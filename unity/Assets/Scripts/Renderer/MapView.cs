@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using EconSim.Core.Data;
@@ -23,6 +24,12 @@ namespace EconSim.Renderer
         [Header("Borders")]
         [SerializeField] private bool enableBorders = true;
         [SerializeField] private Material borderMaterial;
+
+        [Header("Selection")]
+        [SerializeField] private UnityEngine.Camera mapCamera;
+
+        /// <summary>Event fired when a cell is clicked. Passes cell ID (-1 if clicked on nothing).</summary>
+        public event Action<int> OnCellClicked;
 
         private MapData mapData;
         private MeshFilter meshFilter;
@@ -77,6 +84,69 @@ namespace EconSim.Renderer
                 SetMapMode(MapMode.Height);
                 Debug.Log("Map mode: Height (4)");
             }
+
+            // Click to select cell
+            if (Input.GetMouseButtonDown(0))
+            {
+                HandleClick();
+            }
+        }
+
+        private void HandleClick()
+        {
+            if (mapData == null) return;
+
+            var cam = mapCamera != null ? mapCamera : UnityEngine.Camera.main;
+            if (cam == null) return;
+
+            // Use a ground plane at y=0 instead of mesh collider (much faster)
+            Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+            Plane groundPlane = new Plane(Vector3.up, Vector3.zero);
+
+            if (groundPlane.Raycast(ray, out float distance))
+            {
+                Vector3 hitPoint = ray.GetPoint(distance);
+                int cellId = FindCellAtPosition(hitPoint);
+                OnCellClicked?.Invoke(cellId);
+            }
+            else
+            {
+                OnCellClicked?.Invoke(-1);
+            }
+        }
+
+        /// <summary>
+        /// Find the cell that contains the given world position.
+        /// </summary>
+        public int FindCellAtPosition(Vector3 worldPos)
+        {
+            if (mapData == null) return -1;
+
+            // Convert world position back to Azgaar coordinates
+            Vector3 localPos = worldPos - transform.position;
+            float azgaarX = localPos.x / cellScale;
+            float azgaarY = -localPos.z / cellScale;  // Z was negated during mesh generation
+
+            // Find the closest cell center
+            float minDistSq = float.MaxValue;
+            int closestCell = -1;
+
+            foreach (var cell in mapData.Cells)
+            {
+                if (renderLandOnly && !cell.IsLand) continue;
+
+                float dx = cell.Center.X - azgaarX;
+                float dy = cell.Center.Y - azgaarY;
+                float distSq = dx * dx + dy * dy;
+
+                if (distSq < minDistSq)
+                {
+                    minDistSq = distSq;
+                    closestCell = cell.Id;
+                }
+            }
+
+            return closestCell;
         }
 
         public void Initialize(MapData data)

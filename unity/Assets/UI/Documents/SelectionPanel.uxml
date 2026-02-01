@@ -1,0 +1,52 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="selection-panel" class="panel">
+        <ui:Label name="county-name" class="panel-title" text="County" />
+
+        <ui:VisualElement class="section">
+            <ui:Label class="section-header" text="Location" />
+            <ui:VisualElement class="stat-row">
+                <ui:Label text="Province" />
+                <ui:Label name="province-value" text="-" />
+            </ui:VisualElement>
+            <ui:VisualElement class="stat-row">
+                <ui:Label text="State" />
+                <ui:Label name="state-value" text="-" />
+            </ui:VisualElement>
+            <ui:VisualElement class="stat-row">
+                <ui:Label text="Terrain" />
+                <ui:Label name="terrain-value" text="-" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement class="section">
+            <ui:Label class="section-header" text="Population" />
+            <ui:VisualElement class="stat-row">
+                <ui:Label text="Total" />
+                <ui:Label name="pop-total" text="0" />
+            </ui:VisualElement>
+            <ui:VisualElement class="stat-row">
+                <ui:Label text="Workers" />
+                <ui:Label name="pop-workers" text="0" />
+            </ui:VisualElement>
+            <ui:VisualElement class="stat-row">
+                <ui:Label text="Employed" />
+                <ui:Label name="pop-employed" text="0" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="resources-section" class="section">
+            <ui:Label class="section-header" text="Resources" />
+            <ui:VisualElement name="resources-list" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="stockpile-section" class="section">
+            <ui:Label class="section-header" text="Stockpile" />
+            <ui:VisualElement name="stockpile-list" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="facilities-section" class="section">
+            <ui:Label class="section-header" text="Facilities" />
+            <ui:Label name="facilities-count" text="0 facilities" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

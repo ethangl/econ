@@ -8,9 +8,9 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 ## Current Phase
 
-**Phase 4: UI Layer** (next)
+**Phase 5: Iteration & Expansion** (next)
 
-- Time controls, selection & inspection panels, county/market detail view, economic readouts
+- More production chains, multiple markets, population growth, additional map modes
 
 Previous phases complete:
 
@@ -18,6 +18,7 @@ Previous phases complete:
 - ✓ Phase 1.5: Extract Simulation Engine
 - ✓ Phase 2: Simulation Foundation
 - ✓ Phase 3: Markets & Trade
+- ✓ Phase 4: UI Layer (time controls, county selection/inspection)
 
 See `docs/DESIGN.md` → Development Roadmap for full status.
 
@@ -51,11 +52,18 @@ See `docs/DESIGN.md` → Development Roadmap for full status.
 **Unity**:
 
 - `GameManager` - Entry point, loads map, owns simulation
-- `MapView` - Generates Voronoi mesh, map modes
+- `MapView` - Generates Voronoi mesh, map modes, click-to-select
 - `BorderRenderer` - State/province borders
 - `MapCamera` - WASD + drag + zoom
 - `CoreExtensions` - Bridge (Vec2↔Vector2, etc.)
-- `TimeControlHUD` - Day display, pause/play, speed controls
+- `TimeControlPanel` - UI Toolkit: day display, pause/play, speed controls
+- `SelectionPanel` - UI Toolkit: county inspection panel
+
+**UI Toolkit** (`Assets/UI/`):
+
+- `Documents/MainHUD.uxml` - Main UI layout
+- `Styles/Main.uss` - Stylesheet
+- `Settings/DefaultPanelSettings.asset` - Panel settings
 
 ## Setup
 

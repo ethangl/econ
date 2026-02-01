@@ -1015,7 +1015,7 @@ public class SimulationRunner
 - [x] Camera: pan/zoom with edge panning
 - [x] Basic simulation ticking
 - [x] 3 production chains running (wheat→flour→bread, iron→tools, timber→furniture)
-- [ ] UI to inspect counties/markets
+- [x] UI to inspect counties/markets
 
 ---
 
@@ -1086,12 +1086,13 @@ public class SimulationRunner
 - [x] Trade flow simulation
 - [x] Price discovery
 
-### Phase 4: UI Layer
+### Phase 4: UI Layer ✓
 
-- [ ] Time controls (pause, speed)
-- [ ] Selection & inspection panels
-- [ ] County/market detail view
-- [ ] Basic economic readouts
+- [x] Time controls (pause, speed) - UI Toolkit panel
+- [x] Selection & inspection panels - click-to-select counties
+- [x] County detail view (name, location, population, resources, stockpile, facilities)
+- [ ] Market detail view
+- [ ] Global economic readouts
 
 ### Phase 5+: Iteration & Expansion
 
