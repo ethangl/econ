@@ -79,6 +79,21 @@ namespace EconSim.Core.Economy
         /// </summary>
         public float DecayRate;
 
+        // === Theft properties ===
+        /// <summary>
+        /// Fraction of transport losses that become theft (feed black market).
+        /// 0 = no theft appeal, 1 = all losses are stolen.
+        /// High-value portable goods have higher theft risk.
+        /// </summary>
+        public float TheftRisk;
+
+        // === Pricing ===
+        /// <summary>
+        /// Base market price when supply equals demand.
+        /// Raw goods ~1, refined ~2-5, finished basics ~5-10, luxury ~50+.
+        /// </summary>
+        public float BasePrice = 1.0f;
+
         public bool IsRaw => Category == GoodCategory.Raw;
         public bool IsRefined => Category == GoodCategory.Refined;
         public bool IsFinished => Category == GoodCategory.Finished;

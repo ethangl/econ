@@ -27,27 +27,43 @@ namespace EconSim.Core.Simulation.Systems
 
         // Price adjustment parameters
         private const float PriceAdjustmentRate = 0.1f;  // How fast prices move
-        private const float MinPrice = 0.1f;             // Floor price
-        private const float MaxPrice = 10f;              // Ceiling price
+        private const float MinPriceMultiplier = 0.1f;   // Floor = 10% of base price
+        private const float MaxPriceMultiplier = 10f;    // Ceiling = 10x base price
 
         // Thresholds for surplus/deficit (as days of consumption buffer)
         private const float SurplusThreshold = 7f;   // Sell if have >7 days of stock
         private const float DeficitThreshold = 3f;   // Buy if have <3 days of stock
 
+        // For non-consumer goods (raw/refined), sell if stockpile exceeds this
+        private const float NonConsumerSurplusThreshold = 10f;
+
         // Transport cost markup: fraction of goods "lost" to transport costs per unit of transport cost
         // At TransportCostMarkup = 0.01, a county with transport cost 10 loses 10% of purchased goods to fees
         private const float TransportCostMarkup = 0.01f;
 
+        // Black market price floor (higher than legitimate markets)
+        private const float BlackMarketMinPrice = 0.5f;
+
         // Cache transport costs from counties to markets (computed once per market)
         private Dictionary<int, Dictionary<int, float>> _transportCosts;
 
+        // Reference to black market for theft tracking
+        private Market _blackMarket;
+
         public void Initialize(SimulationState state, MapData mapData)
         {
+            // Cache reference to black market
+            _blackMarket = state.Economy.BlackMarket;
+
             // Precompute transport costs from each county to its market
             _transportCosts = new Dictionary<int, Dictionary<int, float>>();
 
             foreach (var market in state.Economy.Markets.Values)
             {
+                // Skip black market (no physical location)
+                if (market.Type == MarketType.Black)
+                    continue;
+
                 var costsToMarket = new Dictionary<int, float>();
                 _transportCosts[market.Id] = costsToMarket;
 
@@ -59,7 +75,7 @@ namespace EconSim.Core.Simulation.Systems
                 }
             }
 
-            SimLog.Log("Trade", $"Initialized with {state.Economy.Markets.Count} markets, transport costs cached");
+            SimLog.Log("Trade", $"Initialized with {state.Economy.Markets.Count} markets (including black market), transport costs cached");
         }
 
         public void Tick(SimulationState state, MapData mapData)
@@ -69,34 +85,64 @@ namespace EconSim.Core.Simulation.Systems
             // Track total trade volume this tick for logging
             var totalSold = new Dictionary<string, float>();
             var totalBought = new Dictionary<string, float>();
+            var totalStolen = new Dictionary<string, float>();
 
+            // Reset all markets (including black market)
             foreach (var market in economy.Markets.Values)
             {
-                // Reset market supply/demand tracking for this tick
                 foreach (var goodState in market.Goods.Values)
                 {
-                    goodState.Supply = 0;
-                    goodState.SupplyOffered = 0;
-                    goodState.Demand = 0;
+                    // For black market, preserve accumulated supply (stolen goods persist)
+                    if (market.Type == MarketType.Black)
+                    {
+                        goodState.SupplyOffered = goodState.Supply;
+                        goodState.Demand = 0;
+                    }
+                    else
+                    {
+                        goodState.Supply = 0;
+                        goodState.SupplyOffered = 0;
+                        goodState.Demand = 0;
+                    }
                 }
+            }
 
-                // Process each county in the market zone
+            // Process legitimate markets
+            foreach (var market in economy.Markets.Values)
+            {
+                // Skip black market in normal processing
+                if (market.Type == MarketType.Black)
+                    continue;
+
+                // Process each county assigned to this market
+                // (Use CellToMarket to avoid double-counting cells in overlapping zones)
                 foreach (var cellId in market.ZoneCellIds)
                 {
+                    // Skip if this cell isn't assigned to this market
+                    if (!economy.CellToMarket.TryGetValue(cellId, out var assignedMarketId)
+                        || assignedMarketId != market.Id)
+                        continue;
+
                     if (!economy.Counties.TryGetValue(cellId, out var county))
                         continue;
 
-                    ProcessCountyTrade(county, market, economy, totalSold, totalBought);
+                    ProcessCountyTrade(county, market, economy, totalSold, totalBought, totalStolen);
                 }
 
                 // Update prices based on supply/demand
                 UpdateMarketPrices(market);
             }
 
-            // Log summary
-            if (totalSold.Count > 0 || totalBought.Count > 0)
+            // Update black market prices
+            if (_blackMarket != null)
             {
-                LogTradeSummary(state.CurrentDay, totalSold, totalBought);
+                UpdateMarketPrices(_blackMarket, isBlackMarket: true);
+            }
+
+            // Log summary
+            if (totalSold.Count > 0 || totalBought.Count > 0 || totalStolen.Count > 0)
+            {
+                LogTradeSummary(state.CurrentDay, totalSold, totalBought, totalStolen);
             }
         }
 
@@ -105,7 +151,8 @@ namespace EconSim.Core.Simulation.Systems
             Market market,
             EconomyState economy,
             Dictionary<string, float> totalSold,
-            Dictionary<string, float> totalBought)
+            Dictionary<string, float> totalBought,
+            Dictionary<string, float> totalStolen)
         {
             // Get transport efficiency for this county-market pair
             float transportEfficiency = GetTransportEfficiency(county.CellId, market);
@@ -115,95 +162,191 @@ namespace EconSim.Core.Simulation.Systems
             {
                 float stockpiled = county.Stockpile.Get(good.Id);
 
-                // Calculate expected consumption (if consumer good)
-                float dailyConsumption = 0;
-                if (good.NeedCategory.HasValue && good.BaseConsumption > 0)
+                if (good.NeedCategory.HasValue)
                 {
-                    dailyConsumption = county.Population.Total * good.BaseConsumption;
-                }
+                    // Consumer goods: sell surplus, buy deficit based on consumption
+                    float dailyConsumption = good.BaseConsumption > 0
+                        ? county.Population.Total * good.BaseConsumption
+                        : 0;
 
-                // Calculate surplus/deficit thresholds
-                float surplusStock = dailyConsumption * SurplusThreshold;
-                float deficitStock = dailyConsumption * DeficitThreshold;
+                    float surplusStock = dailyConsumption * SurplusThreshold;
+                    float deficitStock = dailyConsumption * DeficitThreshold;
 
-                if (stockpiled > surplusStock && surplusStock > 0)
-                {
-                    // SELL: Have more than we need
-                    // When selling, transport costs reduce what arrives at market
-                    float excess = stockpiled - surplusStock;
-                    float toSell = excess * SellRatio;
-
-                    if (toSell > 0.01f)
+                    if (stockpiled > surplusStock && surplusStock > 0)
                     {
-                        // Remove from county stockpile
-                        county.Stockpile.Remove(good.Id, toSell);
-
-                        // Amount that arrives at market (reduced by transport costs)
-                        float arriving = toSell * transportEfficiency;
-
-                        // Add to market supply
-                        var marketGood = market.Goods[good.Id];
-                        marketGood.Supply += arriving;
-                        marketGood.SupplyOffered += arriving;  // Track total offered (for UI)
-
-                        // Track (what was sent, not what arrived)
-                        if (!totalSold.ContainsKey(good.Id)) totalSold[good.Id] = 0;
-                        totalSold[good.Id] += toSell;
+                        // SELL: Have more than we need
+                        float excess = stockpiled - surplusStock;
+                        SellToMarket(county, market, good, excess, transportEfficiency, totalSold, totalStolen);
                     }
-                }
-                else if (stockpiled < deficitStock && dailyConsumption > 0)
-                {
-                    // BUY: Need more than we have
-                    // When buying, transport costs reduce what you receive
-                    float needed = deficitStock - stockpiled;
-                    float toBuy = needed * BuyRatio;
-
-                    if (toBuy > 0.01f)
+                    else if (stockpiled < deficitStock && dailyConsumption > 0)
                     {
-                        // Record demand
-                        var marketGood = market.Goods[good.Id];
-                        marketGood.Demand += toBuy;
+                        // BUY: Need more than we have
+                        float needed = deficitStock - stockpiled;
+                        float toBuy = needed * BuyRatio;
 
-                        // Buy from market supply
-                        float actualBuy = Math.Min(toBuy, marketGood.Supply);
-                        if (actualBuy > 0)
+                        if (toBuy > 0.01f)
                         {
-                            marketGood.Supply -= actualBuy;
-
-                            // Amount that arrives at county (reduced by transport costs)
-                            float arriving = actualBuy * transportEfficiency;
-                            county.Stockpile.Add(good.Id, arriving);
-
-                            if (!totalBought.ContainsKey(good.Id)) totalBought[good.Id] = 0;
-                            totalBought[good.Id] += actualBuy;
+                            var marketGood = market.Goods[good.Id];
+                            marketGood.Demand += toBuy;
+                            TryBuyFromMarkets(county, market, good, toBuy, transportEfficiency, totalBought);
                         }
                     }
                 }
-
-                // For non-consumer goods (raw/refined), check if processing facilities need them
-                if (!good.NeedCategory.HasValue)
+                else
                 {
+                    // Non-consumer goods (raw/refined): sell excess, buy for facility needs
+
+                    // SELL: If stockpile exceeds threshold, sell the excess
+                    if (stockpiled > NonConsumerSurplusThreshold)
+                    {
+                        float excess = stockpiled - NonConsumerSurplusThreshold;
+                        SellToMarket(county, market, good, excess, transportEfficiency, totalSold, totalStolen);
+                    }
+
+                    // BUY: Check if processing facilities need this good
                     float unmetDemand = county.UnmetDemand.TryGetValue(good.Id, out var ud) ? ud : 0;
                     if (unmetDemand > 0)
                     {
+                        float toBuy = unmetDemand * BuyRatio;
                         var marketGood = market.Goods[good.Id];
-                        marketGood.Demand += unmetDemand * BuyRatio;
-
-                        float actualBuy = Math.Min(unmetDemand * BuyRatio, marketGood.Supply);
-                        if (actualBuy > 0)
-                        {
-                            marketGood.Supply -= actualBuy;
-
-                            // Amount that arrives (reduced by transport costs)
-                            float arriving = actualBuy * transportEfficiency;
-                            county.Stockpile.Add(good.Id, arriving);
-
-                            if (!totalBought.ContainsKey(good.Id)) totalBought[good.Id] = 0;
-                            totalBought[good.Id] += actualBuy;
-                        }
+                        marketGood.Demand += toBuy;
+                        TryBuyFromMarkets(county, market, good, toBuy, transportEfficiency, totalBought);
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Sell goods to market with transport loss and theft.
+        /// </summary>
+        private void SellToMarket(
+            CountyEconomy county,
+            Market market,
+            GoodDef good,
+            float excess,
+            float transportEfficiency,
+            Dictionary<string, float> totalSold,
+            Dictionary<string, float> totalStolen)
+        {
+            float toSell = excess * SellRatio;
+            if (toSell < 0.01f) return;
+
+            // Remove from county stockpile
+            county.Stockpile.Remove(good.Id, toSell);
+
+            // Amount that arrives at market (reduced by transport costs)
+            float arriving = toSell * transportEfficiency;
+            float lost = toSell - arriving;
+
+            // Theft: portion of lost goods goes to black market (finished goods only)
+            if (_blackMarket != null && lost > 0 && good.TheftRisk > 0 && good.IsFinished)
+            {
+                float stolen = lost * good.TheftRisk;
+                if (stolen > 0.001f)
+                {
+                    _blackMarket.Goods[good.Id].Supply += stolen;
+                    if (!totalStolen.ContainsKey(good.Id)) totalStolen[good.Id] = 0;
+                    totalStolen[good.Id] += stolen;
+                }
+            }
+
+            // Add to market supply
+            var marketGood = market.Goods[good.Id];
+            marketGood.Supply += arriving;
+            marketGood.SupplyOffered += arriving;
+
+            // Track (what was sent, not what arrived)
+            if (!totalSold.ContainsKey(good.Id)) totalSold[good.Id] = 0;
+            totalSold[good.Id] += toSell;
+        }
+
+        /// <summary>
+        /// Try to buy goods from either local market or black market, whichever is cheaper.
+        /// Returns amount actually bought.
+        /// </summary>
+        private float TryBuyFromMarkets(
+            CountyEconomy county,
+            Market localMarket,
+            GoodDef good,
+            float toBuy,
+            float transportEfficiency,
+            Dictionary<string, float> totalBought)
+        {
+            float remaining = toBuy;
+            float totalBoughtAmount = 0;
+
+            var localGood = localMarket.Goods[good.Id];
+            var blackGood = _blackMarket?.Goods[good.Id];
+
+            // Calculate effective prices (local price adjusted for transport loss)
+            // If transport efficiency is 0.8, you pay for 1 unit but get 0.8, so effective price is 1.25x
+            float localEffectivePrice = localGood.Supply > 0 ? localGood.Price / transportEfficiency : float.MaxValue;
+            float blackPrice = blackGood != null && blackGood.Supply > 0 ? blackGood.Price : float.MaxValue;
+
+            while (remaining > 0.01f)
+            {
+                // Recalculate availability each iteration
+                float localAvailable = localGood.Supply;
+                float blackAvailable = blackGood?.Supply ?? 0;
+
+                if (localAvailable <= 0 && blackAvailable <= 0)
+                    break;
+
+                // Recalculate effective prices
+                localEffectivePrice = localAvailable > 0 ? localGood.Price / transportEfficiency : float.MaxValue;
+                blackPrice = blackAvailable > 0 ? blackGood.Price : float.MaxValue;
+
+                // Buy from cheaper source
+                if (localEffectivePrice <= blackPrice && localAvailable > 0)
+                {
+                    // Buy from local market (with transport loss)
+                    float actualBuy = Math.Min(remaining, localAvailable);
+                    localGood.Supply -= actualBuy;
+
+                    // Amount that arrives at county (reduced by transport costs)
+                    float arriving = actualBuy * transportEfficiency;
+                    county.Stockpile.Add(good.Id, arriving);
+
+                    // Track theft from buying transport losses too (finished goods only)
+                    float lost = actualBuy - arriving;
+                    if (_blackMarket != null && lost > 0 && good.TheftRisk > 0 && good.IsFinished)
+                    {
+                        float stolen = lost * good.TheftRisk;
+                        if (stolen > 0.001f)
+                        {
+                            _blackMarket.Goods[good.Id].Supply += stolen;
+                        }
+                    }
+
+                    totalBoughtAmount += actualBuy;
+                    remaining -= actualBuy;
+                }
+                else if (blackAvailable > 0)
+                {
+                    // Buy from black market (no transport loss - they deliver)
+                    float actualBuy = Math.Min(remaining, blackAvailable);
+                    blackGood.Supply -= actualBuy;
+                    blackGood.Demand += actualBuy;  // Track demand on black market
+
+                    // Full amount arrives (black market delivers directly)
+                    county.Stockpile.Add(good.Id, actualBuy);
+
+                    totalBoughtAmount += actualBuy;
+                    remaining -= actualBuy;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (totalBoughtAmount > 0)
+            {
+                if (!totalBought.ContainsKey(good.Id)) totalBought[good.Id] = 0;
+                totalBought[good.Id] += totalBoughtAmount;
+            }
+
+            return totalBoughtAmount;
         }
 
         /// <summary>
@@ -226,10 +369,17 @@ namespace EconSim.Core.Simulation.Systems
             return Math.Max(0.5f, Math.Min(1f, efficiency));
         }
 
-        private void UpdateMarketPrices(Market market)
+        private void UpdateMarketPrices(Market market, bool isBlackMarket = false)
         {
             foreach (var goodState in market.Goods.Values)
             {
+                // Calculate price bounds relative to this good's base price
+                float basePrice = goodState.BasePrice;
+                float minPrice = isBlackMarket
+                    ? Math.Max(BlackMarketMinPrice, basePrice * MinPriceMultiplier)
+                    : basePrice * MinPriceMultiplier;
+                float maxPrice = basePrice * MaxPriceMultiplier;
+
                 // Price adjusts based on supply/demand ratio
                 // More supply than demand = price drops
                 // More demand than supply = price rises
@@ -246,7 +396,7 @@ namespace EconSim.Core.Simulation.Systems
                     // ratio > 1 means more demand, price should rise
                     // ratio < 1 means more supply, price should fall
                     float priceChange = (ratio - 1f) * PriceAdjustmentRate;
-                    goodState.Price = Math.Max(MinPrice, Math.Min(MaxPrice,
+                    goodState.Price = Math.Max(minPrice, Math.Min(maxPrice,
                         goodState.Price * (1f + priceChange)));
 
                     // Record trade volume
@@ -255,12 +405,14 @@ namespace EconSim.Core.Simulation.Systems
                 else
                 {
                     // No activity, price slowly returns to base
-                    goodState.Price = goodState.Price * 0.99f + goodState.BasePrice * 0.01f;
+                    goodState.Price = goodState.Price * 0.99f + basePrice * 0.01f;
+                    // Ensure minimum price is respected
+                    goodState.Price = Math.Max(minPrice, goodState.Price);
                 }
             }
         }
 
-        private void LogTradeSummary(int day, Dictionary<string, float> sold, Dictionary<string, float> bought)
+        private void LogTradeSummary(int day, Dictionary<string, float> sold, Dictionary<string, float> bought, Dictionary<string, float> stolen)
         {
             var soldSummary = new List<string>();
             foreach (var kvp in sold)
@@ -274,9 +426,24 @@ namespace EconSim.Core.Simulation.Systems
                 boughtSummary.Add($"{kvp.Key}:{kvp.Value:F0}");
             }
 
-            if (soldSummary.Count > 0 || boughtSummary.Count > 0)
+            var stolenSummary = new List<string>();
+            foreach (var kvp in stolen)
             {
-                SimLog.Log("Trade", $"Day {day}: sold=[{string.Join(", ", soldSummary)}], bought=[{string.Join(", ", boughtSummary)}]");
+                if (kvp.Value >= 0.1f)  // Only log meaningful theft
+                    stolenSummary.Add($"{kvp.Key}:{kvp.Value:F1}");
+            }
+
+            var parts = new List<string>();
+            if (soldSummary.Count > 0)
+                parts.Add($"sold=[{string.Join(", ", soldSummary)}]");
+            if (boughtSummary.Count > 0)
+                parts.Add($"bought=[{string.Join(", ", boughtSummary)}]");
+            if (stolenSummary.Count > 0)
+                parts.Add($"stolen=[{string.Join(", ", stolenSummary)}]");
+
+            if (parts.Count > 0)
+            {
+                SimLog.Log("Trade", $"Day {day}: {string.Join(", ", parts)}");
             }
         }
     }

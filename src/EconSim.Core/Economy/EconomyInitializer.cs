@@ -49,6 +49,19 @@ namespace EconSim.Core.Economy
 
             SimLog.Log("Economy", $"Biomes available: {string.Join(", ", biomeNames.Values)}");
 
+            // Debug: log height distribution for mining resources
+            int cellsAbove40 = 0, cellsAbove45 = 0, cellsAbove50 = 0;
+            float maxHeight = 0;
+            foreach (var cell in mapData.Cells)
+            {
+                if (!cell.IsLand) continue;
+                if (cell.Height > maxHeight) maxHeight = cell.Height;
+                if (cell.Height > 40) cellsAbove40++;
+                if (cell.Height > 45) cellsAbove45++;
+                if (cell.Height > 50) cellsAbove50++;
+            }
+            SimLog.Log("Economy", $"Height distribution: max={maxHeight:F1}, >40={cellsAbove40}, >45={cellsAbove45}, >50={cellsAbove50}");
+
             var resourceCounts = new Dictionary<string, int>();
 
             foreach (var cell in mapData.Cells)
@@ -71,6 +84,12 @@ namespace EconSim.Core.Economy
                     {
                         // Height > 50 = mountainous (sea level is 20, max is 100)
                         matches = cell.Height > 50;
+                    }
+                    // Special case: gold_ore uses high terrain with rare probability
+                    else if (good.Id == "gold_ore")
+                    {
+                        // Height > 45 (slightly lower than iron's 50), with 25% chance - rarer due to probability
+                        matches = cell.Height > 45 && _random.NextDouble() < 0.25;
                     }
                     else
                     {
@@ -153,50 +172,75 @@ namespace EconSim.Core.Economy
                 SimLog.Log("Economy", $"  {facilityDef.Id}: placed {placed} (from {candidates.Count + placed} candidates)");
             }
 
-            // Place processing facilities CO-LOCATED with extraction (same counties)
-            // This creates integrated production chains until we have transport
-            SimLog.Log("Economy", "Placing processing facilities (co-located with extraction):");
+            // Place processing facilities in stages to ensure proper co-location
+            // Stage 1: Primary processors (need raw materials) - place in extraction counties
+            // Stage 2: Secondary processors (need refined materials) - place where stage 1 facilities are
+            SimLog.Log("Economy", "Placing processing facilities:");
 
-            // Map processing output to its input source
-            // flour needs wheat -> place mills in wheat counties (farms)
-            // bread needs flour -> place bakeries in wheat counties (with mills)
-            // iron needs iron_ore -> place smelters in iron_ore counties (mines)
-            // tools needs iron -> place smithies in iron_ore counties (with smelters)
-            // lumber needs timber -> place sawmills in timber counties (lumber camps)
-            // furniture needs lumber -> place workshops in timber counties (with sawmills)
+            // Track where each facility type is placed
+            var facilityCounties = new Dictionary<string, List<int>>();
 
-            var processingChains = new Dictionary<string, string>
+            // Stage 1: Primary processors - place in extraction counties
+            var primaryProcessors = new Dictionary<string, string>
             {
-                { "mill", "wheat" },       // mill processes wheat
-                { "bakery", "wheat" },     // bakery in same area as mills
-                { "smelter", "iron_ore" }, // smelter processes iron_ore
-                { "smithy", "iron_ore" },  // smithy in same area as smelters
-                { "sawmill", "timber" },   // sawmill processes timber
-                { "workshop", "timber" }   // workshop in same area as sawmills
+                { "mill", "wheat" },       // mill needs wheat (from farms)
+                { "smelter", "iron_ore" }, // smelter needs iron_ore (from mines)
+                { "refinery", "gold_ore" }, // refinery needs gold_ore (from gold mines)
+                { "sawmill", "timber" }    // sawmill needs timber (from lumber camps)
             };
 
-            foreach (var facilityDef in economy.FacilityDefs.ProcessingFacilities)
+            foreach (var kvp in primaryProcessors)
             {
-                if (!processingChains.TryGetValue(facilityDef.Id, out var sourceGood))
-                {
-                    SimLog.Log("Economy", $"  {facilityDef.Id}: no chain mapping, skipping");
-                    continue;
-                }
+                var facilityId = kvp.Key;
+                var sourceGood = kvp.Value;
+                var facilityDef = economy.FacilityDefs.Get(facilityId);
+                if (facilityDef == null) continue;
 
                 if (!extractionCounties.TryGetValue(sourceGood, out var candidates) || candidates.Count == 0)
                 {
-                    SimLog.Log("Economy", $"  {facilityDef.Id}: no extraction counties for {sourceGood}");
+                    SimLog.Log("Economy", $"  {facilityId}: no extraction counties for {sourceGood}");
                     continue;
                 }
 
-                // Place in ~10% of extraction counties
+                facilityCounties[facilityId] = new List<int>();
                 int toPlace = Math.Max(1, candidates.Count / 10);
                 for (int i = 0; i < toPlace; i++)
                 {
                     int cellId = candidates[_random.Next(candidates.Count)];
-                    economy.CreateFacility(facilityDef.Id, cellId);
+                    economy.CreateFacility(facilityId, cellId);
+                    facilityCounties[facilityId].Add(cellId);
                 }
-                SimLog.Log("Economy", $"  {facilityDef.Id}: placed {toPlace} in {sourceGood} counties");
+                SimLog.Log("Economy", $"  {facilityId}: placed {toPlace} in {sourceGood} counties");
+            }
+
+            // Stage 2: Secondary processors - place where primary processors are
+            var secondaryProcessors = new Dictionary<string, string>
+            {
+                { "bakery", "mill" },      // bakery needs flour (from mills)
+                { "smithy", "smelter" },   // smithy needs iron (from smelters)
+                { "jeweler", "refinery" }, // jeweler needs gold (from refineries)
+                { "workshop", "sawmill" }  // workshop needs lumber (from sawmills)
+            };
+
+            foreach (var kvp in secondaryProcessors)
+            {
+                var facilityId = kvp.Key;
+                var upstreamFacility = kvp.Value;
+                var facilityDef = economy.FacilityDefs.Get(facilityId);
+                if (facilityDef == null) continue;
+
+                if (!facilityCounties.TryGetValue(upstreamFacility, out var candidates) || candidates.Count == 0)
+                {
+                    SimLog.Log("Economy", $"  {facilityId}: no counties with {upstreamFacility}");
+                    continue;
+                }
+
+                // Place in ALL counties that have the upstream processor (ensures production chain works)
+                foreach (var cellId in candidates)
+                {
+                    economy.CreateFacility(facilityId, cellId);
+                }
+                SimLog.Log("Economy", $"  {facilityId}: placed {candidates.Count} (co-located with {upstreamFacility})");
             }
 
             SimLog.Log("Economy", $"Total facilities: {economy.Facilities.Count}");

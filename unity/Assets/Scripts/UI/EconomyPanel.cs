@@ -266,11 +266,16 @@ namespace EconSim.UI
                 return;
             }
 
-            // Aggregate across all markets
+            // Aggregate across legitimate markets only
             var aggregateGoods = new Dictionary<string, (float supply, float demand, float price)>();
+            var blackMarket = _economy.BlackMarket;
 
             foreach (var market in _economy.Markets.Values)
             {
+                // Skip black market in aggregate totals
+                if (market.Type == MarketType.Black)
+                    continue;
+
                 foreach (var kvp in market.Goods)
                 {
                     var state = kvp.Value;
@@ -286,6 +291,9 @@ namespace EconSim.UI
                 }
             }
 
+            // Legitimate Markets Section
+            AddSectionHeader(_tradeList, "Legitimate Markets");
+
             // Header
             var header = new VisualElement();
             header.AddToClassList("goods-header");
@@ -296,6 +304,7 @@ namespace EconSim.UI
             _tradeList.Add(header);
 
             // Rows
+            int legitRows = 0;
             foreach (var kvp in aggregateGoods)
             {
                 var (supply, demand, price) = kvp.Value;
@@ -308,12 +317,62 @@ namespace EconSim.UI
                 row.Add(CreateLabel(FormatQuantity(demand), "goods-value"));
                 row.Add(CreateLabel($"{price:F2}", "goods-value"));
                 _tradeList.Add(row);
+                legitRows++;
             }
 
-            if (_tradeList.childCount <= 1)
+            if (legitRows == 0)
             {
                 AddEmptyLabel(_tradeList, "No trade activity");
             }
+
+            // Black Market Section
+            if (blackMarket != null)
+            {
+                AddSectionHeader(_tradeList, "Black Market", new Color(0.8f, 0.3f, 0.3f));
+
+                // Header
+                var blackHeader = new VisualElement();
+                blackHeader.AddToClassList("goods-header");
+                blackHeader.Add(CreateLabel("Good", "goods-name"));
+                blackHeader.Add(CreateLabel("Stock", "goods-value"));
+                blackHeader.Add(CreateLabel("Sold", "goods-value"));
+                blackHeader.Add(CreateLabel("Price", "goods-value"));
+                _tradeList.Add(blackHeader);
+
+                // Rows - show goods with any supply or recent activity
+                int blackRows = 0;
+                foreach (var kvp in blackMarket.Goods)
+                {
+                    var state = kvp.Value;
+                    // Show if there's stock or recent sales
+                    if (state.Supply < 0.1f && state.LastTradeVolume < 0.1f) continue;
+
+                    var row = new VisualElement();
+                    row.AddToClassList("goods-row");
+                    row.Add(CreateLabel(kvp.Key, "goods-name"));
+                    row.Add(CreateLabel(FormatQuantity(state.Supply), "goods-value"));
+                    row.Add(CreateLabel(FormatQuantity(state.LastTradeVolume), "goods-value"));
+                    row.Add(CreateLabel($"{state.Price:F2}", "goods-value"));
+                    _tradeList.Add(row);
+                    blackRows++;
+                }
+
+                if (blackRows == 0)
+                {
+                    AddEmptyLabel(_tradeList, "No stolen goods in circulation");
+                }
+            }
+        }
+
+        private void AddSectionHeader(VisualElement container, string text, Color? color = null)
+        {
+            var header = new Label(text);
+            header.style.fontSize = 12;
+            header.style.unityFontStyleAndWeight = FontStyle.Bold;
+            header.style.color = color ?? new Color(0.7f, 0.7f, 0.8f);
+            header.style.marginTop = 8;
+            header.style.marginBottom = 4;
+            container.Add(header);
         }
 
         private VisualElement CreateStatRow(string label, string value)

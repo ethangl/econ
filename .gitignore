@@ -2,10 +2,14 @@
 **/[Ll]ibrary/
 **/[Tt]emp/
 **/[Oo]bj/
+**/[Bb]in/
 **/[Bb]uild/
 **/[Bb]uilds/
 **/[Ll]ogs/
 **/[Uu]ser[Ss]ettings/
+
+# Mono crash dumps
+mono_crash.*.json
 
 # Visual Studio cache directory
 .vs/
@@ -53,6 +57,10 @@ crashlytics-build.properties
 
 # TextMeshPro
 [Aa]ssets/TextMesh*Pro/Resources/Fonts*&*Materials/*.mat
+
+# Unity screenshots
+**/[Ss]creenshots/
+**/[Ss]creenshots.meta
 
 # Reference maps (large files, download separately)
 /reference/*.json

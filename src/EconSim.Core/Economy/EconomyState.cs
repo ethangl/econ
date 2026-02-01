@@ -25,6 +25,9 @@ namespace EconSim.Core.Economy
         /// <summary>All markets, keyed by market ID.</summary>
         public Dictionary<int, Market> Markets;
 
+        /// <summary>Reserved ID for the black market.</summary>
+        public const int BlackMarketId = 0;
+
         /// <summary>Next facility ID to assign.</summary>
         public int NextFacilityId;
 
@@ -135,6 +138,11 @@ namespace EconSim.Core.Economy
         }
 
         /// <summary>
+        /// Get the black market (convenience accessor).
+        /// </summary>
+        public Market BlackMarket => GetMarket(BlackMarketId);
+
+        /// <summary>
         /// Get the market that serves a given cell (if any).
         /// </summary>
         public Market GetMarketForCell(int cellId)
@@ -146,19 +154,24 @@ namespace EconSim.Core.Economy
 
         /// <summary>
         /// Rebuild the cell-to-market lookup from market zones.
+        /// Assigns each cell to the nearest market by transport cost.
         /// </summary>
         public void RebuildCellToMarketLookup()
         {
             CellToMarket.Clear();
+            var cellToCost = new Dictionary<int, float>();
+
             foreach (var market in Markets.Values)
             {
                 foreach (var cellId in market.ZoneCellIds)
                 {
-                    // If a cell is in multiple zones, use the first market found
-                    // (could be improved to use closest market)
-                    if (!CellToMarket.ContainsKey(cellId))
+                    float cost = market.ZoneCellCosts.TryGetValue(cellId, out var c) ? c : float.MaxValue;
+
+                    // Assign to this market if it's closer than any previous assignment
+                    if (!CellToMarket.ContainsKey(cellId) || cost < cellToCost[cellId])
                     {
                         CellToMarket[cellId] = market.Id;
+                        cellToCost[cellId] = cost;
                     }
                 }
             }

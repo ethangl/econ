@@ -447,11 +447,14 @@ MaterialType:
 ```
 GoodType:
   - id: string
-  - category: finished
-  - inputs: [{type: material_id, qty: int}]
-  - facility: facility_type
-  - consumer_demand: base_rate
-  - need_category: basic | comfort | luxury
+  - category: raw | refined | finished
+  - inputs: [{type: material_id, qty: int}]  # for refined/finished
+  - facility: facility_type                   # for refined/finished
+  - consumer_demand: base_rate                # for finished
+  - need_category: basic | comfort | luxury   # for finished
+  - base_price: float                         # equilibrium market price
+  - decay_rate: float                         # spoilage per day
+  - theft_risk: float                         # black market appeal (finished only)
 ```
 
 ### Facilities
@@ -564,20 +567,83 @@ Market placement uses suitability scoring:
 - Resource diversity (unique resources in cell + neighbors)
 - Centrality (land neighbor count)
 
+**Multiple markets:** Markets are placed in different states to ensure geographic spread. Each market's zone includes all cells within transport cost budget (100). Cells in overlapping zones are assigned to the nearest market by transport cost.
+
+**Zone visualization:** Each market has a distinct color from a predefined palette (8 colors). The hub province (not just the hub cell) is highlighted with a vivid version of the market color for visibility.
+
 Trade system runs weekly:
 
-- Counties with >7 days stock sell surplus to market
+- Counties with >7 days stock sell surplus to market (consumer goods)
+- Counties with >10 units sell surplus (non-consumer goods)
 - Counties with <3 days stock buy from market
 - Prices adjust via supply/demand ratio (±10% per tick)
-- Price bounds: 0.1x - 10x base price
+- Price bounds: 0.1x - 10x base price (relative to each good's BasePrice)
 - **Transport cost markup**: goods lose ~1% per unit of transport cost during trade
 - Transport efficiency = `1 / (1 + cost * 0.01)`, minimum 50%
+
+**Base prices by good:**
+
+| Category | Good      | BasePrice | Notes                       |
+| -------- | --------- | --------- | --------------------------- |
+| Raw      | Wheat     | 1         | Abundant                    |
+| Raw      | Iron Ore  | 1         | Common mineral              |
+| Raw      | Gold Ore  | 5         | Rare precious metal         |
+| Raw      | Timber    | 1         | Abundant                    |
+| Refined  | Flour     | 3         | 2 wheat + processing        |
+| Refined  | Iron      | 5         | 3 ore + smelting            |
+| Refined  | Gold      | 20        | 3 ore + refining            |
+| Refined  | Lumber    | 3         | 2 timber + processing       |
+| Finished | Bread     | 5         | Basic staple                |
+| Finished | Tools     | 15        | Comfort item, skilled labor |
+| Finished | Jewelry   | 50        | Luxury, artisan premium     |
+| Finished | Furniture | 12        | Luxury, crafted goods       |
 
 Storage decay (in `ConsumptionSystem`):
 
 - `GoodDef.DecayRate`: fraction of stockpile lost per day
 - Bread: 5%/day, Flour: 1%/day, Wheat: 0.5%/day
 - Wood products: 0.2%/day, Metals: 0%
+
+### Black Market
+
+A global underground market that receives stolen finished goods and sells them at premium prices.
+
+**Design:**
+
+- Special `Market` instance with `Type = MarketType.Black` (ID 0)
+- No physical location (`LocationCellId = -1`), no zone
+- Accessible from all counties (no transport cost for purchases)
+- 2x base price markup, higher price floor (0.5x vs 0.1x)
+- Supply persists between ticks (unlike legitimate markets which reset)
+- **Only finished goods** are stolen - raw materials and refined goods stay in the legitimate economy
+
+**Theft sources (finished goods only):**
+
+1. **Transport theft**: When finished goods are transported to/from markets, a portion of transport losses become stolen goods based on `GoodDef.TheftRisk`
+2. **Stockpile theft**: Daily theft from county stockpiles (`TheftSystem`)
+
+**TheftRisk values (finished goods):**
+
+| Good      | TheftRisk | BasePrice | Rationale                |
+| --------- | --------- | --------- | ------------------------ |
+| Jewelry   | 1.0       | 50        | Maximum theft appeal     |
+| Tools     | 0.8       | 15        | High value, high demand  |
+| Furniture | 0.6       | 12        | High value, identifiable |
+| Bread     | 0.1       | 5         | Perishable               |
+
+**Buying behavior:**
+
+- Counties compare effective prices: local market (adjusted for transport loss) vs black market
+- Buy from whichever source is cheaper and has supply
+- Black market purchases have no transport loss (delivered directly)
+
+**Economic dynamics:**
+
+- Heavy theft → black market oversupply → prices drop → can become cheaper than legitimate markets
+- Creates underground economy that competes with legitimate trade
+- Raw/refined goods remain in legitimate trade, only consumer goods enter black market
+
+**UI:** Economy panel (E key) Trade tab shows black market in separate section with stock, sales volume, and prices.
 
 ---
 
@@ -648,25 +714,48 @@ Key methods:
 
 Caching: Simple LRU with configurable max size (default 10k entries).
 
-### Future: Transport Losses
+### Transport Losses & Theft
 
-Additional GoodDef properties for transport inefficiency:
+Transport inefficiency causes goods to be lost in transit. A portion of these losses become theft, feeding the black market.
+
+**Transport efficiency:**
 
 ```
-TransportLossRate: float  # % lost per unit of transport cost (fragility)
-TheftRisk: float          # % lost per unit of transport cost × value
+efficiency = 1 / (1 + transportCost * 0.01)
+arriving = sent * efficiency
+lost = sent - arriving
 ```
 
-- **Fragility**: Goods like pottery, glass, or fresh produce lose quantity in transit proportional to distance. `arriving = sent * (1 - transportCost * TransportLossRate)`
+Minimum efficiency is 50% (goods always lose some portion to transport).
 
-- **Theft/Pilferage**: Valuable goods attract theft. Loss scales with both distance and value. `arriving = sent * (1 - transportCost * value * TheftRisk)`
+**Theft from transport (finished goods only):**
 
-Example values:
-| Good | TransportLossRate | TheftRisk |
-|------|-------------------|-----------|
-| Bread | 0.02 | 0 |
-| Tools | 0.005 | 0.001 |
-| Furniture | 0.01 | 0.0005 |
+```
+if (good.IsFinished && good.TheftRisk > 0):
+    stolen = lost * good.TheftRisk
+```
+
+Stolen finished goods are added to black market supply. See Black Market section for TheftRisk values.
+
+**Stockpile theft (`TheftSystem`):**
+
+Runs daily. Small percentage of stockpiled **finished goods** stolen based on TheftRisk:
+
+```
+if (good.IsFinished && good.TheftRisk > 0):
+    stolen = stockpile * 0.005 * TheftRisk
+```
+
+For tools (TheftRisk=0.8): ~0.4% stolen per day. Minimum stockpile of 1 unit required. Raw materials and refined goods are not stolen.
+
+### Future: Fragility
+
+Additional transport loss for fragile goods (pottery, glass, fresh produce):
+
+```
+TransportLossRate: float  # % lost per unit of transport cost
+arriving = sent * (1 - transportCost * TransportLossRate)
+```
 
 ---
 
@@ -801,7 +890,8 @@ econ/
 │               ├── ITickSystem.cs     # Interface for subsystems
 │               ├── ProductionSystem.cs # Extraction & processing
 │               ├── ConsumptionSystem.cs # Population consumption
-│               └── TradeSystem.cs     # Market trade & pricing
+│               ├── TradeSystem.cs     # Market trade & pricing
+│               └── TheftSystem.cs     # Stockpile theft → black market
 │
 └── unity/                         # Unity frontend
     ├── Assets/
@@ -986,9 +1076,10 @@ public class SimulationRunner
 - **Province** (key 2) - colored by province
 - **Terrain** (key 3) - colored by biome
 - **Height** (key 4) - elevation gradient
-- **Market** (key 5) - colored by market zone, hub cell highlighted brighter
+- **Market** (key 5) - colored by market zone (distinct color per market), hub province highlighted with vivid color
 
 Future:
+
 - Population (density)
 - Resources (by type)
 
@@ -1041,7 +1132,7 @@ Future:
   1. Wheat → Flour → Bread (food)
   2. TBD (maybe: Iron Ore → Iron → Tools)
   3. TBD (maybe: Timber → Lumber → Furniture)
-- **Markets:** 1 market provides goods
+- **Markets:** 3 markets in different states, nearest-market assignment
 - **Demand:** Population everywhere consumes
 
 ### Visual Style
@@ -1089,7 +1180,7 @@ Future:
 
 ### Phase 3: Markets & Trade ✓
 
-- [x] Market placement (1 for v1)
+- [x] Market placement (now 3 markets in different states)
 - [x] Transport cost pathfinding
 - [x] Trade flow simulation
 - [x] Price discovery
@@ -1106,7 +1197,8 @@ Future:
 ### Phase 5+: Iteration & Expansion
 
 - [ ] More production chains
-- [ ] Multiple markets
+- [x] Multiple markets (3 markets in different states, nearest-market assignment, distinct zone colors)
+- [x] Black market (theft feeds underground economy, price-based market selection)
 - [ ] Population growth/decline
 - [ ] Additional map modes (population density, resources)
 - [ ] Facility emergence

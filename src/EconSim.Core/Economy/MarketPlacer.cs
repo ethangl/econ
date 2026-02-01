@@ -111,7 +111,8 @@ namespace EconSim.Core.Economy
             MapData mapData,
             TransportGraph transport,
             EconomyState economy,
-            HashSet<int> excludeCells = null)
+            HashSet<int> excludeCells = null,
+            HashSet<int> excludeStates = null)
         {
             float bestScore = float.MinValue;
             int bestCellId = -1;
@@ -120,6 +121,7 @@ namespace EconSim.Core.Economy
             {
                 if (!cell.IsLand) continue;
                 if (excludeCells != null && excludeCells.Contains(cell.Id)) continue;
+                if (excludeStates != null && excludeStates.Contains(cell.StateId)) continue;
 
                 float score = ComputeSuitability(cell, mapData, transport, economy);
                 if (score > bestScore)
@@ -168,8 +170,8 @@ namespace EconSim.Core.Economy
                     market.Goods[good.Id] = new MarketGoodState
                     {
                         GoodId = good.Id,
-                        BasePrice = 1.0f, // TODO: vary by good category
-                        Price = 1.0f,
+                        BasePrice = good.BasePrice,
+                        Price = good.BasePrice,
                         Supply = 0,
                         Demand = 0
                     };
@@ -195,6 +197,7 @@ namespace EconSim.Core.Economy
             float maxTransportCost = 50f)
         {
             market.ZoneCellIds.Clear();
+            market.ZoneCellCosts.Clear();
 
             var reachable = transport.FindReachable(market.LocationCellId, maxTransportCost);
             foreach (var kvp in reachable)
@@ -202,6 +205,7 @@ namespace EconSim.Core.Economy
                 if (mapData.CellById.TryGetValue(kvp.Key, out var cell) && cell.IsLand)
                 {
                     market.ZoneCellIds.Add(kvp.Key);
+                    market.ZoneCellCosts[kvp.Key] = kvp.Value;
                 }
             }
 

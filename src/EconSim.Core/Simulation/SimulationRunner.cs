@@ -50,6 +50,7 @@ namespace EconSim.Core.Simulation
             RegisterSystem(new ProductionSystem());
             RegisterSystem(new ConsumptionSystem());
             RegisterSystem(new TradeSystem());
+            RegisterSystem(new TheftSystem());
         }
 
         /// <summary>
@@ -98,20 +99,112 @@ namespace EconSim.Core.Simulation
 
         private void InitializeMarkets()
         {
-            // Place 1 market for v1
-            var markets = MarketPlacer.PlaceMarkets(_mapData, _state.Transport, _state.Economy, count: 1);
+            // Initialize the black market first (ID 0, no physical location)
+            InitializeBlackMarket();
 
-            foreach (var market in markets)
+            var usedCells = new HashSet<int>();
+            var usedStates = new HashSet<int>();
+            int marketCount = 3;
+
+            for (int i = 0; i < marketCount; i++)
             {
+                int cellId = MarketPlacer.FindBestMarketLocation(
+                    _mapData, _state.Transport, _state.Economy,
+                    excludeCells: usedCells,
+                    excludeStates: usedStates);
+
+                if (cellId < 0) break;
+
+                var cell = _mapData.CellById[cellId];
+                var burg = cell.HasBurg
+                    ? _mapData.Burgs.Find(b => b.Id == cell.BurgId)
+                    : null;
+
+                var market = new Market
+                {
+                    Id = i + 1,
+                    LocationCellId = cellId,
+                    Name = burg?.Name ?? $"Market {i + 1}",
+                    SuitabilityScore = MarketPlacer.ComputeSuitability(cell, _mapData, _state.Transport, _state.Economy)
+                };
+
+                // Initialize market goods for all tradeable goods
+                foreach (var good in _state.Economy.Goods.All)
+                {
+                    market.Goods[good.Id] = new MarketGoodState
+                    {
+                        GoodId = good.Id,
+                        BasePrice = good.BasePrice,
+                        Price = good.BasePrice,
+                        Supply = 0,
+                        Demand = 0
+                    };
+                }
+
                 // Compute zone with generous transport cost budget
                 MarketPlacer.ComputeMarketZone(market, _mapData, _state.Transport, maxTransportCost: 100f);
                 _state.Economy.Markets[market.Id] = market;
+
+                usedCells.Add(cellId);
+                usedStates.Add(cell.StateId);
+
+                var stateName = _mapData.StateById.TryGetValue(cell.StateId, out var state)
+                    ? state.Name
+                    : "Unknown";
+                SimLog.Log("Market", $"Placed market '{market.Name}' at cell {cellId} in {stateName} (score: {market.SuitabilityScore:F1})");
             }
 
             // Build lookup table
             _state.Economy.RebuildCellToMarketLookup();
 
-            SimLog.Log("Market", $"Initialized {markets.Count} markets, {_state.Economy.CellToMarket.Count} cells have market access");
+            // Log distribution of cells per market
+            var cellsPerMarket = new Dictionary<int, int>();
+            foreach (var kvp in _state.Economy.CellToMarket)
+            {
+                if (!cellsPerMarket.ContainsKey(kvp.Value))
+                    cellsPerMarket[kvp.Value] = 0;
+                cellsPerMarket[kvp.Value]++;
+            }
+            foreach (var market in _state.Economy.Markets.Values)
+            {
+                int count = cellsPerMarket.TryGetValue(market.Id, out var c) ? c : 0;
+                SimLog.Log("Market", $"Market '{market.Name}' assigned {count} cells");
+            }
+
+            SimLog.Log("Market", $"Initialized {_state.Economy.Markets.Count} markets, {_state.Economy.CellToMarket.Count} cells have market access");
+        }
+
+        /// <summary>
+        /// Initialize the black market - a global underground market with no physical location.
+        /// </summary>
+        private void InitializeBlackMarket()
+        {
+            var blackMarket = new Market
+            {
+                Id = EconomyState.BlackMarketId,
+                LocationCellId = -1,  // No physical location
+                Name = "Black Market",
+                Type = MarketType.Black,
+                SuitabilityScore = 0
+            };
+
+            // Initialize goods with 2x base price (black market premium)
+            const float BlackMarketPriceMultiplier = 2.0f;
+            foreach (var good in _state.Economy.Goods.All)
+            {
+                float blackMarketPrice = good.BasePrice * BlackMarketPriceMultiplier;
+                blackMarket.Goods[good.Id] = new MarketGoodState
+                {
+                    GoodId = good.Id,
+                    BasePrice = blackMarketPrice,
+                    Price = blackMarketPrice,
+                    Supply = 0,
+                    Demand = 0
+                };
+            }
+
+            _state.Economy.Markets[blackMarket.Id] = blackMarket;
+            SimLog.Log("Market", "Initialized black market (global, 2x base prices)");
         }
     }
 }

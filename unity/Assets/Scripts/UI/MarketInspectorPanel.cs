@@ -190,7 +190,7 @@ namespace EconSim.UI
 
             // Hub location (burg name or cell ID)
             string hubName = $"Cell {_selectedMarket.LocationCellId}";
-            if (_mapData.CellById.TryGetValue(_selectedMarket.LocationCellId, out var cell))
+            if (_mapData.CellById != null && _mapData.CellById.TryGetValue(_selectedMarket.LocationCellId, out var cell))
             {
                 if (cell.BurgId > 0 && cell.BurgId < _mapData.Burgs.Count)
                 {

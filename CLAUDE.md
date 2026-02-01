@@ -8,9 +8,11 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 ## Current Phase
 
-**Phase 5: Iteration & Expansion** (next)
+**Phase 5: Iteration & Expansion** (in progress)
 
-- More production chains, multiple markets, population growth, additional map modes
+- ✓ Multiple markets (3 markets in different states, nearest-market assignment, distinct zone colors, hub province highlighting)
+- ✓ Black market (theft feeds underground economy, price-based market selection)
+- More production chains, population growth, additional map modes
 
 Previous phases complete:
 
@@ -47,7 +49,8 @@ See `docs/DESIGN.md` → Development Roadmap for full status.
 - `ConsumptionSystem` - Population consumption each tick
 - `TransportGraph` - Dijkstra pathfinding on cell graph with terrain costs
 - `Market`, `MarketPlacer` - Market data structure and placement algorithm
-- `TradeSystem` - Trade flows between counties and markets, price discovery
+- `TradeSystem` - Trade flows between counties and markets, price discovery, black market integration
+- `TheftSystem` - Daily stockpile theft feeding black market
 
 **Unity** (symlinks `EconSim.Core/` from `src/`):
 

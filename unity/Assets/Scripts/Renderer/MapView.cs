@@ -471,10 +471,10 @@ namespace EconSim.Renderer
 
             if (economyState.CellToMarket.TryGetValue(cell.Id, out int marketId))
             {
-                // Check if this cell is the market hub (location)
-                if (IsMarketHub(cell.Id))
+                // Check if this cell is in the market hub's province (highlights the whole province)
+                if (IsInMarketHubProvince(cell, out int hubMarketId))
                 {
-                    return MarketHubColor(marketId);
+                    return MarketHubColor(hubMarketId);
                 }
                 return MarketIdToColor(marketId);
             }
@@ -497,6 +497,30 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
+        /// Check if a cell is in the same province as any market hub.
+        /// Returns true and the market ID if so.
+        /// </summary>
+        private bool IsInMarketHubProvince(Cell cell, out int marketId)
+        {
+            marketId = 0;
+            if (economyState?.Markets == null || mapData == null) return false;
+
+            foreach (var market in economyState.Markets.Values)
+            {
+                if (mapData.CellById.TryGetValue(market.LocationCellId, out var hubCell))
+                {
+                    // Same province as market hub
+                    if (cell.ProvinceId > 0 && cell.ProvinceId == hubCell.ProvinceId)
+                    {
+                        marketId = market.Id;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Get the market located at a cell, or null if none.
         /// </summary>
         public EconSim.Core.Economy.Market GetMarketAtCell(int cellId)
@@ -509,51 +533,50 @@ namespace EconSim.Renderer
             return null;
         }
 
+        // Predefined market zone colors - distinct, muted pastels for large areas
+        private static readonly Color32[] MarketZoneColors = new Color32[]
+        {
+            new Color32(100, 149, 237, 255),  // Cornflower blue
+            new Color32(144, 238, 144, 255),  // Light green
+            new Color32(255, 182, 108, 255),  // Light orange
+            new Color32(221, 160, 221, 255),  // Plum
+            new Color32(240, 230, 140, 255),  // Khaki
+            new Color32(127, 255, 212, 255),  // Aquamarine
+            new Color32(255, 160, 122, 255),  // Light salmon
+            new Color32(176, 196, 222, 255),  // Light steel blue
+        };
+
+        // Predefined market hub colors - vivid, high-contrast versions
+        private static readonly Color32[] MarketHubColors = new Color32[]
+        {
+            new Color32(0, 71, 171, 255),     // Cobalt blue
+            new Color32(0, 128, 0, 255),      // Green
+            new Color32(255, 140, 0, 255),    // Dark orange
+            new Color32(148, 0, 211, 255),    // Dark violet
+            new Color32(184, 134, 11, 255),   // Dark goldenrod
+            new Color32(0, 139, 139, 255),    // Dark cyan
+            new Color32(220, 20, 60, 255),    // Crimson
+            new Color32(70, 130, 180, 255),   // Steel blue
+        };
+
         /// <summary>
-        /// Generate a distinct color from a market ID using a hash-based approach.
-        /// Uses golden ratio to spread hues evenly across the spectrum.
+        /// Get zone color for a market. Uses predefined palette for clarity.
         /// </summary>
         private Color32 MarketIdToColor(int marketId)
         {
-            // Golden ratio conjugate for even hue distribution
-            const float goldenRatioConjugate = 0.618033988749895f;
-
-            // Generate hue using golden ratio (ensures good spread even for sequential IDs)
-            float hue = (marketId * goldenRatioConjugate) % 1.0f;
-
-            // Fixed saturation and value for vibrant, visible colors
-            float saturation = 0.65f;
-            float value = 0.85f;
-
-            // HSV to RGB conversion
-            Color rgb = Color.HSVToRGB(hue, saturation, value);
-            return new Color32(
-                (byte)(rgb.r * 255),
-                (byte)(rgb.g * 255),
-                (byte)(rgb.b * 255),
-                255
-            );
+            int index = (marketId - 1) % MarketZoneColors.Length;
+            if (index < 0) index = 0;
+            return MarketZoneColors[index];
         }
 
         /// <summary>
-        /// Generate a brighter/highlighted color for market hub cells.
+        /// Get hub color for a market. Much more vivid than zone color for contrast.
         /// </summary>
         private Color32 MarketHubColor(int marketId)
         {
-            const float goldenRatioConjugate = 0.618033988749895f;
-            float hue = (marketId * goldenRatioConjugate) % 1.0f;
-
-            // Higher saturation and value for hub - makes it stand out
-            float saturation = 0.9f;
-            float value = 1.0f;
-
-            Color rgb = Color.HSVToRGB(hue, saturation, value);
-            return new Color32(
-                (byte)(rgb.r * 255),
-                (byte)(rgb.g * 255),
-                (byte)(rgb.b * 255),
-                255
-            );
+            int index = (marketId - 1) % MarketHubColors.Length;
+            if (index < 0) index = 0;
+            return MarketHubColors[index];
         }
 
         private void CenterMap()
