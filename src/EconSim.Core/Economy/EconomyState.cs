@@ -22,8 +22,15 @@ namespace EconSim.Core.Economy
         /// <summary>All facility instances, keyed by facility ID.</summary>
         public Dictionary<int, Facility> Facilities;
 
+        /// <summary>All markets, keyed by market ID.</summary>
+        public Dictionary<int, Market> Markets;
+
         /// <summary>Next facility ID to assign.</summary>
         public int NextFacilityId;
+
+        /// <summary>Lookup: cell ID → market ID that serves it (computed from zones).</summary>
+        [NonSerialized]
+        public Dictionary<int, int> CellToMarket;
 
         public EconomyState()
         {
@@ -31,7 +38,9 @@ namespace EconSim.Core.Economy
             FacilityDefs = new FacilityRegistry();
             Counties = new Dictionary<int, CountyEconomy>();
             Facilities = new Dictionary<int, Facility>();
+            Markets = new Dictionary<int, Market>();
             NextFacilityId = 1;
+            CellToMarket = new Dictionary<int, int>();
         }
 
         /// <summary>
@@ -114,6 +123,44 @@ namespace EconSim.Core.Economy
             {
                 if (Facilities.TryGetValue(fid, out var f))
                     yield return f;
+            }
+        }
+
+        /// <summary>
+        /// Get market by ID.
+        /// </summary>
+        public Market GetMarket(int marketId)
+        {
+            return Markets.TryGetValue(marketId, out var m) ? m : null;
+        }
+
+        /// <summary>
+        /// Get the market that serves a given cell (if any).
+        /// </summary>
+        public Market GetMarketForCell(int cellId)
+        {
+            if (CellToMarket.TryGetValue(cellId, out var marketId))
+                return GetMarket(marketId);
+            return null;
+        }
+
+        /// <summary>
+        /// Rebuild the cell-to-market lookup from market zones.
+        /// </summary>
+        public void RebuildCellToMarketLookup()
+        {
+            CellToMarket.Clear();
+            foreach (var market in Markets.Values)
+            {
+                foreach (var cellId in market.ZoneCellIds)
+                {
+                    // If a cell is in multiple zones, use the first market found
+                    // (could be improved to use closest market)
+                    if (!CellToMarket.ContainsKey(cellId))
+                    {
+                        CellToMarket[cellId] = market.Id;
+                    }
+                }
             }
         }
     }

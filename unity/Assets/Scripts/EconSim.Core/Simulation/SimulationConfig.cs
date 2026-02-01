@@ -13,6 +13,7 @@ namespace EconSim.Core.Simulation
             public const float Slow = 0.5f;    // 0.5 days/sec
             public const float Normal = 1f;    // 1 day/sec
             public const float Fast = 5f;      // 5 days/sec
+            public const float Ultra = 20f;    // 20 days/sec
         }
 
         /// <summary>

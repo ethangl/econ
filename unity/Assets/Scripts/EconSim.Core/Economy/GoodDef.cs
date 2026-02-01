@@ -72,6 +72,13 @@ namespace EconSim.Core.Economy
         /// <summary>Base consumption rate per capita per day.</summary>
         public float BaseConsumption;
 
+        // === Storage properties ===
+        /// <summary>
+        /// Fraction of stockpile lost per day due to spoilage/decay.
+        /// 0 = imperishable, 0.05 = 5% lost per day.
+        /// </summary>
+        public float DecayRate;
+
         public bool IsRaw => Category == GoodCategory.Raw;
         public bool IsRefined => Category == GoodCategory.Refined;
         public bool IsFinished => Category == GoodCategory.Finished;

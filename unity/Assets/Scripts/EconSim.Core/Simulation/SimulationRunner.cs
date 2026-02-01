@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
 using EconSim.Core.Simulation.Systems;
+using EconSim.Core.Transport;
 
 namespace EconSim.Core.Simulation
 {
@@ -37,9 +39,17 @@ namespace EconSim.Core.Simulation
             // Initialize economy
             _state.Economy = EconomyInitializer.Initialize(mapData);
 
+            // Initialize transport graph
+            _state.Transport = new TransportGraph(mapData);
+            SimLog.Log("Transport", "Transport graph initialized");
+
+            // Place markets (requires transport for accessibility scoring)
+            InitializeMarkets();
+
             // Register core systems (order matters!)
             RegisterSystem(new ProductionSystem());
             RegisterSystem(new ConsumptionSystem());
+            RegisterSystem(new TradeSystem());
         }
 
         /// <summary>
@@ -85,5 +95,23 @@ namespace EconSim.Core.Simulation
 
         public MapData GetMapData() => _mapData;
         public SimulationState GetState() => _state;
+
+        private void InitializeMarkets()
+        {
+            // Place 1 market for v1
+            var markets = MarketPlacer.PlaceMarkets(_mapData, _state.Transport, _state.Economy, count: 1);
+
+            foreach (var market in markets)
+            {
+                // Compute zone with generous transport cost budget
+                MarketPlacer.ComputeMarketZone(market, _mapData, _state.Transport, maxTransportCost: 100f);
+                _state.Economy.Markets[market.Id] = market;
+            }
+
+            // Build lookup table
+            _state.Economy.RebuildCellToMarketLookup();
+
+            SimLog.Log("Market", $"Initialized {markets.Count} markets, {_state.Economy.CellToMarket.Count} cells have market access");
+        }
     }
 }

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("EconSim.Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+346fe05667ade4442c5c0aa7722874d500a4fb2e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f7e467aef23e62c8567028e57faad52ffd9a2390")]
 [assembly: System.Reflection.AssemblyProductAttribute("EconSim.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("EconSim.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -18,6 +18,7 @@ namespace EconSim.Core.Simulation.Systems
         // Debug: track consumption this tick
         private Dictionary<string, float> _consumedThisTick = new Dictionary<string, float>();
         private Dictionary<string, float> _unmetThisTick = new Dictionary<string, float>();
+        private Dictionary<string, float> _decayedThisTick = new Dictionary<string, float>();
         private const int LogInterval = 30;
 
         public void Initialize(SimulationState state, MapData mapData)
@@ -40,6 +41,7 @@ namespace EconSim.Core.Simulation.Systems
 
             _consumedThisTick.Clear();
             _unmetThisTick.Clear();
+            _decayedThisTick.Clear();
 
             foreach (var county in economy.Counties.Values)
             {
@@ -47,13 +49,18 @@ namespace EconSim.Core.Simulation.Systems
                 county.UnmetDemand.Clear();
 
                 int population = county.Population.Total;
-                if (population <= 0) continue;
 
                 // Consume each consumer good
-                foreach (var good in economy.Goods.ConsumerGoods)
+                if (population > 0)
                 {
-                    ConsumeGood(county, good, population);
+                    foreach (var good in economy.Goods.ConsumerGoods)
+                    {
+                        ConsumeGood(county, good, population);
+                    }
                 }
+
+                // Apply decay to all goods in stockpile (perishability)
+                ApplyDecay(county, economy);
             }
 
             // Debug logging
@@ -71,6 +78,21 @@ namespace EconSim.Core.Simulation.Systems
                 float unmet = _unmetThisTick.ContainsKey(kvp.Key) ? _unmetThisTick[kvp.Key] : 0;
                 float satisfaction = kvp.Value + unmet > 0 ? kvp.Value / (kvp.Value + unmet) * 100 : 100;
                 SimLog.Log("Consumption", $"  {kvp.Key}: {kvp.Value:F1} consumed, {unmet:F1} unmet ({satisfaction:F0}% satisfied)");
+            }
+
+            // Log decay if significant
+            if (_decayedThisTick.Count > 0)
+            {
+                var decaySummary = new List<string>();
+                foreach (var kvp in _decayedThisTick)
+                {
+                    if (kvp.Value >= 0.1f)
+                        decaySummary.Add($"{kvp.Key}:{kvp.Value:F1}");
+                }
+                if (decaySummary.Count > 0)
+                {
+                    SimLog.Log("Consumption", $"  Spoilage: {string.Join(", ", decaySummary)}");
+                }
             }
         }
 
@@ -104,6 +126,39 @@ namespace EconSim.Core.Simulation.Systems
             // Basic unmet → population decline, unrest
             // Comfort unmet → slower growth, mild unrest
             // Luxury unmet → just missed economic activity
+        }
+
+        private void ApplyDecay(CountyEconomy county, EconomyState economy)
+        {
+            // Get all goods currently in stockpile
+            var goodsInStock = new List<string>();
+            foreach (var kvp in county.Stockpile.All)
+            {
+                goodsInStock.Add(kvp.Key);
+            }
+
+            foreach (var goodId in goodsInStock)
+            {
+                var goodDef = economy.Goods.Get(goodId);
+                if (goodDef == null || goodDef.DecayRate <= 0)
+                    continue;
+
+                float currentStock = county.Stockpile.Get(goodId);
+                if (currentStock <= 0)
+                    continue;
+
+                // Calculate decay: stock * decayRate per day
+                float decayed = currentStock * goodDef.DecayRate;
+                if (decayed < 0.001f)
+                    continue;  // Don't bother with tiny amounts
+
+                county.Stockpile.Remove(goodId, decayed);
+
+                // Track for logging
+                if (!_decayedThisTick.ContainsKey(goodId))
+                    _decayedThisTick[goodId] = 0;
+                _decayedThisTick[goodId] += decayed;
+            }
         }
     }
 }

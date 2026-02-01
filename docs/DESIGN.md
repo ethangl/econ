@@ -550,6 +550,35 @@ For each county C:
 - Counties crossing threshold become recognized markets
 - Declining markets fade to local trading
 
+### Implementation Notes (v1)
+
+**Classes:** `Market`, `MarketPlacer`, `TradeSystem`
+
+Market placement uses suitability scoring:
+
+- Settlement bonus (burg population, capital, port)
+- Coastal proximity (CoastDistance ≤ 2)
+- River access (HasRiver, high flow bonus)
+- Population density
+- Accessibility (low neighbor movement costs)
+- Resource diversity (unique resources in cell + neighbors)
+- Centrality (land neighbor count)
+
+Trade system runs weekly:
+
+- Counties with >7 days stock sell surplus to market
+- Counties with <3 days stock buy from market
+- Prices adjust via supply/demand ratio (±10% per tick)
+- Price bounds: 0.1x - 10x base price
+- **Transport cost markup**: goods lose ~1% per unit of transport cost during trade
+- Transport efficiency = `1 / (1 + cost * 0.01)`, minimum 50%
+
+Storage decay (in `ConsumptionSystem`):
+
+- `GoodDef.DecayRate`: fraction of stockpile lost per day
+- Bread: 5%/day, Flour: 1%/day, Wheat: 0.5%/day
+- Wood products: 0.2%/day, Metals: 0%
+
 ---
 
 ## Transport System
@@ -586,6 +615,58 @@ sea_route  → cost * 0.1 (between ports)
 - Caching strategy needed (1000s of counties):
   - Lazy compute + LRU cache
   - Or hierarchical (region→region precomputed, local on demand)
+
+### Implementation Notes (v1)
+
+**Class:** `TransportGraph`
+
+Terrain costs derived from Azgaar biome data:
+
+- Azgaar costs (10-5000 scale) normalized by dividing by 50
+- Result: Grassland=1.0, Forest=1.4-1.8, Desert=3-4, Tundra=20
+- Clamped to 1-20 range
+
+Additional modifiers:
+
+- Height penalty: cells above height 70 get up to 3x cost multiplier
+- River bonus: same-river travel gets 0.8x multiplier
+- Water cells are impassable (cost = 100)
+
+Edge cost formula:
+
+```
+baseCost = (fromCellCost + toCellCost) / 2
+distanceFactor = euclideanDistance / 30
+totalCost = baseCost * distanceFactor * riverBonus
+```
+
+Key methods:
+
+- `FindPath(from, to)` → full path with total cost
+- `FindReachable(from, maxCost)` → all cells within budget (for market zones)
+- `GetTransportCost(from, to)` → cost only (uses cached path)
+
+Caching: Simple LRU with configurable max size (default 10k entries).
+
+### Future: Transport Losses
+
+Additional GoodDef properties for transport inefficiency:
+
+```
+TransportLossRate: float  # % lost per unit of transport cost (fragility)
+TheftRisk: float          # % lost per unit of transport cost × value
+```
+
+- **Fragility**: Goods like pottery, glass, or fresh produce lose quantity in transit proportional to distance. `arriving = sent * (1 - transportCost * TransportLossRate)`
+
+- **Theft/Pilferage**: Valuable goods attract theft. Loss scales with both distance and value. `arriving = sent * (1 - transportCost * value * TheftRisk)`
+
+Example values:
+| Good | TransportLossRate | TheftRisk |
+|------|-------------------|-----------|
+| Bread | 0.02 | 0 |
+| Tools | 0.005 | 0.001 |
+| Furniture | 0.01 | 0.0005 |
 
 ---
 
@@ -689,20 +770,38 @@ econ/
 │   └── EconSim.Core/              # Simulation engine (netstandard2.1)
 │       ├── EconSim.Core.csproj
 │       ├── Common/
-│       │   └── Types.cs           # Vec2, Color32 (Unity-independent)
+│       │   ├── Types.cs           # Vec2, Color32 (Unity-independent)
+│       │   └── SimLog.cs          # Logging utility
 │       ├── Data/
-│       │   └── MapData.cs         # Cell, Province, State, etc.
+│       │   └── MapData.cs         # Cell, Province, State, Biome, etc.
 │       ├── Import/
 │       │   ├── AzgaarData.cs      # Azgaar JSON structure
 │       │   ├── AzgaarParser.cs    # JSON parsing
 │       │   └── MapConverter.cs    # AzgaarMap → MapData
+│       ├── Economy/
+│       │   ├── GoodDef.cs         # Good definitions & registry
+│       │   ├── FacilityDef.cs     # Facility definitions & registry
+│       │   ├── Facility.cs        # Facility instance
+│       │   ├── Stockpile.cs       # Good inventory
+│       │   ├── Population.cs      # Population cohorts
+│       │   ├── CountyEconomy.cs   # Per-county economic state
+│       │   ├── EconomyState.cs    # Global economy container
+│       │   ├── EconomyInitializer.cs # Setup resources & facilities
+│       │   ├── InitialData.cs     # Production chain definitions
+│       │   ├── Market.cs          # Market data structure
+│       │   └── MarketPlacer.cs    # Market placement algorithm
+│       ├── Transport/
+│       │   └── TransportGraph.cs  # Dijkstra pathfinding on cell graph
 │       └── Simulation/
 │           ├── ISimulation.cs     # Main interface for Unity
 │           ├── SimulationRunner.cs # Tick loop implementation
-│           ├── SimulationState.cs # Current state (day, speed)
-│           ├── SimulationConfig.cs # Speed presets
+│           ├── SimulationState.cs # Current state (day, speed, economy)
+│           ├── SimulationConfig.cs # Speed presets, tick intervals
 │           └── Systems/
-│               └── ITickSystem.cs # Interface for subsystems
+│               ├── ITickSystem.cs     # Interface for subsystems
+│               ├── ProductionSystem.cs # Extraction & processing
+│               ├── ConsumptionSystem.cs # Population consumption
+│               └── TradeSystem.cs     # Market trade & pricing
 │
 └── unity/                         # Unity frontend
     ├── Assets/
@@ -980,12 +1079,12 @@ public class SimulationRunner
 - [x] Basic consumption by population
 - [x] Time control HUD (day display, pause/play, speed)
 
-### Phase 3: Markets & Trade
+### Phase 3: Markets & Trade ✓
 
-- [ ] Market placement (1 for v1)
-- [ ] Transport cost pathfinding
-- [ ] Trade flow simulation
-- [ ] Price discovery
+- [x] Market placement (1 for v1)
+- [x] Transport cost pathfinding
+- [x] Trade flow simulation
+- [x] Price discovery
 
 ### Phase 4: UI Layer
 

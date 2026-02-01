@@ -8,15 +8,16 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 ## Current Phase
 
-**Phase 3: Markets & Trade** (next)
+**Phase 4: UI Layer** (next)
 
-- Market placement, transport pathfinding, trade flows, price discovery
+- Time controls, selection & inspection panels, county/market detail view, economic readouts
 
 Previous phases complete:
 
 - ✓ Phase 1: Map Import & Rendering
 - ✓ Phase 1.5: Extract Simulation Engine
 - ✓ Phase 2: Simulation Foundation
+- ✓ Phase 3: Markets & Trade
 
 See `docs/DESIGN.md` → Development Roadmap for full status.
 
@@ -43,6 +44,9 @@ See `docs/DESIGN.md` → Development Roadmap for full status.
 - `Facility`, `Stockpile`, `CountyPopulation` - Runtime economic state
 - `ProductionSystem` - Extraction and processing each tick
 - `ConsumptionSystem` - Population consumption each tick
+- `TransportGraph` - Dijkstra pathfinding on cell graph with terrain costs
+- `Market`, `MarketPlacer` - Market data structure and placement algorithm
+- `TradeSystem` - Trade flows between counties and markets, price discovery
 
 **Unity**:
 

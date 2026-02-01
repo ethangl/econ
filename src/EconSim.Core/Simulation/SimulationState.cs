@@ -1,4 +1,5 @@
 using EconSim.Core.Economy;
+using EconSim.Core.Transport;
 
 namespace EconSim.Core.Simulation
 {
@@ -31,5 +32,10 @@ namespace EconSim.Core.Simulation
         /// Economic state (goods, facilities, county economies).
         /// </summary>
         public EconomyState Economy { get; set; }
+
+        /// <summary>
+        /// Transport graph for pathfinding between cells.
+        /// </summary>
+        public TransportGraph Transport { get; set; }
     }
 }
