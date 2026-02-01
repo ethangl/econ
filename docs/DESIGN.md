@@ -90,7 +90,7 @@ taxSlider.RegisterValueChangedCallback(evt => TaxRate.Value = evt.newValue);
 
 - Base tick = 1 day (structured to allow sub-day ticks later)
 - All rates stored as "per day", converted at tick time
-- Speed settings: paused, slow (1/sec), normal (5/sec), fast (30/sec), ultra (uncapped)
+- Speed settings: paused, slow (0.5/sec), normal (1/sec), fast (5/sec)
 - Multi-rate ticking: different systems update at different frequencies
 
 ```
@@ -153,6 +153,7 @@ The `reference/` directory contains Azgaar Fantasy Map Generator exports (gitign
 | Resolution         | 1440x810   |
 
 **Files:**
+
 - `1234_low-island_40k_1440x810.json` - JSON export (preferred)
 - `1234_low-island_40k_1440x810.map` - Azgaar native format
 - `1234_low-island_40k_1440x810.svg` - SVG export (validation reference)
@@ -183,9 +184,11 @@ pack (main data):
 ```
 
 **Hierarchy:**
+
 ```
 State (9) → Province (327) → Cell (18,751)
 ```
+
 Cell is our "county" equivalent.
 
 **Biomes:** Marine, Hot desert, Cold desert, Savanna, Grassland, Tropical seasonal forest, Temperate deciduous forest, Tropical rainforest, Temperate rainforest, Taiga, Tundra, Glacier, Wetland
@@ -689,10 +692,17 @@ econ/
 │       │   └── Types.cs           # Vec2, Color32 (Unity-independent)
 │       ├── Data/
 │       │   └── MapData.cs         # Cell, Province, State, etc.
-│       └── Import/
-│           ├── AzgaarData.cs      # Azgaar JSON structure
-│           ├── AzgaarParser.cs    # JSON parsing
-│           └── MapConverter.cs    # AzgaarMap → MapData
+│       ├── Import/
+│       │   ├── AzgaarData.cs      # Azgaar JSON structure
+│       │   ├── AzgaarParser.cs    # JSON parsing
+│       │   └── MapConverter.cs    # AzgaarMap → MapData
+│       └── Simulation/
+│           ├── ISimulation.cs     # Main interface for Unity
+│           ├── SimulationRunner.cs # Tick loop implementation
+│           ├── SimulationState.cs # Current state (day, speed)
+│           ├── SimulationConfig.cs # Speed presets
+│           └── Systems/
+│               └── ITickSystem.cs # Interface for subsystems
 │
 └── unity/                         # Unity frontend
     ├── Assets/
@@ -904,8 +914,8 @@ public class SimulationRunner
 - [x] Azgaar JSON file loaded and rendered in Unity
 - [x] 3D terrain mesh (flat world, not globe)
 - [x] Camera: pan/zoom with edge panning
-- [ ] Basic simulation ticking
-- [ ] 3 production chains running
+- [x] Basic simulation ticking
+- [x] 3 production chains running (wheat→flour→bread, iron→tools, timber→furniture)
 - [ ] UI to inspect counties/markets
 
 ---
@@ -962,12 +972,13 @@ public class SimulationRunner
 - [x] Move Data types (MapData, Cell, etc.) to Core
 - [x] Unity bridge layer with type conversions (CoreExtensions)
 
-### Phase 2: Simulation Foundation
+### Phase 2: Simulation Foundation ✓
 
-- [ ] Data structures (County, Resource, Facility, Population)
-- [ ] Tick loop architecture
-- [ ] 3 production chains (harvest → refine → manufacture)
-- [ ] Basic consumption by population
+- [x] Data structures (County, Resource, Facility, Population)
+- [x] Tick loop architecture (ISimulation, SimulationRunner, ITickSystem)
+- [x] 3 production chains (harvest → refine → manufacture)
+- [x] Basic consumption by population
+- [x] Time control HUD (day display, pause/play, speed)
 
 ### Phase 3: Markets & Trade
 

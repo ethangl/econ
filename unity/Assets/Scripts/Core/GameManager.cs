@@ -1,6 +1,9 @@
 using UnityEngine;
 using EconSim.Core.Import;
 using EconSim.Core.Data;
+using EconSim.Core.Common;
+using EconSim.Core.Simulation;
+using EconSim.Core.Simulation.Systems;
 using EconSim.Renderer;
 
 namespace EconSim.Core
@@ -18,6 +21,10 @@ namespace EconSim.Core
         [SerializeField] private MapView mapView;
 
         public MapData MapData { get; private set; }
+        public ISimulation Simulation => _simulation;
+
+        private ISimulation _simulation;
+        private int _lastLoggedDay;
 
         public static GameManager Instance { get; private set; }
 
@@ -29,6 +36,9 @@ namespace EconSim.Core
                 return;
             }
             Instance = this;
+
+            // Route simulation logs to Unity's console
+            SimLog.LogAction = Debug.Log;
         }
 
         private void Start()
@@ -108,6 +118,86 @@ namespace EconSim.Core
             else
             {
                 Debug.LogWarning("MapView not assigned to GameManager");
+            }
+
+            // Initialize simulation (auto-registers ProductionSystem + ConsumptionSystem)
+            _simulation = new SimulationRunner(MapData);
+            _simulation.IsPaused = true;  // Start paused
+
+            Debug.Log("Simulation initialized (paused). Press P to unpause, -/= to change speed.");
+        }
+
+        private void Update()
+        {
+            HandleInput();
+            _simulation?.Tick(Time.deltaTime);
+            LogDayChange();
+        }
+
+        private void HandleInput()
+        {
+            if (_simulation == null) return;
+
+            // P: Toggle pause
+            if (Input.GetKeyDown(KeyCode.P))
+            {
+                _simulation.IsPaused = !_simulation.IsPaused;
+                Debug.Log(_simulation.IsPaused ? "Paused" : $"Running (speed: {_simulation.TimeScale}x)");
+            }
+
+            // -/=: Decrease/increase speed
+            if (Input.GetKeyDown(KeyCode.Minus))
+            {
+                DecreaseSpeed();
+            }
+            if (Input.GetKeyDown(KeyCode.Equals))
+            {
+                IncreaseSpeed();
+            }
+        }
+
+        private static readonly float[] SpeedPresets =
+        {
+            SimulationConfig.Speed.Slow,
+            SimulationConfig.Speed.Normal,
+            SimulationConfig.Speed.Fast,
+            SimulationConfig.Speed.Ultra
+        };
+        private static readonly string[] SpeedNames = { "Slow", "Normal", "Fast", "Ultra" };
+
+        private void DecreaseSpeed()
+        {
+            int index = System.Array.IndexOf(SpeedPresets, _simulation.TimeScale);
+            if (index > 0)
+            {
+                _simulation.TimeScale = SpeedPresets[index - 1];
+                Debug.Log($"Speed: {SpeedNames[index - 1]} ({SpeedPresets[index - 1]} days/sec)");
+            }
+        }
+
+        private void IncreaseSpeed()
+        {
+            int index = System.Array.IndexOf(SpeedPresets, _simulation.TimeScale);
+            if (index < SpeedPresets.Length - 1)
+            {
+                _simulation.TimeScale = SpeedPresets[index + 1];
+                Debug.Log($"Speed: {SpeedNames[index + 1]} ({SpeedPresets[index + 1]} days/sec)");
+            }
+        }
+
+        private void LogDayChange()
+        {
+            if (_simulation == null) return;
+
+            var state = _simulation.GetState();
+            if (state.CurrentDay != _lastLoggedDay)
+            {
+                // Log every 10 days to avoid spam
+                if (state.CurrentDay % 10 == 0)
+                {
+                    Debug.Log($"Day {state.CurrentDay}");
+                }
+                _lastLoggedDay = state.CurrentDay;
             }
         }
     }
