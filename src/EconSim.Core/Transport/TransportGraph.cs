@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
+using EconSim.Core.Economy;
 
 namespace EconSim.Core.Transport
 {
@@ -47,11 +48,18 @@ namespace EconSim.Core.Transport
         private readonly Dictionary<(int, int), PathResult> _pathCache;
         private readonly int _maxCacheSize;
 
+        // Road state for applying road bonuses (set after economy initialization)
+        private RoadState _roadState;
+
         // Default movement cost if biome not found
         private const float DefaultMovementCost = 1.0f;
 
         // River crossing bonus (multiplier < 1 means easier)
         private const float RiverCrossingBonus = 0.8f;
+
+        // Sea transport costs
+        private const float SeaMovementCost = 0.15f;   // ~7x cheaper than base land
+        private const float PortTransitionCost = 3.0f; // Cost to load/unload at port
 
         // Impassable threshold (cells with cost >= this are blocked)
         private const float ImpassableThreshold = 100f;
@@ -71,13 +79,25 @@ namespace EconSim.Core.Transport
         }
 
         /// <summary>
+        /// Set the road state for applying road cost bonuses.
+        /// Call this after economy initialization.
+        /// </summary>
+        public void SetRoadState(RoadState roadState)
+        {
+            _roadState = roadState;
+            // Clear cache when road state changes (roads affect costs)
+            ClearCache();
+        }
+
+        /// <summary>
         /// Get the movement cost for entering a cell.
         /// Based on biome and terrain features.
         /// </summary>
         public float GetCellMovementCost(Cell cell)
         {
+            // Ocean cells: cheap to traverse by ship
             if (!cell.IsLand)
-                return ImpassableThreshold; // Can't walk on water (for now)
+                return SeaMovementCost;
 
             float baseCost = DefaultMovementCost;
 
@@ -124,10 +144,34 @@ namespace EconSim.Core.Transport
 
             float totalCost = baseCost * distanceFactor;
 
-            // River bonus: if both cells are on the same river, movement is easier
-            if (from.HasRiver && to.HasRiver && from.RiverId == to.RiverId)
+            // Port transition: crossing between land and sea incurs loading/unloading cost
+            bool landToSea = from.IsLand && !to.IsLand;
+            bool seaToLand = !from.IsLand && to.IsLand;
+            if (landToSea || seaToLand)
             {
-                totalCost *= RiverCrossingBonus;
+                totalCost += PortTransitionCost;
+            }
+
+            // River and road bonuses: take the better one, don't stack
+            // Only applies to land travel
+            if (from.IsLand && to.IsLand)
+            {
+                float bestMultiplier = 1f;
+
+                // Check river bonus
+                if (from.HasRiver && to.HasRiver && from.RiverId == to.RiverId)
+                {
+                    bestMultiplier = Math.Min(bestMultiplier, RiverCrossingBonus);
+                }
+
+                // Check road bonus
+                if (_roadState != null)
+                {
+                    float roadMultiplier = _roadState.GetCostMultiplier(from.Id, to.Id);
+                    bestMultiplier = Math.Min(bestMultiplier, roadMultiplier);
+                }
+
+                totalCost *= bestMultiplier;
             }
 
             return totalCost;

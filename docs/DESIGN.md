@@ -670,10 +670,13 @@ marsh      → 2.5
 ### Modifiers
 
 ```
-road       → cost * 0.4
-river      → cost * 0.2 (downstream) / 0.5 (upstream)
-sea_route  → cost * 0.1 (between ports)
+path       → cost * 0.7 (emerges at 500 traffic)
+road       → cost * 0.5 (emerges at 2000 traffic)
+river      → cost * 0.8 (same-river travel)
+sea_route  → cost * 0.15 + port transition (3.0 per crossing)
 ```
+
+Note: Road/path and river bonuses don't stack - the best modifier wins.
 
 ### Pathfinding
 
@@ -696,7 +699,8 @@ Additional modifiers:
 
 - Height penalty: cells above height 70 get up to 3x cost multiplier
 - River bonus: same-river travel gets 0.8x multiplier
-- Water cells are impassable (cost = 100)
+- Sea transport: ocean cells cost 0.15 (vs ~1.0 for land)
+- Port transition: +3.0 flat cost when crossing land↔sea boundary
 
 Edge cost formula:
 
@@ -1194,14 +1198,53 @@ Future:
 - [x] Market inspector panel - click market hub to see name, zone size, goods (supply/demand/price)
 - [x] Global economy panel (E key) - tabbed: Overview, Production, Trade
 
-### Phase 5+: Iteration & Expansion
+### Phase 5: Iteration & Expansion ✓
 
-- [ ] More production chains
 - [x] Multiple markets (3 markets in different states, nearest-market assignment, distinct zone colors)
 - [x] Black market (theft feeds underground economy, price-based market selection)
+
+### Phase 5.5: Transport & Rivers ✓
+
+- [x] Ocean transportation
+  - Ocean cells now traversable with low movement cost (0.15 vs ~1.0 for land)
+  - Port transition cost (+3.0) for loading/unloading at coast
+  - Enables sea trade routes - islands now connect to mainland markets
+  - Coastal markets can now serve zones across water bodies
+- [x] Ocean and lake rendering
+  - Water cells now rendered (previously land-only)
+  - Ocean: depth-based blue gradient (shallow to deep)
+  - Lakes: distinct steel blue color
+  - Feature data preserved from Azgaar (ocean/lake/island types)
+- [x] River rendering
+  - Rivers rendered as blue line strips through cell centers
+  - Width tapers from source (30%) to mouth (100%)
+  - 269 rivers visible on current map
+- [x] Selection highlight
+  - Yellow outline around selected cell for visual feedback
+- [x] Emergent roads
+  - Roads form from accumulated trade traffic on cell edges
+  - Traffic recorded when goods move along trade routes (land only, not sea)
+  - Two tiers: path (500 traffic, 0.7x cost) and road (2000 traffic, 0.5x cost)
+  - River and road bonuses don't stack - best one wins
+  - Paths computed lazily (max 50/tick) to avoid performance spikes
+  - Roads rendered as brown line segments between cell centers
+- [x] UI improvements
+  - Click-through prevention: UI panels block clicks to map beneath
+  - County map mode: cells colored by province hue with saturation/brightness variation
+  - Political mode cycling: 1 key cycles Country → Province → County
+  - Hotkeys reorganized: 1=political modes, 2=terrain, 3=height, 4=market
+  - Mode-aware selection panel: shows country/province/county inspector based on current mode
+  - Country inspector: aggregated population, list of provinces
+  - Province inspector: aggregated population, list of counties
+  - County inspector: detailed view with resources, stockpile, facilities
+
+### Phase 6+: Future
+
+- [ ] More production chains
 - [ ] Population growth/decline
 - [ ] Additional map modes (population density, resources)
 - [ ] Facility emergence
 - [ ] Resource depletion
+- [ ] Roads (rendering + transport bonus)
 - [ ] Individual important characters
 - [ ] Dynamic political boundaries

@@ -41,6 +41,7 @@ namespace EconSim.Core.Simulation
 
             // Initialize transport graph
             _state.Transport = new TransportGraph(mapData);
+            _state.Transport.SetRoadState(_state.Economy.Roads);
             SimLog.Log("Transport", "Transport graph initialized");
 
             // Place markets (requires transport for accessibility scoring)

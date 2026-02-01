@@ -25,6 +25,9 @@ namespace EconSim.Core.Economy
         /// <summary>All markets, keyed by market ID.</summary>
         public Dictionary<int, Market> Markets;
 
+        /// <summary>Road network state (traffic accumulation, road tiers).</summary>
+        public RoadState Roads;
+
         /// <summary>Reserved ID for the black market.</summary>
         public const int BlackMarketId = 0;
 
@@ -42,6 +45,7 @@ namespace EconSim.Core.Economy
             Counties = new Dictionary<int, CountyEconomy>();
             Facilities = new Dictionary<int, Facility>();
             Markets = new Dictionary<int, Market>();
+            Roads = new RoadState();
             NextFacilityId = 1;
             CellToMarket = new Dictionary<int, int>();
         }

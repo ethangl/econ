@@ -112,6 +112,9 @@ namespace EconSim.Core
             Debug.Log($"  States: {MapData.States.Count}");
             Debug.Log($"  Provinces: {MapData.Provinces.Count}");
 
+            // Ensure we have a directional light for terrain relief
+            EnsureDirectionalLight();
+
             // Initialize renderer
             if (mapView != null)
             {
@@ -133,11 +136,12 @@ namespace EconSim.Core
             _simulation = new SimulationRunner(MapData);
             _simulation.IsPaused = true;  // Start paused
 
-            // Provide economy state to map view for market mode
+            // Provide economy state to map view for market mode and roads
             if (mapView != null)
             {
                 var economy = _simulation.GetState().Economy;
                 mapView.SetEconomyState(economy);
+                mapView.SetRoadState(economy.Roads);
             }
 
             Debug.Log("Simulation initialized (paused). Press P to unpause, -/= to change speed.");
@@ -201,6 +205,40 @@ namespace EconSim.Core
             }
         }
 
+        /// <summary>
+        /// Ensures a directional light exists for terrain relief shadows.
+        /// Uses a fixed low angle for consistent relief shading.
+        /// </summary>
+        private void EnsureDirectionalLight()
+        {
+            // Set ambient light
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+            RenderSettings.ambientLight = Color.black;
+            RenderSettings.ambientIntensity = 0f;
+
+            // Check if a directional light already exists
+            foreach (var existing in FindObjectsOfType<Light>())
+            {
+                if (existing.type == LightType.Directional)
+                {
+                    Debug.Log("Using existing directional light");
+                    return;
+                }
+            }
+
+            // Create a fixed directional light with low angle for terrain relief
+            var lightObj = new GameObject("Sun");
+            lightObj.transform.rotation = Quaternion.Euler(20f, 45f, 0f);  // Low angle from northwest
+
+            var sun = lightObj.AddComponent<Light>();
+            sun.type = LightType.Directional;
+            sun.color = new Color(1f, 0.97f, 0.9f);
+            sun.intensity = 1.5f;
+            sun.shadows = LightShadows.Soft;
+
+            Debug.Log("Created directional light for terrain relief");
+        }
+
         private void LogDayChange()
         {
             if (_simulation == null) return;
@@ -213,6 +251,13 @@ namespace EconSim.Core
                 {
                     Debug.Log($"Day {state.CurrentDay}");
                 }
+
+                // Refresh road rendering weekly (same frequency as trade)
+                if (state.CurrentDay % 7 == 0 && mapView != null)
+                {
+                    mapView.RefreshRoads();
+                }
+
                 _lastLoggedDay = state.CurrentDay;
             }
         }

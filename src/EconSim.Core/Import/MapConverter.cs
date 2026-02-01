@@ -26,7 +26,8 @@ namespace EconSim.Core.Import
                 States = ConvertStates(azgaar.pack.states),
                 Provinces = ConvertProvinces(azgaar.pack.provinces),
                 Rivers = ConvertRivers(azgaar.pack.rivers),
-                Burgs = ConvertBurgs(azgaar.pack.burgs)
+                Burgs = ConvertBurgs(azgaar.pack.burgs),
+                Features = ConvertFeatures(azgaar.pack.features)
             };
 
             // Build lookup tables
@@ -109,6 +110,7 @@ namespace EconSim.Core.Import
                     BiomeId = ac.biome,
                     IsLand = ac.h >= SEA_LEVEL,
                     CoastDistance = ac.t,
+                    FeatureId = ac.f,
                     StateId = ac.state,
                     ProvinceId = ac.province,
                     BurgId = ac.burg,
@@ -231,6 +233,25 @@ namespace EconSim.Core.Import
                 burgs.Add(burg);
             }
             return burgs;
+        }
+
+        private static List<Feature> ConvertFeatures(List<AzgaarFeature> azgaarFeatures)
+        {
+            var features = new List<Feature>();
+            if (azgaarFeatures == null) return features;
+
+            foreach (var af in azgaarFeatures)
+            {
+                var feature = new Feature
+                {
+                    Id = af.i,
+                    Type = af.type ?? "",
+                    IsBorder = af.border,
+                    CellCount = af.cells?.Count ?? 0
+                };
+                features.Add(feature);
+            }
+            return features;
         }
 
         /// <summary>

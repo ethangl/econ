@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UIElements;
 using EconSim.Core.Data;
 using EconSim.Bridge;
 using EconSim.Camera;
@@ -14,10 +15,10 @@ namespace EconSim.Renderer
     public class MapView : MonoBehaviour
     {
         [Header("Rendering Settings")]
-        [SerializeField] private float heightScale = 0.1f;
+        [SerializeField] private float heightScale = 15f;
         [SerializeField] private float cellScale = 0.01f;  // Scale from Azgaar pixels to Unity units
         [SerializeField] private Material terrainMaterial;
-        [SerializeField] private bool renderLandOnly = true;
+        [SerializeField] private bool renderLandOnly = false;
 
         [Header("Map Mode")]
         [SerializeField] private MapMode currentMode = MapMode.Political;
@@ -39,25 +40,35 @@ namespace EconSim.Renderer
         private MeshRenderer meshRenderer;
         private Mesh mesh;
         private BorderRenderer borderRenderer;
+        private RiverRenderer riverRenderer;
+        private RoadRenderer roadRenderer;
+        private SelectionHighlight selectionHighlight;
 
         // Cell mesh data
         private List<Vector3> vertices = new List<Vector3>();
         private List<int> triangles = new List<int>();
         private List<Color32> colors = new List<Color32>();
 
+        // Vertex heights (computed by averaging neighboring cells)
+        private float[] vertexHeights;
+
+        // Track last political mode for 1-key cycling
+        private MapMode lastPoliticalMode = MapMode.Political;
+
         public enum MapMode
         {
-            Political,  // Colored by state (key: 1)
-            Province,   // Colored by province (key: 2)
-            Terrain,    // Colored by biome (key: 3)
-            Height,     // Colored by elevation (key: 4)
-            Market      // Colored by market zone (key: 5)
+            Political,  // Colored by state/country (key: 1, cycles with Province/County)
+            Province,   // Colored by province (key: 1, cycles with Political/County)
+            County,     // Colored by county/cell (key: 1, cycles with Political/Province)
+            Terrain,    // Colored by biome (key: 2)
+            Height,     // Colored by elevation (key: 3)
+            Market      // Colored by market zone (key: 4)
         }
 
         public MapMode CurrentMode => currentMode;
         public string CurrentModeName => ModeNames[(int)currentMode];
 
-        private static readonly string[] ModeNames = { "Political", "Province", "Terrain", "Height", "Market" };
+        private static readonly string[] ModeNames = { "Political", "Province", "County", "Terrain", "Height", "Market" };
 
         private void Awake()
         {
@@ -70,33 +81,55 @@ namespace EconSim.Renderer
             // Map mode selection with number keys 1-4
             if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1))
             {
-                SetMapMode(MapMode.Political);
-                Debug.Log("Map mode: Political (1)");
+                // Key 1 cycles between political modes (Political → Province → County)
+                // From non-political mode, returns to last used political mode
+                if (currentMode == MapMode.Political)
+                {
+                    SetMapMode(MapMode.Province);
+                    lastPoliticalMode = MapMode.Province;
+                    Debug.Log("Map mode: Province (1)");
+                }
+                else if (currentMode == MapMode.Province)
+                {
+                    SetMapMode(MapMode.County);
+                    lastPoliticalMode = MapMode.County;
+                    Debug.Log("Map mode: County (1)");
+                }
+                else if (currentMode == MapMode.County)
+                {
+                    SetMapMode(MapMode.Political);
+                    lastPoliticalMode = MapMode.Political;
+                    Debug.Log("Map mode: Political (1)");
+                }
+                else
+                {
+                    SetMapMode(lastPoliticalMode);
+                    Debug.Log($"Map mode: {lastPoliticalMode} (1)");
+                }
             }
             else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2))
             {
-                SetMapMode(MapMode.Province);
-                Debug.Log("Map mode: Province (2)");
+                SetMapMode(MapMode.Terrain);
+                Debug.Log("Map mode: Terrain (2)");
             }
             else if (Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3))
             {
-                SetMapMode(MapMode.Terrain);
-                Debug.Log("Map mode: Terrain (3)");
+                SetMapMode(MapMode.Height);
+                Debug.Log("Map mode: Height (3)");
             }
             else if (Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4))
             {
-                SetMapMode(MapMode.Height);
-                Debug.Log("Map mode: Height (4)");
-            }
-            else if (Input.GetKeyDown(KeyCode.Alpha5) || Input.GetKeyDown(KeyCode.Keypad5))
-            {
                 SetMapMode(MapMode.Market);
-                Debug.Log("Map mode: Market (5)");
+                Debug.Log("Map mode: Market (4)");
             }
 
-            // Click to select cell (but not when camera is in panning mode)
+            // Click to select cell (but not when camera is in panning mode or over UI)
             if (Input.GetMouseButtonDown(0))
             {
+                // Skip if pointer is over a UI Toolkit element
+                if (IsPointerOverUI())
+                    return;
+
                 if (mapCameraController == null || !mapCameraController.IsPanningMode)
                 {
                     HandleClick();
@@ -125,6 +158,50 @@ namespace EconSim.Renderer
             {
                 OnCellClicked?.Invoke(-1);
             }
+        }
+
+        /// <summary>
+        /// Check if the mouse pointer is over any UI Toolkit panel element.
+        /// </summary>
+        private bool IsPointerOverUI()
+        {
+            Vector2 mousePos = Input.mousePosition;
+
+            // Check all UIDocuments in the scene
+            var docs = FindObjectsOfType<UIDocument>();
+            foreach (var doc in docs)
+            {
+                var root = doc.rootVisualElement;
+                if (root == null || root.panel == null) continue;
+
+                // Convert screen position to panel position
+                Vector2 panelPos = RuntimePanelUtils.ScreenToPanel(
+                    root.panel,
+                    new Vector2(mousePos.x, Screen.height - mousePos.y)
+                );
+
+                // Pick the topmost element at the panel position
+                var picked = root.panel.Pick(panelPos);
+
+                // If nothing picked or just the root's TemplateContainer, not over UI
+                if (picked == null) continue;
+
+                // Walk up to find if we're inside a real panel (has "panel" class or specific name)
+                var current = picked;
+                while (current != null)
+                {
+                    if (current.ClassListContains("panel") ||
+                        current.name == "selection-panel" ||
+                        current.name == "market-panel" ||
+                        current.name == "economy-panel" ||
+                        current.name == "time-control-panel")
+                    {
+                        return true;
+                    }
+                    current = current.parent;
+                }
+            }
+            return false;
         }
 
         /// <summary>
@@ -175,6 +252,9 @@ namespace EconSim.Renderer
             mapData = data;
             GenerateMesh();
             InitializeBorders();
+            InitializeRivers();
+            InitializeRoads();
+            InitializeSelectionHighlight();
         }
 
         private void InitializeBorders()
@@ -197,6 +277,99 @@ namespace EconSim.Renderer
             }
 
             borderRenderer.Initialize(mapData, cellScale, heightScale);
+
+            // Apply initial border visibility based on current map mode
+            UpdateBorderVisibility();
+        }
+
+        private void InitializeRivers()
+        {
+            if (mapData == null) return;
+
+            // Create or get RiverRenderer component
+            riverRenderer = GetComponent<RiverRenderer>();
+            if (riverRenderer == null)
+            {
+                riverRenderer = gameObject.AddComponent<RiverRenderer>();
+            }
+
+            // Set the river material (reuse border material)
+            if (borderMaterial != null)
+            {
+                var materialField = typeof(RiverRenderer).GetField("riverMaterial",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                materialField?.SetValue(riverRenderer, borderMaterial);
+            }
+
+            riverRenderer.Initialize(mapData, cellScale, heightScale);
+        }
+
+        private void InitializeRoads()
+        {
+            if (mapData == null) return;
+
+            // Create or get RoadRenderer component
+            roadRenderer = GetComponent<RoadRenderer>();
+            if (roadRenderer == null)
+            {
+                roadRenderer = gameObject.AddComponent<RoadRenderer>();
+            }
+
+            // Set the road material (reuse border material)
+            if (borderMaterial != null)
+            {
+                var materialField = typeof(RoadRenderer).GetField("roadMaterial",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                materialField?.SetValue(roadRenderer, borderMaterial);
+            }
+
+            // Note: RoadRenderer.Initialize will be called from SetRoadState once economy is ready
+        }
+
+        /// <summary>
+        /// Set road state for road rendering. Call after economy initialization.
+        /// </summary>
+        public void SetRoadState(EconSim.Core.Economy.RoadState roads)
+        {
+            if (roadRenderer != null && mapData != null)
+            {
+                roadRenderer.Initialize(mapData, roads, cellScale, heightScale);
+            }
+        }
+
+        /// <summary>
+        /// Refresh road rendering. Call periodically to show new roads.
+        /// </summary>
+        public void RefreshRoads()
+        {
+            roadRenderer?.RefreshRoads();
+        }
+
+        private void InitializeSelectionHighlight()
+        {
+            if (mapData == null) return;
+
+            // Create or get SelectionHighlight component
+            selectionHighlight = GetComponent<SelectionHighlight>();
+            if (selectionHighlight == null)
+            {
+                selectionHighlight = gameObject.AddComponent<SelectionHighlight>();
+            }
+
+            // Set the mapView reference via reflection (or make it public/serialized)
+            var mapViewField = typeof(SelectionHighlight).GetField("mapView",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            mapViewField?.SetValue(selectionHighlight, this);
+
+            // Set the outline material (reuse border material if available)
+            if (borderMaterial != null)
+            {
+                var materialField = typeof(SelectionHighlight).GetField("outlineMaterial",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                materialField?.SetValue(selectionHighlight, borderMaterial);
+            }
+
+            selectionHighlight.Initialize(mapData, cellScale, heightScale);
         }
 
         public void SetMapMode(MapMode mode)
@@ -220,6 +393,11 @@ namespace EconSim.Renderer
                     borderRenderer.SetProvinceBordersVisible(false);
                     break;
                 case MapMode.Province:
+                    borderRenderer.SetStateBordersVisible(true);
+                    borderRenderer.SetProvinceBordersVisible(true);
+                    break;
+                case MapMode.County:
+                    // Show province borders to group counties visually
                     borderRenderer.SetStateBordersVisible(true);
                     borderRenderer.SetProvinceBordersVisible(true);
                     break;
@@ -252,6 +430,45 @@ namespace EconSim.Renderer
             }
         }
 
+        /// <summary>
+        /// Compute height for each vertex by averaging the heights of all cells that share it.
+        /// This creates smooth terrain instead of disconnected plateaus.
+        /// </summary>
+        private void ComputeVertexHeights()
+        {
+            int vertexCount = mapData.Vertices.Count;
+            vertexHeights = new float[vertexCount];
+            int[] vertexCellCounts = new int[vertexCount];
+
+            // Accumulate heights from all cells that use each vertex
+            foreach (var cell in mapData.Cells)
+            {
+                if (cell.VertexIndices == null) continue;
+
+                float cellHeight = GetCellHeight(cell);
+
+                foreach (int vIdx in cell.VertexIndices)
+                {
+                    if (vIdx >= 0 && vIdx < vertexCount)
+                    {
+                        vertexHeights[vIdx] += cellHeight;
+                        vertexCellCounts[vIdx]++;
+                    }
+                }
+            }
+
+            // Average the heights
+            for (int i = 0; i < vertexCount; i++)
+            {
+                if (vertexCellCounts[i] > 0)
+                {
+                    vertexHeights[i] /= vertexCellCounts[i];
+                }
+            }
+
+            Debug.Log($"Computed heights for {vertexCount} vertices");
+        }
+
         private void GenerateMesh()
         {
             if (mapData == null)
@@ -261,6 +478,9 @@ namespace EconSim.Renderer
             }
 
             Debug.Log($"Generating mesh for {mapData.Cells.Count} cells...");
+
+            // Compute per-vertex heights by averaging neighboring cells
+            ComputeVertexHeights();
 
             vertices.Clear();
             triangles.Clear();
@@ -315,14 +535,16 @@ namespace EconSim.Renderer
             // Get cell color based on current map mode
             Color32 cellColor = GetCellColor(cell);
 
-            // Get vertex positions for this cell's polygon
+            // Get vertex positions for this cell's polygon, using per-vertex heights
             var polyVerts = new List<Vector3>();
+            float heightSum = 0f;
             foreach (int vIdx in cell.VertexIndices)
             {
                 if (vIdx >= 0 && vIdx < mapData.Vertices.Count)
                 {
                     Vector2 pos2D = mapData.Vertices[vIdx].ToUnity();
-                    float height = GetCellHeight(cell);
+                    float height = vertexHeights[vIdx];
+                    heightSum += height;
                     polyVerts.Add(new Vector3(
                         pos2D.x * cellScale,
                         height,
@@ -340,9 +562,8 @@ namespace EconSim.Renderer
                 center += v;
             center /= polyVerts.Count;
 
-            // Adjust center height
-            float centerHeight = GetCellHeight(cell);
-            center.y = centerHeight;
+            // Center height is average of edge vertex heights (already computed in center.y from the sum)
+            // No need to adjust - it's already correct from averaging polyVerts
 
             int centerIdx = vertices.Count;
             vertices.Add(center);
@@ -381,6 +602,8 @@ namespace EconSim.Renderer
                     return GetPoliticalColor(cell);
                 case MapMode.Province:
                     return GetProvinceColor(cell);
+                case MapMode.County:
+                    return GetCountyColor(cell);
                 case MapMode.Terrain:
                     return GetTerrainColor(cell);
                 case MapMode.Height:
@@ -394,6 +617,12 @@ namespace EconSim.Renderer
 
         private Color32 GetPoliticalColor(Cell cell)
         {
+            // Water cells
+            if (!cell.IsLand)
+            {
+                return GetWaterColor(cell);
+            }
+
             if (cell.StateId > 0 && mapData.StateById.TryGetValue(cell.StateId, out var state))
             {
                 return state.Color.ToUnity();
@@ -403,6 +632,12 @@ namespace EconSim.Renderer
 
         private Color32 GetProvinceColor(Cell cell)
         {
+            // Water cells
+            if (!cell.IsLand)
+            {
+                return GetWaterColor(cell);
+            }
+
             if (cell.ProvinceId > 0 && mapData.ProvinceById.TryGetValue(cell.ProvinceId, out var province))
             {
                 return province.Color.ToUnity();
@@ -410,8 +645,57 @@ namespace EconSim.Renderer
             return GetPoliticalColor(cell);  // Fall back to state color
         }
 
+        private Color32 GetCountyColor(Cell cell)
+        {
+            // Water cells
+            if (!cell.IsLand)
+            {
+                return GetWaterColor(cell);
+            }
+
+            // Get base color from province (or state if no province)
+            Color baseColor;
+            if (cell.ProvinceId > 0 && mapData.ProvinceById.TryGetValue(cell.ProvinceId, out var province))
+            {
+                baseColor = province.Color.ToUnity();
+            }
+            else if (cell.StateId > 0 && mapData.StateById.TryGetValue(cell.StateId, out var state))
+            {
+                baseColor = state.Color.ToUnity();
+            }
+            else
+            {
+                baseColor = new Color(0.78f, 0.78f, 0.78f);  // Neutral gray
+            }
+
+            // Convert to HSV
+            Color.RGBToHSV(baseColor, out float h, out float s, out float v);
+
+            // Use cell ID hash to vary saturation and value
+            uint hash = (uint)(cell.Id * 2654435761L);
+            float satVar = ((hash & 0xFF) / 255f - 0.5f) * 0.3f;        // ±0.15
+            float valVar = (((hash >> 8) & 0xFF) / 255f - 0.5f) * 0.3f; // ±0.15
+
+            s = Mathf.Clamp01(s + satVar);
+            v = Mathf.Clamp01(v + valVar);
+
+            Color result = Color.HSVToRGB(h, s, v);
+            return new Color32(
+                (byte)(result.r * 255),
+                (byte)(result.g * 255),
+                (byte)(result.b * 255),
+                255
+            );
+        }
+
         private Color32 GetTerrainColor(Cell cell)
         {
+            // Water cells - use water colors instead of biome
+            if (!cell.IsLand)
+            {
+                return GetWaterColor(cell);
+            }
+
             if (cell.BiomeId >= 0 && cell.BiomeId < mapData.Biomes.Count)
             {
                 return mapData.Biomes[cell.BiomeId].Color.ToUnity();
@@ -464,6 +748,12 @@ namespace EconSim.Renderer
 
         private Color32 GetMarketColor(Cell cell)
         {
+            // Water cells
+            if (!cell.IsLand)
+            {
+                return GetWaterColor(cell);
+            }
+
             if (economyState == null)
             {
                 return new Color32(100, 100, 100, 255);  // Gray - no economy data
@@ -481,6 +771,30 @@ namespace EconSim.Renderer
 
             // Cell not assigned to any market - dim gray
             return new Color32(60, 60, 60, 255);
+        }
+
+        /// <summary>
+        /// Get color for water cells based on feature type (ocean vs lake).
+        /// </summary>
+        private Color32 GetWaterColor(Cell cell)
+        {
+            // Check feature type to distinguish ocean from lake
+            if (mapData.FeatureById != null && mapData.FeatureById.TryGetValue(cell.FeatureId, out var feature))
+            {
+                if (feature.IsLake)
+                {
+                    // Lakes - lighter cyan-blue
+                    return new Color32(70, 130, 180, 255);  // Steel blue
+                }
+            }
+
+            // Default ocean color - deep blue, varies slightly by depth
+            float depthFactor = Mathf.Clamp01((20 - cell.Height) / 20f);  // 0 at sea level, 1 at deepest
+            return Color32.Lerp(
+                new Color32(50, 100, 150, 255),   // Shallow ocean
+                new Color32(20, 50, 100, 255),    // Deep ocean
+                depthFactor
+            );
         }
 
         /// <summary>
@@ -525,6 +839,8 @@ namespace EconSim.Renderer
         /// </summary>
         public EconSim.Core.Economy.Market GetMarketAtCell(int cellId)
         {
+            // Invalid cell ID (e.g., clicked on ocean)
+            if (cellId < 0) return null;
             if (economyState?.Markets == null) return null;
             foreach (var market in economyState.Markets.Values)
             {
@@ -664,6 +980,9 @@ namespace EconSim.Renderer
 
         [ContextMenu("Set Mode: Province")]
         private void SetModeProvince() => SetMapMode(MapMode.Province);
+
+        [ContextMenu("Set Mode: County")]
+        private void SetModeCounty() => SetMapMode(MapMode.County);
 
         [ContextMenu("Set Mode: Terrain")]
         private void SetModeTerrain() => SetMapMode(MapMode.Terrain);

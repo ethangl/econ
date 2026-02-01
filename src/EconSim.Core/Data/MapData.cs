@@ -19,11 +19,13 @@ namespace EconSim.Core.Data
         public List<River> Rivers;
         public List<Biome> Biomes;
         public List<Burg> Burgs;
+        public List<Feature> Features;
 
         // Lookup tables (built after loading)
         [NonSerialized] public Dictionary<int, Cell> CellById;
         [NonSerialized] public Dictionary<int, Province> ProvinceById;
         [NonSerialized] public Dictionary<int, State> StateById;
+        [NonSerialized] public Dictionary<int, Feature> FeatureById;
 
         public void BuildLookups()
         {
@@ -43,6 +45,15 @@ namespace EconSim.Core.Data
             foreach (var state in States)
             {
                 StateById[state.Id] = state;
+            }
+
+            FeatureById = new Dictionary<int, Feature>();
+            if (Features != null)
+            {
+                foreach (var feature in Features)
+                {
+                    FeatureById[feature.Id] = feature;
+                }
             }
         }
     }
@@ -76,6 +87,7 @@ namespace EconSim.Core.Data
         public int BiomeId;
         public bool IsLand;
         public int CoastDistance;       // + for land (dist to coast), - for water
+        public int FeatureId;           // Index into Features (ocean, lake, island, etc.)
 
         // Political
         public int StateId;             // 0 = none/neutral
@@ -174,5 +186,18 @@ namespace EconSim.Core.Data
         public bool HasPlaza;
         public bool HasWalls;
         public bool HasTemple;
+    }
+
+    [Serializable]
+    public class Feature
+    {
+        public int Id;
+        public string Type;             // "ocean", "lake", "island", "sea", etc.
+        public bool IsBorder;           // Touches map edge
+        public int CellCount;
+
+        public bool IsOcean => Type == "ocean" || Type == "sea";
+        public bool IsLake => Type == "lake";
+        public bool IsWater => IsOcean || IsLake;
     }
 }
