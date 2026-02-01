@@ -5,6 +5,7 @@ using EconSim.Core.Common;
 using EconSim.Core.Simulation;
 using EconSim.Core.Simulation.Systems;
 using EconSim.Renderer;
+using EconSim.Camera;
 
 namespace EconSim.Core
 {
@@ -19,6 +20,7 @@ namespace EconSim.Core
 
         [Header("References")]
         [SerializeField] private MapView mapView;
+        [SerializeField] private MapCamera mapCamera;
 
         public MapData MapData { get; private set; }
         public ISimulation Simulation => _simulation;
@@ -114,6 +116,13 @@ namespace EconSim.Core
             if (mapView != null)
             {
                 mapView.Initialize(MapData);
+
+                // Fit camera to land bounds
+                if (mapCamera != null)
+                {
+                    var landBounds = mapView.GetLandBounds();
+                    mapCamera.FitToBounds(landBounds, 0.1f);  // 10% margin
+                }
             }
             else
             {
@@ -123,6 +132,13 @@ namespace EconSim.Core
             // Initialize simulation (auto-registers ProductionSystem + ConsumptionSystem)
             _simulation = new SimulationRunner(MapData);
             _simulation.IsPaused = true;  // Start paused
+
+            // Provide economy state to map view for market mode
+            if (mapView != null)
+            {
+                var economy = _simulation.GetState().Economy;
+                mapView.SetEconomyState(economy);
+            }
 
             Debug.Log("Simulation initialized (paused). Press P to unpause, -/= to change speed.");
         }

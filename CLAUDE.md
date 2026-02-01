@@ -18,7 +18,7 @@ Previous phases complete:
 - ✓ Phase 1.5: Extract Simulation Engine
 - ✓ Phase 2: Simulation Foundation
 - ✓ Phase 3: Markets & Trade
-- ✓ Phase 4: UI Layer (time controls, county selection/inspection)
+- ✓ Phase 4: UI Layer (time controls, county/market inspection, market map mode, economy panel)
 
 See `docs/DESIGN.md` → Development Roadmap for full status.
 
@@ -49,21 +49,22 @@ See `docs/DESIGN.md` → Development Roadmap for full status.
 - `Market`, `MarketPlacer` - Market data structure and placement algorithm
 - `TradeSystem` - Trade flows between counties and markets, price discovery
 
-**Unity**:
+**Unity** (symlinks `EconSim.Core/` from `src/`):
 
 - `GameManager` - Entry point, loads map, owns simulation
-- `MapView` - Generates Voronoi mesh, map modes, click-to-select
+- `MapView` - Generates Voronoi mesh, map modes (1-5), click-to-select
 - `BorderRenderer` - State/province borders
 - `MapCamera` - WASD + drag + zoom
 - `CoreExtensions` - Bridge (Vec2↔Vector2, etc.)
 - `TimeControlPanel` - UI Toolkit: day display, pause/play, speed controls
 - `SelectionPanel` - UI Toolkit: county inspection panel
+- `MarketInspectorPanel` - UI Toolkit: market inspection (hub, zone, goods table)
+- `EconomyPanel` - UI Toolkit: global economy (E key, tabbed: overview/production/trade)
 
 **UI Toolkit** (`Assets/UI/`):
 
-- `Documents/MainHUD.uxml` - Main UI layout
+- `Documents/MainHUD.uxml` - Main UI layout (selection panel, market panel, time controls)
 - `Styles/Main.uss` - Stylesheet
-- `Settings/DefaultPanelSettings.asset` - Panel settings
 
 ## Setup
 

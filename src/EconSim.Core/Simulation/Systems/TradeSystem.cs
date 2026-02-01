@@ -76,6 +76,7 @@ namespace EconSim.Core.Simulation.Systems
                 foreach (var goodState in market.Goods.Values)
                 {
                     goodState.Supply = 0;
+                    goodState.SupplyOffered = 0;
                     goodState.Demand = 0;
                 }
 
@@ -143,6 +144,7 @@ namespace EconSim.Core.Simulation.Systems
                         // Add to market supply
                         var marketGood = market.Goods[good.Id];
                         marketGood.Supply += arriving;
+                        marketGood.SupplyOffered += arriving;  // Track total offered (for UI)
 
                         // Track (what was sent, not what arrived)
                         if (!totalSold.ContainsKey(good.Id)) totalSold[good.Id] = 0;

@@ -55,10 +55,16 @@ namespace EconSim.Core.Economy
         public string GoodId { get; set; }
 
         /// <summary>
-        /// Total quantity available for purchase.
-        /// Accumulated from county surpluses.
+        /// Total quantity available for purchase (remaining after trades).
+        /// Accumulated from county surpluses, reduced by purchases.
         /// </summary>
         public float Supply { get; set; }
+
+        /// <summary>
+        /// Total quantity offered this tick (before purchases).
+        /// Use this for UI display.
+        /// </summary>
+        public float SupplyOffered { get; set; }
 
         /// <summary>
         /// Total quantity wanted.

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using EconSim.Core.Data;
 using EconSim.Bridge;
+using EconSim.Camera;
 
 namespace EconSim.Renderer
 {
@@ -26,12 +27,14 @@ namespace EconSim.Renderer
         [SerializeField] private Material borderMaterial;
 
         [Header("Selection")]
-        [SerializeField] private UnityEngine.Camera mapCamera;
+        [SerializeField] private UnityEngine.Camera selectionCamera;
+        [SerializeField] private MapCamera mapCameraController;
 
         /// <summary>Event fired when a cell is clicked. Passes cell ID (-1 if clicked on nothing).</summary>
         public event Action<int> OnCellClicked;
 
         private MapData mapData;
+        private EconSim.Core.Economy.EconomyState economyState;
         private MeshFilter meshFilter;
         private MeshRenderer meshRenderer;
         private Mesh mesh;
@@ -47,13 +50,14 @@ namespace EconSim.Renderer
             Political,  // Colored by state (key: 1)
             Province,   // Colored by province (key: 2)
             Terrain,    // Colored by biome (key: 3)
-            Height      // Colored by elevation (key: 4)
+            Height,     // Colored by elevation (key: 4)
+            Market      // Colored by market zone (key: 5)
         }
 
         public MapMode CurrentMode => currentMode;
         public string CurrentModeName => ModeNames[(int)currentMode];
 
-        private static readonly string[] ModeNames = { "Political", "Province", "Terrain", "Height" };
+        private static readonly string[] ModeNames = { "Political", "Province", "Terrain", "Height", "Market" };
 
         private void Awake()
         {
@@ -84,11 +88,19 @@ namespace EconSim.Renderer
                 SetMapMode(MapMode.Height);
                 Debug.Log("Map mode: Height (4)");
             }
+            else if (Input.GetKeyDown(KeyCode.Alpha5) || Input.GetKeyDown(KeyCode.Keypad5))
+            {
+                SetMapMode(MapMode.Market);
+                Debug.Log("Map mode: Market (5)");
+            }
 
-            // Click to select cell
+            // Click to select cell (but not when camera is in panning mode)
             if (Input.GetMouseButtonDown(0))
             {
-                HandleClick();
+                if (mapCameraController == null || !mapCameraController.IsPanningMode)
+                {
+                    HandleClick();
+                }
             }
         }
 
@@ -96,7 +108,7 @@ namespace EconSim.Renderer
         {
             if (mapData == null) return;
 
-            var cam = mapCamera != null ? mapCamera : UnityEngine.Camera.main;
+            var cam = selectionCamera != null ? selectionCamera : UnityEngine.Camera.main;
             if (cam == null) return;
 
             // Use a ground plane at y=0 instead of mesh collider (much faster)
@@ -117,6 +129,7 @@ namespace EconSim.Renderer
 
         /// <summary>
         /// Find the cell that contains the given world position.
+        /// Returns -1 if click is too far from any land cell.
         /// </summary>
         public int FindCellAtPosition(Vector3 worldPos)
         {
@@ -144,6 +157,14 @@ namespace EconSim.Renderer
                     minDistSq = distSq;
                     closestCell = cell.Id;
                 }
+            }
+
+            // Average cell radius is roughly 5-10 Azgaar units
+            // If click is more than 15 units from nearest cell center, ignore it
+            const float maxDistSq = 15f * 15f;
+            if (minDistSq > maxDistSq)
+            {
+                return -1;
             }
 
             return closestCell;
@@ -204,6 +225,11 @@ namespace EconSim.Renderer
                     break;
                 case MapMode.Terrain:
                 case MapMode.Height:
+                    borderRenderer.SetStateBordersVisible(false);
+                    borderRenderer.SetProvinceBordersVisible(false);
+                    break;
+                case MapMode.Market:
+                    // Hide political borders, market zones speak for themselves
                     borderRenderer.SetStateBordersVisible(false);
                     borderRenderer.SetProvinceBordersVisible(false);
                     break;
@@ -359,6 +385,8 @@ namespace EconSim.Renderer
                     return GetTerrainColor(cell);
                 case MapMode.Height:
                     return GetHeightColor(cell);
+                case MapMode.Market:
+                    return GetMarketColor(cell);
                 default:
                     return new Color32(128, 128, 128, 255);
             }
@@ -434,6 +462,100 @@ namespace EconSim.Renderer
             }
         }
 
+        private Color32 GetMarketColor(Cell cell)
+        {
+            if (economyState == null)
+            {
+                return new Color32(100, 100, 100, 255);  // Gray - no economy data
+            }
+
+            if (economyState.CellToMarket.TryGetValue(cell.Id, out int marketId))
+            {
+                // Check if this cell is the market hub (location)
+                if (IsMarketHub(cell.Id))
+                {
+                    return MarketHubColor(marketId);
+                }
+                return MarketIdToColor(marketId);
+            }
+
+            // Cell not assigned to any market - dim gray
+            return new Color32(60, 60, 60, 255);
+        }
+
+        /// <summary>
+        /// Check if a cell is a market hub (the cell where the market is located).
+        /// </summary>
+        public bool IsMarketHub(int cellId)
+        {
+            if (economyState?.Markets == null) return false;
+            foreach (var market in economyState.Markets.Values)
+            {
+                if (market.LocationCellId == cellId) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Get the market located at a cell, or null if none.
+        /// </summary>
+        public EconSim.Core.Economy.Market GetMarketAtCell(int cellId)
+        {
+            if (economyState?.Markets == null) return null;
+            foreach (var market in economyState.Markets.Values)
+            {
+                if (market.LocationCellId == cellId) return market;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Generate a distinct color from a market ID using a hash-based approach.
+        /// Uses golden ratio to spread hues evenly across the spectrum.
+        /// </summary>
+        private Color32 MarketIdToColor(int marketId)
+        {
+            // Golden ratio conjugate for even hue distribution
+            const float goldenRatioConjugate = 0.618033988749895f;
+
+            // Generate hue using golden ratio (ensures good spread even for sequential IDs)
+            float hue = (marketId * goldenRatioConjugate) % 1.0f;
+
+            // Fixed saturation and value for vibrant, visible colors
+            float saturation = 0.65f;
+            float value = 0.85f;
+
+            // HSV to RGB conversion
+            Color rgb = Color.HSVToRGB(hue, saturation, value);
+            return new Color32(
+                (byte)(rgb.r * 255),
+                (byte)(rgb.g * 255),
+                (byte)(rgb.b * 255),
+                255
+            );
+        }
+
+        /// <summary>
+        /// Generate a brighter/highlighted color for market hub cells.
+        /// </summary>
+        private Color32 MarketHubColor(int marketId)
+        {
+            const float goldenRatioConjugate = 0.618033988749895f;
+            float hue = (marketId * goldenRatioConjugate) % 1.0f;
+
+            // Higher saturation and value for hub - makes it stand out
+            float saturation = 0.9f;
+            float value = 1.0f;
+
+            Color rgb = Color.HSVToRGB(hue, saturation, value);
+            return new Color32(
+                (byte)(rgb.r * 255),
+                (byte)(rgb.g * 255),
+                (byte)(rgb.b * 255),
+                255
+            );
+        }
+
         private void CenterMap()
         {
             if (mapData == null) return;
@@ -473,6 +595,37 @@ namespace EconSim.Renderer
             mesh.SetColors(colors);
         }
 
+        /// <summary>
+        /// Initialize economy state reference for market map mode.
+        /// Call this after economy initialization.
+        /// </summary>
+        public void SetEconomyState(EconSim.Core.Economy.EconomyState economy)
+        {
+            economyState = economy;
+        }
+
+        /// <summary>
+        /// Get the world-space bounds of the land mass (rendered cells only).
+        /// Returns the mesh bounds which represents the actual land area.
+        /// </summary>
+        public Bounds GetLandBounds()
+        {
+            if (mesh != null)
+            {
+                // Mesh bounds are in local space, transform to world space
+                var localBounds = mesh.bounds;
+                return new Bounds(
+                    transform.TransformPoint(localBounds.center),
+                    localBounds.size  // Size doesn't change for uniform scale
+                );
+            }
+
+            // Fallback to full map bounds if mesh not ready
+            float width = mapData?.Info.Width * cellScale ?? 14.4f;
+            float height = mapData?.Info.Height * cellScale ?? 8.1f;
+            return new Bounds(Vector3.zero, new Vector3(width, 0.1f, height));
+        }
+
 #if UNITY_EDITOR
         [ContextMenu("Regenerate Mesh")]
         private void RegenerateMesh()
@@ -494,6 +647,9 @@ namespace EconSim.Renderer
 
         [ContextMenu("Set Mode: Height")]
         private void SetModeHeight() => SetMapMode(MapMode.Height);
+
+        [ContextMenu("Set Mode: Market")]
+        private void SetModeMarket() => SetMapMode(MapMode.Market);
 
         [ContextMenu("Toggle State Borders")]
         private void ToggleStateBorders()

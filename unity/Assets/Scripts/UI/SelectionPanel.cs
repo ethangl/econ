@@ -22,6 +22,7 @@ namespace EconSim.UI
         private VisualElement _panel;
 
         // Cached element references
+        private Button _closeButton;
         private Label _countyName;
         private Label _provinceValue;
         private Label _stateValue;
@@ -82,6 +83,14 @@ namespace EconSim.UI
 
         private void OnCellClicked(int cellId)
         {
+            // In market mode, don't show county panel at all
+            // (MarketInspectorPanel handles market hubs)
+            if (_mapView != null && _mapView.CurrentMode == MapView.MapMode.Market)
+            {
+                Hide();
+                return;
+            }
+
             SelectCounty(cellId);
         }
 
@@ -114,6 +123,7 @@ namespace EconSim.UI
 
             // Query elements
             _panel = _root.Q<VisualElement>("selection-panel");
+            _closeButton = _root.Q<Button>("close-button");
             _countyName = _root.Q<Label>("county-name");
             _provinceValue = _root.Q<Label>("province-value");
             _stateValue = _root.Q<Label>("state-value");
@@ -124,6 +134,9 @@ namespace EconSim.UI
             _resourcesList = _root.Q<VisualElement>("resources-list");
             _stockpileList = _root.Q<VisualElement>("stockpile-list");
             _facilitiesCount = _root.Q<Label>("facilities-count");
+
+            // Wire up close button
+            _closeButton?.RegisterCallback<ClickEvent>(evt => Hide());
 
             // Start hidden
             if (_panel != null)
@@ -157,10 +170,18 @@ namespace EconSim.UI
         public void Hide()
         {
             _panel?.AddToClassList("hidden");
+            _selectedCellId = -1;
         }
 
         private void Update()
         {
+            // Escape key closes the panel
+            if (Input.GetKeyDown(KeyCode.Escape) && _selectedCellId >= 0)
+            {
+                Hide();
+                return;
+            }
+
             // Refresh display periodically if something is selected
             if (_selectedCellId >= 0 && Time.frameCount % 30 == 0)
             {
@@ -170,7 +191,7 @@ namespace EconSim.UI
 
         private void UpdateDisplay()
         {
-            if (_selectedCellId < 0 || _mapData == null) return;
+            if (_selectedCellId < 0 || _mapData == null || _mapData.CellById == null) return;
 
             if (!_mapData.CellById.TryGetValue(_selectedCellId, out var cell)) return;
 

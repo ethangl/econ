@@ -806,11 +806,15 @@ econ/
 └── unity/                         # Unity frontend
     ├── Assets/
     │   ├── Scripts/
-    │   │   ├── EconSim.Core/      # Core library (mirrored from src/)
+    │   │   ├── EconSim.Core/      # Symlink → src/EconSim.Core/
     │   │   ├── Bridge/            # CoreExtensions (Vec2↔Vector2, etc.)
     │   │   ├── Renderer/          # MapView, BorderRenderer
     │   │   ├── Camera/            # MapCamera
-    │   │   └── Core/              # GameManager
+    │   │   ├── Core/              # GameManager
+    │   │   └── UI/                # SelectionPanel, MarketInspectorPanel, TimeControlPanel
+    │   ├── UI/
+    │   │   ├── Documents/         # UXML templates (MainHUD.uxml)
+    │   │   └── Styles/            # USS stylesheets (Main.uss)
     │   ├── Shaders/               # Vertex color shaders
     │   └── Scenes/
     ├── Packages/
@@ -978,9 +982,13 @@ public class SimulationRunner
 
 ### Map Modes
 
-- Political (colored by country/region)
-- Terrain (elevation, biomes)
-- Economic (trade flows, market zones)
+- **Political** (key 1) - colored by state
+- **Province** (key 2) - colored by province
+- **Terrain** (key 3) - colored by biome
+- **Height** (key 4) - elevation gradient
+- **Market** (key 5) - colored by market zone, hub cell highlighted brighter
+
+Future:
 - Population (density)
 - Resources (by type)
 
@@ -1091,15 +1099,16 @@ public class SimulationRunner
 - [x] Time controls (pause, speed) - UI Toolkit panel
 - [x] Selection & inspection panels - click-to-select counties
 - [x] County detail view (name, location, population, resources, stockpile, facilities)
-- [ ] Market detail view
-- [ ] Global economic readouts
+- [x] Market map mode (key 5) - colors counties by market zone, highlights hub
+- [x] Market inspector panel - click market hub to see name, zone size, goods (supply/demand/price)
+- [x] Global economy panel (E key) - tabbed: Overview, Production, Trade
 
 ### Phase 5+: Iteration & Expansion
 
 - [ ] More production chains
 - [ ] Multiple markets
 - [ ] Population growth/decline
-- [ ] Map modes (economic, population, resources)
+- [ ] Additional map modes (population density, resources)
 - [ ] Facility emergence
 - [ ] Resource depletion
 - [ ] Individual important characters

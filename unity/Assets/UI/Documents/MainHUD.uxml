@@ -3,7 +3,10 @@
     <ui:VisualElement name="root" class="root-container">
         <!-- Selection Panel (left side) -->
         <ui:VisualElement name="selection-panel" class="panel hidden">
-            <ui:Label name="county-name" class="panel-title" text="County" />
+            <ui:VisualElement class="panel-header-row">
+                <ui:Label name="county-name" class="panel-title" text="County" />
+                <ui:Button name="close-button" class="close-button" text="X" />
+            </ui:VisualElement>
 
             <ui:VisualElement class="section">
                 <ui:Label class="section-header" text="Location" />
@@ -50,6 +53,80 @@
             <ui:VisualElement name="facilities-section" class="section">
                 <ui:Label class="section-header" text="Facilities" />
                 <ui:Label name="facilities-count" text="0 facilities" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Market Inspector Panel (left side, same position as selection) -->
+        <ui:VisualElement name="market-panel" class="panel hidden">
+            <ui:VisualElement class="panel-header-row">
+                <ui:Label name="market-name" class="panel-title" text="Market" />
+                <ui:Button name="market-close-button" class="close-button" text="X" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="section">
+                <ui:Label class="section-header" text="Location" />
+                <ui:VisualElement class="stat-row">
+                    <ui:Label text="Hub" />
+                    <ui:Label name="market-hub-value" text="-" />
+                </ui:VisualElement>
+                <ui:VisualElement class="stat-row">
+                    <ui:Label text="Zone Size" />
+                    <ui:Label name="market-zone-value" text="0 counties" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:VisualElement class="section">
+                <ui:Label class="section-header" text="Goods" />
+                <ui:VisualElement name="market-goods-list" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Economy Panel (bottom right, toggle with E) -->
+        <ui:VisualElement name="economy-panel" class="panel hidden">
+            <ui:VisualElement class="panel-header-row">
+                <ui:Label class="panel-title" text="Economy" />
+                <ui:Button name="economy-close-button" class="close-button" text="X" />
+            </ui:VisualElement>
+
+            <!-- Tab buttons -->
+            <ui:VisualElement name="economy-tabs" class="tab-bar">
+                <ui:Button name="tab-overview" class="tab-button tab-active" text="Overview" />
+                <ui:Button name="tab-production" class="tab-button" text="Production" />
+                <ui:Button name="tab-trade" class="tab-button" text="Trade" />
+            </ui:VisualElement>
+
+            <!-- Tab content: Overview -->
+            <ui:VisualElement name="tab-content-overview" class="tab-content">
+                <ui:VisualElement class="stat-row">
+                    <ui:Label text="Population" />
+                    <ui:Label name="econ-population" text="0" />
+                </ui:VisualElement>
+                <ui:VisualElement class="stat-row">
+                    <ui:Label text="Workers" />
+                    <ui:Label name="econ-workers" text="0" />
+                </ui:VisualElement>
+                <ui:VisualElement class="stat-row">
+                    <ui:Label text="Employed" />
+                    <ui:Label name="econ-employed" text="0" />
+                </ui:VisualElement>
+                <ui:VisualElement class="stat-row">
+                    <ui:Label text="Facilities" />
+                    <ui:Label name="econ-facilities" text="0" />
+                </ui:VisualElement>
+                <ui:VisualElement class="stat-row">
+                    <ui:Label text="Markets" />
+                    <ui:Label name="econ-markets" text="0" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- Tab content: Production -->
+            <ui:VisualElement name="tab-content-production" class="tab-content hidden">
+                <ui:VisualElement name="production-list" />
+            </ui:VisualElement>
+
+            <!-- Tab content: Trade -->
+            <ui:VisualElement name="tab-content-trade" class="tab-content hidden">
+                <ui:VisualElement name="trade-list" />
             </ui:VisualElement>
         </ui:VisualElement>
 
