@@ -1269,12 +1269,20 @@ Future:
   - Saves textures to `unity/debug/` folder as PNG
 - [x] Shader property added (`_HeightmapTex`) for Phase 6b
 
-### Phase 6b: Grid Mesh & Terrain Rendering (planned)
+### Phase 6b: Grid Mesh Test ✓
 
-- [ ] Replace Voronoi mesh with grid mesh
+- [x] Grid mesh renders correctly with data texture sampling
+- [x] UV mapping verified (UV1/mesh.uv2 → shader texcoord1)
+- [x] Triangle winding order for top-down camera (clockwise)
+- [x] Vertex colors for water/fallback areas
+- [x] Test scene and editor tooling (`GridMeshTest.cs`, `GridMeshTestSceneBuilder.cs`)
+
+### Phase 6c: Heightmap Integration (planned)
+
 - [ ] Shader vertex displacement from heightmap
 - [ ] Shader-computed normals from heightmap gradients
 - [ ] Water detection from height (not stateId)
+- [ ] Replace Voronoi mesh with grid mesh in MapView
 - [ ] Voronoi fallback toggle for comparison
 
 ### Phase 6+: Future

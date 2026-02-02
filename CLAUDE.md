@@ -6,15 +6,39 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 **Stack:** Unity + C# + R3 + UI Toolkit
 
+### Unity Instructions
+
+**Important: Do NOT use [SerializeField] before features are complete.** Unity's serialization causes Inspector values to override code defaults, making iteration difficult. Use hardcoded constants or non-serialized fields until the feature is confirmed to work.
+
+**Important: Do NOT use screenshots or automated visual testing for visual verification.** Ask the user to run the test scene and describe what they see.
+
+### Unity Gotchas
+
+**Namespace conflicts:** The `EconSim.Renderer` namespace conflicts with Unity types. Use fully qualified names:
+- `UnityEngine.Camera` not `Camera`
+- `MeshRenderer` not `Renderer`
+
+**Editor scripts:** Scripts in `Assets/Editor/` need an assembly definition (`.asmdef`) that references the main `EconSim` assembly. See `Assets/Editor/EconSim.Editor.asmdef`.
+
+**UV channels:** Unity's mesh UV naming is confusing:
+- `mesh.uv` = UV0 = shader `texcoord0`
+- `mesh.uv2` = UV1 = shader `texcoord1`
+- The MapOverlay shader uses `texcoord1` for data texture sampling
+
+**Triangle winding:** For top-down orthographic camera, triangles must be wound **clockwise** (reversed from typical). If mesh is invisible but exists in Scene view, check winding order.
+
+**Material instances:** `meshRenderer.material` creates an instance; `meshRenderer.sharedMaterial` uses the asset directly. When overlay manager sets textures on a material, ensure the renderer uses the same material reference.
+
 ## Current Phase
 
-**Phase 6a: Heightmap Texture Generation** (complete)
+**Phase 6b: Grid Mesh Test** (complete)
 
-- ✓ Smooth heightmap texture from Azgaar cell data
-- ✓ Gaussian blur (radius 15) for smooth cell boundaries
-- ✓ Land height clamping to survive blur near coastlines
-- ✓ Y-axis flip for Unity texture coordinates
-- ✓ TextureDebugger utility for verification
+- ✓ Grid mesh renders correctly with data texture sampling
+- ✓ UV mapping verified (UV1/mesh.uv2 → shader texcoord1)
+- ✓ Triangle winding order for top-down camera (clockwise)
+- ✓ Vertex colors for water/fallback areas
+- ✓ Test scene: `Assets/Scenes/GridMeshTest.unity`
+- ✓ Editor tool: Window > EconSim > Create Grid Mesh Test Scene
 
 Previous phases complete:
 
@@ -26,6 +50,7 @@ Previous phases complete:
 - ✓ Phase 5: Multiple markets, black market
 - ✓ Phase 5.5: Transport & Rivers (ocean/river transport, emergent roads, selection highlight)
 - ✓ Phase 5.6: Shader-Based Map Overlays (GPU borders, data textures, palettes)
+- ✓ Phase 6a: Heightmap Texture Generation (smooth heightmap, Gaussian blur, Y-flip)
 
 See `docs/DESIGN.md` → Development Roadmap for full status.
 
@@ -62,6 +87,7 @@ See `docs/DESIGN.md` → Development Roadmap for full status.
 
 - `GameManager` - Entry point, loads map, owns simulation
 - `MapView` - Generates Voronoi mesh, map modes (1=political cycle, 2=terrain, 3=height, 4=market), click-to-select
+- `GridMeshTest` - Test harness for grid mesh rendering (validates UV mapping, winding order)
 - `BorderRenderer` - State/province borders (legacy, replaced by shader system)
 - `MapOverlayManager` - Generates data textures for shader-based borders/overlays
 - `RiverRenderer` - River line strips (blue, tapered)
@@ -93,10 +119,12 @@ Current map: seed 1234, low island, 40k points, 1440x810
 The map uses a GPU-driven overlay system for borders and map modes:
 
 **Key files:**
+
 - `Assets/Shaders/MapOverlay.shader` - GPU border detection with anti-aliasing
 - `Assets/Scripts/Renderer/MapOverlayManager.cs` - Data texture generation
 
 **Data texture format (RGBAHalf):**
+
 - R: StateId / 65535
 - G: ProvinceId / 65535
 - B: CellId / 65535
@@ -105,6 +133,7 @@ The map uses a GPU-driven overlay system for borders and map modes:
 **Border detection:** Uses screen-space derivatives (ddx/ddy) with 16-sample multi-radius sampling for smooth anti-aliased borders at constant pixel width.
 
 **Future overlays supported by this infrastructure:**
+
 - Heat maps (population, wealth, unrest)
 - Trade routes / flow visualization
 - Fog of war

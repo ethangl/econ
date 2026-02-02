@@ -1,3 +1,4 @@
 ﻿<Solution>
   <Project Path="EconSim.csproj" />
+  <Project Path="EconSim.Editor.csproj" />
 </Solution>
