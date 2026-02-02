@@ -23,6 +23,10 @@ namespace EconSim.Renderer
         [Header("Map Mode")]
         [SerializeField] private MapMode currentMode = MapMode.Political;
 
+        [Header("Shader Overlays")]
+        [SerializeField] private bool useShaderOverlays = true;
+        [SerializeField] [Range(1, 4)] private int overlayResolutionMultiplier = 2;  // Higher = smoother borders, more memory
+
         [Header("Borders")]
         [SerializeField] private bool enableBorders = true;
         [SerializeField] private Material borderMaterial;
@@ -43,11 +47,13 @@ namespace EconSim.Renderer
         private RiverRenderer riverRenderer;
         private RoadRenderer roadRenderer;
         private SelectionHighlight selectionHighlight;
+        private MapOverlayManager overlayManager;
 
         // Cell mesh data
         private List<Vector3> vertices = new List<Vector3>();
         private List<int> triangles = new List<int>();
         private List<Color32> colors = new List<Color32>();
+        private List<Vector2> uv1 = new List<Vector2>();  // Data texture UVs (Azgaar coords normalized)
 
         // Vertex heights (computed by averaging neighboring cells)
         private float[] vertexHeights;
@@ -74,6 +80,12 @@ namespace EconSim.Renderer
         {
             meshFilter = GetComponent<MeshFilter>();
             meshRenderer = GetComponent<MeshRenderer>();
+        }
+
+        private void OnDestroy()
+        {
+            // Clean up overlay manager textures
+            overlayManager?.Dispose();
         }
 
         private void Update()
@@ -251,15 +263,39 @@ namespace EconSim.Renderer
         {
             mapData = data;
             GenerateMesh();
+            InitializeOverlays();
             InitializeBorders();
             InitializeRivers();
             InitializeRoads();
             InitializeSelectionHighlight();
         }
 
+        private void InitializeOverlays()
+        {
+            if (!useShaderOverlays || mapData == null)
+                return;
+
+            // Get the material from the MeshRenderer if not set in Inspector
+            Material mat = terrainMaterial;
+            if (mat == null && meshRenderer != null)
+            {
+                mat = meshRenderer.sharedMaterial;
+            }
+
+            if (mat == null)
+                return;
+
+            overlayManager = new MapOverlayManager(mapData, mat, overlayResolutionMultiplier);
+
+            // Sync shader mode with current map mode
+            overlayManager.SetMapMode(currentMode);
+            UpdateOverlayVisibility();
+        }
+
         private void InitializeBorders()
         {
-            if (!enableBorders || mapData == null) return;
+            // Skip mesh-based borders if using shader overlays
+            if (useShaderOverlays || !enableBorders || mapData == null) return;
 
             // Create or get BorderRenderer component
             borderRenderer = GetComponent<BorderRenderer>();
@@ -378,7 +414,51 @@ namespace EconSim.Renderer
             {
                 currentMode = mode;
                 UpdateColors();
-                UpdateBorderVisibility();
+
+                if (useShaderOverlays && overlayManager != null)
+                {
+                    overlayManager.SetMapMode(mode);
+                    UpdateOverlayVisibility();
+                }
+                else
+                {
+                    UpdateBorderVisibility();
+                }
+            }
+        }
+
+        private void UpdateOverlayVisibility()
+        {
+            if (overlayManager == null) return;
+
+            switch (currentMode)
+            {
+                case MapMode.Political:
+                    overlayManager.SetStateBordersVisible(true);
+                    overlayManager.SetProvinceBordersVisible(false);
+                    overlayManager.SetMarketBordersVisible(false);
+                    break;
+                case MapMode.Province:
+                    overlayManager.SetStateBordersVisible(true);
+                    overlayManager.SetProvinceBordersVisible(true);
+                    overlayManager.SetMarketBordersVisible(false);
+                    break;
+                case MapMode.County:
+                    overlayManager.SetStateBordersVisible(true);
+                    overlayManager.SetProvinceBordersVisible(true);
+                    overlayManager.SetMarketBordersVisible(false);
+                    break;
+                case MapMode.Terrain:
+                case MapMode.Height:
+                    overlayManager.SetStateBordersVisible(false);
+                    overlayManager.SetProvinceBordersVisible(false);
+                    overlayManager.SetMarketBordersVisible(false);
+                    break;
+                case MapMode.Market:
+                    overlayManager.SetStateBordersVisible(false);
+                    overlayManager.SetProvinceBordersVisible(false);
+                    overlayManager.SetMarketBordersVisible(true);
+                    break;
             }
         }
 
@@ -416,7 +496,11 @@ namespace EconSim.Renderer
 
         public void SetStateBordersVisible(bool visible)
         {
-            if (borderRenderer != null)
+            if (useShaderOverlays && overlayManager != null)
+            {
+                overlayManager.SetStateBordersVisible(visible);
+            }
+            else if (borderRenderer != null)
             {
                 borderRenderer.SetStateBordersVisible(visible);
             }
@@ -424,7 +508,11 @@ namespace EconSim.Renderer
 
         public void SetProvinceBordersVisible(bool visible)
         {
-            if (borderRenderer != null)
+            if (useShaderOverlays && overlayManager != null)
+            {
+                overlayManager.SetProvinceBordersVisible(visible);
+            }
+            else if (borderRenderer != null)
             {
                 borderRenderer.SetProvinceBordersVisible(visible);
             }
@@ -485,6 +573,7 @@ namespace EconSim.Renderer
             vertices.Clear();
             triangles.Clear();
             colors.Clear();
+            uv1.Clear();
 
             // Generate triangulated polygons for each cell
             int cellsRendered = 0;
@@ -513,6 +602,13 @@ namespace EconSim.Renderer
             mesh.SetVertices(vertices);
             mesh.SetTriangles(triangles, 0);
             mesh.SetColors(colors);
+
+            // Set UV1 for shader overlay data texture sampling
+            if (useShaderOverlays && uv1.Count == vertices.Count)
+            {
+                mesh.SetUVs(1, uv1);
+            }
+
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
 
@@ -537,7 +633,13 @@ namespace EconSim.Renderer
 
             // Get vertex positions for this cell's polygon, using per-vertex heights
             var polyVerts = new List<Vector3>();
+            var polyUVs = new List<Vector2>();  // Azgaar coordinates normalized for data texture
             float heightSum = 0f;
+
+            // Normalization factors for UV1 (Azgaar coords -> 0-1)
+            float invWidth = 1f / mapData.Info.Width;
+            float invHeight = 1f / mapData.Info.Height;
+
             foreach (int vIdx in cell.VertexIndices)
             {
                 if (vIdx >= 0 && vIdx < mapData.Vertices.Count)
@@ -550,6 +652,9 @@ namespace EconSim.Renderer
                         height,
                         -pos2D.y * cellScale  // Flip Y to Z, negate for Unity coords
                     ));
+
+                    // UV1: normalized Azgaar coordinates for data texture sampling
+                    polyUVs.Add(new Vector2(pos2D.x * invWidth, pos2D.y * invHeight));
                 }
             }
 
@@ -558,9 +663,13 @@ namespace EconSim.Renderer
 
             // Fan triangulation from cell center
             Vector3 center = Vector3.zero;
+            Vector2 centerUV = Vector2.zero;
             foreach (var v in polyVerts)
                 center += v;
+            foreach (var uv in polyUVs)
+                centerUV += uv;
             center /= polyVerts.Count;
+            centerUV /= polyUVs.Count;
 
             // Center height is average of edge vertex heights (already computed in center.y from the sum)
             // No need to adjust - it's already correct from averaging polyVerts
@@ -568,6 +677,7 @@ namespace EconSim.Renderer
             int centerIdx = vertices.Count;
             vertices.Add(center);
             colors.Add(cellColor);
+            uv1.Add(centerUV);
 
             // Add polygon vertices and create triangles
             int firstPolyIdx = vertices.Count;
@@ -575,6 +685,7 @@ namespace EconSim.Renderer
             {
                 vertices.Add(polyVerts[i]);
                 colors.Add(cellColor);
+                uv1.Add(polyUVs[i]);
             }
 
             // Create fan triangles
@@ -941,6 +1052,12 @@ namespace EconSim.Renderer
         public void SetEconomyState(EconSim.Core.Economy.EconomyState economy)
         {
             economyState = economy;
+
+            // Forward to overlay manager for market zone visualization
+            if (overlayManager != null)
+            {
+                overlayManager.SetEconomyState(economy);
+            }
         }
 
         /// <summary>

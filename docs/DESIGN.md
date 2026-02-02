@@ -1238,6 +1238,27 @@ Future:
   - Province inspector: aggregated population, list of counties
   - County inspector: detailed view with resources, stockpile, facilities
 
+### Phase 5.6: Shader-Based Map Overlays ✓
+
+- [x] GPU border detection
+  - Replaces mesh-based BorderRenderer with shader-driven approach
+  - Screen-space derivatives (ddx/ddy) for consistent pixel-width borders
+  - 16-sample multi-radius anti-aliasing for smooth edges
+  - Borders stay constant width regardless of camera zoom
+- [x] Data textures
+  - RGBAHalf format: R=StateId, G=ProvinceId, B=CellId, A=MarketId
+  - Configurable resolution multiplier (1-4x, default 2x = 2880×1620)
+  - Spatial grid maps Azgaar coordinates to cell IDs
+- [x] Color palette textures
+  - 256-entry palettes for state/province/market coloring
+  - UV1 mesh coordinates for data texture sampling
+- [x] MapOverlayManager
+  - Generates and uploads textures to GPU
+  - API for map mode switching, border visibility, border width
+  - Water cell handling (falls back to vertex colors)
+- [x] Future overlay support infrastructure
+  - Heat maps, fog of war, trade routes can reuse same texture/shader pattern
+
 ### Phase 6+: Future
 
 - [ ] More production chains

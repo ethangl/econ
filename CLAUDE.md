@@ -8,13 +8,15 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 ## Current Phase
 
-**Phase 5.5: Transport & Rivers** (complete)
+**Phase 5.6: Shader-Based Map Overlays** (complete)
 
-- ✓ Ocean transportation (sea routes with port transition costs)
-- ✓ River rendering (blue tapered line strips)
-- ✓ Selection highlight (yellow outline on selected cell)
-- ✓ Emergent roads (form from trade traffic, path→road tiers)
-- ✓ UI improvements (county map mode, mode-aware inspectors, click-through fix)
+- ✓ GPU border detection (replaces mesh-based BorderRenderer)
+- ✓ Data textures (RGBAHalf storing StateId, ProvinceId, CellId, MarketId)
+- ✓ Screen-space consistent borders (constant pixel width regardless of zoom)
+- ✓ 16-sample multi-radius anti-aliasing for smooth border edges
+- ✓ Configurable resolution multiplier (1-4x, default 2x for 2880×1620 texture)
+- ✓ Water cell handling (falls back to vertex colors when ID is 0)
+- ✓ Color palette textures for state/province/market coloring
 
 Previous phases complete:
 
@@ -24,6 +26,7 @@ Previous phases complete:
 - ✓ Phase 3: Markets & Trade
 - ✓ Phase 4: UI Layer (time controls, county/market inspection, market map mode, economy panel)
 - ✓ Phase 5: Multiple markets, black market
+- ✓ Phase 5.5: Transport & Rivers (ocean/river transport, emergent roads, selection highlight)
 
 See `docs/DESIGN.md` → Development Roadmap for full status.
 
@@ -60,7 +63,8 @@ See `docs/DESIGN.md` → Development Roadmap for full status.
 
 - `GameManager` - Entry point, loads map, owns simulation
 - `MapView` - Generates Voronoi mesh, map modes (1=political cycle, 2=terrain, 3=height, 4=market), click-to-select
-- `BorderRenderer` - State/province borders
+- `BorderRenderer` - State/province borders (legacy, replaced by shader system)
+- `MapOverlayManager` - Generates data textures for shader-based borders/overlays
 - `RiverRenderer` - River line strips (blue, tapered)
 - `RoadRenderer` - Emergent road segments (brown)
 - `SelectionHighlight` - Yellow outline on selected cell
@@ -84,3 +88,25 @@ Reference data is gitignored. To set up:
 2. Place in `reference/`
 
 Current map: seed 1234, low island, 40k points, 1440x810
+
+## Shader-Based Overlay System
+
+The map uses a GPU-driven overlay system for borders and map modes:
+
+**Key files:**
+- `Assets/Shaders/MapOverlay.shader` - GPU border detection with anti-aliasing
+- `Assets/Scripts/Renderer/MapOverlayManager.cs` - Data texture generation
+
+**Data texture format (RGBAHalf):**
+- R: StateId / 65535
+- G: ProvinceId / 65535
+- B: CellId / 65535
+- A: MarketId / 65535
+
+**Border detection:** Uses screen-space derivatives (ddx/ddy) with 16-sample multi-radius sampling for smooth anti-aliased borders at constant pixel width.
+
+**Future overlays supported by this infrastructure:**
+- Heat maps (population, wealth, unrest)
+- Trade routes / flow visualization
+- Fog of war
+- War/occupation overlays
