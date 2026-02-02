@@ -9,14 +9,17 @@ namespace EconSim.Camera
     public class MapCamera : MonoBehaviour
     {
         [Header("Zoom Settings")]
-        [SerializeField] private float minZoom = 2f;
-        [SerializeField] private float maxZoom = 50f;
+        [SerializeField] private float minZoomFraction = 0.05f;  // Min zoom as fraction of max (5% = close detail)
+        [SerializeField] private float absoluteMinZoom = 0.5f;   // Never zoom closer than this (world units)
         [SerializeField] private float zoomSpeed = 5f;
         [SerializeField] private float zoomSmoothTime = 0.1f;
 
+        private float minZoom = 0.5f;   // Calculated from map size
+        private float maxZoom = 12f;    // Calculated from map size
+
         [Header("Pan Settings")]
-        [SerializeField] private float panSpeed = 20f;
-        [SerializeField] private float dragPanSpeed = 1f;
+        [SerializeField] private float panSpeed = 12f;
+        [SerializeField] private float dragPanSpeed = 0.333333f;
 
         [Header("Bounds")]
         [SerializeField] private bool constrainToBounds = true;
@@ -59,9 +62,12 @@ namespace EconSim.Camera
 
         private void Start()
         {
+            // Initialize zoom limits based on default map size
+            RecalculateZoomLimits();
+
             // Initialize zoom
             currentZoom = transform.position.y;
-            targetZoom = currentZoom;
+            targetZoom = Mathf.Clamp(currentZoom, minZoom, maxZoom);
 
             // Position camera at center of map
             CenterOnMap();
@@ -257,16 +263,16 @@ namespace EconSim.Camera
                 Vector3 delta = Input.mousePosition - lastMousePosition;
                 lastMousePosition = Input.mousePosition;
 
-                float zoomFactor = currentZoom / maxZoom;
                 float panMultiplier = invertPan ? 1f : -1f;
 
-                // Convert screen pixels to world units (constant factor, not frame-rate dependent)
-                const float pixelToWorld = 0.05f;
+                // Scale by currentZoom directly (map-size independent)
+                // Higher zoom = seeing more = same pixel drag moves further in world
+                const float pixelToWorld = 0.005f;
 
                 Vector3 move = new Vector3(
-                    delta.x * dragPanSpeed * zoomFactor * panMultiplier * pixelToWorld,
+                    delta.x * dragPanSpeed * currentZoom * panMultiplier * pixelToWorld,
                     0,
-                    delta.y * dragPanSpeed * zoomFactor * panMultiplier * pixelToWorld
+                    delta.y * dragPanSpeed * currentZoom * panMultiplier * pixelToWorld
                 );
 
                 transform.position += move;
@@ -275,18 +281,28 @@ namespace EconSim.Camera
 
         private void ApplyConstraints()
         {
-            if (!constrainToBounds) return;
+            if (!constrainToBounds || cam == null) return;
 
             Vector3 pos = transform.position;
 
-            float halfWidth = mapSize.x * 0.5f;
-            float halfHeight = mapSize.y * 0.5f;
+            float halfMapWidth = mapSize.x * 0.5f;
+            float halfMapHeight = mapSize.y * 0.5f;
 
-            // Allow some margin based on zoom level
-            float margin = currentZoom * 0.5f;
+            // Calculate visible area at current zoom
+            float verticalFOV = cam.fieldOfView * Mathf.Deg2Rad;
+            float horizontalFOV = 2f * Mathf.Atan(Mathf.Tan(verticalFOV / 2f) * cam.aspect);
 
-            pos.x = Mathf.Clamp(pos.x, -halfWidth - margin, halfWidth + margin);
-            pos.z = Mathf.Clamp(pos.z, -halfHeight - margin, halfHeight + margin);
+            float visibleHalfWidth = currentZoom * Mathf.Tan(horizontalFOV / 2f);
+            float visibleHalfHeight = currentZoom * Mathf.Tan(verticalFOV / 2f);
+
+            // Constrain so visible area stays within map bounds
+            // At max zoom (whole map visible), this keeps camera centered
+            // At min zoom (close up), allows panning to edges
+            float maxOffsetX = Mathf.Max(0f, halfMapWidth - visibleHalfWidth);
+            float maxOffsetZ = Mathf.Max(0f, halfMapHeight - visibleHalfHeight);
+
+            pos.x = Mathf.Clamp(pos.x, -maxOffsetX, maxOffsetX);
+            pos.z = Mathf.Clamp(pos.z, -maxOffsetZ, maxOffsetZ);
 
             transform.position = pos;
         }
@@ -312,10 +328,46 @@ namespace EconSim.Camera
 
         /// <summary>
         /// Set the map bounds for constraining camera movement.
+        /// Also recalculates zoom limits based on map size.
         /// </summary>
         public void SetMapBounds(float width, float height)
         {
             mapSize = new Vector2(width, height);
+            RecalculateZoomLimits();
+        }
+
+        /// <summary>
+        /// Recalculates min/max zoom based on current map size and camera FOV.
+        /// maxZoom is set so the entire map just fits on screen.
+        /// minZoom is a fraction of maxZoom, but never below absoluteMinZoom.
+        /// </summary>
+        private void RecalculateZoomLimits()
+        {
+            if (cam == null)
+            {
+                cam = GetComponent<UnityEngine.Camera>();
+                if (cam == null) cam = UnityEngine.Camera.main;
+            }
+            if (cam == null) return;
+
+            // Calculate height needed to see the full map (tight fit, no margin)
+            float verticalFOV = cam.fieldOfView * Mathf.Deg2Rad;
+            float horizontalFOV = 2f * Mathf.Atan(Mathf.Tan(verticalFOV / 2f) * cam.aspect);
+
+            // Height needed to fit vertical extent
+            float heightForVertical = (mapSize.y / 2f) / Mathf.Tan(verticalFOV / 2f);
+            // Height needed to fit horizontal extent
+            float heightForHorizontal = (mapSize.x / 2f) / Mathf.Tan(horizontalFOV / 2f);
+
+            // Use the larger of the two to ensure everything fits
+            maxZoom = Mathf.Max(heightForVertical, heightForHorizontal);
+
+            // Min zoom is a fraction of max, but never below absolute minimum
+            minZoom = Mathf.Max(maxZoom * minZoomFraction, absoluteMinZoom);
+
+            // Clamp current zoom if it exceeds new limits
+            if (targetZoom > maxZoom) targetZoom = maxZoom;
+            if (targetZoom < minZoom) targetZoom = minZoom;
         }
 
         /// <summary>
@@ -329,6 +381,7 @@ namespace EconSim.Camera
         /// <summary>
         /// Fit the camera to show the given bounds with some margin.
         /// Centers on the bounds and sets zoom to show the full area.
+        /// Also updates map bounds and zoom limits based on the new bounds.
         /// </summary>
         /// <param name="bounds">World-space bounds to fit</param>
         /// <param name="marginPercent">Extra margin as a percentage (0.1 = 10% margin)</param>
@@ -336,38 +389,32 @@ namespace EconSim.Camera
         {
             if (cam == null) return;
 
+            // Update map bounds and recalculate zoom limits
+            mapSize = new Vector2(bounds.size.x, bounds.size.z);
+            RecalculateZoomLimits();
+
             // Center on the bounds
             Vector3 pos = transform.position;
             pos.x = bounds.center.x;
             pos.z = bounds.center.z;
 
-            // Calculate required height to fit bounds
+            // Calculate required height to fit bounds with the requested margin
             float boundsWidth = bounds.size.x * (1f + marginPercent);
             float boundsHeight = bounds.size.z * (1f + marginPercent);
 
-            // For perspective camera, calculate height needed to see the bounds
             float verticalFOV = cam.fieldOfView * Mathf.Deg2Rad;
             float horizontalFOV = 2f * Mathf.Atan(Mathf.Tan(verticalFOV / 2f) * cam.aspect);
 
-            // Height needed to fit vertical extent
             float heightForVertical = (boundsHeight / 2f) / Mathf.Tan(verticalFOV / 2f);
-            // Height needed to fit horizontal extent
             float heightForHorizontal = (boundsWidth / 2f) / Mathf.Tan(horizontalFOV / 2f);
 
-            // Use the larger of the two to ensure everything fits
             float requiredHeight = Mathf.Max(heightForVertical, heightForHorizontal);
-
-            // Clamp to zoom limits
             requiredHeight = Mathf.Clamp(requiredHeight, minZoom, maxZoom);
 
-            // Apply
             pos.y = requiredHeight;
             transform.position = pos;
             currentZoom = requiredHeight;
             targetZoom = requiredHeight;
-
-            // Update map bounds for constraints
-            mapSize = new Vector2(bounds.size.x, bounds.size.z);
         }
 
 #if UNITY_EDITOR

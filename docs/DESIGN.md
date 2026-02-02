@@ -1246,7 +1246,7 @@ Future:
   - 16-sample multi-radius anti-aliasing for smooth edges
   - Borders stay constant width regardless of camera zoom
 - [x] Data textures
-  - RGBAHalf format: R=StateId, G=ProvinceId, B=CellId, A=MarketId
+  - RGBAFloat format: R=StateId, G=ProvinceId, B=BiomeId+WaterFlag, A=CellId
   - Configurable resolution multiplier (1-4x, default 2x = 2880×1620)
   - Spatial grid maps Azgaar coordinates to cell IDs
 - [x] Color palette textures
@@ -1261,10 +1261,9 @@ Future:
 
 ### Phase 6a: Heightmap Texture Generation ✓
 
-- [x] Smooth heightmap texture from Azgaar cell data
-  - Gaussian blur (radius 15) for smooth cell boundaries
-  - Land height clamping above sea level to survive blur
+- [x] Heightmap texture from Azgaar cell data
   - Y-axis flip for Unity texture coordinates (Azgaar uses Y-down)
+  - Bilinear filtering for smooth sampling
 - [x] TextureDebugger utility for verification
   - Saves textures to `unity/debug/` folder as PNG
 - [x] Shader property added (`_HeightmapTex`) for Phase 6b
@@ -1281,13 +1280,47 @@ Future:
 
 - [x] Shader vertex displacement from heightmap
 - [x] Shader-computed normals from heightmap gradients
-- [x] Height-based coloring for Height map mode (computed in shader)
-- [x] Biome texture for Terrain map mode (sampled from generated texture)
+- [x] Height-based coloring (computed in shader, now used for water depth only)
+- [x] Biome texture for Terrain map mode with elevation tinting
 - [x] Grid mesh integrated into MapView (default renderer)
-- [x] Height displacement only in Height mode (other modes flat)
+- [x] Height displacement infrastructure (disabled, superseded by elevation tinting)
 - [x] Voronoi fallback toggle (context menu "Toggle Grid Mesh")
 
-### Phase 6+: Future
+### Phase 6d: Palette-Based Map Rendering ✓
+
+- [x] Refactored from blurred color textures to palette lookups
+  - Removed expensive bilateral blur on 4 textures (~200 lines removed)
+  - Shader samples data texture → looks up color from 256x1 palette
+  - Faster initialization, smaller memory footprint
+- [x] Biome palette texture for terrain mode
+  - Colors loaded from Azgaar biome data
+- [x] Water detection decoupled from heightmap
+  - Water flag packed into data texture B channel (BiomeId + 32768 if water)
+  - Water depth uses heightmap for visuals, land modes use data texture for water flag
+- [x] Instant update capability
+  - Ownership changes (conquests, market zone shifts) only need data texture + palette update
+
+### Phase 7: Rendering Refinement (in progress)
+
+- [x] Political color generation
+  - State colors: even hue distribution across spectrum, hash-based S/V variance
+  - Province colors: derived in shader from state color + hash(provinceId) variance
+  - County colors: derived in shader from province color + hash(cellId) variance
+  - HSV clamping: S [0.25, 0.60], V [0.45, 0.80] to avoid conflict with UI/borders
+  - Unowned cells: neutral grey (0.5, 0.5, 0.5)
+- [x] Data texture restructure
+  - R: StateId, G: ProvinceId, B: BiomeId+WaterFlag, A: CellId (was MarketId)
+  - CellId enables true per-cell flat shading in county mode
+  - Separate `cellToMarketTexture` (16384x1) for dynamic market zone mapping
+  - Market zones can now change without regenerating main data texture
+- [ ] Border rendering refinement
+- [ ] Water shader for ocean/lakes/rivers
+- [ ] Elevation tinting toggle (H key)
+- [ ] Selection shader (GPU-based highlight)
+- [ ] Coastline enhancement
+- [x] Remove heightmap map mode (redundant with elevation tinting)
+
+### Phase 7+: Future
 
 - [ ] More production chains
 - [ ] Population growth/decline

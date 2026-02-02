@@ -73,15 +73,14 @@ namespace EconSim.Renderer
             Political,  // Colored by state/country (key: 1, cycles with Province/County)
             Province,   // Colored by province (key: 1, cycles with Political/County)
             County,     // Colored by county/cell (key: 1, cycles with Political/Province)
-            Terrain,    // Colored by biome (key: 2)
-            Height,     // Colored by elevation (key: 3)
-            Market      // Colored by market zone (key: 4)
+            Terrain,    // Colored by biome with elevation tinting (key: 2)
+            Market      // Colored by market zone (key: 3)
         }
 
         public MapMode CurrentMode => currentMode;
         public string CurrentModeName => ModeNames[(int)currentMode];
 
-        private static readonly string[] ModeNames = { "Political", "Province", "County", "Terrain", "Height", "Market" };
+        private static readonly string[] ModeNames = { "Political", "Province", "County", "Terrain", "Market" };
 
         private void Awake()
         {
@@ -91,6 +90,9 @@ namespace EconSim.Renderer
 
         private void OnDestroy()
         {
+            // Unsubscribe from shader selection
+            OnCellClicked -= HandleShaderSelection;
+
             // Clean up overlay manager textures
             overlayManager?.Dispose();
         }
@@ -133,13 +135,8 @@ namespace EconSim.Renderer
             }
             else if (Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3))
             {
-                SetMapMode(MapMode.Height);
-                Debug.Log("Map mode: Height (3)");
-            }
-            else if (Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4))
-            {
                 SetMapMode(MapMode.Market);
-                Debug.Log("Map mode: Market (4)");
+                Debug.Log("Map mode: Market (3)");
             }
 
             // Click to select cell (but not when camera is in panning mode or over UI)
@@ -294,18 +291,8 @@ namespace EconSim.Renderer
 
             overlayManager = new MapOverlayManager(mapData, mat, overlayResolutionMultiplier);
 
-            // Configure height displacement for grid mesh (only enabled in Height mode)
-            if (useGridMesh)
-            {
-                overlayManager.SetHeightScale(gridHeightScale);
-                overlayManager.SetSeaLevel(0.2f);
-                // Only enable displacement if starting in Height mode
-                overlayManager.SetHeightDisplacementEnabled(currentMode == MapMode.Height);
-            }
-            else
-            {
-                overlayManager.SetHeightDisplacementEnabled(false);
-            }
+            // Height displacement is disabled (elevation is now shown via biome-elevation tinting)
+            overlayManager.SetHeightDisplacementEnabled(false);
 
             // Sync shader mode with current map mode
             overlayManager.SetMapMode(currentMode);
@@ -405,7 +392,22 @@ namespace EconSim.Renderer
         {
             if (mapData == null) return;
 
-            // Create or get SelectionHighlight component
+            // Use shader-based selection when overlays are enabled
+            if (useShaderOverlays && overlayManager != null)
+            {
+                // Subscribe to cell clicks for shader selection
+                OnCellClicked += HandleShaderSelection;
+
+                // Destroy any existing SelectionHighlight component (legacy)
+                var oldHighlight = GetComponent<SelectionHighlight>();
+                if (oldHighlight != null)
+                {
+                    Destroy(oldHighlight);
+                }
+                return;
+            }
+
+            // Legacy: Create or get SelectionHighlight component for non-shader mode
             selectionHighlight = GetComponent<SelectionHighlight>();
             if (selectionHighlight == null)
             {
@@ -428,6 +430,55 @@ namespace EconSim.Renderer
             selectionHighlight.Initialize(mapData, cellScale, heightScale);
         }
 
+        private void HandleShaderSelection(int cellId)
+        {
+            if (overlayManager == null) return;
+
+            // Clear selection if clicked on nothing
+            if (cellId < 0)
+            {
+                overlayManager.ClearSelection();
+                return;
+            }
+
+            // Get the cell to look up its state/province
+            if (!mapData.CellById.TryGetValue(cellId, out var cell))
+            {
+                overlayManager.ClearSelection();
+                return;
+            }
+
+            // Select at the appropriate level based on current map mode
+            switch (currentMode)
+            {
+                case MapMode.Political:
+                    // Select the entire state/country
+                    overlayManager.SetSelectedState(cell.StateId);
+                    break;
+                case MapMode.Province:
+                    // Select the entire province
+                    overlayManager.SetSelectedProvince(cell.ProvinceId);
+                    break;
+                case MapMode.Market:
+                    // Select the entire market zone
+                    if (economyState != null && economyState.CellToMarket.TryGetValue(cellId, out int marketId))
+                    {
+                        overlayManager.SetSelectedMarket(marketId);
+                    }
+                    else
+                    {
+                        overlayManager.ClearSelection();
+                    }
+                    break;
+                case MapMode.County:
+                case MapMode.Terrain:
+                default:
+                    // Select the individual cell
+                    overlayManager.SetSelectedCell(cellId);
+                    break;
+            }
+        }
+
         public void SetMapMode(MapMode mode)
         {
             if (currentMode != mode)
@@ -440,12 +491,8 @@ namespace EconSim.Renderer
                     overlayManager.SetMapMode(mode);
                     UpdateOverlayVisibility();
 
-                    // Only enable height displacement for Height map mode
-                    if (useGridMesh)
-                    {
-                        bool useHeight = (mode == MapMode.Height);
-                        overlayManager.SetHeightDisplacementEnabled(useHeight);
-                    }
+                    // Clear selection when changing modes (selection level changes)
+                    overlayManager.ClearSelection();
                 }
                 else
                 {
@@ -476,7 +523,6 @@ namespace EconSim.Renderer
                     overlayManager.SetMarketBordersVisible(false);
                     break;
                 case MapMode.Terrain:
-                case MapMode.Height:
                     overlayManager.SetStateBordersVisible(false);
                     overlayManager.SetProvinceBordersVisible(false);
                     overlayManager.SetMarketBordersVisible(false);
@@ -509,7 +555,6 @@ namespace EconSim.Renderer
                     borderRenderer.SetProvinceBordersVisible(true);
                     break;
                 case MapMode.Terrain:
-                case MapMode.Height:
                     borderRenderer.SetStateBordersVisible(false);
                     borderRenderer.SetProvinceBordersVisible(false);
                     break;
@@ -697,7 +742,7 @@ namespace EconSim.Renderer
 
             if (terrainMaterial != null)
             {
-                meshRenderer.material = terrainMaterial;
+                meshRenderer.sharedMaterial = terrainMaterial;
             }
 
             CenterMap();
@@ -759,7 +804,7 @@ namespace EconSim.Renderer
 
             if (terrainMaterial != null)
             {
-                meshRenderer.material = terrainMaterial;
+                meshRenderer.sharedMaterial = terrainMaterial;
             }
 
             // Center the map
@@ -860,8 +905,6 @@ namespace EconSim.Renderer
                     return GetCountyColor(cell);
                 case MapMode.Terrain:
                     return GetTerrainColor(cell);
-                case MapMode.Height:
-                    return GetHeightColor(cell);
                 case MapMode.Market:
                     return GetMarketColor(cell);
                 default:
@@ -955,49 +998,6 @@ namespace EconSim.Renderer
                 return mapData.Biomes[cell.BiomeId].Color.ToUnity();
             }
             return new Color32(100, 100, 100, 255);
-        }
-
-        private Color32 GetHeightColor(Cell cell)
-        {
-            // Gradient from blue (low) to green (mid) to brown (high) to white (peaks)
-            float t = cell.Height / 100f;
-
-            if (t < 0.2f)  // Water
-            {
-                float waterT = t / 0.2f;
-                return Color32.Lerp(
-                    new Color32(0, 30, 80, 255),    // Deep water
-                    new Color32(50, 100, 150, 255), // Shallow water
-                    waterT
-                );
-            }
-            else if (t < 0.4f)  // Lowlands
-            {
-                float landT = (t - 0.2f) / 0.2f;
-                return Color32.Lerp(
-                    new Color32(80, 160, 80, 255),  // Coastal green
-                    new Color32(120, 180, 80, 255), // Grassland
-                    landT
-                );
-            }
-            else if (t < 0.7f)  // Hills
-            {
-                float hillT = (t - 0.4f) / 0.3f;
-                return Color32.Lerp(
-                    new Color32(120, 180, 80, 255), // Grassland
-                    new Color32(139, 119, 101, 255), // Brown hills
-                    hillT
-                );
-            }
-            else  // Mountains
-            {
-                float mtT = (t - 0.7f) / 0.3f;
-                return Color32.Lerp(
-                    new Color32(139, 119, 101, 255), // Brown
-                    new Color32(240, 240, 250, 255), // Snow caps
-                    mtT
-                );
-            }
         }
 
         private Color32 GetMarketColor(Cell cell)
@@ -1250,9 +1250,6 @@ namespace EconSim.Renderer
 
         [ContextMenu("Set Mode: Terrain")]
         private void SetModeTerrain() => SetMapMode(MapMode.Terrain);
-
-        [ContextMenu("Set Mode: Height")]
-        private void SetModeHeight() => SetMapMode(MapMode.Height);
 
         [ContextMenu("Set Mode: Market")]
         private void SetModeMarket() => SetMapMode(MapMode.Market);

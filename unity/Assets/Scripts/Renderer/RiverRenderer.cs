@@ -15,6 +15,7 @@ namespace EconSim.Renderer
         [SerializeField] private float widthScale = 0.003f;  // Multiplied by river.Width
         [SerializeField] private float heightOffset = 0.005f;
         [SerializeField] private Color riverColor = new Color(0.2f, 0.5f, 0.8f, 1f);
+        [SerializeField] private int samplesPerSegment = 8;  // Spline samples between each cell center
 
         [Header("Display Options")]
         [SerializeField] private bool showRivers = true;
@@ -85,18 +86,21 @@ namespace EconSim.Renderer
                 if (pathPoints.Count < 2)
                     continue;
 
+                // Smooth the path using Catmull-Rom spline interpolation
+                var smoothedPath = InterpolateCatmullRom(pathPoints, samplesPerSegment);
+
                 // Calculate max width at mouth
                 float maxWidth = baseWidth + river.Width * widthScale;
 
                 // Generate quad strip along the path with tapering width
-                for (int i = 0; i < pathPoints.Count - 1; i++)
+                for (int i = 0; i < smoothedPath.Count - 1; i++)
                 {
-                    Vector3 current = pathPoints[i];
-                    Vector3 next = pathPoints[i + 1];
+                    Vector3 current = smoothedPath[i];
+                    Vector3 next = smoothedPath[i + 1];
 
                     // Taper: narrow at source (i=0), wide at mouth (i=count-1)
-                    float tCurrent = (float)i / (pathPoints.Count - 1);
-                    float tNext = (float)(i + 1) / (pathPoints.Count - 1);
+                    float tCurrent = (float)i / (smoothedPath.Count - 1);
+                    float tNext = (float)(i + 1) / (smoothedPath.Count - 1);
 
                     // Width ranges from 30% at source to 100% at mouth
                     float widthCurrent = maxWidth * (0.3f + 0.7f * tCurrent);
@@ -149,6 +153,56 @@ namespace EconSim.Renderer
             meshFilter.mesh = riverMesh;
         }
 
+        /// <summary>
+        /// Interpolates a path using Catmull-Rom splines for smooth curves.
+        /// </summary>
+        private List<Vector3> InterpolateCatmullRom(List<Vector3> points, int samples)
+        {
+            if (points.Count < 2)
+                return new List<Vector3>(points);
+
+            var result = new List<Vector3>();
+
+            for (int i = 0; i < points.Count - 1; i++)
+            {
+                // Get four control points for the spline segment
+                // Catmull-Rom needs P0, P1, P2, P3 to interpolate between P1 and P2
+                Vector3 p0 = points[Mathf.Max(0, i - 1)];
+                Vector3 p1 = points[i];
+                Vector3 p2 = points[i + 1];
+                Vector3 p3 = points[Mathf.Min(points.Count - 1, i + 2)];
+
+                // Sample the spline segment
+                for (int s = 0; s < samples; s++)
+                {
+                    float t = (float)s / samples;
+                    result.Add(CatmullRomPoint(p0, p1, p2, p3, t));
+                }
+            }
+
+            // Add the final point
+            result.Add(points[points.Count - 1]);
+
+            return result;
+        }
+
+        /// <summary>
+        /// Evaluates a point on a Catmull-Rom spline segment (uniform parameterization).
+        /// </summary>
+        private Vector3 CatmullRomPoint(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+        {
+            float t2 = t * t;
+            float t3 = t2 * t;
+
+            // Catmull-Rom basis functions
+            return 0.5f * (
+                2f * p1 +
+                (-p0 + p2) * t +
+                (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 +
+                (-p0 + 3f * p1 - 3f * p2 + p3) * t3
+            );
+        }
+
         private float GetCellHeight(Cell cell)
         {
             float normalizedHeight = (cell.Height - mapData.Info.SeaLevel) / 80f;
@@ -191,6 +245,7 @@ namespace EconSim.Renderer
                 GenerateRivers();
             }
         }
+
 #endif
     }
 }

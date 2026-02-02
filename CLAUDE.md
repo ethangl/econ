@@ -31,17 +31,20 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 ## Current Phase
 
-**Phase 6c: Heightmap Integration** (complete)
+**Phase 7: Rendering Refinement** (in progress)
 
-- ✓ Shader vertex displacement from heightmap
-- ✓ Shader-computed normals from heightmap gradients
-- ✓ Height-based coloring for Height map mode (green→brown→white gradient)
-- ✓ Biome texture for Terrain map mode (actual biome colors)
-- ✓ Grid mesh integrated into MapView (replaces Voronoi as default)
-- ✓ Height displacement only enabled for Height mode (other modes flat)
-- ✓ All map modes working with grid mesh
+- ✓ Political color generation (shader-based HSV cascade)
+- ✓ Data texture restructure (CellId replaces MarketId)
+- ✓ Dynamic market zone texture
+- ✓ Biome-elevation matrix (terrain mode with elevation shading)
+- Border rendering refinement
+- Water shader
+- Selection shader
 
 Previous phases complete:
+
+- ✓ Phase 6d: Palette-Based Map Rendering
+- ✓ Phase 6c: Heightmap Integration (vertex displacement, normals, height coloring)
 
 - ✓ Phase 1: Map Import & Rendering
 - ✓ Phase 1.5: Extract Simulation Engine
@@ -51,7 +54,7 @@ Previous phases complete:
 - ✓ Phase 5: Multiple markets, black market
 - ✓ Phase 5.5: Transport & Rivers (ocean/river transport, emergent roads, selection highlight)
 - ✓ Phase 5.6: Shader-Based Map Overlays (GPU borders, data textures, palettes)
-- ✓ Phase 6a: Heightmap Texture Generation (smooth heightmap, Gaussian blur, Y-flip)
+- ✓ Phase 6a: Heightmap Texture Generation (heightmap texture, Y-flip)
 - ✓ Phase 6b: Grid Mesh Test (UV mapping, winding order, test scene)
 
 See `docs/DESIGN.md` → Development Roadmap for full status.
@@ -88,13 +91,13 @@ See `docs/DESIGN.md` → Development Roadmap for full status.
 **Unity** (symlinks `EconSim.Core/` from `src/`):
 
 - `GameManager` - Entry point, loads map, owns simulation
-- `MapView` - Generates grid mesh (default) or Voronoi mesh, map modes (1=political cycle, 2=terrain, 3=height with 3D displacement, 4=market), click-to-select
+- `MapView` - Generates grid mesh (default) or Voronoi mesh, map modes (1=political cycle, 2=terrain with elevation tinting, 3=market), click-to-select
 - `GridMeshTest` - Test harness for grid mesh rendering (validates UV mapping, winding order)
 - `BorderRenderer` - State/province borders (legacy, replaced by shader system)
-- `MapOverlayManager` - Generates data textures for shader-based borders/overlays
+- `MapOverlayManager` - Generates data textures, palettes, and biome-elevation matrix for shader overlays
 - `RiverRenderer` - River line strips (blue, tapered)
 - `RoadRenderer` - Emergent road segments (brown)
-- `SelectionHighlight` - Yellow outline on selected cell
+- `SelectionHighlight` - Legacy outline (disabled when shader overlays enabled)
 - `MapCamera` - WASD + drag + zoom
 - `CoreExtensions` - Bridge (Vec2↔Vector2, etc.)
 - `TimeControlPanel` - UI Toolkit: day display, pause/play, speed controls
@@ -122,17 +125,50 @@ The map uses a GPU-driven overlay system for borders and map modes:
 
 **Key files:**
 
-- `Assets/Shaders/MapOverlay.shader` - GPU border detection with anti-aliasing
+- `Assets/Shaders/MapOverlay.shader` - GPU border detection, color derivation
 - `Assets/Scripts/Renderer/MapOverlayManager.cs` - Data texture generation
+- `EconSim.Core/Rendering/PoliticalPalette.cs` - State color generation
 
-**Data texture format (RGBAHalf):**
+**Data texture format (RGBAFloat):**
 
 - R: StateId / 65535
 - G: ProvinceId / 65535
-- B: CellId / 65535
-- A: MarketId / 65535
+- B: (BiomeId + WaterFlag) / 65535 — water flag adds 32768 if cell is water
+- A: CellId / 65535 — enables per-cell coloring in county mode (32-bit float for precision)
+
+**Palette textures:**
+
+- State palette (256x1): colors from PoliticalPalette (even hue distribution)
+- Market palette (256x1): derived from hub state colors
+- Biome palette (256x1): colors from Azgaar data (unused, kept for reference)
+- Biome-elevation matrix (64x64): biome colors with elevation-based shading
+
+**Biome-elevation matrix (terrain mode):**
+
+- X axis (U) = biome ID (0-63)
+- Y axis (V) = normalized land elevation (0 = sea level, 1 = max height)
+- Uses Azgaar's absolute elevation scale: 0% = height 20, 100% = height 100
+- Brightness gradient: 0.4 at sea level → 1.0 at high elevation
+- Snow blend at 85%+ elevation (Azgaar height 88-100)
+- Low-elevation maps (islands) won't show snow — this is intentional
+
+**Color derivation (shader-based cascade):**
+
+- Political mode: state color from palette
+- Province mode: derived from state color + hash(provinceId) HSV variance (±0.07 S/V)
+- County mode: derived from province color + hash(cellId) HSV variance (±0.07 S/V)
+- State HSV: S base 0.52 [0.38, 0.68], V base 0.70 [0.58, 0.85]
+- Derived HSV clamp: S [0.15, 0.95], V [0.25, 0.95] (allows ± variance around parent)
+
+**Market zone mapping:**
+
+- Separate `cellToMarketTexture` (16384x1, RHalf)
+- Maps CellId → MarketId dynamically
+- Updated when economy state changes
 
 **Border detection:** Uses screen-space derivatives (ddx/ddy) with 16-sample multi-radius sampling for smooth anti-aliased borders at constant pixel width.
+
+**Selection highlight:** Mode-aware GPU selection using same AA technique as borders. Selects state in political mode, province in province mode, market zone in market mode, cell otherwise. Uniforms: `_SelectedStateId`, `_SelectedProvinceId`, `_SelectedMarketId`, `_SelectedCellId` (normalized, -1 = none).
 
 **Future overlays supported by this infrastructure:**
 
