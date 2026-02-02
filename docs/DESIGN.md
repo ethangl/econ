@@ -1277,13 +1277,15 @@ Future:
 - [x] Vertex colors for water/fallback areas
 - [x] Test scene and editor tooling (`GridMeshTest.cs`, `GridMeshTestSceneBuilder.cs`)
 
-### Phase 6c: Heightmap Integration (planned)
+### Phase 6c: Heightmap Integration ✓
 
-- [ ] Shader vertex displacement from heightmap
-- [ ] Shader-computed normals from heightmap gradients
-- [ ] Water detection from height (not stateId)
-- [ ] Replace Voronoi mesh with grid mesh in MapView
-- [ ] Voronoi fallback toggle for comparison
+- [x] Shader vertex displacement from heightmap
+- [x] Shader-computed normals from heightmap gradients
+- [x] Height-based coloring for Height map mode (computed in shader)
+- [x] Biome texture for Terrain map mode (sampled from generated texture)
+- [x] Grid mesh integrated into MapView (default renderer)
+- [x] Height displacement only in Height mode (other modes flat)
+- [x] Voronoi fallback toggle (context menu "Toggle Grid Mesh")
 
 ### Phase 6+: Future
 

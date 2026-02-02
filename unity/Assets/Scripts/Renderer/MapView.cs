@@ -27,6 +27,12 @@ namespace EconSim.Renderer
         [SerializeField] private bool useShaderOverlays = true;
         [SerializeField] [Range(1, 4)] private int overlayResolutionMultiplier = 2;  // Higher = smoother borders, more memory
 
+        // Grid mesh with height displacement (Phase 6c)
+        // Non-serialized during development - see CLAUDE.md
+        private bool useGridMesh = true;
+        private int gridDivisor = 1;  // 1 = full source resolution, 2 = half, etc.
+        private float gridHeightScale = 3f;
+
         [Header("Borders")]
         [SerializeField] private bool enableBorders = true;
         [SerializeField] private Material borderMaterial;
@@ -53,6 +59,7 @@ namespace EconSim.Renderer
         private List<Vector3> vertices = new List<Vector3>();
         private List<int> triangles = new List<int>();
         private List<Color32> colors = new List<Color32>();
+        private List<Vector2> uv0 = new List<Vector2>();  // Heightmap UVs (Unity coords, Y-flipped)
         private List<Vector2> uv1 = new List<Vector2>();  // Data texture UVs (Azgaar coords normalized)
 
         // Vertex heights (computed by averaging neighboring cells)
@@ -287,6 +294,19 @@ namespace EconSim.Renderer
 
             overlayManager = new MapOverlayManager(mapData, mat, overlayResolutionMultiplier);
 
+            // Configure height displacement for grid mesh (only enabled in Height mode)
+            if (useGridMesh)
+            {
+                overlayManager.SetHeightScale(gridHeightScale);
+                overlayManager.SetSeaLevel(0.2f);
+                // Only enable displacement if starting in Height mode
+                overlayManager.SetHeightDisplacementEnabled(currentMode == MapMode.Height);
+            }
+            else
+            {
+                overlayManager.SetHeightDisplacementEnabled(false);
+            }
+
             // Sync shader mode with current map mode
             overlayManager.SetMapMode(currentMode);
             UpdateOverlayVisibility();
@@ -419,6 +439,13 @@ namespace EconSim.Renderer
                 {
                     overlayManager.SetMapMode(mode);
                     UpdateOverlayVisibility();
+
+                    // Only enable height displacement for Height map mode
+                    if (useGridMesh)
+                    {
+                        bool useHeight = (mode == MapMode.Height);
+                        overlayManager.SetHeightDisplacementEnabled(useHeight);
+                    }
                 }
                 else
                 {
@@ -565,7 +592,123 @@ namespace EconSim.Renderer
                 return;
             }
 
-            Debug.Log($"Generating mesh for {mapData.Cells.Count} cells...");
+            if (useGridMesh && useShaderOverlays)
+            {
+                GenerateGridMesh();
+            }
+            else
+            {
+                GenerateVoronoiMesh();
+            }
+        }
+
+        /// <summary>
+        /// Generate a grid mesh for GPU height displacement.
+        /// Uses dual UV channels: UV0 for heightmap (Y-flipped), UV1 for data texture (Azgaar coords).
+        /// </summary>
+        private void GenerateGridMesh()
+        {
+            // Use source resolution divided by divisor for clean texel alignment
+            int gridWidth = mapData.Info.Width / gridDivisor;
+            int gridHeight = mapData.Info.Height / gridDivisor;
+
+            Debug.Log($"Generating grid mesh {gridWidth}x{gridHeight} (divisor {gridDivisor})...");
+
+            float worldWidth = mapData.Info.Width * cellScale;
+            float worldHeight = mapData.Info.Height * cellScale;
+
+            int vertCountX = gridWidth + 1;
+            int vertCountY = gridHeight + 1;
+            int totalVerts = vertCountX * vertCountY;
+
+            vertices.Clear();
+            colors.Clear();
+            uv0.Clear();
+            uv1.Clear();
+            triangles.Clear();
+
+            var oceanColor = new Color32(30, 50, 90, 255);
+
+            // Generate vertices and UVs
+            for (int y = 0; y <= gridHeight; y++)
+            {
+                for (int x = 0; x <= gridWidth; x++)
+                {
+                    float u = (float)x / gridWidth;
+                    float v = (float)y / gridHeight;
+
+                    // World position: X right, Z negative (matches Voronoi convention)
+                    float worldX = u * worldWidth;
+                    float worldZ = -v * worldHeight;
+
+                    vertices.Add(new Vector3(worldX, 0f, worldZ));
+                    colors.Add(oceanColor);
+
+                    // UV0 for heightmap: Y-flipped to match Unity texture coordinates
+                    uv0.Add(new Vector2(u, 1f - v));
+
+                    // UV1 for data texture: Azgaar coordinates (no flip)
+                    uv1.Add(new Vector2(u, v));
+                }
+            }
+
+            // Generate triangles (clockwise winding for top-down view)
+            for (int y = 0; y < gridHeight; y++)
+            {
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int bl = y * vertCountX + x;
+                    int br = bl + 1;
+                    int tl = (y + 1) * vertCountX + x;
+                    int tr = tl + 1;
+
+                    // Triangle 1: BL, TR, TL
+                    triangles.Add(bl);
+                    triangles.Add(tr);
+                    triangles.Add(tl);
+
+                    // Triangle 2: BL, BR, TR
+                    triangles.Add(bl);
+                    triangles.Add(br);
+                    triangles.Add(tr);
+                }
+            }
+
+            Debug.Log($"Generated grid mesh: {totalVerts} vertices, {triangles.Count / 3} triangles");
+
+            // Create or update mesh
+            if (mesh == null)
+            {
+                mesh = new Mesh();
+                mesh.name = "MapMesh";
+            }
+            mesh.Clear();
+            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+
+            mesh.SetVertices(vertices);
+            mesh.SetColors(colors);
+            mesh.SetUVs(0, uv0);  // UV0 for heightmap
+            mesh.SetUVs(1, uv1);  // UV1 for data texture
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            meshFilter.mesh = mesh;
+
+            if (terrainMaterial != null)
+            {
+                meshRenderer.material = terrainMaterial;
+            }
+
+            CenterMap();
+        }
+
+        /// <summary>
+        /// Generate Voronoi mesh from cell polygons (original approach, no height displacement).
+        /// </summary>
+        private void GenerateVoronoiMesh()
+        {
+            Debug.Log($"Generating Voronoi mesh for {mapData.Cells.Count} cells...");
 
             // Compute per-vertex heights by averaging neighboring cells
             ComputeVertexHeights();
@@ -586,7 +729,7 @@ namespace EconSim.Renderer
                 cellsRendered++;
             }
 
-            Debug.Log($"Generated mesh: {vertices.Count} vertices, {triangles.Count / 3} triangles, {cellsRendered} cells");
+            Debug.Log($"Generated Voronoi mesh: {vertices.Count} vertices, {triangles.Count / 3} triangles, {cellsRendered} cells");
 
             // Create or update mesh
             if (mesh == null)
@@ -1021,6 +1164,10 @@ namespace EconSim.Renderer
         {
             if (mesh == null || mapData == null) return;
 
+            // Grid mesh uses shader for coloring, skip vertex color updates
+            if (useGridMesh && useShaderOverlays)
+                return;
+
             colors.Clear();
 
             int vertexIndex = 0;
@@ -1136,6 +1283,21 @@ namespace EconSim.Renderer
                 {
                     bool current = (bool)field.GetValue(borderRenderer);
                     borderRenderer.SetProvinceBordersVisible(!current);
+                }
+            }
+        }
+
+        [ContextMenu("Toggle Grid Mesh")]
+        private void ToggleGridMesh()
+        {
+            useGridMesh = !useGridMesh;
+            Debug.Log($"Grid mesh: {(useGridMesh ? "enabled" : "disabled")}");
+            if (mapData != null)
+            {
+                GenerateMesh();
+                if (overlayManager != null)
+                {
+                    overlayManager.SetHeightDisplacementEnabled(useGridMesh);
                 }
             }
         }

@@ -7,6 +7,15 @@ Shader "EconSim/MapOverlay"
 
         // Heightmap for terrain (Phase 6)
         _HeightmapTex ("Heightmap", 2D) = "gray" {}
+        _HeightScale ("Height Scale", Float) = 3
+        _SeaLevel ("Sea Level", Float) = 0.2
+        _UseHeightDisplacement ("Use Height Displacement", Int) = 0
+
+        // Blurred color textures (base resolution, bilinear filtered)
+        _BiomeTex ("Biome", 2D) = "gray" {}
+        _StateColorTex ("State Colors", 2D) = "gray" {}
+        _ProvinceColorTex ("Province Colors", 2D) = "gray" {}
+        _MarketColorTex ("Market Colors", 2D) = "gray" {}
 
         // Data texture: R=StateId, G=ProvinceId, B=CellId, A=MarketId (normalized to 0-1)
         _CellDataTex ("Cell Data", 2D) = "black" {}
@@ -24,7 +33,7 @@ Shader "EconSim/MapOverlay"
         _ProvinceBorderWidth ("Province Border Width (pixels)", Range(0.5, 3)) = 1.0
         _MarketBorderWidth ("Market Border Width (pixels)", Range(0.5, 3)) = 1.5
 
-        // Map mode: 0=vertex color (terrain/height), 1=political, 2=province, 3=county, 4=market
+        // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome
         _MapMode ("Map Mode", Int) = 0
 
         // Border visibility flags
@@ -44,8 +53,20 @@ Shader "EconSim/MapOverlay"
         struct Input
         {
             float4 vertexColor;
-            float2 dataUV;  // UV for sampling data texture (Azgaar coordinates)
+            float2 dataUV;    // UV for sampling data texture (Azgaar coordinates)
+            float2 heightUV;  // UV for sampling heightmap (Unity coordinates, Y-flipped)
         };
+
+        sampler2D _HeightmapTex;
+        float4 _HeightmapTex_TexelSize;  // (1/width, 1/height, width, height)
+        float _HeightScale;
+        float _SeaLevel;
+        int _UseHeightDisplacement;
+
+        sampler2D _BiomeTex;
+        sampler2D _StateColorTex;
+        sampler2D _ProvinceColorTex;
+        sampler2D _MarketColorTex;
 
         sampler2D _CellDataTex;
         float4 _CellDataTex_TexelSize;  // (1/width, 1/height, width, height)
@@ -81,8 +102,17 @@ Shader "EconSim/MapOverlay"
         {
             UNITY_INITIALIZE_OUTPUT(Input, o);
             o.vertexColor = v.color;
-            // Use UV1 for data texture coordinates (set by MapOverlayManager)
+            // UV0 for heightmap (Unity coordinates, Y-flipped)
+            o.heightUV = v.texcoord.xy;
+            // UV1 for data texture (Azgaar coordinates)
             o.dataUV = v.texcoord1.xy;
+
+            // Vertex displacement from heightmap
+            if (_UseHeightDisplacement > 0)
+            {
+                float height = tex2Dlod(_HeightmapTex, float4(v.texcoord.xy, 0, 0)).r;
+                v.vertex.y = (height - _SeaLevel) * _HeightScale;
+            }
         }
 
         // Sample cell data at a UV position with point filtering
@@ -155,6 +185,24 @@ Shader "EconSim/MapOverlay"
         {
             float2 uv = IN.dataUV;
 
+            // Calculate normal from heightmap gradient (for lighting on displaced terrain)
+            if (_UseHeightDisplacement > 0)
+            {
+                float2 texelSize = _HeightmapTex_TexelSize.xy;
+                float hL = tex2D(_HeightmapTex, IN.heightUV - float2(texelSize.x, 0)).r;
+                float hR = tex2D(_HeightmapTex, IN.heightUV + float2(texelSize.x, 0)).r;
+                float hD = tex2D(_HeightmapTex, IN.heightUV - float2(0, texelSize.y)).r;
+                float hU = tex2D(_HeightmapTex, IN.heightUV + float2(0, texelSize.y)).r;
+
+                // Normal from height gradient (scale affects steepness)
+                float3 normal = normalize(float3(
+                    (hL - hR) * _HeightScale * 0.5,
+                    1.0,
+                    (hD - hU) * _HeightScale * 0.5
+                ));
+                o.Normal = normal;
+            }
+
             // Sample center cell data
             float4 centerData = SampleCellData(uv);
             float stateId = centerData.r;
@@ -162,54 +210,95 @@ Shader "EconSim/MapOverlay"
             float cellId = centerData.b;
             float marketId = centerData.a;
 
+            // Sample height for water detection and height-based coloring
+            float height = tex2D(_HeightmapTex, IN.heightUV).r;
+            bool isWater = (_UseHeightDisplacement > 0) ? (height < _SeaLevel) : (stateId < 0.00001);
+
             // Base color depends on map mode
-            // Water cells (stateId=0) always use vertex colors
             fixed3 baseColor;
-            bool isWater = stateId < 0.00001;
 
             if (_MapMode == 0 || isWater)
             {
-                // Vertex color mode (terrain/height) or water - pass through
-                baseColor = IN.vertexColor.rgb;
+                // Vertex color mode (terrain/height) or water
+                if (_UseHeightDisplacement > 0)
+                {
+                    // Compute color from heightmap
+                    if (isWater)
+                    {
+                        // Water gradient: deep to shallow
+                        float waterT = height / _SeaLevel;
+                        baseColor = lerp(
+                            fixed3(0.08, 0.2, 0.4),   // Deep water
+                            fixed3(0.2, 0.4, 0.6),    // Shallow water
+                            waterT
+                        );
+                    }
+                    else
+                    {
+                        // Land gradient: green -> brown -> white
+                        float landT = (height - _SeaLevel) / (1.0 - _SeaLevel);
+                        if (landT < 0.3)
+                        {
+                            float t = landT / 0.3;
+                            baseColor = lerp(
+                                fixed3(0.31, 0.63, 0.31),  // Coastal green
+                                fixed3(0.47, 0.71, 0.31),  // Grassland
+                                t
+                            );
+                        }
+                        else if (landT < 0.6)
+                        {
+                            float t = (landT - 0.3) / 0.3;
+                            baseColor = lerp(
+                                fixed3(0.47, 0.71, 0.31),  // Grassland
+                                fixed3(0.55, 0.47, 0.4),   // Brown hills
+                                t
+                            );
+                        }
+                        else
+                        {
+                            float t = (landT - 0.6) / 0.4;
+                            baseColor = lerp(
+                                fixed3(0.55, 0.47, 0.4),   // Brown hills
+                                fixed3(0.94, 0.94, 0.98),  // Snow caps
+                                t
+                            );
+                        }
+                    }
+                }
+                else
+                {
+                    // No displacement - use vertex colors (Voronoi mesh)
+                    baseColor = IN.vertexColor.rgb;
+                }
             }
             else if (_MapMode == 1)
             {
-                // Political mode - color by state
-                baseColor = LookupPaletteColor(_StatePaletteTex, stateId);
+                // Political mode - sample blurred state color texture
+                baseColor = tex2D(_StateColorTex, IN.heightUV).rgb;
             }
             else if (_MapMode == 2)
             {
-                // Province mode - color by province
-                // Fall back to vertex color if no province
-                if (provinceId < 0.00001)
-                    baseColor = IN.vertexColor.rgb;
-                else
-                    baseColor = LookupPaletteColor(_ProvincePaletteTex, provinceId);
+                // Province mode - sample blurred province color texture
+                baseColor = tex2D(_ProvinceColorTex, IN.heightUV).rgb;
             }
             else if (_MapMode == 3)
             {
-                // County mode - color by cell (with province-based variation)
-                // Fall back to vertex color if no province
-                if (provinceId < 0.00001)
-                {
-                    baseColor = IN.vertexColor.rgb;
-                }
-                else
-                {
-                    baseColor = LookupPaletteColor(_ProvincePaletteTex, provinceId);
-                    // Add per-cell variation using cell ID hash
-                    float hash = frac(sin(cellId * 65535.0 * 78.233) * 43758.5453);
-                    baseColor = baseColor * (0.85 + hash * 0.3);
-                }
+                // County mode - province colors with per-cell variation
+                baseColor = tex2D(_ProvinceColorTex, IN.heightUV).rgb;
+                // Add per-cell variation using cell ID hash
+                float hash = frac(sin(cellId * 65535.0 * 78.233) * 43758.5453);
+                baseColor = baseColor * (0.85 + hash * 0.3);
             }
             else if (_MapMode == 4)
             {
-                // Market mode - color by market zone
-                // Fall back to vertex color if no market
-                if (marketId < 0.00001)
-                    baseColor = IN.vertexColor.rgb;
-                else
-                    baseColor = LookupPaletteColor(_MarketPaletteTex, marketId);
+                // Market mode - sample blurred market color texture
+                baseColor = tex2D(_MarketColorTex, IN.heightUV).rgb;
+            }
+            else if (_MapMode == 5)
+            {
+                // Terrain/biome mode - sample biome texture
+                baseColor = tex2D(_BiomeTex, IN.heightUV).rgb;
             }
             else
             {

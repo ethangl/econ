@@ -174,7 +174,8 @@ namespace EconSim.Renderer
             int totalVerts = vertCountX * vertCountY;
 
             var vertices = new Vector3[totalVerts];
-            var uvs = new Vector2[totalVerts];
+            var uv0 = new Vector2[totalVerts];  // UV0 for heightmap (Unity coords, Y-flipped)
+            var uv1 = new Vector2[totalVerts];  // UV1 for data texture (Azgaar coords)
 
             // Generate vertices and UVs
             for (int y = 0; y <= GridHeight; y++)
@@ -194,10 +195,13 @@ namespace EconSim.Renderer
 
                     vertices[idx] = new Vector3(worldX, 0f, worldZ);
 
-                    // UV: normalized position, NO FLIP
-                    // This matches the Voronoi mesh: UV.y = pos2D.y * invHeight
-                    // The data texture is also in Azgaar coordinates (no flip)
-                    uvs[idx] = new Vector2(u, v);
+                    // UV0 for heightmap: Y-flipped to match Unity texture coordinates
+                    // Heightmap texture was Y-flipped during generation (Azgaar y=0 at top -> Unity y=height-1)
+                    uv0[idx] = new Vector2(u, 1f - v);
+
+                    // UV1 for data texture: Azgaar coordinates (no flip)
+                    // Data texture is in Azgaar coordinates where y=0 is at top
+                    uv1[idx] = new Vector2(u, v);
                 }
             }
 
@@ -236,9 +240,8 @@ namespace EconSim.Renderer
 
             mesh.vertices = vertices;
             mesh.colors32 = colors;
-            // UV1 (mesh.uv2 in Unity) is used by the shader for data texture sampling
-            // UV0 can be left empty or used for other purposes
-            mesh.uv2 = uvs;
+            mesh.uv = uv0;    // UV0 for heightmap (shader texcoord0)
+            mesh.uv2 = uv1;   // UV1 for data texture (shader texcoord1)
             mesh.triangles = triangles;
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
@@ -264,7 +267,12 @@ namespace EconSim.Renderer
             overlayManager.SetStateBordersVisible(true);
             overlayManager.SetProvinceBordersVisible(true);
 
-            Debug.Log("GridMeshTest: Set to County mode with borders");
+            // Enable height displacement for 3D terrain
+            overlayManager.SetHeightDisplacementEnabled(true);
+            overlayManager.SetHeightScale(3f);
+            overlayManager.SetSeaLevel(0.2f);
+
+            Debug.Log("GridMeshTest: Set to County mode with borders and height displacement");
         }
 
     }

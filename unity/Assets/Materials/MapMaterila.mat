@@ -23,6 +23,10 @@ Material:
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
+    - _BiomeTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _BumpMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -55,6 +59,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _MarketColorTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _MarketPaletteTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -71,7 +79,15 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _ProvinceColorTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _ProvincePaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _StateColorTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -88,30 +104,30 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _HeightScale: 15
-    - _MapMode: 0
-    - _MarketBorderWidth: 1.5
+    - _HeightScale: 3
+    - _MapMode: 2
+    - _MarketBorderWidth: 0.8
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.02
-    - _ProvinceBorderWidth: 1
+    - _ProvinceBorderWidth: 0.8
     - _SeaLevel: 0.2
     - _ShowMarketBorders: 0
-    - _ShowProvinceBorders: 0
-    - _ShowStateBorders: 0
+    - _ShowProvinceBorders: 1
+    - _ShowStateBorders: 1
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1
-    - _StateBorderWidth: 2
+    - _StateBorderWidth: 0.8
     - _UVSec: 0
-    - _UseHeightDisplacement: 1
+    - _UseHeightDisplacement: 0
     - _ZWrite: 1
     m_Colors:
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
-    - _MarketBorderColor: {r: 0.5, g: 0.29999998, b: 0.09999997, a: 1}
-    - _ProvinceBorderColor: {r: 0.29999998, g: 0.29999998, b: 0.29999998, a: 0.8}
-    - _StateBorderColor: {r: 0.09999997, g: 0.09999997, b: 0.09999997, a: 1}
+    - _MarketBorderColor: {r: 0, g: 0, b: 0, a: 0.7529412}
+    - _ProvinceBorderColor: {r: 0, g: 0, b: 0, a: 0.2509804}
+    - _StateBorderColor: {r: 0, g: 0, b: 0, a: 0.7529412}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

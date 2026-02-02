@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
+using EconSim.Bridge;
 
 namespace EconSim.Renderer
 {
@@ -14,6 +15,10 @@ namespace EconSim.Renderer
         // Shader property IDs (cached for performance)
         private static readonly int CellDataTexId = Shader.PropertyToID("_CellDataTex");
         private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
+        private static readonly int BiomeTexId = Shader.PropertyToID("_BiomeTex");
+        private static readonly int StateColorTexId = Shader.PropertyToID("_StateColorTex");
+        private static readonly int ProvinceColorTexId = Shader.PropertyToID("_ProvinceColorTex");
+        private static readonly int MarketColorTexId = Shader.PropertyToID("_MarketColorTex");
         private static readonly int StatePaletteTexId = Shader.PropertyToID("_StatePaletteTex");
         private static readonly int ProvincePaletteTexId = Shader.PropertyToID("_ProvincePaletteTex");
         private static readonly int MarketPaletteTexId = Shader.PropertyToID("_MarketPaletteTex");
@@ -24,6 +29,9 @@ namespace EconSim.Renderer
         private static readonly int StateBorderWidthId = Shader.PropertyToID("_StateBorderWidth");
         private static readonly int ProvinceBorderWidthId = Shader.PropertyToID("_ProvinceBorderWidth");
         private static readonly int MarketBorderWidthId = Shader.PropertyToID("_MarketBorderWidth");
+        private static readonly int UseHeightDisplacementId = Shader.PropertyToID("_UseHeightDisplacement");
+        private static readonly int HeightScaleId = Shader.PropertyToID("_HeightScale");
+        private static readonly int SeaLevelId = Shader.PropertyToID("_SeaLevel");
 
         // Heightmap generation constants
         private const int HeightmapBlurRadius = 15;  // Smooth cell boundaries
@@ -42,9 +50,13 @@ namespace EconSim.Renderer
         // Data textures
         private Texture2D cellDataTexture;      // RGBAHalf: StateId, ProvinceId, CellId, MarketId
         private Texture2D heightmapTexture;     // RFloat: smoothed height values
-        private Texture2D statePaletteTexture;  // 256x1: state colors
-        private Texture2D provincePaletteTexture; // 256x1: province colors
-        private Texture2D marketPaletteTexture; // 256x1: market colors
+        private Texture2D biomeTexture;         // RGB: biome colors (blurred)
+        private Texture2D stateColorTexture;    // RGB: state colors (blurred)
+        private Texture2D provinceColorTexture; // RGB: province colors (blurred)
+        private Texture2D marketColorTexture;   // RGB: market colors (blurred)
+        private Texture2D statePaletteTexture;  // 256x1: state colors (legacy)
+        private Texture2D provincePaletteTexture; // 256x1: province colors (legacy)
+        private Texture2D marketPaletteTexture; // 256x1: market colors (legacy)
 
         // Spatial lookup grid: maps Azgaar pixel coordinates to cell IDs
         private int[] spatialGrid;
@@ -100,7 +112,8 @@ namespace EconSim.Renderer
             BuildSpatialGrid();
             GenerateDataTextures();
             GenerateHeightmapTexture();
-            GeneratePaletteTextures();
+            GenerateBlurredColorTextures();  // Biome, state, province at base resolution with blur
+            GeneratePaletteTextures();       // Legacy palettes (kept for fallback)
             ApplyTexturesToMaterial();
 
             // Debug output
@@ -290,6 +303,214 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
+        /// Generate all blurred color textures at base resolution.
+        /// Base resolution + bilateral blur + bilinear filtering = smooth edges without aliasing.
+        /// </summary>
+        private void GenerateBlurredColorTextures()
+        {
+            // Use base resolution (not multiplied) for faster blur
+            int texWidth = baseWidth;
+            int texHeight = baseHeight;
+            int blurRadius = 3;
+            float colorSigma = 30f;
+
+            Color32 waterColor = new Color32(30, 50, 90, 255);
+            Color32 neutralColor = new Color32(128, 128, 128, 255);
+
+            // Build a base-resolution spatial grid for texture generation
+            int[] baseGrid = new int[texWidth * texHeight];
+            for (int i = 0; i < baseGrid.Length; i++)
+                baseGrid[i] = -1;
+
+            foreach (var cell in mapData.Cells)
+            {
+                if (cell.VertexIndices == null || cell.VertexIndices.Count < 3)
+                    continue;
+
+                int cx = Mathf.RoundToInt(cell.Center.X);
+                int cy = Mathf.RoundToInt(cell.Center.Y);
+                int radius = 8;
+
+                for (int dy = -radius; dy <= radius; dy++)
+                {
+                    for (int dx = -radius; dx <= radius; dx++)
+                    {
+                        int x = cx + dx;
+                        int y = cy + dy;
+                        if (x < 0 || x >= texWidth || y < 0 || y >= texHeight)
+                            continue;
+
+                        int idx = y * texWidth + x;
+                        if (baseGrid[idx] < 0)
+                        {
+                            baseGrid[idx] = cell.Id;
+                        }
+                        else if (mapData.CellById.TryGetValue(baseGrid[idx], out var existing))
+                        {
+                            float edx = x - existing.Center.X;
+                            float edy = y - existing.Center.Y;
+                            float existDist = edx * edx + edy * edy;
+                            float newDist = dx * dx + dy * dy;
+                            if (newDist < existDist)
+                                baseGrid[idx] = cell.Id;
+                        }
+                    }
+                }
+            }
+
+            // Generate biome texture
+            Color32[] biomePixels = new Color32[texWidth * texHeight];
+            Color32[] statePixels = new Color32[texWidth * texHeight];
+            Color32[] provincePixels = new Color32[texWidth * texHeight];
+
+            for (int y = 0; y < texHeight; y++)
+            {
+                int srcY = texHeight - 1 - y;  // Y-flip for Unity coordinates
+
+                for (int x = 0; x < texWidth; x++)
+                {
+                    int srcIdx = srcY * texWidth + x;
+                    int dstIdx = y * texWidth + x;
+                    int cellId = baseGrid[srcIdx];
+
+                    if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
+                    {
+                        if (!cell.IsLand)
+                        {
+                            float depthFactor = Mathf.Clamp01((20 - cell.Height) / 20f);
+                            Color32 water = Color32.Lerp(
+                                new Color32(50, 100, 150, 255),
+                                new Color32(20, 50, 100, 255),
+                                depthFactor
+                            );
+                            biomePixels[dstIdx] = water;
+                            statePixels[dstIdx] = water;
+                            provincePixels[dstIdx] = water;
+                        }
+                        else
+                        {
+                            // Biome
+                            if (cell.BiomeId >= 0 && cell.BiomeId < mapData.Biomes.Count)
+                                biomePixels[dstIdx] = mapData.Biomes[cell.BiomeId].Color.ToUnity();
+                            else
+                                biomePixels[dstIdx] = new Color32(100, 150, 100, 255);
+
+                            // State
+                            if (cell.StateId > 0 && mapData.StateById.TryGetValue(cell.StateId, out var state))
+                                statePixels[dstIdx] = state.Color.ToUnity();
+                            else
+                                statePixels[dstIdx] = neutralColor;
+
+                            // Province
+                            if (cell.ProvinceId > 0 && mapData.ProvinceById.TryGetValue(cell.ProvinceId, out var province))
+                                provincePixels[dstIdx] = province.Color.ToUnity();
+                            else if (cell.StateId > 0 && mapData.StateById.TryGetValue(cell.StateId, out var st))
+                                provincePixels[dstIdx] = st.Color.ToUnity();
+                            else
+                                provincePixels[dstIdx] = neutralColor;
+                        }
+                    }
+                    else
+                    {
+                        biomePixels[dstIdx] = waterColor;
+                        statePixels[dstIdx] = waterColor;
+                        provincePixels[dstIdx] = waterColor;
+                    }
+                }
+            }
+
+            // Apply bilateral blur to each
+            biomePixels = BilateralBlur(biomePixels, texWidth, texHeight, blurRadius, colorSigma);
+            statePixels = BilateralBlur(statePixels, texWidth, texHeight, blurRadius, colorSigma);
+            provincePixels = BilateralBlur(provincePixels, texWidth, texHeight, blurRadius, colorSigma);
+
+            // Create textures
+            biomeTexture = CreateColorTexture("BiomeTexture", biomePixels, texWidth, texHeight);
+            stateColorTexture = CreateColorTexture("StateColorTexture", statePixels, texWidth, texHeight);
+            provinceColorTexture = CreateColorTexture("ProvinceColorTexture", provincePixels, texWidth, texHeight);
+
+            // Market texture generated later when economy state is set
+            marketColorTexture = CreateColorTexture("MarketColorTexture", new Color32[texWidth * texHeight], texWidth, texHeight);
+
+            Debug.Log($"MapOverlayManager: Generated blurred color textures {texWidth}x{texHeight}");
+        }
+
+        private Texture2D CreateColorTexture(string name, Color32[] pixels, int width, int height)
+        {
+            var tex = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            tex.name = name;
+            tex.filterMode = FilterMode.Bilinear;
+            tex.wrapMode = TextureWrapMode.Clamp;
+            tex.SetPixels32(pixels);
+            tex.Apply();
+            return tex;
+        }
+
+        /// <summary>
+        /// Bilateral blur - edge-preserving smoothing.
+        /// Smooths similar colors, preserves edges between different colors.
+        /// </summary>
+        private Color32[] BilateralBlur(Color32[] input, int width, int height, int radius, float colorSigma)
+        {
+            Color32[] output = new Color32[input.Length];
+            float spatialSigma = radius / 2.5f;
+            float colorSigmaSq2 = 2f * colorSigma * colorSigma;
+            float spatialSigmaSq2 = 2f * spatialSigma * spatialSigma;
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int centerIdx = y * width + x;
+                    Color32 centerColor = input[centerIdx];
+
+                    float sumR = 0, sumG = 0, sumB = 0;
+                    float weightSum = 0;
+
+                    for (int ky = -radius; ky <= radius; ky++)
+                    {
+                        int sy = Mathf.Clamp(y + ky, 0, height - 1);
+
+                        for (int kx = -radius; kx <= radius; kx++)
+                        {
+                            int sx = Mathf.Clamp(x + kx, 0, width - 1);
+                            int sampleIdx = sy * width + sx;
+                            Color32 sampleColor = input[sampleIdx];
+
+                            // Spatial weight (Gaussian based on distance)
+                            float distSq = kx * kx + ky * ky;
+                            float spatialWeight = Mathf.Exp(-distSq / spatialSigmaSq2);
+
+                            // Color weight (Gaussian based on color difference)
+                            float dr = centerColor.r - sampleColor.r;
+                            float dg = centerColor.g - sampleColor.g;
+                            float db = centerColor.b - sampleColor.b;
+                            float colorDistSq = dr * dr + dg * dg + db * db;
+                            float colorWeight = Mathf.Exp(-colorDistSq / colorSigmaSq2);
+
+                            // Combined weight
+                            float weight = spatialWeight * colorWeight;
+
+                            sumR += sampleColor.r * weight;
+                            sumG += sampleColor.g * weight;
+                            sumB += sampleColor.b * weight;
+                            weightSum += weight;
+                        }
+                    }
+
+                    output[centerIdx] = new Color32(
+                        (byte)Mathf.Clamp(sumR / weightSum, 0, 255),
+                        (byte)Mathf.Clamp(sumG / weightSum, 0, 255),
+                        (byte)Mathf.Clamp(sumB / weightSum, 0, 255),
+                        255
+                    );
+                }
+            }
+
+            return output;
+        }
+
+        /// <summary>
         /// Apply separable Gaussian blur to a 2D array of float values.
         /// </summary>
         private float[] GaussianBlur(float[] input, int width, int height, int radius)
@@ -439,6 +660,10 @@ namespace EconSim.Renderer
 
             terrainMaterial.SetTexture(CellDataTexId, cellDataTexture);
             terrainMaterial.SetTexture(HeightmapTexId, heightmapTexture);
+            terrainMaterial.SetTexture(BiomeTexId, biomeTexture);
+            terrainMaterial.SetTexture(StateColorTexId, stateColorTexture);
+            terrainMaterial.SetTexture(ProvinceColorTexId, provinceColorTexture);
+            terrainMaterial.SetTexture(MarketColorTexId, marketColorTexture);
             terrainMaterial.SetTexture(StatePaletteTexId, statePaletteTexture);
             terrainMaterial.SetTexture(ProvincePaletteTexId, provincePaletteTexture);
             terrainMaterial.SetTexture(MarketPaletteTexId, marketPaletteTexture);
@@ -511,11 +736,90 @@ namespace EconSim.Renderer
                 cellDataTexture.Apply();
                 Debug.Log($"MapOverlayManager: Updated market IDs in cell data texture");
             }
+
+            // Generate blurred market color texture
+            GenerateMarketColorTexture(economy);
+        }
+
+        /// <summary>
+        /// Generate blurred market color texture from economy state.
+        /// Uses spatial grid for O(pixels) instead of O(pixels × cells).
+        /// </summary>
+        private void GenerateMarketColorTexture(EconomyState economy)
+        {
+            int texWidth = baseWidth;
+            int texHeight = baseHeight;
+
+            Color32 waterColor = new Color32(30, 50, 90, 255);
+            Color32 noMarketColor = new Color32(60, 60, 60, 255);
+
+            Color32[] pixels = new Color32[texWidth * texHeight];
+
+            // Use the high-res spatial grid, sampling at base resolution
+            float scale = (float)gridWidth / texWidth;
+
+            for (int y = 0; y < texHeight; y++)
+            {
+                int srcY = texHeight - 1 - y;  // Y-flip
+
+                for (int x = 0; x < texWidth; x++)
+                {
+                    int dstIdx = y * texWidth + x;
+
+                    // Sample from high-res grid
+                    int gx = Mathf.Clamp(Mathf.RoundToInt(x * scale), 0, gridWidth - 1);
+                    int gy = Mathf.Clamp(Mathf.RoundToInt(srcY * scale), 0, gridHeight - 1);
+                    int cellId = spatialGrid[gy * gridWidth + gx];
+
+                    if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
+                    {
+                        if (!cell.IsLand)
+                        {
+                            pixels[dstIdx] = waterColor;
+                        }
+                        else if (economy.CellToMarket.TryGetValue(cellId, out int marketId))
+                        {
+                            int colorIdx = (marketId - 1) % MarketZoneColors.Length;
+                            if (colorIdx < 0) colorIdx = 0;
+                            pixels[dstIdx] = new Color32(
+                                (byte)(MarketZoneColors[colorIdx].r * 255),
+                                (byte)(MarketZoneColors[colorIdx].g * 255),
+                                (byte)(MarketZoneColors[colorIdx].b * 255),
+                                255
+                            );
+                        }
+                        else
+                        {
+                            pixels[dstIdx] = noMarketColor;
+                        }
+                    }
+                    else
+                    {
+                        pixels[dstIdx] = waterColor;
+                    }
+                }
+            }
+
+            // Apply bilateral blur
+            pixels = BilateralBlur(pixels, texWidth, texHeight, 3, 30f);
+
+            // Update texture
+            if (marketColorTexture != null)
+                Object.Destroy(marketColorTexture);
+
+            marketColorTexture = CreateColorTexture("MarketColorTexture", pixels, texWidth, texHeight);
+            terrainMaterial.SetTexture(MarketColorTexId, marketColorTexture);
+
+            Debug.Log($"MapOverlayManager: Generated blurred market color texture");
         }
 
         /// <summary>
         /// Set the current map mode for the shader.
         /// Mode: 0=vertex color (terrain/height), 1=political, 2=province, 3=county, 4=market
+        /// </summary>
+        /// <summary>
+        /// Set the current map mode for the shader.
+        /// Mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome
         /// </summary>
         public void SetMapMode(MapView.MapMode mode)
         {
@@ -536,9 +840,12 @@ namespace EconSim.Renderer
                 case MapView.MapMode.Market:
                     shaderMode = 4;
                     break;
+                case MapView.MapMode.Terrain:
+                    shaderMode = 5;  // Biome texture
+                    break;
+                case MapView.MapMode.Height:
                 default:
-                    // Terrain, Height, or any future modes use vertex color
-                    shaderMode = 0;
+                    shaderMode = 0;  // Height gradient
                     break;
             }
 
@@ -597,6 +904,34 @@ namespace EconSim.Renderer
         {
             if (terrainMaterial == null) return;
             terrainMaterial.SetFloat(MarketBorderWidthId, Mathf.Clamp(pixels, 0.5f, 3f));
+        }
+
+        /// <summary>
+        /// Enable or disable height displacement in the shader.
+        /// When enabled, the shader displaces vertices based on heightmap values.
+        /// </summary>
+        public void SetHeightDisplacementEnabled(bool enabled)
+        {
+            if (terrainMaterial == null) return;
+            terrainMaterial.SetInt(UseHeightDisplacementId, enabled ? 1 : 0);
+        }
+
+        /// <summary>
+        /// Set the height scale for terrain displacement.
+        /// </summary>
+        public void SetHeightScale(float scale)
+        {
+            if (terrainMaterial == null) return;
+            terrainMaterial.SetFloat(HeightScaleId, scale);
+        }
+
+        /// <summary>
+        /// Set the sea level threshold for water detection.
+        /// </summary>
+        public void SetSeaLevel(float level)
+        {
+            if (terrainMaterial == null) return;
+            terrainMaterial.SetFloat(SeaLevelId, level);
         }
 
         /// <summary>
@@ -660,6 +995,14 @@ namespace EconSim.Renderer
                 Object.Destroy(cellDataTexture);
             if (heightmapTexture != null)
                 Object.Destroy(heightmapTexture);
+            if (biomeTexture != null)
+                Object.Destroy(biomeTexture);
+            if (stateColorTexture != null)
+                Object.Destroy(stateColorTexture);
+            if (provinceColorTexture != null)
+                Object.Destroy(provinceColorTexture);
+            if (marketColorTexture != null)
+                Object.Destroy(marketColorTexture);
             if (statePaletteTexture != null)
                 Object.Destroy(statePaletteTexture);
             if (provincePaletteTexture != null)

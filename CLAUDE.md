@@ -31,14 +31,15 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 ## Current Phase
 
-**Phase 6b: Grid Mesh Test** (complete)
+**Phase 6c: Heightmap Integration** (complete)
 
-- ✓ Grid mesh renders correctly with data texture sampling
-- ✓ UV mapping verified (UV1/mesh.uv2 → shader texcoord1)
-- ✓ Triangle winding order for top-down camera (clockwise)
-- ✓ Vertex colors for water/fallback areas
-- ✓ Test scene: `Assets/Scenes/GridMeshTest.unity`
-- ✓ Editor tool: Window > EconSim > Create Grid Mesh Test Scene
+- ✓ Shader vertex displacement from heightmap
+- ✓ Shader-computed normals from heightmap gradients
+- ✓ Height-based coloring for Height map mode (green→brown→white gradient)
+- ✓ Biome texture for Terrain map mode (actual biome colors)
+- ✓ Grid mesh integrated into MapView (replaces Voronoi as default)
+- ✓ Height displacement only enabled for Height mode (other modes flat)
+- ✓ All map modes working with grid mesh
 
 Previous phases complete:
 
@@ -51,6 +52,7 @@ Previous phases complete:
 - ✓ Phase 5.5: Transport & Rivers (ocean/river transport, emergent roads, selection highlight)
 - ✓ Phase 5.6: Shader-Based Map Overlays (GPU borders, data textures, palettes)
 - ✓ Phase 6a: Heightmap Texture Generation (smooth heightmap, Gaussian blur, Y-flip)
+- ✓ Phase 6b: Grid Mesh Test (UV mapping, winding order, test scene)
 
 See `docs/DESIGN.md` → Development Roadmap for full status.
 
@@ -86,7 +88,7 @@ See `docs/DESIGN.md` → Development Roadmap for full status.
 **Unity** (symlinks `EconSim.Core/` from `src/`):
 
 - `GameManager` - Entry point, loads map, owns simulation
-- `MapView` - Generates Voronoi mesh, map modes (1=political cycle, 2=terrain, 3=height, 4=market), click-to-select
+- `MapView` - Generates grid mesh (default) or Voronoi mesh, map modes (1=political cycle, 2=terrain, 3=height with 3D displacement, 4=market), click-to-select
 - `GridMeshTest` - Test harness for grid mesh rendering (validates UV mapping, winding order)
 - `BorderRenderer` - State/province borders (legacy, replaced by shader system)
 - `MapOverlayManager` - Generates data textures for shader-based borders/overlays
