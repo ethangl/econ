@@ -84,7 +84,7 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _MapMode: 0
+    - _MapMode: 3
     - _MarketBorderWidth: 1.5
     - _Metallic: 0
     - _Mode: 0
@@ -92,7 +92,7 @@ Material:
     - _Parallax: 0.02
     - _ProvinceBorderWidth: 1
     - _ShowMarketBorders: 0
-    - _ShowProvinceBorders: 0
+    - _ShowProvinceBorders: 1
     - _ShowStateBorders: 1
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1

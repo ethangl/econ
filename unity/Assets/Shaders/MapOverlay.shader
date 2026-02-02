@@ -5,6 +5,9 @@ Shader "EconSim/MapOverlay"
         _Glossiness ("Smoothness", Range(0,1)) = 0.2
         _Metallic ("Metallic", Range(0,1)) = 0.0
 
+        // Heightmap for terrain (Phase 6)
+        _HeightmapTex ("Heightmap", 2D) = "gray" {}
+
         // Data texture: R=StateId, G=ProvinceId, B=CellId, A=MarketId (normalized to 0-1)
         _CellDataTex ("Cell Data", 2D) = "black" {}
 

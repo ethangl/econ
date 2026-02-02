@@ -67,6 +67,12 @@ crashlytics-build.properties
 /reference/*.map
 /reference/*.svg
 
+# Debug textures (generated at runtime)
+/unity/debug/
+
+# unity mobile blah blah blah
+/unity/Assets/MobileDependencyResolver
+
 # macOS
 .DS_Store
 .AppleDouble

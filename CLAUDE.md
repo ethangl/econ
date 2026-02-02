@@ -8,15 +8,13 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 ## Current Phase
 
-**Phase 5.6: Shader-Based Map Overlays** (complete)
+**Phase 6a: Heightmap Texture Generation** (complete)
 
-- ✓ GPU border detection (replaces mesh-based BorderRenderer)
-- ✓ Data textures (RGBAHalf storing StateId, ProvinceId, CellId, MarketId)
-- ✓ Screen-space consistent borders (constant pixel width regardless of zoom)
-- ✓ 16-sample multi-radius anti-aliasing for smooth border edges
-- ✓ Configurable resolution multiplier (1-4x, default 2x for 2880×1620 texture)
-- ✓ Water cell handling (falls back to vertex colors when ID is 0)
-- ✓ Color palette textures for state/province/market coloring
+- ✓ Smooth heightmap texture from Azgaar cell data
+- ✓ Gaussian blur (radius 15) for smooth cell boundaries
+- ✓ Land height clamping to survive blur near coastlines
+- ✓ Y-axis flip for Unity texture coordinates
+- ✓ TextureDebugger utility for verification
 
 Previous phases complete:
 
@@ -27,6 +25,7 @@ Previous phases complete:
 - ✓ Phase 4: UI Layer (time controls, county/market inspection, market map mode, economy panel)
 - ✓ Phase 5: Multiple markets, black market
 - ✓ Phase 5.5: Transport & Rivers (ocean/river transport, emergent roads, selection highlight)
+- ✓ Phase 5.6: Shader-Based Map Overlays (GPU borders, data textures, palettes)
 
 See `docs/DESIGN.md` → Development Roadmap for full status.
 
@@ -110,3 +109,13 @@ The map uses a GPU-driven overlay system for borders and map modes:
 - Trade routes / flow visualization
 - Fog of war
 - War/occupation overlays
+
+## Coordinate Systems
+
+**Azgaar (imported maps):** Y=0 at top, increases downward (screen coordinates)
+
+**Unity (native):** Y=0 at bottom for textures, Y-up in world space
+
+Currently, Azgaar coordinates are used internally in `MapData`, `Cell`, etc. The Y-flip happens at texture generation time in `MapOverlayManager`. This is a pragmatic choice to minimize refactoring.
+
+**Future consideration:** If we generate our own maps, use Unity coordinates natively and remove the Y-flip in texture generation. Ideally, the flip would happen once at the Azgaar import boundary (`AzgaarParser`/`MapConverter`) so all internal data uses Unity conventions.

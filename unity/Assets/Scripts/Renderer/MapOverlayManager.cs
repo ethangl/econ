@@ -13,6 +13,7 @@ namespace EconSim.Renderer
     {
         // Shader property IDs (cached for performance)
         private static readonly int CellDataTexId = Shader.PropertyToID("_CellDataTex");
+        private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
         private static readonly int StatePaletteTexId = Shader.PropertyToID("_StatePaletteTex");
         private static readonly int ProvincePaletteTexId = Shader.PropertyToID("_ProvincePaletteTex");
         private static readonly int MarketPaletteTexId = Shader.PropertyToID("_MarketPaletteTex");
@@ -23,6 +24,11 @@ namespace EconSim.Renderer
         private static readonly int StateBorderWidthId = Shader.PropertyToID("_StateBorderWidth");
         private static readonly int ProvinceBorderWidthId = Shader.PropertyToID("_ProvinceBorderWidth");
         private static readonly int MarketBorderWidthId = Shader.PropertyToID("_MarketBorderWidth");
+
+        // Heightmap generation constants
+        private const int HeightmapBlurRadius = 15;  // Smooth cell boundaries
+        private const float SeaLevel = 0.2f;  // Azgaar sea level = 20/100
+        private const float LandMinHeight = 0.25f;  // Margin above sea level to survive blur
 
         private MapData mapData;
         private EconomyState economyState;
@@ -35,6 +41,7 @@ namespace EconSim.Renderer
 
         // Data textures
         private Texture2D cellDataTexture;      // RGBAHalf: StateId, ProvinceId, CellId, MarketId
+        private Texture2D heightmapTexture;     // RFloat: smoothed height values
         private Texture2D statePaletteTexture;  // 256x1: state colors
         private Texture2D provincePaletteTexture; // 256x1: province colors
         private Texture2D marketPaletteTexture; // 256x1: market colors
@@ -92,8 +99,13 @@ namespace EconSim.Renderer
 
             BuildSpatialGrid();
             GenerateDataTextures();
+            GenerateHeightmapTexture();
             GeneratePaletteTextures();
             ApplyTexturesToMaterial();
+
+            // Debug output
+            TextureDebugger.SaveTexture(heightmapTexture, "heightmap");
+            TextureDebugger.SaveTexture(cellDataTexture, "cell_data");
         }
 
         /// <summary>
@@ -224,6 +236,129 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
+        /// Generate smoothed heightmap texture from cell height data.
+        /// Uses Gaussian blur to smooth the blocky cell boundaries.
+        /// </summary>
+        private void GenerateHeightmapTexture()
+        {
+            // 1. Sample raw heights from spatial grid (blocky cell-based)
+            float[] rawHeights = new float[gridWidth * gridHeight];
+
+            for (int i = 0; i < spatialGrid.Length; i++)
+            {
+                int cellId = spatialGrid[i];
+                if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
+                {
+                    float h = cell.Height / 100f;  // Normalize 0-100 to 0-1
+
+                    // Clamp land heights above sea level to prevent
+                    // blur from pushing coastal land below water
+                    if (cell.IsLand && h < LandMinHeight)
+                        h = LandMinHeight;
+
+                    rawHeights[i] = h;
+                }
+                else
+                {
+                    rawHeights[i] = 0f;  // Default to sea floor
+                }
+            }
+
+            // 2. Gaussian blur for smooth transitions
+            float[] smoothed = GaussianBlur(rawHeights, gridWidth, gridHeight, HeightmapBlurRadius);
+
+            // 3. Flip Y axis: Azgaar uses Y=0 at top (screen coords), Unity textures use Y=0 at bottom
+            // NOTE: If we switch to generating our own maps, use Unity coords natively and remove this flip.
+            // See CLAUDE.md "Coordinate Systems" for details.
+            float[] flipped = new float[smoothed.Length];
+            for (int y = 0; y < gridHeight; y++)
+            {
+                int srcRow = (gridHeight - 1 - y) * gridWidth;
+                int dstRow = y * gridWidth;
+                System.Array.Copy(smoothed, srcRow, flipped, dstRow, gridWidth);
+            }
+
+            // 4. Create texture
+            heightmapTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RFloat, false);
+            heightmapTexture.name = "HeightmapTexture";
+            heightmapTexture.filterMode = FilterMode.Bilinear;
+            heightmapTexture.wrapMode = TextureWrapMode.Clamp;
+            heightmapTexture.SetPixelData(flipped, 0);
+            heightmapTexture.Apply();
+
+            Debug.Log($"MapOverlayManager: Generated heightmap {gridWidth}x{gridHeight}, blur radius {HeightmapBlurRadius}");
+        }
+
+        /// <summary>
+        /// Apply separable Gaussian blur to a 2D array of float values.
+        /// </summary>
+        private float[] GaussianBlur(float[] input, int width, int height, int radius)
+        {
+            float[] kernel = GenerateGaussianKernel(radius);
+            float[] temp = new float[width * height];
+            float[] output = new float[width * height];
+
+            // Horizontal pass
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    float sum = 0, weightSum = 0;
+                    for (int k = -radius; k <= radius; k++)
+                    {
+                        int sx = Mathf.Clamp(x + k, 0, width - 1);
+                        float w = kernel[k + radius];
+                        sum += input[y * width + sx] * w;
+                        weightSum += w;
+                    }
+                    temp[y * width + x] = sum / weightSum;
+                }
+            }
+
+            // Vertical pass
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    float sum = 0, weightSum = 0;
+                    for (int k = -radius; k <= radius; k++)
+                    {
+                        int sy = Mathf.Clamp(y + k, 0, height - 1);
+                        float w = kernel[k + radius];
+                        sum += temp[sy * width + x] * w;
+                        weightSum += w;
+                    }
+                    output[y * width + x] = sum / weightSum;
+                }
+            }
+
+            return output;
+        }
+
+        /// <summary>
+        /// Generate a 1D Gaussian kernel for the given radius.
+        /// </summary>
+        private float[] GenerateGaussianKernel(int radius)
+        {
+            int size = radius * 2 + 1;
+            float[] kernel = new float[size];
+            float sigma = radius / 2.5f;
+            float sum = 0;
+
+            for (int i = 0; i < size; i++)
+            {
+                int x = i - radius;
+                kernel[i] = Mathf.Exp(-(x * x) / (2 * sigma * sigma));
+                sum += kernel[i];
+            }
+
+            for (int i = 0; i < size; i++)
+                kernel[i] /= sum;
+
+            return kernel;
+        }
+
+        /// <summary>
         /// Generate color palette textures for states, provinces, and markets.
         /// </summary>
         private void GeneratePaletteTextures()
@@ -303,6 +438,7 @@ namespace EconSim.Renderer
             if (terrainMaterial == null) return;
 
             terrainMaterial.SetTexture(CellDataTexId, cellDataTexture);
+            terrainMaterial.SetTexture(HeightmapTexId, heightmapTexture);
             terrainMaterial.SetTexture(StatePaletteTexId, statePaletteTexture);
             terrainMaterial.SetTexture(ProvincePaletteTexId, provincePaletteTexture);
             terrainMaterial.SetTexture(MarketPaletteTexId, marketPaletteTexture);
@@ -522,6 +658,8 @@ namespace EconSim.Renderer
         {
             if (cellDataTexture != null)
                 Object.Destroy(cellDataTexture);
+            if (heightmapTexture != null)
+                Object.Destroy(heightmapTexture);
             if (statePaletteTexture != null)
                 Object.Destroy(statePaletteTexture);
             if (provincePaletteTexture != null)

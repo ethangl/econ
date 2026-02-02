@@ -1259,6 +1259,24 @@ Future:
 - [x] Future overlay support infrastructure
   - Heat maps, fog of war, trade routes can reuse same texture/shader pattern
 
+### Phase 6a: Heightmap Texture Generation ✓
+
+- [x] Smooth heightmap texture from Azgaar cell data
+  - Gaussian blur (radius 15) for smooth cell boundaries
+  - Land height clamping above sea level to survive blur
+  - Y-axis flip for Unity texture coordinates (Azgaar uses Y-down)
+- [x] TextureDebugger utility for verification
+  - Saves textures to `unity/debug/` folder as PNG
+- [x] Shader property added (`_HeightmapTex`) for Phase 6b
+
+### Phase 6b: Grid Mesh & Terrain Rendering (planned)
+
+- [ ] Replace Voronoi mesh with grid mesh
+- [ ] Shader vertex displacement from heightmap
+- [ ] Shader-computed normals from heightmap gradients
+- [ ] Water detection from height (not stateId)
+- [ ] Voronoi fallback toggle for comparison
+
 ### Phase 6+: Future
 
 - [ ] More production chains

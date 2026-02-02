@@ -526,20 +526,20 @@ namespace EconSim.Core.Simulation.Systems
                 boughtSummary.Add($"{kvp.Key}:{kvp.Value:F0}");
             }
 
-            var stolenSummary = new List<string>();
-            foreach (var kvp in stolen)
-            {
-                if (kvp.Value >= 0.1f)  // Only log meaningful theft
-                    stolenSummary.Add($"{kvp.Key}:{kvp.Value:F1}");
-            }
+            // var stolenSummary = new List<string>();
+            // foreach (var kvp in stolen)
+            // {
+            //     if (kvp.Value >= 0.1f)  // Only log meaningful theft
+            //         stolenSummary.Add($"{kvp.Key}:{kvp.Value:F1}");
+            // }
 
             var parts = new List<string>();
             if (soldSummary.Count > 0)
                 parts.Add($"sold=[{string.Join(", ", soldSummary)}]");
             if (boughtSummary.Count > 0)
                 parts.Add($"bought=[{string.Join(", ", boughtSummary)}]");
-            if (stolenSummary.Count > 0)
-                parts.Add($"stolen=[{string.Join(", ", stolenSummary)}]");
+            // if (stolenSummary.Count > 0)
+            //     parts.Add($"stolen=[{string.Join(", ", stolenSummary)}]");
 
             if (parts.Count > 0)
             {

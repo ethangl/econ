@@ -99,10 +99,10 @@ namespace EconSim.Core.Simulation.Systems
                     summary.Add($"{kvp.Key}:{kvp.Value:F1}");
             }
 
-            if (summary.Count > 0)
-            {
-                SimLog.Log("Theft", $"Day {day}: stolen from stockpiles=[{string.Join(", ", summary)}]");
-            }
+            // if (summary.Count > 0)
+            // {
+            //     SimLog.Log("Theft", $"Day {day}: stolen from stockpiles=[{string.Join(", ", summary)}]");
+            // }
         }
     }
 }
