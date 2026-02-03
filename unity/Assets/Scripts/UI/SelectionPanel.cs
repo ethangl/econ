@@ -73,10 +73,10 @@ namespace EconSim.UI
                 _mapView = FindObjectOfType<MapView>();
             }
 
-            // Subscribe to cell clicks
+            // Subscribe to selection changes (fires after MapView updates its selection state)
             if (_mapView != null)
             {
-                _mapView.OnCellClicked += OnCellClicked;
+                _mapView.OnSelectionChanged += OnSelectionChanged;
             }
 
             SetupUI();
@@ -86,15 +86,15 @@ namespace EconSim.UI
         {
             if (_mapView != null)
             {
-                _mapView.OnCellClicked -= OnCellClicked;
+                _mapView.OnSelectionChanged -= OnSelectionChanged;
             }
         }
 
-        private void OnCellClicked(int cellId)
+        private void OnSelectionChanged(MapView.SelectionDepth depth)
         {
             if (_mapView == null) return;
 
-            // Don't show in non-political modes
+            // Don't show in non-political modes (Market/Terrain have their own panels or no panel)
             var mode = _mapView.CurrentMode;
             if (mode != MapView.MapMode.Political &&
                 mode != MapView.MapMode.Province &&
@@ -104,26 +104,20 @@ namespace EconSim.UI
                 return;
             }
 
-            if (cellId < 0 || _mapData == null || !_mapData.CellById.ContainsKey(cellId))
+            // Use the drill-down selection depth from MapView
+            switch (depth)
             {
-                Hide();
-                return;
-            }
-
-            var cell = _mapData.CellById[cellId];
-
-            // Select the appropriate entity based on mode
-            switch (mode)
-            {
-                case MapView.MapMode.Political:
-                    SelectState(cell.StateId);
+                case MapView.SelectionDepth.State:
+                    SelectState(_mapView.SelectedStateId);
                     break;
-                case MapView.MapMode.Province:
-                    SelectProvince(cell.ProvinceId);
+                case MapView.SelectionDepth.Province:
+                    SelectProvince(_mapView.SelectedProvinceId);
                     break;
-                case MapView.MapMode.County:
-                    // Look up county ID from cell
-                    SelectCounty(cell.CountyId);
+                case MapView.SelectionDepth.County:
+                    SelectCounty(_mapView.SelectedCountyId);
+                    break;
+                default:
+                    Hide();
                     break;
             }
         }

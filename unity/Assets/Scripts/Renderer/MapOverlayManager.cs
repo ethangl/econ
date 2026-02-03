@@ -1,9 +1,12 @@
 using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
 using UnityEngine;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
 using EconSim.Core.Rendering;
 using EconSim.Bridge;
+using Profiler = EconSim.Core.Common.StartupProfiler;
 
 namespace EconSim.Renderer
 {
@@ -42,6 +45,12 @@ namespace EconSim.Renderer
         private static readonly int SelectionBorderColorId = Shader.PropertyToID("_SelectionBorderColor");
         private static readonly int SelectionBorderWidthId = Shader.PropertyToID("_SelectionBorderWidth");
         private static readonly int SelectionFillAlphaId = Shader.PropertyToID("_SelectionFillAlpha");
+        private static readonly int HoveredStateIdId = Shader.PropertyToID("_HoveredStateId");
+        private static readonly int HoveredProvinceIdId = Shader.PropertyToID("_HoveredProvinceId");
+        private static readonly int HoveredCountyIdId = Shader.PropertyToID("_HoveredCountyId");
+        private static readonly int HoveredMarketIdId = Shader.PropertyToID("_HoveredMarketId");
+        private static readonly int HoverIntensityId = Shader.PropertyToID("_HoverIntensity");
+        private static readonly int SelectionDimmingId = Shader.PropertyToID("_SelectionDimming");
 
         private MapData mapData;
         private EconomyState economyState;
@@ -121,13 +130,33 @@ namespace EconSim.Renderer
             gridWidth = baseWidth * this.resolutionMultiplier;
             gridHeight = baseHeight * this.resolutionMultiplier;
 
+            Profiler.Begin("BuildSpatialGrid");
             BuildSpatialGrid();
+            Profiler.End();
+
+            Profiler.Begin("GenerateDataTextures");
             GenerateDataTextures();
+            Profiler.End();
+
+            Profiler.Begin("GenerateHeightmapTexture");
             GenerateHeightmapTexture();
+            Profiler.End();
+
+            Profiler.Begin("GenerateRiverMaskTexture");
             GenerateRiverMaskTexture();
+            Profiler.End();
+
+            Profiler.Begin("GeneratePaletteTextures");
             GeneratePaletteTextures();
+            Profiler.End();
+
+            Profiler.Begin("GenerateBiomeElevationMatrix");
             GenerateBiomeElevationMatrix();
+            Profiler.End();
+
+            Profiler.Begin("ApplyTexturesToMaterial");
             ApplyTexturesToMaterial();
+            Profiler.End();
 
             // Debug output
             TextureDebugger.SaveTexture(heightmapTexture, "heightmap");
@@ -138,26 +167,149 @@ namespace EconSim.Renderer
         /// Build spatial lookup grid mapping Azgaar coordinates to cell IDs.
         /// Uses cell centers to determine ownership of each grid position.
         /// Applies domain warping for organic, meandering borders.
+        /// Results are cached to disk for fast subsequent loads.
         /// </summary>
         private void BuildSpatialGrid()
         {
-            spatialGrid = new int[gridWidth * gridHeight];
+            // Try to load from cache first
+            string cacheKey = ComputeSpatialGridCacheKey();
+            string cachePath = GetSpatialGridCachePath(cacheKey);
 
-            // Initialize to -1 (no cell)
-            for (int i = 0; i < spatialGrid.Length; i++)
+            if (TryLoadSpatialGridFromCache(cachePath))
+            {
+                Debug.Log($"MapOverlayManager: Loaded spatial grid from cache ({gridWidth}x{gridHeight})");
+                return;
+            }
+
+            // Build the grid from scratch
+            BuildSpatialGridFromScratch();
+
+            // Save to cache for next time
+            SaveSpatialGridToCache(cachePath);
+            Debug.Log($"MapOverlayManager: Built and cached spatial grid {gridWidth}x{gridHeight} ({resolutionMultiplier}x resolution, warp amplitude {WarpAmplitude})");
+        }
+
+        /// <summary>
+        /// Compute a cache key based on parameters that affect the spatial grid.
+        /// </summary>
+        private string ComputeSpatialGridCacheKey()
+        {
+            // Include all parameters that affect the grid output
+            string input = $"{mapData.Info.Name}_{mapData.Info.Width}x{mapData.Info.Height}_{mapData.Cells.Count}cells_{resolutionMultiplier}x_{WarpAmplitude}amp_{WarpFrequency}freq_{WarpOctaves}oct";
+
+            // Simple hash
+            int hash = input.GetHashCode();
+            return $"spatial_grid_{hash:X8}";
+        }
+
+        /// <summary>
+        /// Get the cache file path for a given cache key.
+        /// </summary>
+        private string GetSpatialGridCachePath(string cacheKey)
+        {
+            // Use Unity's persistent data path for cache
+            string cacheDir = Path.Combine(Application.persistentDataPath, "MapCache");
+            if (!Directory.Exists(cacheDir))
+            {
+                Directory.CreateDirectory(cacheDir);
+            }
+            return Path.Combine(cacheDir, $"{cacheKey}.bin");
+        }
+
+        /// <summary>
+        /// Try to load the spatial grid from a cache file.
+        /// </summary>
+        private bool TryLoadSpatialGridFromCache(string cachePath)
+        {
+            if (!File.Exists(cachePath))
+                return false;
+
+            try
+            {
+                using (var stream = File.OpenRead(cachePath))
+                using (var reader = new BinaryReader(stream))
+                {
+                    // Read and verify header
+                    int cachedWidth = reader.ReadInt32();
+                    int cachedHeight = reader.ReadInt32();
+
+                    if (cachedWidth != gridWidth || cachedHeight != gridHeight)
+                    {
+                        Debug.LogWarning($"MapOverlayManager: Cache size mismatch ({cachedWidth}x{cachedHeight} vs {gridWidth}x{gridHeight}), rebuilding");
+                        return false;
+                    }
+
+                    // Read grid data
+                    int length = gridWidth * gridHeight;
+                    spatialGrid = new int[length];
+
+                    for (int i = 0; i < length; i++)
+                    {
+                        spatialGrid[i] = reader.ReadInt32();
+                    }
+
+                    return true;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"MapOverlayManager: Failed to load cache: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Save the spatial grid to a cache file.
+        /// </summary>
+        private void SaveSpatialGridToCache(string cachePath)
+        {
+            try
+            {
+                using (var stream = File.Create(cachePath))
+                using (var writer = new BinaryWriter(stream))
+                {
+                    // Write header
+                    writer.Write(gridWidth);
+                    writer.Write(gridHeight);
+
+                    // Write grid data
+                    for (int i = 0; i < spatialGrid.Length; i++)
+                    {
+                        writer.Write(spatialGrid[i]);
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"MapOverlayManager: Failed to save cache: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Build the spatial grid from scratch (expensive operation).
+        /// Uses parallel processing for performance.
+        /// </summary>
+        private void BuildSpatialGridFromScratch()
+        {
+            spatialGrid = new int[gridWidth * gridHeight];
+            var distanceSqGrid = new float[gridWidth * gridHeight];
+
+            // Initialize grids
+            Parallel.For(0, spatialGrid.Length, i =>
             {
                 spatialGrid[i] = -1;
-            }
+                distanceSqGrid[i] = float.MaxValue;
+            });
 
             float scale = resolutionMultiplier;
             float warpScale = WarpAmplitude * scale;  // Scale warp with resolution
 
-            // Pre-compute warped coordinates for each grid position
+            // Pre-compute warped coordinates for each grid position (parallelized)
             // This warps the lookup space to create organic boundaries
             var warpedX = new float[gridWidth * gridHeight];
             var warpedY = new float[gridWidth * gridHeight];
 
-            for (int y = 0; y < gridHeight; y++)
+            Parallel.For(0, gridHeight, y =>
             {
                 for (int x = 0; x < gridWidth; x++)
                 {
@@ -169,16 +321,18 @@ namespace EconSim.Renderer
                     warpedX[idx] = x + FractalNoise(baseX, baseY, 0, WarpOctaves, WarpFrequency) * warpScale;
                     warpedY[idx] = y + FractalNoise(baseX, baseY, 12345, WarpOctaves, WarpFrequency) * warpScale;
                 }
-            }
+            });
 
-            // For each land cell, fill its approximate area in the grid
+            // Pre-compute cell bounding boxes and centers
+            var cellInfos = new List<(Cell cell, int x0, int y0, int x1, int y1, float cx, float cy)>();
+            int expand = Mathf.CeilToInt(warpScale) + 1;
+
             foreach (var cell in mapData.Cells)
             {
                 if (cell.VertexIndices == null || cell.VertexIndices.Count < 3)
                     continue;
 
                 // Find bounding box of cell vertices (in scaled coordinates)
-                // Expand by warp amplitude to ensure we cover warped positions
                 float minX = float.MaxValue, maxX = float.MinValue;
                 float minY = float.MaxValue, maxY = float.MinValue;
 
@@ -195,57 +349,54 @@ namespace EconSim.Renderer
                 }
 
                 // Expand bounding box by warp amplitude and clamp to grid
-                int expand = Mathf.CeilToInt(warpScale) + 1;
                 int x0 = Mathf.Max(0, Mathf.FloorToInt(minX) - expand);
                 int x1 = Mathf.Min(gridWidth - 1, Mathf.CeilToInt(maxX) + expand);
                 int y0 = Mathf.Max(0, Mathf.FloorToInt(minY) - expand);
                 int y1 = Mathf.Min(gridHeight - 1, Mathf.CeilToInt(maxY) + expand);
 
-                // Fill grid positions within bounding box
-                // Use distance from WARPED position to cell center to resolve conflicts
                 float cx = cell.Center.X * scale;
                 float cy = cell.Center.Y * scale;
 
+                cellInfos.Add((cell, x0, y0, x1, y1, cx, cy));
+            }
+
+            // Process cells in parallel, using distance comparison for conflict resolution
+            // Use striped locks (one per row) to reduce contention
+            var rowLocks = new object[gridHeight];
+            for (int i = 0; i < gridHeight; i++)
+                rowLocks[i] = new object();
+
+            Parallel.ForEach(cellInfos, info =>
+            {
+                var (cell, x0, y0, x1, y1, cx, cy) = info;
+
                 for (int y = y0; y <= y1; y++)
                 {
-                    for (int x = x0; x <= x1; x++)
+                    // Lock only this row
+                    lock (rowLocks[y])
                     {
-                        int gridIdx = y * gridWidth + x;
-
-                        // Use warped coordinates for distance calculation
-                        float wx = warpedX[gridIdx];
-                        float wy = warpedY[gridIdx];
-
-                        // Check if this grid position is closer to this cell
-                        float dx = wx - cx;
-                        float dy = wy - cy;
-                        float distSq = dx * dx + dy * dy;
-
-                        int existingCellId = spatialGrid[gridIdx];
-                        if (existingCellId < 0)
+                        for (int x = x0; x <= x1; x++)
                         {
-                            // No cell assigned yet
-                            spatialGrid[gridIdx] = cell.Id;
-                        }
-                        else if (mapData.CellById.TryGetValue(existingCellId, out var existingCell))
-                        {
-                            // Compare distances using warped coordinates
-                            float ecx = existingCell.Center.X * scale;
-                            float ecy = existingCell.Center.Y * scale;
-                            float edx = wx - ecx;
-                            float edy = wy - ecy;
-                            float existingDistSq = edx * edx + edy * edy;
+                            int gridIdx = y * gridWidth + x;
 
-                            if (distSq < existingDistSq)
+                            // Use warped coordinates for distance calculation
+                            float wx = warpedX[gridIdx];
+                            float wy = warpedY[gridIdx];
+
+                            // Check if this grid position is closer to this cell
+                            float dx = wx - cx;
+                            float dy = wy - cy;
+                            float distSq = dx * dx + dy * dy;
+
+                            if (distSq < distanceSqGrid[gridIdx])
                             {
+                                distanceSqGrid[gridIdx] = distSq;
                                 spatialGrid[gridIdx] = cell.Id;
                             }
                         }
                     }
                 }
-            }
-
-            Debug.Log($"MapOverlayManager: Built spatial grid {gridWidth}x{gridHeight} ({resolutionMultiplier}x resolution, warp amplitude {WarpAmplitude})");
+            });
         }
 
         /// <summary>
@@ -253,6 +404,7 @@ namespace EconSim.Renderer
         /// Format: RGBAFloat with StateId, ProvinceId, BiomeId+WaterFlag, CountyId normalized to 0-1.
         /// B channel encodes: BiomeId in low bits, water flag in high bit (add 32768 if water)
         /// Uses 32-bit float for precise ID storage (half-precision caused banding artifacts).
+        /// Parallelized for performance.
         /// </summary>
         private void GenerateDataTextures()
         {
@@ -263,8 +415,8 @@ namespace EconSim.Renderer
 
             cellDataPixels = new Color[gridWidth * gridHeight];
 
-            // Fill texture from spatial grid
-            for (int y = 0; y < gridHeight; y++)
+            // Fill texture from spatial grid (parallelized by row)
+            Parallel.For(0, gridHeight, y =>
             {
                 for (int x = 0; x < gridWidth; x++)
                 {
@@ -295,7 +447,7 @@ namespace EconSim.Renderer
 
                     cellDataPixels[gridIdx] = pixel;
                 }
-            }
+            });
 
             cellDataTexture.SetPixels(cellDataPixels);
             cellDataTexture.Apply();
@@ -307,38 +459,35 @@ namespace EconSim.Renderer
         /// Generate heightmap texture from cell height data.
         /// Used for water depth coloring. 3D height displacement is currently disabled.
         /// Water detection for other modes uses the water flag in the data texture.
+        /// Parallelized for performance.
         /// </summary>
         private void GenerateHeightmapTexture()
         {
-            // 1. Sample raw heights from spatial grid
-            float[] rawHeights = new float[gridWidth * gridHeight];
+            // 1. Sample raw heights from spatial grid and flip Y in one pass (parallelized)
+            float[] flipped = new float[gridWidth * gridHeight];
 
-            for (int i = 0; i < spatialGrid.Length; i++)
-            {
-                int cellId = spatialGrid[i];
-                if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
-                {
-                    // Normalize 0-100 to 0-1
-                    rawHeights[i] = cell.Height / 100f;
-                }
-                else
-                {
-                    rawHeights[i] = 0f;  // Default to sea floor
-                }
-            }
-
-            // 2. Flip Y axis: Azgaar uses Y=0 at top (screen coords), Unity textures use Y=0 at bottom
-            // NOTE: If we switch to generating our own maps, use Unity coords natively and remove this flip.
-            // See CLAUDE.md "Coordinate Systems" for details.
-            float[] flipped = new float[rawHeights.Length];
-            for (int y = 0; y < gridHeight; y++)
+            Parallel.For(0, gridHeight, y =>
             {
                 int srcRow = (gridHeight - 1 - y) * gridWidth;
                 int dstRow = y * gridWidth;
-                System.Array.Copy(rawHeights, srcRow, flipped, dstRow, gridWidth);
-            }
 
-            // 3. Create texture
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int srcIdx = srcRow + x;
+                    int cellId = spatialGrid[srcIdx];
+
+                    float height = 0f;
+                    if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
+                    {
+                        // Normalize 0-100 to 0-1
+                        height = cell.Height / 100f;
+                    }
+
+                    flipped[dstRow + x] = height;
+                }
+            });
+
+            // 2. Create texture
             heightmapTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RFloat, false);
             heightmapTexture.name = "HeightmapTexture";
             heightmapTexture.filterMode = FilterMode.Bilinear;
@@ -352,6 +501,7 @@ namespace EconSim.Renderer
         /// <summary>
         /// Generate river mask texture by rasterizing river paths.
         /// Rivers are "knocked out" of the land in the shader, showing water underneath.
+        /// Results are cached to disk.
         /// </summary>
         private void GenerateRiverMaskTexture()
         {
@@ -360,7 +510,97 @@ namespace EconSim.Renderer
             riverMaskTexture.filterMode = FilterMode.Bilinear;
             riverMaskTexture.wrapMode = TextureWrapMode.Clamp;
 
-            // Initialize to 0 (no river)
+            // Try to load from cache
+            string cacheKey = ComputeRiverMaskCacheKey();
+            string cachePath = GetRiverMaskCachePath(cacheKey);
+
+            if (TryLoadRiverMaskFromCache(cachePath))
+            {
+                Debug.Log($"MapOverlayManager: Loaded river mask from cache ({gridWidth}x{gridHeight})");
+                return;
+            }
+
+            // Generate from scratch
+            var pixels = GenerateRiverMaskPixels();
+
+            // Upload to texture
+            var colorPixels = new Color[pixels.Length];
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                float v = pixels[i] / 255f;
+                colorPixels[i] = new Color(v, v, v, 1f);
+            }
+            riverMaskTexture.SetPixels(colorPixels);
+            riverMaskTexture.Apply();
+
+            // Save to cache
+            SaveRiverMaskToCache(cachePath, pixels);
+
+            TextureDebugger.SaveTexture(riverMaskTexture, "river_mask");
+            Debug.Log($"MapOverlayManager: Generated and cached river mask {gridWidth}x{gridHeight} ({mapData.Rivers.Count} rivers)");
+        }
+
+        private string ComputeRiverMaskCacheKey()
+        {
+            // Include parameters that affect river mask output
+            int riverHash = 0;
+            foreach (var river in mapData.Rivers)
+            {
+                riverHash ^= river.Id * 31 + river.CellPath?.Count ?? 0;
+            }
+            string input = $"{mapData.Info.Name}_{gridWidth}x{gridHeight}_{mapData.Rivers.Count}rivers_{riverHash}";
+            return $"river_mask_{input.GetHashCode():X8}";
+        }
+
+        private string GetRiverMaskCachePath(string cacheKey)
+        {
+            string cacheDir = Path.Combine(Application.persistentDataPath, "MapCache");
+            if (!Directory.Exists(cacheDir))
+                Directory.CreateDirectory(cacheDir);
+            return Path.Combine(cacheDir, $"{cacheKey}.bin");
+        }
+
+        private bool TryLoadRiverMaskFromCache(string cachePath)
+        {
+            if (!File.Exists(cachePath))
+                return false;
+
+            try
+            {
+                var pixels = File.ReadAllBytes(cachePath);
+                if (pixels.Length != gridWidth * gridHeight)
+                    return false;
+
+                var colorPixels = new Color[pixels.Length];
+                for (int i = 0; i < pixels.Length; i++)
+                {
+                    float v = pixels[i] / 255f;
+                    colorPixels[i] = new Color(v, v, v, 1f);
+                }
+                riverMaskTexture.SetPixels(colorPixels);
+                riverMaskTexture.Apply();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void SaveRiverMaskToCache(string cachePath, byte[] pixels)
+        {
+            try
+            {
+                File.WriteAllBytes(cachePath, pixels);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"Failed to save river mask cache: {ex.Message}");
+            }
+        }
+
+        private byte[] GenerateRiverMaskPixels()
+        {
             var pixels = new byte[gridWidth * gridHeight];
 
             float scale = resolutionMultiplier;
@@ -407,25 +647,13 @@ namespace EconSim.Renderer
                 }
 
                 // Draw circular caps at river endpoints to fill gaps in gradient
-                // Source cap slightly larger than the tapered width for smoother gradient falloff
                 float sourceCapRadius = maxWidth * 0.4f;
                 float mouthCapRadius = maxWidth * 0.5f;
                 DrawFilledCircle(pixels, smoothedPoints[0], sourceCapRadius);
                 DrawFilledCircle(pixels, smoothedPoints[smoothedPoints.Count - 1], mouthCapRadius);
             }
 
-            // Upload to texture
-            var colorPixels = new Color[pixels.Length];
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                float v = pixels[i] / 255f;
-                colorPixels[i] = new Color(v, v, v, 1f);
-            }
-            riverMaskTexture.SetPixels(colorPixels);
-            riverMaskTexture.Apply();
-
-            TextureDebugger.SaveTexture(riverMaskTexture, "river_mask");
-            Debug.Log($"MapOverlayManager: Generated river mask texture {gridWidth}x{gridHeight} ({mapData.Rivers.Count} rivers)");
+            return pixels;
         }
 
         /// <summary>
@@ -739,8 +967,9 @@ namespace EconSim.Renderer
             terrainMaterial.SetInt(ShowMarketBordersId, 0);
             terrainMaterial.SetInt(ShowCountyBordersId, 0);
 
-            // Clear any persisted selection from previous play session
+            // Clear any persisted selection/hover from previous play session
             ClearSelection();
+            ClearHover();
         }
 
         /// <summary>
@@ -1049,6 +1278,92 @@ namespace EconSim.Renderer
         {
             if (terrainMaterial == null) return;
             terrainMaterial.SetFloat(SelectionFillAlphaId, Mathf.Clamp(alpha, 0f, 0.5f));
+        }
+
+        /// <summary>
+        /// Clear all hover highlighting.
+        /// </summary>
+        public void ClearHover()
+        {
+            if (terrainMaterial == null) return;
+            terrainMaterial.SetFloat(HoveredStateIdId, -1f);
+            terrainMaterial.SetFloat(HoveredProvinceIdId, -1f);
+            terrainMaterial.SetFloat(HoveredCountyIdId, -1f);
+            terrainMaterial.SetFloat(HoveredMarketIdId, -1f);
+        }
+
+        /// <summary>
+        /// Set the currently hovered state for shader-based highlighting.
+        /// Clears other hovers.
+        /// </summary>
+        public void SetHoveredState(int stateId)
+        {
+            if (terrainMaterial == null) return;
+            float normalizedId = stateId < 0 ? -1f : stateId / 65535f;
+            terrainMaterial.SetFloat(HoveredStateIdId, normalizedId);
+            terrainMaterial.SetFloat(HoveredProvinceIdId, -1f);
+            terrainMaterial.SetFloat(HoveredCountyIdId, -1f);
+            terrainMaterial.SetFloat(HoveredMarketIdId, -1f);
+        }
+
+        /// <summary>
+        /// Set the currently hovered province for shader-based highlighting.
+        /// Clears other hovers.
+        /// </summary>
+        public void SetHoveredProvince(int provinceId)
+        {
+            if (terrainMaterial == null) return;
+            terrainMaterial.SetFloat(HoveredStateIdId, -1f);
+            float normalizedId = provinceId < 0 ? -1f : provinceId / 65535f;
+            terrainMaterial.SetFloat(HoveredProvinceIdId, normalizedId);
+            terrainMaterial.SetFloat(HoveredCountyIdId, -1f);
+            terrainMaterial.SetFloat(HoveredMarketIdId, -1f);
+        }
+
+        /// <summary>
+        /// Set the currently hovered county for shader-based highlighting.
+        /// Clears other hovers.
+        /// </summary>
+        public void SetHoveredCounty(int countyId)
+        {
+            if (terrainMaterial == null) return;
+            terrainMaterial.SetFloat(HoveredStateIdId, -1f);
+            terrainMaterial.SetFloat(HoveredProvinceIdId, -1f);
+            float normalizedId = countyId < 0 ? -1f : countyId / 65535f;
+            terrainMaterial.SetFloat(HoveredCountyIdId, normalizedId);
+            terrainMaterial.SetFloat(HoveredMarketIdId, -1f);
+        }
+
+        /// <summary>
+        /// Set the currently hovered market for shader-based highlighting.
+        /// Clears other hovers.
+        /// </summary>
+        public void SetHoveredMarket(int marketId)
+        {
+            if (terrainMaterial == null) return;
+            terrainMaterial.SetFloat(HoveredStateIdId, -1f);
+            terrainMaterial.SetFloat(HoveredProvinceIdId, -1f);
+            terrainMaterial.SetFloat(HoveredCountyIdId, -1f);
+            float normalizedId = marketId < 0 ? -1f : marketId / 65535f;
+            terrainMaterial.SetFloat(HoveredMarketIdId, normalizedId);
+        }
+
+        /// <summary>
+        /// Set the selection dimming factor (0 = black, 1 = no dimming).
+        /// </summary>
+        public void SetSelectionDimming(float dimming)
+        {
+            if (terrainMaterial == null) return;
+            terrainMaterial.SetFloat(SelectionDimmingId, Mathf.Clamp01(dimming));
+        }
+
+        /// <summary>
+        /// Set the hover intensity (0 = no effect, 1 = full effect).
+        /// </summary>
+        public void SetHoverIntensity(float intensity)
+        {
+            if (terrainMaterial == null) return;
+            terrainMaterial.SetFloat(HoverIntensityId, Mathf.Clamp01(intensity));
         }
 
         /// <summary>

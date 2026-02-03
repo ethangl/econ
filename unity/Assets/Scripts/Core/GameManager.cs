@@ -6,6 +6,7 @@ using EconSim.Core.Simulation;
 using EconSim.Core.Simulation.Systems;
 using EconSim.Renderer;
 using EconSim.Camera;
+using Profiler = EconSim.Core.Common.StartupProfiler;
 
 namespace EconSim.Core
 {
@@ -45,18 +46,20 @@ namespace EconSim.Core
 
         private void Start()
         {
+            Profiler.Reset();
+            Profiler.Begin("Total Startup");
             LoadMap();
+            Profiler.End();
+            Profiler.LogResults();
         }
 
         private void LoadMap()
         {
             Debug.Log($"Loading map: {mapFileName}");
 
-            AzgaarMap azgaarMap;
-
             if (loadFromResources)
             {
-                // Load from Resources/Maps folder
+                // Load from Resources/Maps folder (no caching for embedded resources)
                 string resourcePath = $"Maps/{System.IO.Path.GetFileNameWithoutExtension(mapFileName)}";
                 var textAsset = Resources.Load<TextAsset>(resourcePath);
 
@@ -68,15 +71,20 @@ namespace EconSim.Core
                     return;
                 }
 
-                azgaarMap = AzgaarParser.Parse(textAsset.text);
+                Profiler.Begin("Parse JSON");
+                var azgaarMap = AzgaarParser.Parse(textAsset.text);
+                Profiler.End();
+
+                Profiler.Begin("Convert Map");
+                MapData = MapConverter.Convert(azgaarMap);
+                Profiler.End();
+
+                InitializeWithMapData();
             }
             else
             {
                 LoadMapFromFile();
-                return;
             }
-
-            ConvertAndInitialize(azgaarMap);
         }
 
         private void LoadMapFromFile()
@@ -90,27 +98,45 @@ namespace EconSim.Core
                 return;
             }
 
+            // Try to load from cache first
+            string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "MapCache");
+
+            Profiler.Begin("Load MapData");
+            if (MapDataCache.TryLoad(filePath, cacheDir, out var cachedMapData))
+            {
+                Profiler.End();
+                MapData = cachedMapData;
+                InitializeWithMapData();
+                return;
+            }
+            Profiler.End();
+
+            // Cache miss - parse and convert
+            Profiler.Begin("Parse JSON");
             var azgaarMap = AzgaarParser.ParseFile(filePath);
-            ConvertAndInitialize(azgaarMap);
+            Profiler.End();
+
+            Profiler.Begin("Convert Map");
+            MapData = MapConverter.Convert(azgaarMap);
+            Profiler.End();
+
+            // Save to cache for next time
+            Profiler.Begin("Save MapData Cache");
+            MapDataCache.Save(filePath, cacheDir, MapData);
+            Profiler.End();
+
+            InitializeWithMapData();
         }
 
-        private void ConvertAndInitialize(AzgaarMap azgaarMap)
+        private void InitializeWithMapData()
         {
-            Debug.Log($"Parsed map: {azgaarMap.info.mapName}");
-            Debug.Log($"  Dimensions: {azgaarMap.info.width}x{azgaarMap.info.height}");
-            Debug.Log($"  Cells: {azgaarMap.pack.cells.Count}");
-            Debug.Log($"  States: {azgaarMap.pack.states.Count}");
-            Debug.Log($"  Provinces: {azgaarMap.pack.provinces.Count}");
-            Debug.Log($"  Rivers: {azgaarMap.pack.rivers.Count}");
-            Debug.Log($"  Burgs: {azgaarMap.pack.burgs.Count}");
-
-            // Convert to simulation data
-            MapData = MapConverter.Convert(azgaarMap);
-
-            Debug.Log($"Converted map: {MapData.Info.Name}");
-            Debug.Log($"  Land cells: {MapData.Info.LandCells} / {MapData.Info.TotalCells}");
+            Debug.Log($"Map loaded: {MapData.Info.Name}");
+            Debug.Log($"  Dimensions: {MapData.Info.Width}x{MapData.Info.Height}");
+            Debug.Log($"  Cells: {MapData.Cells.Count}");
             Debug.Log($"  States: {MapData.States.Count}");
             Debug.Log($"  Provinces: {MapData.Provinces.Count}");
+            Debug.Log($"  Rivers: {MapData.Rivers.Count}");
+            Debug.Log($"  Counties: {MapData.Counties.Count}");
 
             // Ensure we have a directional light for terrain relief
             EnsureDirectionalLight();
@@ -118,7 +144,9 @@ namespace EconSim.Core
             // Initialize renderer
             if (mapView != null)
             {
+                Profiler.Begin("MapView.Initialize");
                 mapView.Initialize(MapData);
+                Profiler.End();
 
                 // Fit camera to land bounds
                 if (mapCamera != null)
@@ -133,7 +161,9 @@ namespace EconSim.Core
             }
 
             // Initialize simulation (auto-registers ProductionSystem + ConsumptionSystem)
+            Profiler.Begin("Simulation Init");
             _simulation = new SimulationRunner(MapData);
+            Profiler.End();
             _simulation.IsPaused = true;  // Start paused
 
             // Provide economy state to map view for market mode and roads
@@ -146,6 +176,7 @@ namespace EconSim.Core
 
             Debug.Log("Simulation initialized (paused). Press P to unpause, -/= to change speed.");
         }
+
 
         private void Update()
         {

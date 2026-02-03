@@ -150,12 +150,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7cd7ba835769b440ebb904a3a0ae1cb3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EconSim::EconSim.Camera.MapCamera
-  minZoomFraction: 0.001
+  minZoomFraction: 0.2
   absoluteMinZoom: 0.5
   zoomSpeed: 5
   zoomSmoothTime: 0.1
   panSpeed: 12
   dragPanSpeed: 0.333333
+  focusSmoothTime: 0.3
+  pitchAtMaxZoom: 75
+  pitchAtMinZoom: 60
   constrainToBounds: 1
   mapSize: {x: 14.4, y: 8.1}
   panModifierKey: 325
@@ -228,13 +231,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1070810155}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
+  m_LocalRotation: {x: 0.60876137, y: 0, z: 0, w: 0.7933534}
   m_LocalPosition: {x: 0, y: 20, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 75, y: 0, z: 0}
 --- !u!1 &2010017522
 GameObject:
   m_ObjectHideFlags: 0
@@ -395,6 +398,8 @@ MonoBehaviour:
   borderMaterial: {fileID: 2100000, guid: 68122421a08414a3498952b5510cd8cb, type: 2}
   selectionCamera: {fileID: 0}
   mapCameraController: {fileID: 1070810156}
+  selectionDimmingTarget: 0.25
+  dimmingAnimationSpeed: 8
 --- !u!23 &2039203592
 MeshRenderer:
   m_ObjectHideFlags: 0

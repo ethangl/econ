@@ -119,18 +119,26 @@ Material:
     m_Floats:
     - _BumpScale: 1
     - _CoastlineBorderWidth: 2
-    - _CountyBorderWidth: 0.666
+    - _CountyBorderWidth: 0.6
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _GradientCenterOpacity: 0.333
-    - _GradientEdgeDarkening: 0.75
-    - _GradientRadius: 20
+    - _GradientCenterOpacity: 0.2
+    - _GradientEdgeDarkening: 0.8
+    - _GradientRadius: 16
     - _HeightScale: 3
-    - _MapMode: 3
+    - _HoverDimming: 0.9992545
+    - _HoverFillAlpha: 0.15
+    - _HoverGradientRadius: 40
+    - _HoverIntensity: 1.7776891e-36
+    - _HoveredCountyId: -1
+    - _HoveredMarketId: -1
+    - _HoveredProvinceId: -1
+    - _HoveredStateId: -1
+    - _MapMode: 1
     - _MarketBorderWidth: 1
     - _Metallic: 0
     - _Mode: 0
@@ -148,10 +156,12 @@ Material:
     - _SelectedProvinceId: -1
     - _SelectedStateId: -1
     - _SelectionBorderWidth: 3
+    - _SelectionDimming: 1
     - _SelectionFillAlpha: 0.15
-    - _ShowCountyBorders: 1
+    - _SelectionPopAmount: 0.2
+    - _ShowCountyBorders: 0
     - _ShowMarketBorders: 0
-    - _ShowProvinceBorders: 1
+    - _ShowProvinceBorders: 0
     - _ShowStateBorders: 1
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
@@ -166,9 +176,10 @@ Material:
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _CountyBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+    - _HoverFillColor: {r: 1, g: 1, b: 1, a: 1}
     - _MarketBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
-    - _ProvinceBorderColor: {r: 0, g: 0, b: 0, a: 0.627451}
-    - _SelectionBorderColor: {r: 1, g: 0.9, b: 0.19999993, a: 0.3764706}
+    - _ProvinceBorderColor: {r: 0, g: 0, b: 0, a: 0.7529412}
+    - _SelectionBorderColor: {r: 1, g: 0.9, b: 0.1999999, a: 0}
     - _StateBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
     - _WaterDeepColor: {r: 0.07999996, g: 0.14999998, b: 0.34999996, a: 1}
     - _WaterShallowColor: {r: 0.24999994, g: 0.45, b: 0.54999995, a: 0.09803922}

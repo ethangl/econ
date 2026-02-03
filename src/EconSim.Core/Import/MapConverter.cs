@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
+using Profiler = EconSim.Core.Common.StartupProfiler;
 
 namespace EconSim.Core.Import
 {
@@ -17,6 +18,7 @@ namespace EconSim.Core.Import
         /// </summary>
         public static MapData Convert(AzgaarMap azgaar)
         {
+            Profiler.Begin("ConvertStructures");
             var mapData = new MapData
             {
                 Info = ConvertInfo(azgaar),
@@ -29,15 +31,22 @@ namespace EconSim.Core.Import
                 Burgs = ConvertBurgs(azgaar.pack.burgs),
                 Features = ConvertFeatures(azgaar.pack.features)
             };
+            Profiler.End();
 
             // Build lookup tables
+            Profiler.Begin("BuildLookups");
             mapData.BuildLookups();
+            Profiler.End();
 
             // Populate province cell lists
+            Profiler.Begin("PopulateProvinceCells");
             PopulateProvinceCells(mapData);
+            Profiler.End();
 
             // Group cells into counties
+            Profiler.Begin("CountyGrouper");
             CountyGrouper.GroupCells(mapData);
+            Profiler.End();
 
             return mapData;
         }

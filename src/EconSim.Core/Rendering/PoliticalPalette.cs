@@ -12,7 +12,7 @@ namespace EconSim.Core.Rendering
     public class PoliticalPalette
     {
         // Base HSV values for countries (center of range)
-        private const float BaseSaturation = 0.52f;
+        private const float BaseSaturation = 0.42f;
         private const float BaseValue = 0.70f;
 
         // State variance ranges (±)
@@ -20,8 +20,8 @@ namespace EconSim.Core.Rendering
         private const float StateValVariance = 0.08f;
 
         // Clamping bounds
-        private const float MinSaturation = 0.38f;
-        private const float MaxSaturation = 0.68f;
+        private const float MinSaturation = 0.28f;
+        private const float MaxSaturation = 0.55f;
         private const float MinValue = 0.58f;
         private const float MaxValue = 0.85f;
 

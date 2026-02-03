@@ -4,6 +4,7 @@ using EconSim.Core.Data;
 using EconSim.Core.Economy;
 using EconSim.Core.Simulation.Systems;
 using EconSim.Core.Transport;
+using Profiler = EconSim.Core.Common.StartupProfiler;
 
 namespace EconSim.Core.Simulation
 {
@@ -37,15 +38,21 @@ namespace EconSim.Core.Simulation
             _accumulator = 0f;
 
             // Initialize economy
+            Profiler.Begin("EconomyInitializer");
             _state.Economy = EconomyInitializer.Initialize(mapData);
+            Profiler.End();
 
             // Initialize transport graph
+            Profiler.Begin("TransportGraph");
             _state.Transport = new TransportGraph(mapData);
             _state.Transport.SetRoadState(_state.Economy.Roads);
+            Profiler.End();
             SimLog.Log("Transport", "Transport graph initialized");
 
             // Place markets (requires transport for accessibility scoring)
+            Profiler.Begin("InitializeMarkets");
             InitializeMarkets();
+            Profiler.End();
 
             // Register core systems (order matters!)
             RegisterSystem(new ProductionSystem());

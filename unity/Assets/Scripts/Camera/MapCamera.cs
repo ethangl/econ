@@ -20,6 +20,11 @@ namespace EconSim.Camera
         [Header("Pan Settings")]
         [SerializeField] private float panSpeed = 12f;
         [SerializeField] private float dragPanSpeed = 0.333333f;
+        [SerializeField] private float focusSmoothTime = 0.3f;  // Smooth pan duration for FocusOn
+
+        [Header("Pitch Settings")]
+        [SerializeField] private float pitchAtMaxZoom = 75f;  // More top-down when zoomed out
+        [SerializeField] private float pitchAtMinZoom = 50f;  // More angled when zoomed in
 
         [Header("Bounds")]
         [SerializeField] private bool constrainToBounds = true;
@@ -34,6 +39,13 @@ namespace EconSim.Camera
         private float targetZoom;
         private float currentZoom;
         private float zoomVelocity;
+        private float pitchAngle;  // Camera X rotation in degrees (90 = straight down, 75 = tilted)
+
+        // Smooth pan state
+        private Vector2 targetPanPosition;
+        private Vector2 currentPanPosition;
+        private Vector2 panVelocity;
+        private bool isFocusPanning;  // True when animating to a FocusOn target
 
         private Vector3 lastMousePosition;
         private bool isDragging;
@@ -62,12 +74,26 @@ namespace EconSim.Camera
 
         private void Start()
         {
+            // Add screen noise overlay if not present
+            if (GetComponent<Renderer.ScreenNoiseOverlay>() == null)
+            {
+                gameObject.AddComponent<Renderer.ScreenNoiseOverlay>();
+            }
+
             // Initialize zoom limits based on default map size
             RecalculateZoomLimits();
+
+            // Initialize pitch based on starting zoom (will be updated each frame)
+            float zoomT = Mathf.InverseLerp(minZoom, maxZoom, transform.position.y);
+            pitchAngle = Mathf.Lerp(pitchAtMinZoom, pitchAtMaxZoom, zoomT);
 
             // Initialize zoom
             currentZoom = transform.position.y;
             targetZoom = Mathf.Clamp(currentZoom, minZoom, maxZoom);
+
+            // Initialize pan position (accounting for pitch offset)
+            currentPanPosition = new Vector2(transform.position.x, transform.position.z);
+            targetPanPosition = currentPanPosition;
 
             // Position camera at center of map
             CenterOnMap();
@@ -176,10 +202,41 @@ namespace EconSim.Camera
             // Smooth zoom
             currentZoom = Mathf.SmoothDamp(currentZoom, targetZoom, ref zoomVelocity, zoomSmoothTime);
 
-            // Apply zoom (camera height)
+            // Update pitch based on zoom level (more top-down when far, more angled when close)
+            float zoomT = Mathf.InverseLerp(minZoom, maxZoom, currentZoom);
+            pitchAngle = Mathf.Lerp(pitchAtMinZoom, pitchAtMaxZoom, zoomT);
+            transform.rotation = Quaternion.Euler(pitchAngle, 0f, 0f);
+
+            // Smooth pan (when focus panning)
+            if (isFocusPanning)
+            {
+                currentPanPosition = Vector2.SmoothDamp(currentPanPosition, targetPanPosition, ref panVelocity, focusSmoothTime);
+
+                // Stop panning when close enough
+                if (Vector2.Distance(currentPanPosition, targetPanPosition) < 0.001f)
+                {
+                    currentPanPosition = targetPanPosition;
+                    isFocusPanning = false;
+                }
+            }
+
+            // Apply position
             Vector3 pos = transform.position;
             pos.y = currentZoom;
+            if (isFocusPanning)
+            {
+                pos.x = currentPanPosition.x;
+                pos.z = currentPanPosition.y;
+            }
             transform.position = pos;
+
+            // Apply constraints after setting position (important for focus panning)
+            if (isFocusPanning)
+            {
+                ApplyConstraints();
+                // Sync currentPanPosition with constrained position
+                currentPanPosition = new Vector2(transform.position.x, transform.position.z);
+            }
         }
 
         private void HandleZoom()
@@ -212,6 +269,9 @@ namespace EconSim.Camera
                 panDirection.Normalize();
                 float zoomFactor = currentZoom / maxZoom;
                 transform.position += panDirection * panSpeed * zoomFactor * Time.deltaTime;
+
+                // Cancel focus panning when user manually pans
+                isFocusPanning = false;
             }
 
             // Track cursor state changes
@@ -276,6 +336,9 @@ namespace EconSim.Camera
                 );
 
                 transform.position += move;
+
+                // Cancel focus panning when user drags
+                isFocusPanning = false;
             }
         }
 
@@ -284,6 +347,27 @@ namespace EconSim.Camera
             if (!constrainToBounds || cam == null) return;
 
             Vector3 pos = transform.position;
+            float zOffset = GetLookAtOffset(currentZoom);
+
+            // Calculate where the camera is currently looking
+            Vector2 lookAt = new Vector2(pos.x, pos.z + zOffset);
+
+            // Constrain the look-at point to keep visible area within map bounds
+            lookAt = ClampLookAtToBounds(lookAt);
+
+            // Derive camera position from constrained look-at point
+            pos.x = lookAt.x;
+            pos.z = lookAt.y - zOffset;
+
+            transform.position = pos;
+        }
+
+        /// <summary>
+        /// Clamp a look-at point to keep the visible area within map bounds.
+        /// </summary>
+        private Vector2 ClampLookAtToBounds(Vector2 lookAt)
+        {
+            if (!constrainToBounds || cam == null) return lookAt;
 
             float halfMapWidth = mapSize.x * 0.5f;
             float halfMapHeight = mapSize.y * 0.5f;
@@ -295,35 +379,68 @@ namespace EconSim.Camera
             float visibleHalfWidth = currentZoom * Mathf.Tan(horizontalFOV / 2f);
             float visibleHalfHeight = currentZoom * Mathf.Tan(verticalFOV / 2f);
 
+            // Account for pitch - visible area in Z is stretched
+            float pitchRad = pitchAngle * Mathf.Deg2Rad;
+            float pitchStretch = 1f / Mathf.Sin(pitchRad);
+            visibleHalfHeight *= pitchStretch;
+
             // Constrain so visible area stays within map bounds
-            // At max zoom (whole map visible), this keeps camera centered
-            // At min zoom (close up), allows panning to edges
             float maxOffsetX = Mathf.Max(0f, halfMapWidth - visibleHalfWidth);
             float maxOffsetZ = Mathf.Max(0f, halfMapHeight - visibleHalfHeight);
 
-            pos.x = Mathf.Clamp(pos.x, -maxOffsetX, maxOffsetX);
-            pos.z = Mathf.Clamp(pos.z, -maxOffsetZ, maxOffsetZ);
+            lookAt.x = Mathf.Clamp(lookAt.x, -maxOffsetX, maxOffsetX);
+            lookAt.y = Mathf.Clamp(lookAt.y, -maxOffsetZ, maxOffsetZ);
 
-            transform.position = pos;
+            return lookAt;
         }
 
         /// <summary>
-        /// Center the camera on the map.
+        /// Calculate the Z offset from camera position to the point it's looking at on the ground.
+        /// For a tilted camera, the look-at point is in front of (positive Z from) the camera.
+        /// </summary>
+        private float GetLookAtOffset(float height)
+        {
+            // offset = height / tan(pitchAngle)
+            // At 90° (straight down): tan(90°) = infinity, offset = 0
+            // At 75°: tan(75°) ≈ 3.73, offset ≈ 0.268 * height
+            float pitchRad = pitchAngle * Mathf.Deg2Rad;
+            if (pitchAngle >= 89.9f) return 0f;  // Straight down, no offset
+            return height / Mathf.Tan(pitchRad);
+        }
+
+        /// <summary>
+        /// Center the camera on the map (instant, no animation).
+        /// Accounts for camera pitch - positions camera so it looks at map center.
         /// </summary>
         public void CenterOnMap()
         {
-            transform.position = new Vector3(0, currentZoom, 0);
+            // To look at (0, 0, 0), camera needs to be offset backward in Z
+            float zOffset = GetLookAtOffset(currentZoom);
+            transform.position = new Vector3(0, currentZoom, -zOffset);
+            currentPanPosition = new Vector2(0, -zOffset);
+            targetPanPosition = currentPanPosition;
+            isFocusPanning = false;
         }
 
         /// <summary>
-        /// Move camera to focus on a specific world position.
+        /// Smoothly move camera to focus on a specific world position.
+        /// Accounts for camera pitch - positions camera so it looks at the target.
+        /// Respects map bounds - the target is clamped to keep the view within the map.
         /// </summary>
         public void FocusOn(Vector3 worldPosition)
         {
-            Vector3 pos = transform.position;
-            pos.x = worldPosition.x;
-            pos.z = worldPosition.z;
-            transform.position = pos;
+            // Clamp the look-at point to valid bounds
+            Vector2 lookAt = new Vector2(worldPosition.x, worldPosition.z);
+            lookAt = ClampLookAtToBounds(lookAt);
+
+            // Derive camera position from the look-at point
+            float zOffset = GetLookAtOffset(currentZoom);
+            Vector2 cameraTarget = new Vector2(lookAt.x, lookAt.y - zOffset);
+
+            targetPanPosition = cameraTarget;
+            currentPanPosition = new Vector2(transform.position.x, transform.position.z);
+            panVelocity = Vector2.zero;
+            isFocusPanning = true;
         }
 
         /// <summary>
@@ -382,6 +499,7 @@ namespace EconSim.Camera
         /// Fit the camera to show the given bounds with some margin.
         /// Centers on the bounds and sets zoom to show the full area.
         /// Also updates map bounds and zoom limits based on the new bounds.
+        /// Accounts for camera pitch when centering.
         /// </summary>
         /// <param name="bounds">World-space bounds to fit</param>
         /// <param name="marginPercent">Extra margin as a percentage (0.1 = 10% margin)</param>
@@ -392,11 +510,6 @@ namespace EconSim.Camera
             // Update map bounds and recalculate zoom limits
             mapSize = new Vector2(bounds.size.x, bounds.size.z);
             RecalculateZoomLimits();
-
-            // Center on the bounds
-            Vector3 pos = transform.position;
-            pos.x = bounds.center.x;
-            pos.z = bounds.center.z;
 
             // Calculate required height to fit bounds with the requested margin
             float boundsWidth = bounds.size.x * (1f + marginPercent);
@@ -411,10 +524,15 @@ namespace EconSim.Camera
             float requiredHeight = Mathf.Max(heightForVertical, heightForHorizontal);
             requiredHeight = Mathf.Clamp(requiredHeight, minZoom, maxZoom);
 
-            pos.y = requiredHeight;
+            // To look at bounds center, offset camera backward for pitch
+            float zOffset = GetLookAtOffset(requiredHeight);
+            Vector3 pos = new Vector3(bounds.center.x, requiredHeight, bounds.center.z - zOffset);
+
             transform.position = pos;
             currentZoom = requiredHeight;
             targetZoom = requiredHeight;
+            currentPanPosition = new Vector2(pos.x, pos.z);
+            targetPanPosition = currentPanPosition;
         }
 
 #if UNITY_EDITOR

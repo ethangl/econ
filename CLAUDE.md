@@ -15,12 +15,14 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 ### Unity Gotchas
 
 **Namespace conflicts:** The `EconSim.Renderer` namespace conflicts with Unity types. Use fully qualified names:
+
 - `UnityEngine.Camera` not `Camera`
 - `MeshRenderer` not `Renderer`
 
 **Editor scripts:** Scripts in `Assets/Editor/` need an assembly definition (`.asmdef`) that references the main `EconSim` assembly. See `Assets/Editor/EconSim.Editor.asmdef`.
 
 **UV channels:** Unity's mesh UV naming is confusing:
+
 - `mesh.uv` = UV0 = shader `texcoord0`
 - `mesh.uv2` = UV1 = shader `texcoord1`
 - The MapOverlay shader uses `texcoord1` for data texture sampling
@@ -29,47 +31,12 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 **Material instances:** `meshRenderer.material` creates an instance; `meshRenderer.sharedMaterial` uses the asset directly. When overlay manager sets textures on a material, ensure the renderer uses the same material reference.
 
-## Current Phase
-
-**Phase 8: Gradient Fill System** (in progress)
-
-- ✓ Land-only borders (no borders at coastlines)
-- ✓ Gradient fill for political modes (state/province/county)
-- ✓ Multiply blend mode for edge darkening
-- ✓ Province/county borders rendered under country fill
-- ✓ Gradient fill for market mode (same style as political)
-- ✓ Market borders on top of fill, political borders underneath
-- ✓ River mask texture (rivers knocked out from land, show water underneath)
-- ✓ Rivers treated as edges for gradient fill (darkening near rivers)
-- ✓ Domain warping for organic cell boundaries (jigsaw-style meandering edges)
-- Water shader
-- Selection shader refinement
-
-Previous phases complete:
-
-- ✓ Phase 7: Rendering Refinement (political colors, data textures, biome matrix, county grouping)
-
-- ✓ Phase 6d: Palette-Based Map Rendering
-- ✓ Phase 6c: Heightmap Integration (vertex displacement, normals, height coloring)
-
-- ✓ Phase 1: Map Import & Rendering
-- ✓ Phase 1.5: Extract Simulation Engine
-- ✓ Phase 2: Simulation Foundation
-- ✓ Phase 3: Markets & Trade
-- ✓ Phase 4: UI Layer (time controls, county/market inspection, market map mode, economy panel)
-- ✓ Phase 5: Multiple markets, black market
-- ✓ Phase 5.5: Transport & Rivers (ocean/river transport, emergent roads, selection highlight)
-- ✓ Phase 5.6: Shader-Based Map Overlays (GPU borders, data textures, palettes)
-- ✓ Phase 6a: Heightmap Texture Generation (heightmap texture, Y-flip)
-- ✓ Phase 6b: Grid Mesh Test (UV mapping, winding order, test scene)
-
-See `docs/DESIGN.md` → Development Roadmap for full status.
-
 ## Quick Reference
 
 | What           | Where                     |
 | -------------- | ------------------------- |
 | Design doc     | `docs/DESIGN.md`          |
+| Changelog      | `docs/CHANGELOG.md`       |
 | Core library   | `src/EconSim.Core/`       |
 | Unity frontend | `unity/Assets/Scripts/`   |
 | Reference maps | `reference/` (gitignored) |
@@ -212,11 +179,13 @@ Political modes (1/2/3) and market mode (4) use a gradient fill style:
 - State borders always on top
 
 Shader uniforms for gradient control:
+
 - `_GradientRadius` (default 40) - how far from edges the gradient extends (pixels)
 - `_GradientEdgeDarkening` (default 0.5, range 0-1) - multiply blend strength at edges
 - `_GradientCenterOpacity` (default 0.5, range 0-1) - how much terrain shows through in center
 
 Layer order for political modes (1/2/3):
+
 1. Terrain base
 2. County borders (under fill)
 3. Province borders (under fill)
@@ -224,6 +193,7 @@ Layer order for political modes (1/2/3):
 5. State borders (on top)
 
 Layer order for market mode (4):
+
 1. Terrain base
 2. County borders (under fill)
 3. Province borders (under fill)
@@ -240,6 +210,7 @@ Cell boundaries use domain warping for organic, jigsaw-style meandering edges in
 - Deterministic: hash-based noise produces identical results each run
 
 Parameters in `MapOverlayManager`:
+
 - `WarpAmplitude = 3.0` — max displacement in base pixels (scales with resolution)
 - `WarpFrequency = 0.1` — noise frequency (higher = tighter wobbles)
 - `WarpOctaves = 3` — noise layers (more = finer detail)

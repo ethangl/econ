@@ -5,6 +5,7 @@ using UnityEngine.UIElements;
 using EconSim.Core.Data;
 using EconSim.Bridge;
 using EconSim.Camera;
+using Profiler = EconSim.Core.Common.StartupProfiler;
 
 namespace EconSim.Renderer
 {
@@ -20,8 +21,8 @@ namespace EconSim.Renderer
         [SerializeField] private Material terrainMaterial;
         [SerializeField] private bool renderLandOnly = false;
 
-        [Header("Map Mode")]
-        [SerializeField] private MapMode currentMode = MapMode.Political;
+        // Map mode (not serialized - always starts in Political per CLAUDE.md guidance)
+        private MapMode currentMode = MapMode.Political;
 
         [Header("Shader Overlays")]
         [SerializeField] private bool useShaderOverlays = true;
@@ -41,8 +42,21 @@ namespace EconSim.Renderer
         [SerializeField] private UnityEngine.Camera selectionCamera;
         [SerializeField] private MapCamera mapCameraController;
 
+        [Header("Selection Settings")]
+        [SerializeField] [Range(0f, 1f)] private float selectionDimmingTarget = 0.5f;
+        [SerializeField] private float dimmingAnimationSpeed = 8f;
+
+        // Animation state (not serialized)
+        private float currentSelectionDimming = 1f;
+        private bool hasActiveSelection;
+        private float currentHoverIntensity = 0f;
+        private bool hasActiveHover;
+
         /// <summary>Event fired when a cell is clicked. Passes cell ID (-1 if clicked on nothing).</summary>
         public event Action<int> OnCellClicked;
+
+        /// <summary>Event fired after selection changes. Passes the selection depth.</summary>
+        public event Action<SelectionDepth> OnSelectionChanged;
 
         private MapData mapData;
         private EconSim.Core.Economy.EconomyState economyState;
@@ -65,8 +79,17 @@ namespace EconSim.Renderer
         // Vertex heights (computed by averaging neighboring cells)
         private float[] vertexHeights;
 
-        // Track last political mode for 1-key cycling
-        private MapMode lastPoliticalMode = MapMode.Political;
+        // Drill-down selection state
+        public enum SelectionDepth { None, State, Province, County }
+        private SelectionDepth selectionDepth = SelectionDepth.None;
+        private int selectedStateId = -1;
+        private int selectedProvinceId = -1;
+        private int selectedCountyId = -1;
+
+        public SelectionDepth CurrentSelectionDepth => selectionDepth;
+        public int SelectedStateId => selectedStateId;
+        public int SelectedProvinceId => selectedProvinceId;
+        public int SelectedCountyId => selectedCountyId;
 
         public enum MapMode
         {
@@ -88,6 +111,11 @@ namespace EconSim.Renderer
             meshRenderer = GetComponent<MeshRenderer>();
         }
 
+        private void OnValidate()
+        {
+            // selectionDimmingTarget changes take effect through the animation loop
+        }
+
         private void OnDestroy()
         {
             // Unsubscribe from shader selection
@@ -99,34 +127,12 @@ namespace EconSim.Renderer
 
         private void Update()
         {
-            // Map mode selection with number keys 1-4
+            // Map mode selection with number keys 1-3
             if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1))
             {
-                // Key 1 cycles between political modes (Political → Province → County)
-                // From non-political mode, returns to last used political mode
-                if (currentMode == MapMode.Political)
-                {
-                    SetMapMode(MapMode.Province);
-                    lastPoliticalMode = MapMode.Province;
-                    Debug.Log("Map mode: Province (1)");
-                }
-                else if (currentMode == MapMode.Province)
-                {
-                    SetMapMode(MapMode.County);
-                    lastPoliticalMode = MapMode.County;
-                    Debug.Log("Map mode: County (1)");
-                }
-                else if (currentMode == MapMode.County)
-                {
-                    SetMapMode(MapMode.Political);
-                    lastPoliticalMode = MapMode.Political;
-                    Debug.Log("Map mode: Political (1)");
-                }
-                else
-                {
-                    SetMapMode(lastPoliticalMode);
-                    Debug.Log($"Map mode: {lastPoliticalMode} (1)");
-                }
+                // Key 1 switches to Political mode (drill-down handles province/county)
+                SetMapMode(MapMode.Political);
+                Debug.Log("Map mode: Political (1)");
             }
             else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2))
             {
@@ -137,6 +143,20 @@ namespace EconSim.Renderer
             {
                 SetMapMode(MapMode.Market);
                 Debug.Log("Map mode: Market (3)");
+            }
+
+            // Update hover state (but not when panning or over UI)
+            if (mapCameraController == null || !mapCameraController.IsPanningMode)
+            {
+                if (!IsPointerOverUI())
+                {
+                    UpdateHover();
+                }
+                else
+                {
+                    // Clear hover when over UI (animation will fade out)
+                    hasActiveHover = false;
+                }
             }
 
             // Click to select cell (but not when camera is in panning mode or over UI)
@@ -150,6 +170,97 @@ namespace EconSim.Renderer
                 {
                     HandleClick();
                 }
+            }
+
+            // Animate selection dimming
+            UpdateDimmingAnimation();
+        }
+
+        private void SetSelectionActive(bool active)
+        {
+            hasActiveSelection = active;
+        }
+
+        private void UpdateDimmingAnimation()
+        {
+            if (overlayManager == null) return;
+
+            float dt = Time.deltaTime * dimmingAnimationSpeed;
+
+            // Animate toward target (selectionDimmingTarget when selected, 1 when not)
+            float target = hasActiveSelection ? selectionDimmingTarget : 1f;
+            currentSelectionDimming = Mathf.Lerp(currentSelectionDimming, target, dt);
+            overlayManager.SetSelectionDimming(currentSelectionDimming);
+
+            // Animate hover intensity (1 when hovered, 0 when not)
+            float hoverTarget = hasActiveHover ? 1f : 0f;
+            currentHoverIntensity = Mathf.Lerp(currentHoverIntensity, hoverTarget, dt);
+            overlayManager.SetHoverIntensity(currentHoverIntensity);
+
+            // Only clear hover IDs once intensity has fully faded out
+            if (!hasActiveHover && currentHoverIntensity < 0.01f)
+            {
+                overlayManager.ClearHover();
+            }
+        }
+
+        private void UpdateHover()
+        {
+            if (overlayManager == null || mapData == null) return;
+
+            var cam = selectionCamera != null ? selectionCamera : UnityEngine.Camera.main;
+            if (cam == null) return;
+
+            // Raycast to ground plane
+            Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+            Plane groundPlane = new Plane(Vector3.up, Vector3.zero);
+
+            if (!groundPlane.Raycast(ray, out float distance))
+            {
+                hasActiveHover = false;
+                return;
+            }
+
+            Vector3 hitPoint = ray.GetPoint(distance);
+            int cellId = FindCellAtPosition(hitPoint);
+
+            if (cellId < 0)
+            {
+                hasActiveHover = false;
+                return;
+            }
+
+            if (!mapData.CellById.TryGetValue(cellId, out var cell) || !cell.IsLand)
+            {
+                hasActiveHover = false;
+                return;
+            }
+
+            // Set hover based on current map mode
+            hasActiveHover = true;
+            switch (currentMode)
+            {
+                case MapMode.Political:
+                    overlayManager.SetHoveredState(cell.StateId);
+                    break;
+                case MapMode.Province:
+                    overlayManager.SetHoveredProvince(cell.ProvinceId);
+                    break;
+                case MapMode.Market:
+                    if (economyState != null && economyState.CellToMarket.TryGetValue(cellId, out int marketId))
+                    {
+                        overlayManager.SetHoveredMarket(marketId);
+                    }
+                    else
+                    {
+                        hasActiveHover = false;
+                    }
+                    break;
+                case MapMode.County:
+                case MapMode.Terrain:
+                default:
+                    overlayManager.SetHoveredCounty(cell.CountyId);
+                    break;
             }
         }
 
@@ -266,12 +377,28 @@ namespace EconSim.Renderer
         public void Initialize(MapData data)
         {
             mapData = data;
+
+            Profiler.Begin("GenerateMesh");
             GenerateMesh();
+            Profiler.End();
+
+            Profiler.Begin("InitializeOverlays");
             InitializeOverlays();
+            Profiler.End();
+
+            Profiler.Begin("InitializeBorders");
             InitializeBorders();
+            Profiler.End();
+
             // InitializeRivers();  // Disabled - rivers now rendered via shader mask (Phase 8)
+
+            Profiler.Begin("InitializeRoads");
             InitializeRoads();
+            Profiler.End();
+
+            Profiler.Begin("InitializeSelectionHighlight");
             InitializeSelectionHighlight();
+            Profiler.End();
         }
 
         private void InitializeOverlays()
@@ -437,54 +564,344 @@ namespace EconSim.Renderer
             // Clear selection if clicked on nothing
             if (cellId < 0)
             {
-                overlayManager.ClearSelection();
+                ClearDrillDownSelection();
                 return;
             }
 
             // Get the cell to look up its state/province
             if (!mapData.CellById.TryGetValue(cellId, out var cell))
             {
-                overlayManager.ClearSelection();
+                ClearDrillDownSelection();
                 return;
             }
 
             // Water cells have no meaningful state/province/county - clear selection
-            // (Without this check, all water cells would be selected since they all have ID 0)
             if (!cell.IsLand)
             {
-                overlayManager.ClearSelection();
+                ClearDrillDownSelection();
                 return;
             }
 
-            // Select at the appropriate level based on current map mode
-            switch (currentMode)
+            // Market mode has its own selection logic (no drill-down)
+            if (currentMode == MapMode.Market)
             {
-                case MapMode.Political:
-                    // Select the entire state/country
-                    overlayManager.SetSelectedState(cell.StateId);
+                HandleMarketSelection(cell, cellId);
+                return;
+            }
+
+            // Terrain mode - just select county, no drill-down
+            if (currentMode == MapMode.Terrain)
+            {
+                SelectAtDepth(SelectionDepth.County, cell);
+                return;
+            }
+
+            // Political modes (Political, Province, County) - use drill-down logic
+            HandleDrillDownSelection(cell);
+        }
+
+        /// <summary>
+        /// Drill-down selection: clicking same entity drills deeper, clicking outside resets.
+        /// </summary>
+        private void HandleDrillDownSelection(Cell cell)
+        {
+            Vector3? centerPosition = null;
+
+            switch (selectionDepth)
+            {
+                case SelectionDepth.None:
+                    // No selection yet - select state
+                    SelectAtDepth(SelectionDepth.State, cell);
+                    centerPosition = GetStateCentroid(cell.StateId);
                     break;
-                case MapMode.Province:
-                    // Select the entire province
-                    overlayManager.SetSelectedProvince(cell.ProvinceId);
-                    break;
-                case MapMode.Market:
-                    // Select the entire market zone
-                    if (economyState != null && economyState.CellToMarket.TryGetValue(cellId, out int marketId))
+
+                case SelectionDepth.State:
+                    if (cell.StateId == selectedStateId)
                     {
-                        overlayManager.SetSelectedMarket(marketId);
+                        // Clicking same state - drill down to province
+                        SelectAtDepth(SelectionDepth.Province, cell);
+                        centerPosition = GetProvinceCentroid(cell.ProvinceId);
                     }
                     else
                     {
-                        overlayManager.ClearSelection();
+                        // Clicking different state - select new state
+                        SelectAtDepth(SelectionDepth.State, cell);
+                        centerPosition = GetStateCentroid(cell.StateId);
                     }
                     break;
-                case MapMode.County:
-                case MapMode.Terrain:
-                default:
-                    // Select the county this cell belongs to
+
+                case SelectionDepth.Province:
+                    if (cell.ProvinceId == selectedProvinceId)
+                    {
+                        // Clicking same province - drill down to county
+                        SelectAtDepth(SelectionDepth.County, cell);
+                        centerPosition = GetCountyCentroid(cell.CountyId);
+                    }
+                    else if (cell.StateId == selectedStateId)
+                    {
+                        // Clicking different province in same state - select new province
+                        SelectAtDepth(SelectionDepth.Province, cell);
+                        centerPosition = GetProvinceCentroid(cell.ProvinceId);
+                    }
+                    else
+                    {
+                        // Clicking different state - reset to state level
+                        SelectAtDepth(SelectionDepth.State, cell);
+                        centerPosition = GetStateCentroid(cell.StateId);
+                    }
+                    break;
+
+                case SelectionDepth.County:
+                    if (cell.CountyId == selectedCountyId)
+                    {
+                        // Already at deepest level, clicking same county - do nothing
+                        return;
+                    }
+                    else if (cell.ProvinceId == selectedProvinceId)
+                    {
+                        // Clicking different county in same province - select new county
+                        SelectAtDepth(SelectionDepth.County, cell);
+                        centerPosition = GetCountyCentroid(cell.CountyId);
+                    }
+                    else if (cell.StateId == selectedStateId)
+                    {
+                        // Clicking different province in same state - go back to province level
+                        SelectAtDepth(SelectionDepth.Province, cell);
+                        centerPosition = GetProvinceCentroid(cell.ProvinceId);
+                    }
+                    else
+                    {
+                        // Clicking different state - reset to state level
+                        SelectAtDepth(SelectionDepth.State, cell);
+                        centerPosition = GetStateCentroid(cell.StateId);
+                    }
+                    break;
+            }
+
+            // Pan camera to center on selection
+            if (centerPosition.HasValue && mapCameraController != null)
+            {
+                mapCameraController.FocusOn(centerPosition.Value);
+            }
+        }
+
+        /// <summary>
+        /// Select at a specific depth and update shader uniforms.
+        /// </summary>
+        private void SelectAtDepth(SelectionDepth depth, Cell cell)
+        {
+            selectionDepth = depth;
+            selectedStateId = cell.StateId;
+            selectedProvinceId = cell.ProvinceId;
+            selectedCountyId = cell.CountyId;
+            SetSelectionActive(true);
+
+            // Update shader selection based on depth
+            overlayManager.ClearSelection();
+            switch (depth)
+            {
+                case SelectionDepth.State:
+                    overlayManager.SetSelectedState(cell.StateId);
+                    break;
+                case SelectionDepth.Province:
+                    overlayManager.SetSelectedProvince(cell.ProvinceId);
+                    break;
+                case SelectionDepth.County:
                     overlayManager.SetSelectedCounty(cell.CountyId);
                     break;
             }
+
+            // Update border visibility to match selection depth
+            UpdateBordersForSelectionDepth();
+
+            // Notify listeners
+            OnSelectionChanged?.Invoke(depth);
+        }
+
+        /// <summary>
+        /// Update border visibility based on current selection depth.
+        /// </summary>
+        private void UpdateBordersForSelectionDepth()
+        {
+            if (overlayManager == null) return;
+
+            // In political modes, show borders appropriate to selection depth
+            if (currentMode == MapMode.Political || currentMode == MapMode.Province || currentMode == MapMode.County)
+            {
+                switch (selectionDepth)
+                {
+                    case SelectionDepth.State:
+                        overlayManager.SetStateBordersVisible(true);
+                        overlayManager.SetProvinceBordersVisible(false);
+                        overlayManager.SetCountyBordersVisible(false);
+                        break;
+                    case SelectionDepth.Province:
+                        overlayManager.SetStateBordersVisible(true);
+                        overlayManager.SetProvinceBordersVisible(true);
+                        overlayManager.SetCountyBordersVisible(false);
+                        break;
+                    case SelectionDepth.County:
+                        overlayManager.SetStateBordersVisible(true);
+                        overlayManager.SetProvinceBordersVisible(true);
+                        overlayManager.SetCountyBordersVisible(true);
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Clear drill-down selection state.
+        /// </summary>
+        private void ClearDrillDownSelection()
+        {
+            selectionDepth = SelectionDepth.None;
+            selectedStateId = -1;
+            selectedProvinceId = -1;
+            selectedCountyId = -1;
+            SetSelectionActive(false);
+            overlayManager?.ClearSelection();
+            UpdateOverlayVisibility();  // Restore borders based on map mode
+
+            // Notify listeners
+            OnSelectionChanged?.Invoke(SelectionDepth.None);
+        }
+
+        /// <summary>
+        /// Handle market mode selection (no drill-down).
+        /// </summary>
+        private void HandleMarketSelection(Cell cell, int cellId)
+        {
+            Vector3? centerPosition = null;
+
+            if (economyState != null && economyState.CellToMarket.TryGetValue(cellId, out int marketId))
+            {
+                SetSelectionActive(true);
+                overlayManager.SetSelectedMarket(marketId);
+                centerPosition = GetMarketCentroid(marketId);
+            }
+            else
+            {
+                SetSelectionActive(false);
+                overlayManager.ClearSelection();
+            }
+
+            if (centerPosition.HasValue && mapCameraController != null)
+            {
+                mapCameraController.FocusOn(centerPosition.Value);
+            }
+        }
+
+        /// <summary>
+        /// Convert Azgaar coordinates to world position.
+        /// </summary>
+        private Vector3 AzgaarToWorld(float azgaarX, float azgaarY)
+        {
+            // World position matches mesh generation: X scaled, Z negated and scaled
+            // transform.position offsets to center the map
+            return new Vector3(
+                azgaarX * cellScale + transform.position.x,
+                0f,
+                -azgaarY * cellScale + transform.position.z
+            );
+        }
+
+        /// <summary>
+        /// Get world-space centroid of a county.
+        /// </summary>
+        private Vector3? GetCountyCentroid(int countyId)
+        {
+            if (countyId <= 0) return null;
+            if (!mapData.CountyById.TryGetValue(countyId, out var county)) return null;
+
+            return AzgaarToWorld(county.Centroid.X, county.Centroid.Y);
+        }
+
+        /// <summary>
+        /// Get world-space centroid of a province.
+        /// </summary>
+        private Vector3? GetProvinceCentroid(int provinceId)
+        {
+            if (provinceId <= 0) return null;
+            if (!mapData.ProvinceById.TryGetValue(provinceId, out var province)) return null;
+
+            // Use center cell if available
+            if (province.CenterCellId > 0 && mapData.CellById.TryGetValue(province.CenterCellId, out var centerCell))
+            {
+                return AzgaarToWorld(centerCell.Center.X, centerCell.Center.Y);
+            }
+
+            // Fall back to calculating from cell list
+            if (province.CellIds == null || province.CellIds.Count == 0) return null;
+
+            float sumX = 0, sumY = 0;
+            int count = 0;
+            foreach (int cellId in province.CellIds)
+            {
+                if (mapData.CellById.TryGetValue(cellId, out var cell))
+                {
+                    sumX += cell.Center.X;
+                    sumY += cell.Center.Y;
+                    count++;
+                }
+            }
+            if (count == 0) return null;
+
+            return AzgaarToWorld(sumX / count, sumY / count);
+        }
+
+        /// <summary>
+        /// Get world-space centroid of a state.
+        /// </summary>
+        private Vector3? GetStateCentroid(int stateId)
+        {
+            if (stateId <= 0) return null;
+            if (!mapData.StateById.TryGetValue(stateId, out var state)) return null;
+
+            // Use center cell if available
+            if (state.CenterCellId > 0 && mapData.CellById.TryGetValue(state.CenterCellId, out var centerCell))
+            {
+                return AzgaarToWorld(centerCell.Center.X, centerCell.Center.Y);
+            }
+
+            // Fall back to calculating from all cells with this state ID
+            float sumX = 0, sumY = 0;
+            int count = 0;
+            foreach (var cell in mapData.Cells)
+            {
+                if (cell.StateId == stateId && cell.IsLand)
+                {
+                    sumX += cell.Center.X;
+                    sumY += cell.Center.Y;
+                    count++;
+                }
+            }
+            if (count == 0) return null;
+
+            return AzgaarToWorld(sumX / count, sumY / count);
+        }
+
+        /// <summary>
+        /// Get world-space centroid of a market zone.
+        /// </summary>
+        private Vector3? GetMarketCentroid(int marketId)
+        {
+            if (marketId <= 0 || economyState == null) return null;
+
+            // Calculate from all cells assigned to this market
+            float sumX = 0, sumY = 0;
+            int count = 0;
+            foreach (var kvp in economyState.CellToMarket)
+            {
+                if (kvp.Value == marketId && mapData.CellById.TryGetValue(kvp.Key, out var cell))
+                {
+                    sumX += cell.Center.X;
+                    sumY += cell.Center.Y;
+                    count++;
+                }
+            }
+            if (count == 0) return null;
+
+            return AzgaarToWorld(sumX / count, sumY / count);
         }
 
         public void SetMapMode(MapMode mode)
@@ -497,10 +914,9 @@ namespace EconSim.Renderer
                 if (useShaderOverlays && overlayManager != null)
                 {
                     overlayManager.SetMapMode(mode);
-                    UpdateOverlayVisibility();
 
-                    // Clear selection when changing modes (selection level changes)
-                    overlayManager.ClearSelection();
+                    // Clear drill-down selection when changing modes
+                    ClearDrillDownSelection();
                 }
                 else
                 {
