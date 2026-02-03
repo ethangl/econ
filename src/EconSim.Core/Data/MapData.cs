@@ -20,12 +20,14 @@ namespace EconSim.Core.Data
         public List<Biome> Biomes;
         public List<Burg> Burgs;
         public List<Feature> Features;
+        public List<County> Counties;    // Economic unit groupings (set by CountyGrouper)
 
         // Lookup tables (built after loading)
         [NonSerialized] public Dictionary<int, Cell> CellById;
         [NonSerialized] public Dictionary<int, Province> ProvinceById;
         [NonSerialized] public Dictionary<int, State> StateById;
         [NonSerialized] public Dictionary<int, Feature> FeatureById;
+        [NonSerialized] public Dictionary<int, County> CountyById;
 
         public void BuildLookups()
         {
@@ -55,6 +57,15 @@ namespace EconSim.Core.Data
                     FeatureById[feature.Id] = feature;
                 }
             }
+
+            CountyById = new Dictionary<int, County>();
+            if (Counties != null)
+            {
+                foreach (var county in Counties)
+                {
+                    CountyById[county.Id] = county;
+                }
+            }
         }
     }
 
@@ -72,7 +83,7 @@ namespace EconSim.Core.Data
 
     /// <summary>
     /// A map cell (Voronoi polygon). This is the smallest unit of geography.
-    /// In the simulation, this corresponds to a "county".
+    /// Multiple cells form a County, which is the unit of economic simulation.
     /// </summary>
     [Serializable]
     public class Cell
@@ -93,6 +104,7 @@ namespace EconSim.Core.Data
         public int StateId;             // 0 = none/neutral
         public int ProvinceId;          // 0 = none
         public int BurgId;              // 0 = no settlement
+        public int CountyId;            // County this cell belongs to (set by CountyGrouper)
 
         // Rivers
         public int RiverId;             // 0 = no river
@@ -105,6 +117,36 @@ namespace EconSim.Core.Data
 
         public bool HasRiver => RiverId > 0;
         public bool HasBurg => BurgId > 0;
+    }
+
+    /// <summary>
+    /// A county groups multiple cells into a single economic unit.
+    /// High-density areas (cities) are single-cell counties; sparse rural areas consolidate.
+    /// </summary>
+    [Serializable]
+    public class County
+    {
+        public int Id;
+        public string Name;             // From seat burg name or "County {Id}"
+        public int SeatCellId;          // County seat (burg cell or highest-pop cell)
+        public List<int> CellIds;       // All cells in this county
+        public int ProvinceId;          // Province this county belongs to
+        public int StateId;             // State this county belongs to
+        public float TotalPopulation;   // Sum of population from all cells
+        public Vec2 Centroid;           // Center of mass (population-weighted or geometric)
+
+        public County()
+        {
+            CellIds = new List<int>();
+        }
+
+        public County(int id) : this()
+        {
+            Id = id;
+        }
+
+        /// <summary>Number of cells in this county.</summary>
+        public int CellCount => CellIds?.Count ?? 0;
     }
 
     [Serializable]

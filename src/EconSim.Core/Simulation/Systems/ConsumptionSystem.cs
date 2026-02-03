@@ -63,11 +63,11 @@ namespace EconSim.Core.Simulation.Systems
                 ApplyDecay(county, economy);
             }
 
-            // Debug logging
-            if (state.CurrentDay % LogInterval == 0)
-            {
-                LogConsumptionSummary(state);
-            }
+            // Debug logging (disabled for cleaner console - enable when debugging economy)
+            // if (state.CurrentDay % LogInterval == 0)
+            // {
+            //     LogConsumptionSummary(state);
+            // }
         }
 
         private void LogConsumptionSummary(SimulationState state)

@@ -145,8 +145,8 @@ namespace EconSim.Renderer
                 return;
             }
 
-            // Use resolution multiplier of 2 (same as default MapView)
-            overlayManager = new MapOverlayManager(mapData, terrainMaterial, 2);
+            // Use resolution multiplier of 4 (same as default MapView)
+            overlayManager = new MapOverlayManager(mapData, terrainMaterial, 4);
             Debug.Log("GridMeshTest: Initialized overlay manager");
         }
 

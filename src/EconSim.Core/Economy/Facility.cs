@@ -14,8 +14,11 @@ namespace EconSim.Core.Economy
         /// <summary>Reference to the facility type definition.</summary>
         public string TypeId;
 
-        /// <summary>Cell (county) where this facility is located.</summary>
+        /// <summary>Cell where this facility is physically located.</summary>
         public int CellId;
+
+        /// <summary>County that owns this facility (for economic flows).</summary>
+        public int CountyId;
 
         /// <summary>Current number of workers assigned.</summary>
         public int AssignedWorkers;

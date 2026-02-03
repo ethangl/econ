@@ -246,11 +246,11 @@ namespace EconSim.Core
             var state = _simulation.GetState();
             if (state.CurrentDay != _lastLoggedDay)
             {
-                // Log every 10 days to avoid spam
-                if (state.CurrentDay % 10 == 0)
-                {
-                    Debug.Log($"Day {state.CurrentDay}");
-                }
+                // Day counter logging disabled for cleaner console
+                // if (state.CurrentDay % 10 == 0)
+                // {
+                //     Debug.Log($"Day {state.CurrentDay}");
+                // }
 
                 // Refresh road rendering weekly (same frequency as trade)
                 if (state.CurrentDay % 7 == 0 && mapView != null)

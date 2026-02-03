@@ -36,6 +36,9 @@ namespace EconSim.Core.Import
             // Populate province cell lists
             PopulateProvinceCells(mapData);
 
+            // Group cells into counties
+            CountyGrouper.GroupCells(mapData);
+
             return mapData;
         }
 

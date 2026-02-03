@@ -16,7 +16,7 @@ namespace EconSim.Core.Economy
         public FacilityRegistry FacilityDefs;
 
         // === Runtime state ===
-        /// <summary>Economic state per county, keyed by cell ID.</summary>
+        /// <summary>Economic state per county, keyed by county ID.</summary>
         public Dictionary<int, CountyEconomy> Counties;
 
         /// <summary>All facility instances, keyed by facility ID.</summary>
@@ -34,7 +34,15 @@ namespace EconSim.Core.Economy
         /// <summary>Next facility ID to assign.</summary>
         public int NextFacilityId;
 
-        /// <summary>Lookup: cell ID → market ID that serves it (computed from zones).</summary>
+        /// <summary>Lookup: cell ID → county ID (from MapData).</summary>
+        [NonSerialized]
+        public Dictionary<int, int> CellToCounty;
+
+        /// <summary>Lookup: county ID → market ID that serves it.</summary>
+        [NonSerialized]
+        public Dictionary<int, int> CountyToMarket;
+
+        /// <summary>Lookup: cell ID → market ID that serves it (computed from county assignments).</summary>
         [NonSerialized]
         public Dictionary<int, int> CellToMarket;
 
@@ -47,53 +55,88 @@ namespace EconSim.Core.Economy
             Markets = new Dictionary<int, Market>();
             Roads = new RoadState();
             NextFacilityId = 1;
+            CellToCounty = new Dictionary<int, int>();
+            CountyToMarket = new Dictionary<int, int>();
             CellToMarket = new Dictionary<int, int>();
         }
 
         /// <summary>
         /// Initialize county economies from map data.
+        /// Creates one CountyEconomy per County (not per Cell).
         /// </summary>
         public void InitializeFromMap(MapData mapData)
         {
+            // Build cell-to-county lookup
+            CellToCounty.Clear();
             foreach (var cell in mapData.Cells)
             {
-                if (!cell.IsLand) continue;
+                if (cell.IsLand && cell.CountyId > 0)
+                {
+                    CellToCounty[cell.Id] = cell.CountyId;
+                }
+            }
 
-                var county = new CountyEconomy(cell.Id);
-                county.Population = CountyPopulation.FromTotal(cell.Population);
-                Counties[cell.Id] = county;
+            // Create economy for each county
+            if (mapData.Counties == null) return;
+
+            foreach (var countyData in mapData.Counties)
+            {
+                var countyEcon = new CountyEconomy(countyData.Id);
+                countyEcon.Population = CountyPopulation.FromTotal(countyData.TotalPopulation);
+                Counties[countyData.Id] = countyEcon;
             }
         }
 
         /// <summary>
-        /// Get or create county economy for a cell.
+        /// Get county economy by county ID.
         /// </summary>
-        public CountyEconomy GetCounty(int cellId)
+        public CountyEconomy GetCounty(int countyId)
         {
-            if (!Counties.TryGetValue(cellId, out var county))
+            if (!Counties.TryGetValue(countyId, out var county))
             {
-                county = new CountyEconomy(cellId);
-                Counties[cellId] = county;
+                county = new CountyEconomy(countyId);
+                Counties[countyId] = county;
             }
             return county;
         }
 
         /// <summary>
-        /// Create a new facility instance.
+        /// Get county economy for a cell (uses CellToCounty lookup).
+        /// </summary>
+        public CountyEconomy GetCountyForCell(int cellId)
+        {
+            if (CellToCounty.TryGetValue(cellId, out int countyId))
+            {
+                return GetCounty(countyId);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Create a new facility instance at a cell.
+        /// The facility is physically located in the cell but economically owned by its county.
         /// </summary>
         public Facility CreateFacility(string typeId, int cellId)
         {
+            // Look up the county that owns this cell
+            int countyId = CellToCounty.TryGetValue(cellId, out int cId) ? cId : 0;
+
             var facility = new Facility
             {
                 Id = NextFacilityId++,
                 TypeId = typeId,
-                CellId = cellId
+                CellId = cellId,
+                CountyId = countyId
             };
 
             Facilities[facility.Id] = facility;
 
-            var county = GetCounty(cellId);
-            county.FacilityIds.Add(facility.Id);
+            // Add to county's facility list
+            if (countyId > 0)
+            {
+                var county = GetCounty(countyId);
+                county.FacilityIds.Add(facility.Id);
+            }
 
             return facility;
         }
@@ -119,11 +162,11 @@ namespace EconSim.Core.Economy
         }
 
         /// <summary>
-        /// Get all facilities in a county.
+        /// Get all facilities in a county by county ID.
         /// </summary>
-        public IEnumerable<Facility> GetFacilitiesInCounty(int cellId)
+        public IEnumerable<Facility> GetFacilitiesInCounty(int countyId)
         {
-            if (!Counties.TryGetValue(cellId, out var county))
+            if (!Counties.TryGetValue(countyId, out var county))
                 yield break;
 
             foreach (var fid in county.FacilityIds)
@@ -157,14 +200,17 @@ namespace EconSim.Core.Economy
         }
 
         /// <summary>
-        /// Rebuild the cell-to-market lookup from market zones.
+        /// Rebuild the cell-to-market and county-to-market lookups from market zones.
         /// Assigns each cell to the nearest market by transport cost.
+        /// Counties are assigned based on their seat cell's assignment.
         /// </summary>
         public void RebuildCellToMarketLookup()
         {
             CellToMarket.Clear();
+            CountyToMarket.Clear();
             var cellToCost = new Dictionary<int, float>();
 
+            // First pass: assign cells to markets
             foreach (var market in Markets.Values)
             {
                 foreach (var cellId in market.ZoneCellIds)
@@ -179,6 +225,47 @@ namespace EconSim.Core.Economy
                     }
                 }
             }
+
+            // Second pass: assign counties based on best cell access
+            // For each county, use the cell with lowest transport cost to any market
+            foreach (var countyEcon in Counties.Values)
+            {
+                int bestMarketId = -1;
+                float bestCost = float.MaxValue;
+
+                // Check all cells in this county (need MapData reference to get cell list)
+                // For now, iterate through CellToCounty to find cells in this county
+                foreach (var kvp in CellToCounty)
+                {
+                    if (kvp.Value != countyEcon.CountyId) continue;
+                    int cellId = kvp.Key;
+
+                    if (CellToMarket.TryGetValue(cellId, out int marketId) &&
+                        cellToCost.TryGetValue(cellId, out float cost))
+                    {
+                        if (cost < bestCost)
+                        {
+                            bestCost = cost;
+                            bestMarketId = marketId;
+                        }
+                    }
+                }
+
+                if (bestMarketId > 0)
+                {
+                    CountyToMarket[countyEcon.CountyId] = bestMarketId;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Get the market that serves a given county.
+        /// </summary>
+        public Market GetMarketForCounty(int countyId)
+        {
+            if (CountyToMarket.TryGetValue(countyId, out var marketId))
+                return GetMarket(marketId);
+            return null;
         }
     }
 }

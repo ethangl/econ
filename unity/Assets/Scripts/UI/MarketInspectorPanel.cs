@@ -203,9 +203,17 @@ namespace EconSim.UI
             }
             SetLabel(_hubValue, hubName);
 
-            // Zone size
-            int zoneSize = _selectedMarket.ZoneCellIds?.Count ?? 0;
-            SetLabel(_zoneValue, $"{zoneSize} counties");
+            // Zone size (count counties assigned to this market)
+            int countyCount = 0;
+            if (_economy?.CountyToMarket != null)
+            {
+                foreach (var kvp in _economy.CountyToMarket)
+                {
+                    if (kvp.Value == _selectedMarket.Id)
+                        countyCount++;
+                }
+            }
+            SetLabel(_zoneValue, $"{countyCount} counties");
 
             // Goods
             UpdateGoodsList();

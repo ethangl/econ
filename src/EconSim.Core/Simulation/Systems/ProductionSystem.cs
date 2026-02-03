@@ -70,11 +70,11 @@ namespace EconSim.Core.Simulation.Systems
                 RunProcessingFacility(economy, facility, def);
             }
 
-            // Debug logging every LogInterval ticks
-            if (state.CurrentDay % LogInterval == 0)
-            {
-                LogProductionSummary(state);
-            }
+            // Debug logging (disabled for cleaner console - enable when debugging economy)
+            // if (state.CurrentDay % LogInterval == 0)
+            // {
+            //     LogProductionSummary(state);
+            // }
         }
 
         private void LogProductionSummary(SimulationState state)
@@ -113,7 +113,7 @@ namespace EconSim.Core.Simulation.Systems
 
         private void RunExtractionFacility(EconomyState economy, Facility facility, FacilityDef def, MapData mapData)
         {
-            var county = economy.GetCounty(facility.CellId);
+            var county = economy.GetCounty(facility.CountyId);
             var goodDef = economy.Goods.Get(def.OutputGoodId);
             if (goodDef == null) return;
 
@@ -136,7 +136,7 @@ namespace EconSim.Core.Simulation.Systems
 
         private void RunProcessingFacility(EconomyState economy, Facility facility, FacilityDef def)
         {
-            var county = economy.GetCounty(facility.CellId);
+            var county = economy.GetCounty(facility.CountyId);
             var goodDef = economy.Goods.Get(def.OutputGoodId);
             if (goodDef == null || goodDef.Inputs == null) return;
 

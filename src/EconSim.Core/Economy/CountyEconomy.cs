@@ -4,14 +4,15 @@ using System.Collections.Generic;
 namespace EconSim.Core.Economy
 {
     /// <summary>
-    /// Economic state for a single county (cell).
+    /// Economic state for a single county.
     /// This is the runtime data that changes each tick.
+    /// A county contains one or more cells grouped by CountyGrouper.
     /// </summary>
     [Serializable]
     public class CountyEconomy
     {
-        /// <summary>Cell ID this economy belongs to.</summary>
-        public int CellId;
+        /// <summary>County ID this economy belongs to (from MapData.Counties).</summary>
+        public int CountyId;
 
         /// <summary>Population cohorts and employment state.</summary>
         public CountyPopulation Population;
@@ -31,9 +32,9 @@ namespace EconSim.Core.Economy
         /// <summary>Unmet demand from last consumption tick (for tracking/effects).</summary>
         public Dictionary<string, float> UnmetDemand;
 
-        public CountyEconomy(int cellId)
+        public CountyEconomy(int countyId)
         {
-            CellId = cellId;
+            CountyId = countyId;
             Population = new CountyPopulation();
             Stockpile = new Stockpile();
             FacilityIds = new List<int>();

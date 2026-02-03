@@ -43,7 +43,7 @@ namespace EconSim.UI
         private EconomyState _economy;
 
         // Selection state - what's currently selected based on mode
-        private int _selectedCellId = -1;
+        private int _selectedCountyId = -1;
         private int _selectedProvinceId = -1;
         private int _selectedStateId = -1;
 
@@ -122,7 +122,8 @@ namespace EconSim.UI
                     SelectProvince(cell.ProvinceId);
                     break;
                 case MapView.MapMode.County:
-                    SelectCounty(cellId);
+                    // Look up county ID from cell
+                    SelectCounty(cell.CountyId);
                     break;
             }
         }
@@ -212,12 +213,12 @@ namespace EconSim.UI
             UpdateProvinceDisplay();
         }
 
-        public void SelectCounty(int cellId)
+        public void SelectCounty(int countyId)
         {
             ClearSelection();
-            _selectedCellId = cellId;
+            _selectedCountyId = countyId;
 
-            if (cellId < 0 || _mapData == null || !_mapData.CellById.ContainsKey(cellId))
+            if (countyId <= 0 || _mapData == null || !_mapData.CountyById.ContainsKey(countyId))
             {
                 Hide();
                 return;
@@ -229,12 +230,12 @@ namespace EconSim.UI
 
         private void ClearSelection()
         {
-            _selectedCellId = -1;
+            _selectedCountyId = -1;
             _selectedProvinceId = -1;
             _selectedStateId = -1;
         }
 
-        private bool HasSelection => _selectedCellId >= 0 || _selectedProvinceId > 0 || _selectedStateId > 0;
+        private bool HasSelection => _selectedCountyId > 0 || _selectedProvinceId > 0 || _selectedStateId > 0;
 
         public void Show()
         {
@@ -263,7 +264,7 @@ namespace EconSim.UI
                     UpdateStateDisplay();
                 else if (_selectedProvinceId > 0)
                     UpdateProvinceDisplay();
-                else if (_selectedCellId >= 0)
+                else if (_selectedCountyId > 0)
                     UpdateCountyDisplay();
             }
         }
@@ -400,34 +401,26 @@ namespace EconSim.UI
 
         private void UpdateCountyDisplay()
         {
-            if (_selectedCellId < 0 || _mapData == null || _mapData.CellById == null) return;
+            if (_selectedCountyId <= 0 || _mapData == null || _mapData.CountyById == null) return;
 
-            if (!_mapData.CellById.TryGetValue(_selectedCellId, out var cell)) return;
+            if (!_mapData.CountyById.TryGetValue(_selectedCountyId, out var county)) return;
 
-            // Restore terrain label text
+            // Restore terrain label text to "Cells" for county mode
             var terrainRow = _terrainValue?.parent;
             if (terrainRow != null)
             {
                 var label = terrainRow.Q<Label>();
                 if (label != null && label != _terrainValue)
-                    label.text = "Terrain";
+                    label.text = "Cells";
             }
 
-            // County name (use burg name if has settlement, otherwise Cell #)
-            string countyName = $"Cell {cell.Id}";
-            if (cell.BurgId > 0 && cell.BurgId < _mapData.Burgs.Count)
-            {
-                var burg = _mapData.Burgs[cell.BurgId];
-                if (!string.IsNullOrEmpty(burg.Name))
-                {
-                    countyName = burg.Name;
-                }
-            }
+            // County name
+            string countyName = county.Name ?? $"County {county.Id}";
             SetLabel(_entityName, countyName);
 
             // Province
             string provinceName = "-";
-            if (cell.ProvinceId > 0 && _mapData.ProvinceById.TryGetValue(cell.ProvinceId, out var province))
+            if (county.ProvinceId > 0 && _mapData.ProvinceById.TryGetValue(county.ProvinceId, out var province))
             {
                 provinceName = province.Name;
             }
@@ -435,19 +428,14 @@ namespace EconSim.UI
 
             // State
             string stateName = "-";
-            if (cell.StateId > 0 && _mapData.StateById.TryGetValue(cell.StateId, out var state))
+            if (county.StateId > 0 && _mapData.StateById.TryGetValue(county.StateId, out var state))
             {
                 stateName = state.Name;
             }
             SetLabel(_stateValue, stateName);
 
-            // Terrain/Biome
-            string biomeName = "Unknown";
-            if (cell.BiomeId >= 0 && cell.BiomeId < _mapData.Biomes.Count)
-            {
-                biomeName = _mapData.Biomes[cell.BiomeId].Name;
-            }
-            SetLabel(_terrainValue, biomeName);
+            // Cell count
+            SetLabel(_terrainValue, $"{county.CellCount}");
 
             // Show all sections for county mode
             SetSectionVisible(_resourcesSection, true);
@@ -460,7 +448,7 @@ namespace EconSim.UI
                 resourcesHeader.text = "Resources";
 
             // Population data from economy
-            if (_economy != null && _economy.Counties.TryGetValue(_selectedCellId, out var countyEcon))
+            if (_economy != null && _economy.Counties.TryGetValue(_selectedCountyId, out var countyEcon))
             {
                 var pop = countyEcon.Population;
                 SetLabel(_popTotal, pop.Total.ToString("N0"));
@@ -480,8 +468,8 @@ namespace EconSim.UI
             }
             else
             {
-                // No economy data yet
-                SetLabel(_popTotal, ((int)cell.Population).ToString("N0"));
+                // No economy data yet - use total population from county data
+                SetLabel(_popTotal, ((int)county.TotalPopulation).ToString("N0"));
                 SetLabel(_popWorkers, "-");
                 SetLabel(_popEmployed, "-");
                 ClearList(_resourcesList);
@@ -538,10 +526,11 @@ namespace EconSim.UI
 
             _resourcesList.Clear();
 
-            // Find all cells in this province
-            var cells = _mapData.Cells.Where(c => c.ProvinceId == province.Id && c.IsLand).ToList();
+            // Find all counties in this province
+            var counties = _mapData.Counties?.Where(c => c.ProvinceId == province.Id).ToList()
+                ?? new System.Collections.Generic.List<EconSim.Core.Data.County>();
 
-            if (cells.Count == 0)
+            if (counties.Count == 0)
             {
                 var noneLabel = new Label("None");
                 noneLabel.style.color = new Color(0.5f, 0.5f, 0.5f);
@@ -551,29 +540,24 @@ namespace EconSim.UI
             }
 
             // Show count if too many
-            if (cells.Count > 10)
+            if (counties.Count > 10)
             {
-                var countLabel = new Label($"{cells.Count} counties");
+                var countLabel = new Label($"{counties.Count} counties");
                 countLabel.style.color = new Color(0.7f, 0.7f, 0.7f);
                 countLabel.style.fontSize = 11;
                 _resourcesList.Add(countLabel);
                 return;
             }
 
-            foreach (var cell in cells)
+            foreach (var county in counties)
             {
-                string name = $"Cell {cell.Id}";
-                if (cell.BurgId > 0 && cell.BurgId < _mapData.Burgs.Count)
-                {
-                    var burg = _mapData.Burgs[cell.BurgId];
-                    if (!string.IsNullOrEmpty(burg.Name))
-                        name = burg.Name;
-                }
+                string name = county.Name ?? $"County {county.Id}";
+                string cellInfo = county.CellCount == 1 ? "1 cell" : $"{county.CellCount} cells";
 
                 var row = new VisualElement();
                 row.AddToClassList("resource-item");
 
-                var nameLabel = new Label(name);
+                var nameLabel = new Label($"{name} ({cellInfo})");
                 row.Add(nameLabel);
                 _resourcesList.Add(row);
             }

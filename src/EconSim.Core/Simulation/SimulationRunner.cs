@@ -155,24 +155,24 @@ namespace EconSim.Core.Simulation
                 SimLog.Log("Market", $"Placed market '{market.Name}' at cell {cellId} in {stateName} (score: {market.SuitabilityScore:F1})");
             }
 
-            // Build lookup table
+            // Build lookup table (assigns cells and counties to markets)
             _state.Economy.RebuildCellToMarketLookup();
 
-            // Log distribution of cells per market
-            var cellsPerMarket = new Dictionary<int, int>();
-            foreach (var kvp in _state.Economy.CellToMarket)
+            // Log distribution of counties per market
+            var countiesPerMarket = new Dictionary<int, int>();
+            foreach (var kvp in _state.Economy.CountyToMarket)
             {
-                if (!cellsPerMarket.ContainsKey(kvp.Value))
-                    cellsPerMarket[kvp.Value] = 0;
-                cellsPerMarket[kvp.Value]++;
+                if (!countiesPerMarket.ContainsKey(kvp.Value))
+                    countiesPerMarket[kvp.Value] = 0;
+                countiesPerMarket[kvp.Value]++;
             }
             foreach (var market in _state.Economy.Markets.Values)
             {
-                int count = cellsPerMarket.TryGetValue(market.Id, out var c) ? c : 0;
-                SimLog.Log("Market", $"Market '{market.Name}' assigned {count} cells");
+                int count = countiesPerMarket.TryGetValue(market.Id, out var c) ? c : 0;
+                SimLog.Log("Market", $"Market '{market.Name}' assigned {count} counties");
             }
 
-            SimLog.Log("Market", $"Initialized {_state.Economy.Markets.Count} markets, {_state.Economy.CellToMarket.Count} cells have market access");
+            SimLog.Log("Market", $"Initialized {_state.Economy.Markets.Count} markets, {_state.Economy.CountyToMarket.Count} counties have market access");
         }
 
         /// <summary>

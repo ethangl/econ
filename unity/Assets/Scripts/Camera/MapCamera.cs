@@ -9,7 +9,7 @@ namespace EconSim.Camera
     public class MapCamera : MonoBehaviour
     {
         [Header("Zoom Settings")]
-        [SerializeField] private float minZoomFraction = 0.05f;  // Min zoom as fraction of max (5% = close detail)
+        [SerializeField] private float minZoomFraction = 0.15f;  // Min zoom as fraction of max (15% = moderate detail)
         [SerializeField] private float absoluteMinZoom = 0.5f;   // Never zoom closer than this (world units)
         [SerializeField] private float zoomSpeed = 5f;
         [SerializeField] private float zoomSmoothTime = 0.1f;

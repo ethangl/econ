@@ -146,18 +146,15 @@ namespace EconSim.Core.Simulation.Systems
                     continue;
 
                 // Process each county assigned to this market
-                // (Use CellToMarket to avoid double-counting cells in overlapping zones)
-                foreach (var cellId in market.ZoneCellIds)
+                // Counties are assigned via CountyToMarket (computed from cell transport costs)
+                foreach (var countyEcon in economy.Counties.Values)
                 {
-                    // Skip if this cell isn't assigned to this market
-                    if (!economy.CellToMarket.TryGetValue(cellId, out var assignedMarketId)
+                    // Skip if this county isn't assigned to this market
+                    if (!economy.CountyToMarket.TryGetValue(countyEcon.CountyId, out var assignedMarketId)
                         || assignedMarketId != market.Id)
                         continue;
 
-                    if (!economy.Counties.TryGetValue(cellId, out var county))
-                        continue;
-
-                    ProcessCountyTrade(county, market, economy, totalSold, totalBought, totalStolen);
+                    ProcessCountyTrade(countyEcon, market, economy, mapData, totalSold, totalBought, totalStolen);
                 }
 
                 // Update prices based on supply/demand
@@ -170,23 +167,28 @@ namespace EconSim.Core.Simulation.Systems
                 UpdateMarketPrices(_blackMarket, isBlackMarket: true);
             }
 
-            // Log summary
-            if (totalSold.Count > 0 || totalBought.Count > 0 || totalStolen.Count > 0)
-            {
-                LogTradeSummary(state.CurrentDay, totalSold, totalBought, totalStolen);
-            }
+            // Log summary (disabled for cleaner console - enable when debugging trade)
+            // if (totalSold.Count > 0 || totalBought.Count > 0 || totalStolen.Count > 0)
+            // {
+            //     LogTradeSummary(state.CurrentDay, totalSold, totalBought, totalStolen);
+            // }
         }
 
         private void ProcessCountyTrade(
             CountyEconomy county,
             Market market,
             EconomyState economy,
+            MapData mapData,
             Dictionary<string, float> totalSold,
             Dictionary<string, float> totalBought,
             Dictionary<string, float> totalStolen)
         {
-            // Get transport efficiency for this county-market pair
-            float transportEfficiency = GetTransportEfficiency(county.CellId, market);
+            // Get the county's seat cell for transport calculations
+            int seatCellId = GetCountySeatCell(county.CountyId, mapData);
+            if (seatCellId < 0) return;
+
+            // Get transport efficiency for this county-market pair (using seat cell)
+            float transportEfficiency = GetTransportEfficiency(seatCellId, market);
 
             // For each good the county has or needs
             foreach (var good in economy.Goods.All)
@@ -207,7 +209,7 @@ namespace EconSim.Core.Simulation.Systems
                     {
                         // SELL: Have more than we need
                         float excess = stockpiled - surplusStock;
-                        SellToMarket(county, market, good, excess, transportEfficiency, totalSold, totalStolen);
+                        SellToMarket(county, market, good, excess, transportEfficiency, seatCellId, totalSold, totalStolen);
                     }
                     else if (stockpiled < deficitStock && dailyConsumption > 0)
                     {
@@ -219,7 +221,7 @@ namespace EconSim.Core.Simulation.Systems
                         {
                             var marketGood = market.Goods[good.Id];
                             marketGood.Demand += toBuy;
-                            TryBuyFromMarkets(county, market, good, toBuy, transportEfficiency, totalBought);
+                            TryBuyFromMarkets(county, market, good, toBuy, transportEfficiency, seatCellId, totalBought);
                         }
                     }
                 }
@@ -231,7 +233,7 @@ namespace EconSim.Core.Simulation.Systems
                     if (stockpiled > NonConsumerSurplusThreshold)
                     {
                         float excess = stockpiled - NonConsumerSurplusThreshold;
-                        SellToMarket(county, market, good, excess, transportEfficiency, totalSold, totalStolen);
+                        SellToMarket(county, market, good, excess, transportEfficiency, seatCellId, totalSold, totalStolen);
                     }
 
                     // BUY: Check if processing facilities need this good
@@ -241,10 +243,22 @@ namespace EconSim.Core.Simulation.Systems
                         float toBuy = unmetDemand * BuyRatio;
                         var marketGood = market.Goods[good.Id];
                         marketGood.Demand += toBuy;
-                        TryBuyFromMarkets(county, market, good, toBuy, transportEfficiency, totalBought);
+                        TryBuyFromMarkets(county, market, good, toBuy, transportEfficiency, seatCellId, totalBought);
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Get the seat cell ID for a county (used for transport calculations).
+        /// </summary>
+        private int GetCountySeatCell(int countyId, MapData mapData)
+        {
+            if (mapData.CountyById != null && mapData.CountyById.TryGetValue(countyId, out var county))
+            {
+                return county.SeatCellId;
+            }
+            return -1;
         }
 
         /// <summary>
@@ -319,6 +333,7 @@ namespace EconSim.Core.Simulation.Systems
             GoodDef good,
             float excess,
             float transportEfficiency,
+            int seatCellId,
             Dictionary<string, float> totalSold,
             Dictionary<string, float> totalStolen)
         {
@@ -329,7 +344,7 @@ namespace EconSim.Core.Simulation.Systems
             county.Stockpile.Remove(good.Id, toSell);
 
             // Record traffic along the route for road building
-            RecordTrafficToMarket(county.CellId, market, toSell);
+            RecordTrafficToMarket(seatCellId, market, toSell);
 
             // Amount that arrives at market (reduced by transport costs)
             float arriving = toSell * transportEfficiency;
@@ -367,6 +382,7 @@ namespace EconSim.Core.Simulation.Systems
             GoodDef good,
             float toBuy,
             float transportEfficiency,
+            int seatCellId,
             Dictionary<string, float> totalBought)
         {
             float remaining = toBuy;
@@ -401,7 +417,7 @@ namespace EconSim.Core.Simulation.Systems
                     localGood.Supply -= actualBuy;
 
                     // Record traffic along the route for road building
-                    RecordTrafficToMarket(county.CellId, localMarket, actualBuy);
+                    RecordTrafficToMarket(seatCellId, localMarket, actualBuy);
 
                     // Amount that arrives at county (reduced by transport costs)
                     float arriving = actualBuy * transportEfficiency;

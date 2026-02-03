@@ -152,7 +152,7 @@ namespace EconSim.Renderer
                     if (tier == RoadTier.Path) paths++;
                     else if (tier == RoadTier.Road) roadCount++;
                 }
-                Debug.Log($"RoadRenderer: {paths} paths, {roadCount} roads");
+                // Debug.Log($"RoadRenderer: {paths} paths, {roadCount} roads");
             }
         }
 

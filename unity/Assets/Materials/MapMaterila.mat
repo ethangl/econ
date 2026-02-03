@@ -19,10 +19,14 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties: 
+  m_LockedProperties: _ProvinceBorderColor
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
+    - _BiomeMatrixTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _BiomePaletteTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -99,6 +103,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _RiverMaskTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _StateColorTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -111,44 +119,58 @@ Material:
     m_Floats:
     - _BumpScale: 1
     - _CoastlineBorderWidth: 2
+    - _CountyBorderWidth: 0.666
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
+    - _GradientCenterOpacity: 0.333
+    - _GradientEdgeDarkening: 0.75
+    - _GradientRadius: 20
     - _HeightScale: 3
-    - _MapMode: 4
-    - _MarketBorderWidth: 0.8
+    - _MapMode: 3
+    - _MarketBorderWidth: 1
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.02
+    - _PoliticalCenterOpacity: 0.222
+    - _PoliticalEdgeDarkening: 0.777
+    - _PoliticalEdgeOpacity: 0.8
+    - _PoliticalGradientRadius: 64
     - _ProvinceBorderWidth: 0.8
     - _SeaLevel: 0.2
     - _SelectedCellId: -1
-    - _SelectedMarketId: 0.000030518044
+    - _SelectedCountyId: -1
+    - _SelectedMarketId: -1
     - _SelectedProvinceId: -1
     - _SelectedStateId: -1
     - _SelectionBorderWidth: 3
     - _SelectionFillAlpha: 0.15
-    - _ShowMarketBorders: 1
-    - _ShowProvinceBorders: 0
-    - _ShowStateBorders: 0
+    - _ShowCountyBorders: 1
+    - _ShowMarketBorders: 0
+    - _ShowProvinceBorders: 1
+    - _ShowStateBorders: 1
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1
-    - _StateBorderWidth: 0.8
+    - _StateBorderWidth: 1
     - _UVSec: 0
     - _UseHeightDisplacement: 0
+    - _WaterGradientRadius: 11
     - _ZWrite: 1
     m_Colors:
     - _CoastlineBorderColor: {r: 0.02, g: 0.049999982, b: 0.14999998, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
+    - _CountyBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
-    - _MarketBorderColor: {r: 0, g: 0, b: 0, a: 0}
-    - _ProvinceBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
+    - _MarketBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
+    - _ProvinceBorderColor: {r: 0, g: 0, b: 0, a: 0.627451}
     - _SelectionBorderColor: {r: 1, g: 0.9, b: 0.19999993, a: 0.3764706}
-    - _StateBorderColor: {r: 0, g: 0, b: 0, a: 0.5019608}
+    - _StateBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
+    - _WaterDeepColor: {r: 0.07999996, g: 0.14999998, b: 0.34999996, a: 1}
+    - _WaterShallowColor: {r: 0.24999994, g: 0.45, b: 0.54999995, a: 0.09803922}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

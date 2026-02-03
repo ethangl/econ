@@ -25,7 +25,7 @@ namespace EconSim.Renderer
 
         [Header("Shader Overlays")]
         [SerializeField] private bool useShaderOverlays = true;
-        [SerializeField] [Range(1, 4)] private int overlayResolutionMultiplier = 2;  // Higher = smoother borders, more memory
+        [SerializeField] [Range(1, 8)] private int overlayResolutionMultiplier = 6;  // Higher = smoother borders, more memory
 
         // Grid mesh with height displacement (Phase 6c)
         // Non-serialized during development - see CLAUDE.md
@@ -269,7 +269,7 @@ namespace EconSim.Renderer
             GenerateMesh();
             InitializeOverlays();
             InitializeBorders();
-            InitializeRivers();
+            // InitializeRivers();  // Disabled - rivers now rendered via shader mask (Phase 8)
             InitializeRoads();
             InitializeSelectionHighlight();
         }
@@ -448,6 +448,14 @@ namespace EconSim.Renderer
                 return;
             }
 
+            // Water cells have no meaningful state/province/county - clear selection
+            // (Without this check, all water cells would be selected since they all have ID 0)
+            if (!cell.IsLand)
+            {
+                overlayManager.ClearSelection();
+                return;
+            }
+
             // Select at the appropriate level based on current map mode
             switch (currentMode)
             {
@@ -473,8 +481,8 @@ namespace EconSim.Renderer
                 case MapMode.County:
                 case MapMode.Terrain:
                 default:
-                    // Select the individual cell
-                    overlayManager.SetSelectedCell(cellId);
+                    // Select the county this cell belongs to
+                    overlayManager.SetSelectedCounty(cell.CountyId);
                     break;
             }
         }
@@ -510,26 +518,31 @@ namespace EconSim.Renderer
                 case MapMode.Political:
                     overlayManager.SetStateBordersVisible(true);
                     overlayManager.SetProvinceBordersVisible(false);
+                    overlayManager.SetCountyBordersVisible(false);
                     overlayManager.SetMarketBordersVisible(false);
                     break;
                 case MapMode.Province:
                     overlayManager.SetStateBordersVisible(true);
                     overlayManager.SetProvinceBordersVisible(true);
+                    overlayManager.SetCountyBordersVisible(false);
                     overlayManager.SetMarketBordersVisible(false);
                     break;
                 case MapMode.County:
                     overlayManager.SetStateBordersVisible(true);
                     overlayManager.SetProvinceBordersVisible(true);
+                    overlayManager.SetCountyBordersVisible(true);
                     overlayManager.SetMarketBordersVisible(false);
                     break;
                 case MapMode.Terrain:
                     overlayManager.SetStateBordersVisible(false);
                     overlayManager.SetProvinceBordersVisible(false);
+                    overlayManager.SetCountyBordersVisible(false);
                     overlayManager.SetMarketBordersVisible(false);
                     break;
                 case MapMode.Market:
                     overlayManager.SetStateBordersVisible(false);
                     overlayManager.SetProvinceBordersVisible(false);
+                    overlayManager.SetCountyBordersVisible(false);
                     overlayManager.SetMarketBordersVisible(true);
                     break;
             }
@@ -587,6 +600,14 @@ namespace EconSim.Renderer
             else if (borderRenderer != null)
             {
                 borderRenderer.SetProvinceBordersVisible(visible);
+            }
+        }
+
+        public void SetCountyBordersVisible(bool visible)
+        {
+            if (useShaderOverlays && overlayManager != null)
+            {
+                overlayManager.SetCountyBordersVisible(visible);
             }
         }
 
