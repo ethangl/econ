@@ -496,7 +496,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6736e9d10e17c4ab2853db4382c6ef10, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EconSim::EconSim.Core.GameManager
-  mapFileName: 1234_low-island_40k_1440x810.json
+  mapFileName: preston.json
   loadFromResources: 0
   mapView: {fileID: 2039203591}
   mapCamera: {fileID: 1070810156}

@@ -16,16 +16,16 @@ namespace EconSim.Renderer
     public class GridMeshTest : MonoBehaviour
     {
         // Hardcoded paths - do NOT use [SerializeField] until feature is complete
-        private const string MapFileName = "1234_low-island_40k_1440x810.json";
+        private const string MapFileName = "preston.json";
         private const string MaterialPath = "Assets/Materials/MapMaterila.mat";  // Note: typo in actual filename
         private const float CellScale = 0.01f;
 
         // Set to true to use a simple debug material instead of the terrain shader
         private const bool UseDebugMaterial = false;
 
-        // Grid resolution: 0.1x source map (144x81 for 1440x810)
-        private const int GridWidth = 144;
-        private const int GridHeight = 81;
+        // Grid resolution: 0.1x source map (192x108 for 1920x1080)
+        private const int GridWidth = 192;
+        private const int GridHeight = 108;
 
         private Material terrainMaterial;
         private MapData mapData;

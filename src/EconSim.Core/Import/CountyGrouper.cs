@@ -16,7 +16,7 @@ namespace EconSim.Core.Import
         // Tuning parameters
         private const float HighDensityThreshold = 500f;  // Cells above this pop become instant single-cell counties
         private const float TargetPopulation = 200f;      // Target population per county (rural areas)
-        private const int MaxCellsPerCounty = 12;         // Maximum cells in a rural county
+        private const int MaxCellsPerCounty = 64;         // Maximum cells in a rural county
 
         /// <summary>
         /// Group cells into counties. Modifies mapData in place:

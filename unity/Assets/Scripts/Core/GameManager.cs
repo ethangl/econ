@@ -15,7 +15,7 @@ namespace EconSim.Core
     public class GameManager : MonoBehaviour
     {
         [Header("Map Settings")]
-        [SerializeField] private string mapFileName = "1234_low-island_40k_1440x810.json";
+        [SerializeField] private string mapFileName = "preston.json";
         [SerializeField] private bool loadFromResources = false;
 
         [Header("References")]
