@@ -33,6 +33,15 @@ namespace EconSim.UI
 
         private void Start()
         {
+            if (EconSim.Core.GameManager.IsMapReady)
+                StartCoroutine(Initialize());
+            else
+                EconSim.Core.GameManager.OnMapReady += OnMapReadyHandler;
+        }
+
+        private void OnMapReadyHandler()
+        {
+            EconSim.Core.GameManager.OnMapReady -= OnMapReadyHandler;
             StartCoroutine(Initialize());
         }
 
@@ -68,6 +77,7 @@ namespace EconSim.UI
 
         private void OnDestroy()
         {
+            EconSim.Core.GameManager.OnMapReady -= OnMapReadyHandler;
             if (_mapView != null)
             {
                 _mapView.OnCellClicked -= OnCellClicked;

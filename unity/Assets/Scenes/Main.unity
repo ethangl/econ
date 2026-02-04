@@ -119,6 +119,76 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &579430162
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 579430165}
+  - component: {fileID: 579430164}
+  - component: {fileID: 579430163}
+  m_Layer: 0
+  m_Name: StartupScreen
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &579430163
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 579430162}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c49e0569fa8c24913b398674f6a9910c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EconSim::EconSim.UI.StartupScreenPanel
+  _uiDocument: {fileID: 0}
+  _styleSheet: {fileID: 7433441132597879392, guid: 693a22797ab114fa8975aaac0de5c171, type: 3}
+--- !u!114 &579430164
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 579430162}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
+  m_PanelSettings: {fileID: 11400000, guid: 8177926f51b534668add58e06fae4b7f, type: 2}
+  m_ParentUI: {fileID: 0}
+  sourceAsset: {fileID: 9197481963319205126, guid: 430805da4474e4b6d8d8c147cceb627a, type: 3}
+  m_SortingOrder: 100
+  m_Position: 0
+  m_WorldSpaceSizeMode: 1
+  m_WorldSpaceWidth: 1920
+  m_WorldSpaceHeight: 1080
+  m_PivotReferenceSize: 0
+  m_Pivot: 0
+  m_WorldSpaceCollider: {fileID: 0}
+--- !u!4 &579430165
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 579430162}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1070810155
 GameObject:
   m_ObjectHideFlags: 0
@@ -131,6 +201,7 @@ GameObject:
   - component: {fileID: 1070810158}
   - component: {fileID: 1070810157}
   - component: {fileID: 1070810156}
+  - component: {fileID: 1070810160}
   m_Layer: 0
   m_Name: Camera
   m_TagString: MainCamera
@@ -238,6 +309,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 75, y: 0, z: 0}
+--- !u!114 &1070810160
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1070810155}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 47b88d506861e41898e275dcab0f18dc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EconSim::EconSim.Renderer.ScreenNoiseOverlay
+  intensity: 0.015
 --- !u!1 &2010017522
 GameObject:
   m_ObjectHideFlags: 0
@@ -391,7 +475,6 @@ MonoBehaviour:
   cellScale: 0.01
   terrainMaterial: {fileID: 0}
   renderLandOnly: 0
-  currentMode: 2
   useShaderOverlays: 1
   overlayResolutionMultiplier: 6
   enableBorders: 1
@@ -528,3 +611,4 @@ SceneRoots:
   - {fileID: 2039203594}
   - {fileID: 1070810159}
   - {fileID: 2010017525}
+  - {fileID: 579430165}

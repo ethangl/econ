@@ -45,6 +45,20 @@ namespace EconSim.UI
 
         private void Start()
         {
+            if (EconSim.Core.GameManager.IsMapReady)
+                StartCoroutine(Initialize());
+            else
+                EconSim.Core.GameManager.OnMapReady += OnMapReadyHandler;
+        }
+
+        private void OnDestroy()
+        {
+            EconSim.Core.GameManager.OnMapReady -= OnMapReadyHandler;
+        }
+
+        private void OnMapReadyHandler()
+        {
+            EconSim.Core.GameManager.OnMapReady -= OnMapReadyHandler;
             StartCoroutine(Initialize());
         }
 

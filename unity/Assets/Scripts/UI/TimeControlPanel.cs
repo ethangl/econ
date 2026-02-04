@@ -28,12 +28,26 @@ namespace EconSim.UI
 
         private void Start()
         {
+            if (EconSim.Core.GameManager.IsMapReady)
+                StartCoroutine(Initialize());
+            else
+                EconSim.Core.GameManager.OnMapReady += OnMapReady;
+        }
+
+        private void OnDestroy()
+        {
+            EconSim.Core.GameManager.OnMapReady -= OnMapReady;
+        }
+
+        private void OnMapReady()
+        {
+            EconSim.Core.GameManager.OnMapReady -= OnMapReady;
             StartCoroutine(Initialize());
         }
 
         private System.Collections.IEnumerator Initialize()
         {
-            // Wait a frame for GameManager to initialize
+            // Wait a frame to ensure everything is ready
             yield return null;
 
             var gameManager = EconSim.Core.GameManager.Instance;

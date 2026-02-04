@@ -31,39 +31,42 @@
     margin-bottom: 6px;
 }
 
-/* Time Control Panel */
+/* Time Control Panel - Horizontal Layout */
 #time-control-panel {
     position: absolute;
     top: 10px;
     right: 10px;
-    width: 160px;
-    padding: 10px;
+    height: 40px;
+    flex-direction: row;
+    align-items: center;
+    padding: 0 10px;
 }
 
 #date-label {
-    font-size: 14px;
+    font-size: 13px;
     -unity-font-style: bold;
     -unity-text-align: middle-center;
     color: rgb(220, 220, 220);
-    margin-bottom: 8px;
+    margin-right: 12px;
+    min-width: 80px;
 }
 
 #speed-controls {
     flex-direction: row;
-    justify-content: space-between;
-    margin-bottom: 6px;
+    align-items: center;
 }
 
 #speed-controls Button {
-    width: 40px;
-    height: 28px;
-    font-size: 16px;
+    width: 28px;
+    height: 24px;
+    font-size: 14px;
     -unity-font-style: bold;
     background-color: rgb(50, 50, 55);
     border-color: rgb(70, 70, 75);
     border-width: 1px;
     border-radius: 3px;
     color: rgb(200, 200, 200);
+    margin: 0 2px;
 }
 
 #speed-controls Button:hover {
@@ -75,15 +78,15 @@
 }
 
 #pause-button {
-    flex-grow: 1;
-    margin-left: 4px;
-    margin-right: 4px;
+    width: 32px;
 }
 
 #speed-label {
     font-size: 11px;
     -unity-text-align: middle-center;
     color: rgb(150, 150, 150);
+    margin-left: 10px;
+    min-width: 30px;
 }
 
 /* Paused state indicator */
@@ -300,4 +303,78 @@
 #market-hub-value, #market-zone-value {
     color: rgb(220, 220, 230);
     -unity-font-style: bold;
+}
+
+/* Startup Screen */
+.startup-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(10, 10, 15, 0.95);
+    justify-content: center;
+    align-items: center;
+}
+
+.startup-modal {
+    width: 320px;
+    padding: 24px;
+    align-items: center;
+}
+
+.startup-title {
+    font-size: 24px;
+    -unity-font-style: bold;
+    color: rgb(220, 220, 230);
+    margin-bottom: 8px;
+}
+
+.startup-subtitle {
+    font-size: 14px;
+    color: rgb(140, 140, 150);
+    margin-bottom: 24px;
+}
+
+.startup-buttons {
+    flex-direction: column;
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.startup-button {
+    height: 40px;
+    font-size: 14px;
+    -unity-font-style: bold;
+    background-color: rgb(50, 70, 90);
+    border-color: rgb(70, 100, 130);
+    border-width: 1px;
+    border-radius: 4px;
+    color: rgb(220, 220, 230);
+    margin-bottom: 10px;
+}
+
+.startup-button:hover {
+    background-color: rgb(60, 85, 110);
+}
+
+.startup-button:active {
+    background-color: rgb(40, 60, 80);
+}
+
+.startup-button-disabled {
+    background-color: rgb(40, 40, 45);
+    border-color: rgb(60, 60, 65);
+    color: rgb(100, 100, 110);
+}
+
+.startup-button-disabled:hover {
+    background-color: rgb(40, 40, 45);
+}
+
+.startup-status {
+    font-size: 12px;
+    color: rgb(150, 150, 160);
+    min-height: 16px;
+    -unity-text-align: middle-center;
 }

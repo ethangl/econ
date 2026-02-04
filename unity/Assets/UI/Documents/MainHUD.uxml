@@ -130,7 +130,7 @@
             </ui:VisualElement>
         </ui:VisualElement>
 
-        <!-- Time Control Panel (right side) -->
+        <!-- Time Control Panel (top right, horizontal) -->
         <ui:VisualElement name="time-control-panel" class="panel">
             <ui:Label name="date-label" text="Y1 M1 D1" />
             <ui:VisualElement name="speed-controls">
@@ -138,7 +138,7 @@
                 <ui:Button name="pause-button" text="||" />
                 <ui:Button name="faster-button" text="+" />
             </ui:VisualElement>
-            <ui:Label name="speed-label" text="Normal (1x)" />
+            <ui:Label name="speed-label" text="1x" />
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

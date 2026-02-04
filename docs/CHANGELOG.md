@@ -2,7 +2,23 @@
 
 Development phases and completed work for the Economic Simulator project.
 
-## Phase 9: Gradient Fill System (in progress)
+## Phase 10: Startup Screen & UI Polish
+
+- **Startup screen modal**
+  - Centered overlay on game launch with "Load Map" and "Generate New" buttons
+  - "Generate New" stubbed for future procedural map generation
+  - Dark semi-transparent background covers camera noise
+  - Hides automatically when map finishes loading
+
+- **Deferred map loading**
+  - Map no longer auto-loads on Start()
+  - `GameManager.OnMapReady` event fires when map and simulation are ready
+  - `GameManager.IsMapReady` property for synchronous checks
+  - UI panels subscribe to OnMapReady before accessing simulation
+
+---
+
+## Phase 9: Gradient Fill System ✓
 
 ### Completed
 

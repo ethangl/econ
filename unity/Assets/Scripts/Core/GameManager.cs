@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using EconSim.Core.Import;
 using EconSim.Core.Data;
@@ -26,6 +27,17 @@ namespace EconSim.Core
         public MapData MapData { get; private set; }
         public ISimulation Simulation => _simulation;
 
+        /// <summary>
+        /// Fired when the map has finished loading and the simulation is ready.
+        /// UI panels should subscribe to this to know when it's safe to access GameManager.Simulation.
+        /// </summary>
+        public static event Action OnMapReady;
+
+        /// <summary>
+        /// True after the map has been loaded and simulation initialized.
+        /// </summary>
+        public static bool IsMapReady { get; private set; }
+
         private ISimulation _simulation;
         private int _lastLoggedDay;
 
@@ -45,6 +57,15 @@ namespace EconSim.Core
         }
 
         private void Start()
+        {
+            // Map loading is now triggered by StartupScreenPanel
+            // Do not auto-load on start
+        }
+
+        /// <summary>
+        /// Called by StartupScreenPanel when the user chooses to load a map.
+        /// </summary>
+        public void LoadMapFromStartup()
         {
             Profiler.Reset();
             Profiler.Begin("Total Startup");
@@ -175,6 +196,10 @@ namespace EconSim.Core
             }
 
             Debug.Log("Simulation initialized (paused). Press P to unpause, -/= to change speed.");
+
+            // Mark map as ready and notify subscribers
+            IsMapReady = true;
+            OnMapReady?.Invoke();
         }
 
 
@@ -292,5 +317,27 @@ namespace EconSim.Core
                 _lastLoggedDay = state.CurrentDay;
             }
         }
+
+#if UNITY_EDITOR
+        [ContextMenu("Clear Map Cache")]
+        private void ClearMapCache()
+        {
+            string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "MapCache");
+            if (System.IO.Directory.Exists(cacheDir))
+            {
+                var files = System.IO.Directory.GetFiles(cacheDir);
+                foreach (var file in files)
+                {
+                    System.IO.File.Delete(file);
+                    Debug.Log($"Deleted cache file: {System.IO.Path.GetFileName(file)}");
+                }
+                Debug.Log($"Cleared {files.Length} cache file(s) from {cacheDir}");
+            }
+            else
+            {
+                Debug.Log("No cache directory found.");
+            }
+        }
+#endif
     }
 }

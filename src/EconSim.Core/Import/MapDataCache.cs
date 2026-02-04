@@ -296,7 +296,7 @@ namespace EconSim.Core.Import
                 Seed = ReadString(r),
                 TotalCells = r.ReadInt32(),
                 LandCells = r.ReadInt32(),
-                SeaLevel = r.ReadInt32()
+                SeaLevel = r.ReadSingle()
             };
         }
 
