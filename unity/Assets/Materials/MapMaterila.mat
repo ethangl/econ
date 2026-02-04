@@ -126,9 +126,9 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _GradientCenterOpacity: 0.2
-    - _GradientEdgeDarkening: 0.8
-    - _GradientRadius: 16
+    - _GradientCenterOpacity: 0.15
+    - _GradientEdgeDarkening: 0.865
+    - _GradientRadius: 15.7
     - _HeightScale: 3
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
@@ -138,7 +138,7 @@ Material:
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredStateId: -1
-    - _MapMode: 4
+    - _MapMode: 1
     - _MarketBorderWidth: 1
     - _Metallic: 0
     - _Mode: 0
@@ -156,17 +156,19 @@ Material:
     - _SelectedProvinceId: -1
     - _SelectedStateId: -1
     - _SelectionBorderWidth: 3
+    - _SelectionDesaturation: 0
     - _SelectionDimming: 1
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
     - _ShowCountyBorders: 0
-    - _ShowMarketBorders: 1
+    - _ShowMarketBorders: 0
     - _ShowProvinceBorders: 0
     - _ShowStateBorders: 0
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1
-    - _StateBorderWidth: 1
+    - _StateBorderOpacity: 0.75
+    - _StateBorderWidth: 24
     - _UVSec: 0
     - _UseHeightDisplacement: 0
     - _WaterGradientRadius: 11

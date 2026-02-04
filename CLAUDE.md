@@ -91,7 +91,7 @@ Reference data is gitignored. To set up:
 1. Export a map from [Azgaar's FMG](https://azgaar.github.io/Fantasy-Map-Generator/) as JSON
 2. Place in `reference/`
 
-Current map: seed 1234, low island, 40k points, 1440x810
+Current map: seed 1234, low island, 40k points, 1920x1080 (map dimensions are read from JSON, not hardcoded)
 
 ## Shader-Based Overlay System
 
@@ -141,22 +141,23 @@ The map uses a GPU-driven overlay system for borders and map modes:
 - Maps CellId → MarketId via CountyToMarket lookup
 - Updated when economy state changes
 
-**Border detection:** Uses screen-space derivatives (ddx/ddy) with 16-sample multi-radius sampling for smooth anti-aliased borders at constant pixel width.
+**State border rendering (shader-based double borders):**
 
-**Border types (shader uniforms):**
+- `CalculateStateBorderProximity()` detects only state-to-state boundaries (ignores water/rivers)
+- World-space sizing: `_StateBorderWidth` in texels of data texture (default 24)
+- Border band drawn when `stateBorderProximity < 0.5`
+- Border color: state color at 65% V (floor 35%), multiplied with grayscale terrain
+- `_StateBorderOpacity` controls blend with interior color
+- Each country gets its own colored border band → parallel double-line effect at boundaries
 
-- State: `_StateBorderColor`, `_StateBorderWidth`, `_ShowStateBorders`
-- Province: `_ProvinceBorderColor`, `_ProvinceBorderWidth`, `_ShowProvinceBorders`
-- County: `_CountyBorderColor`, `_CountyBorderWidth`, `_ShowCountyBorders`
-- Market: `_MarketBorderColor`, `_MarketBorderWidth`, `_ShowMarketBorders`
+**Province/county border rendering (mesh-based):**
 
-**Border behavior:**
-
-- Borders only render between neighboring land cells (no coastline borders)
-- Water cells are skipped in border detection
-- Selection borders still appear at coastlines (to show full extent of selected region)
-
-Border layer order (bottom to top): market → county → province → state
+- `BorderRenderer.cs` generates polyline meshes from Voronoi cell edges
+- Edges chained into continuous polylines
+- Province/county borders use shared edge positions (single line)
+- Colors derived from `PoliticalPalette` (darkened, saturated state colors)
+- `SimpleBorder.shader` renders vertex-colored border meshes
+- Border layer order (bottom to top): county → province → state
 
 **River mask texture (Phase 8):**
 
@@ -175,8 +176,7 @@ Political modes (1/2/3) and market mode (4) use a gradient fill style:
 - Water cells and rivers both count as edges (gradient darkens near coastlines and rivers)
 - Multiply blend at edges: `terrain × politicalColor` (Photoshop-style multiply)
 - Gradient from dark multiplied edge to full color in center
-- Province/county borders rendered on terrain, then gradient fill applied on top
-- State borders always on top
+- Borders rendered via mesh-based `BorderRenderer` (separate from shader gradient)
 
 Shader uniforms for gradient control:
 
@@ -184,38 +184,9 @@ Shader uniforms for gradient control:
 - `_GradientEdgeDarkening` (default 0.5, range 0-1) - multiply blend strength at edges
 - `_GradientCenterOpacity` (default 0.5, range 0-1) - how much terrain shows through in center
 
-Layer order for political modes (1/2/3):
+Shader renders terrain with gradient fill; borders are separate mesh layer on top.
 
-1. Terrain base
-2. County borders (under fill)
-3. Province borders (under fill)
-4. Political gradient fill
-5. State borders (on top)
-
-Layer order for market mode (4):
-
-1. Terrain base
-2. County borders (under fill)
-3. Province borders (under fill)
-4. Market gradient fill
-5. Market borders (on top of fill)
-6. State borders (on top)
-
-**Domain warping (Phase 8):**
-
-Cell boundaries use domain warping for organic, jigsaw-style meandering edges instead of straight Voronoi lines:
-
-- During spatial grid generation, lookup coordinates are warped using fractal noise
-- Warped coordinates determine cell ownership (distance to cell center)
-- Deterministic: hash-based noise produces identical results each run
-
-Parameters in `MapOverlayManager`:
-
-- `WarpAmplitude = 3.0` — max displacement in base pixels (scales with resolution)
-- `WarpFrequency = 0.1` — noise frequency (higher = tighter wobbles)
-- `WarpOctaves = 3` — noise layers (more = finer detail)
-
-**Selection highlight:** Mode-aware GPU selection using same AA technique as borders. Selects state in political mode, province in province mode, market zone in market mode, county otherwise. Uniforms: `_SelectedStateId`, `_SelectedProvinceId`, `_SelectedMarketId`, `_SelectedCountyId` (normalized, -1 = none).
+**Selection highlight:** Mode-aware GPU selection using 16-sample multi-radius AA. Selects state in political mode, province in province mode, market zone in market mode, county otherwise. Uniforms: `_SelectedStateId`, `_SelectedProvinceId`, `_SelectedMarketId`, `_SelectedCountyId` (normalized, -1 = none).
 
 **Future overlays supported by this infrastructure:**
 

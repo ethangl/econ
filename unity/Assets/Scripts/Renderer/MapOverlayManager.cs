@@ -26,15 +26,6 @@ namespace EconSim.Renderer
         private static readonly int BiomeMatrixTexId = Shader.PropertyToID("_BiomeMatrixTex");
         private static readonly int CellToMarketTexId = Shader.PropertyToID("_CellToMarketTex");
         private static readonly int MapModeId = Shader.PropertyToID("_MapMode");
-        private static readonly int ShowStateBordersId = Shader.PropertyToID("_ShowStateBorders");
-        private static readonly int ShowProvinceBordersId = Shader.PropertyToID("_ShowProvinceBorders");
-        private static readonly int ShowMarketBordersId = Shader.PropertyToID("_ShowMarketBorders");
-        private static readonly int ShowCountyBordersId = Shader.PropertyToID("_ShowCountyBorders");
-        private static readonly int StateBorderWidthId = Shader.PropertyToID("_StateBorderWidth");
-        private static readonly int ProvinceBorderWidthId = Shader.PropertyToID("_ProvinceBorderWidth");
-        private static readonly int MarketBorderWidthId = Shader.PropertyToID("_MarketBorderWidth");
-        private static readonly int CountyBorderWidthId = Shader.PropertyToID("_CountyBorderWidth");
-        private static readonly int CountyBorderColorId = Shader.PropertyToID("_CountyBorderColor");
         private static readonly int UseHeightDisplacementId = Shader.PropertyToID("_UseHeightDisplacement");
         private static readonly int HeightScaleId = Shader.PropertyToID("_HeightScale");
         private static readonly int SeaLevelId = Shader.PropertyToID("_SeaLevel");
@@ -44,13 +35,13 @@ namespace EconSim.Renderer
         private static readonly int SelectedMarketIdId = Shader.PropertyToID("_SelectedMarketId");
         private static readonly int SelectionBorderColorId = Shader.PropertyToID("_SelectionBorderColor");
         private static readonly int SelectionBorderWidthId = Shader.PropertyToID("_SelectionBorderWidth");
-        private static readonly int SelectionFillAlphaId = Shader.PropertyToID("_SelectionFillAlpha");
         private static readonly int HoveredStateIdId = Shader.PropertyToID("_HoveredStateId");
         private static readonly int HoveredProvinceIdId = Shader.PropertyToID("_HoveredProvinceId");
         private static readonly int HoveredCountyIdId = Shader.PropertyToID("_HoveredCountyId");
         private static readonly int HoveredMarketIdId = Shader.PropertyToID("_HoveredMarketId");
         private static readonly int HoverIntensityId = Shader.PropertyToID("_HoverIntensity");
         private static readonly int SelectionDimmingId = Shader.PropertyToID("_SelectionDimming");
+        private static readonly int SelectionDesaturationId = Shader.PropertyToID("_SelectionDesaturation");
 
         private MapData mapData;
         private EconomyState economyState;
@@ -63,6 +54,11 @@ namespace EconSim.Renderer
 
         // Data textures
         private Texture2D cellDataTexture;      // RGBAFloat: StateId, ProvinceId, BiomeId+WaterFlag, CountyId
+
+        /// <summary>
+        /// Public accessor for the cell data texture (for border masking).
+        /// </summary>
+        public Texture2D CellDataTexture => cellDataTexture;
         private Texture2D cellToMarketTexture;  // R16: CellId -> MarketId mapping (dynamic)
         private Texture2D heightmapTexture;     // RFloat: smoothed height values
         private Texture2D riverMaskTexture;     // R8: river mask (1 = river, 0 = not river)
@@ -75,11 +71,6 @@ namespace EconSim.Renderer
         private int[] spatialGrid;
         private int gridWidth;
         private int gridHeight;
-
-        // Domain warping for organic borders (jigsaw-style: tight oscillations, moderate amplitude)
-        private const float WarpAmplitude = 3.0f;   // Max displacement in base pixels (scales with resolution)
-        private const float WarpFrequency = 0.1f;   // Noise frequency (higher = tighter wobbles)
-        private const int WarpOctaves = 3;          // Noise octaves (more = finer detail)
 
         // Raw texture data for incremental updates
         private Color[] cellDataPixels;
@@ -186,7 +177,7 @@ namespace EconSim.Renderer
 
             // Save to cache for next time
             SaveSpatialGridToCache(cachePath);
-            Debug.Log($"MapOverlayManager: Built and cached spatial grid {gridWidth}x{gridHeight} ({resolutionMultiplier}x resolution, warp amplitude {WarpAmplitude})");
+            Debug.Log($"MapOverlayManager: Built and cached spatial grid {gridWidth}x{gridHeight} ({resolutionMultiplier}x resolution)");
         }
 
         /// <summary>
@@ -195,7 +186,7 @@ namespace EconSim.Renderer
         private string ComputeSpatialGridCacheKey()
         {
             // Include all parameters that affect the grid output
-            string input = $"{mapData.Info.Name}_{mapData.Info.Width}x{mapData.Info.Height}_{mapData.Cells.Count}cells_{resolutionMultiplier}x_{WarpAmplitude}amp_{WarpFrequency}freq_{WarpOctaves}oct";
+            string input = $"{mapData.Info.Name}_{mapData.Info.Width}x{mapData.Info.Height}_{mapData.Cells.Count}cells_{resolutionMultiplier}x_v2";
 
             // Simple hash
             int hash = input.GetHashCode();
@@ -302,30 +293,9 @@ namespace EconSim.Renderer
             });
 
             float scale = resolutionMultiplier;
-            float warpScale = WarpAmplitude * scale;  // Scale warp with resolution
-
-            // Pre-compute warped coordinates for each grid position (parallelized)
-            // This warps the lookup space to create organic boundaries
-            var warpedX = new float[gridWidth * gridHeight];
-            var warpedY = new float[gridWidth * gridHeight];
-
-            Parallel.For(0, gridHeight, y =>
-            {
-                for (int x = 0; x < gridWidth; x++)
-                {
-                    int idx = y * gridWidth + x;
-                    // Use base coordinates for noise sampling (resolution-independent)
-                    float baseX = x / scale;
-                    float baseY = y / scale;
-                    // Apply domain warping
-                    warpedX[idx] = x + FractalNoise(baseX, baseY, 0, WarpOctaves, WarpFrequency) * warpScale;
-                    warpedY[idx] = y + FractalNoise(baseX, baseY, 12345, WarpOctaves, WarpFrequency) * warpScale;
-                }
-            });
 
             // Pre-compute cell bounding boxes and centers
             var cellInfos = new List<(Cell cell, int x0, int y0, int x1, int y1, float cx, float cy)>();
-            int expand = Mathf.CeilToInt(warpScale) + 1;
 
             foreach (var cell in mapData.Cells)
             {
@@ -348,11 +318,11 @@ namespace EconSim.Renderer
                     }
                 }
 
-                // Expand bounding box by warp amplitude and clamp to grid
-                int x0 = Mathf.Max(0, Mathf.FloorToInt(minX) - expand);
-                int x1 = Mathf.Min(gridWidth - 1, Mathf.CeilToInt(maxX) + expand);
-                int y0 = Mathf.Max(0, Mathf.FloorToInt(minY) - expand);
-                int y1 = Mathf.Min(gridHeight - 1, Mathf.CeilToInt(maxY) + expand);
+                // Clamp bounding box to grid
+                int x0 = Mathf.Max(0, Mathf.FloorToInt(minX));
+                int x1 = Mathf.Min(gridWidth - 1, Mathf.CeilToInt(maxX));
+                int y0 = Mathf.Max(0, Mathf.FloorToInt(minY));
+                int y1 = Mathf.Min(gridHeight - 1, Mathf.CeilToInt(maxY));
 
                 float cx = cell.Center.X * scale;
                 float cy = cell.Center.Y * scale;
@@ -379,13 +349,9 @@ namespace EconSim.Renderer
                         {
                             int gridIdx = y * gridWidth + x;
 
-                            // Use warped coordinates for distance calculation
-                            float wx = warpedX[gridIdx];
-                            float wy = warpedY[gridIdx];
-
                             // Check if this grid position is closer to this cell
-                            float dx = wx - cx;
-                            float dy = wy - cy;
+                            float dx = x - cx;
+                            float dy = y - cy;
                             float distSq = dx * dx + dy * dy;
 
                             if (distSq < distanceSqGrid[gridIdx])
@@ -960,12 +926,8 @@ namespace EconSim.Renderer
             cellToMarketTexture.Apply();
             terrainMaterial.SetTexture(CellToMarketTexId, cellToMarketTexture);
 
-            // Default to political mode with state borders
+            // Default to political mode
             terrainMaterial.SetInt(MapModeId, 1);
-            terrainMaterial.SetInt(ShowStateBordersId, 1);
-            terrainMaterial.SetInt(ShowProvinceBordersId, 0);
-            terrainMaterial.SetInt(ShowMarketBordersId, 0);
-            terrainMaterial.SetInt(ShowCountyBordersId, 0);
 
             // Clear any persisted selection/hover from previous play session
             ClearSelection();
@@ -1073,87 +1035,6 @@ namespace EconSim.Renderer
             }
 
             terrainMaterial.SetInt(MapModeId, shaderMode);
-        }
-
-        /// <summary>
-        /// Set state border visibility.
-        /// </summary>
-        public void SetStateBordersVisible(bool visible)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetInt(ShowStateBordersId, visible ? 1 : 0);
-        }
-
-        /// <summary>
-        /// Set province border visibility.
-        /// </summary>
-        public void SetProvinceBordersVisible(bool visible)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetInt(ShowProvinceBordersId, visible ? 1 : 0);
-        }
-
-        /// <summary>
-        /// Set market border visibility.
-        /// </summary>
-        public void SetMarketBordersVisible(bool visible)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetInt(ShowMarketBordersId, visible ? 1 : 0);
-        }
-
-        /// <summary>
-        /// Set county border visibility.
-        /// </summary>
-        public void SetCountyBordersVisible(bool visible)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetInt(ShowCountyBordersId, visible ? 1 : 0);
-        }
-
-        /// <summary>
-        /// Set state border width in screen pixels.
-        /// </summary>
-        public void SetStateBorderWidth(float pixels)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(StateBorderWidthId, Mathf.Clamp(pixels, 0.5f, 5f));
-        }
-
-        /// <summary>
-        /// Set province border width in screen pixels.
-        /// </summary>
-        public void SetProvinceBorderWidth(float pixels)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(ProvinceBorderWidthId, Mathf.Clamp(pixels, 0.5f, 3f));
-        }
-
-        /// <summary>
-        /// Set market border width in screen pixels.
-        /// </summary>
-        public void SetMarketBorderWidth(float pixels)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(MarketBorderWidthId, Mathf.Clamp(pixels, 0.5f, 3f));
-        }
-
-        /// <summary>
-        /// Set county border width in screen pixels.
-        /// </summary>
-        public void SetCountyBorderWidth(float pixels)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(CountyBorderWidthId, Mathf.Clamp(pixels, 0.5f, 2f));
-        }
-
-        /// <summary>
-        /// Set county border color.
-        /// </summary>
-        public void SetCountyBorderColor(Color color)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetColor(CountyBorderColorId, color);
         }
 
         /// <summary>
@@ -1272,15 +1153,6 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
-        /// Set the selection fill alpha (0 = no fill, 0.5 = max fill).
-        /// </summary>
-        public void SetSelectionFillAlpha(float alpha)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SelectionFillAlphaId, Mathf.Clamp(alpha, 0f, 0.5f));
-        }
-
-        /// <summary>
         /// Clear all hover highlighting.
         /// </summary>
         public void ClearHover()
@@ -1358,6 +1230,15 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
+        /// Set the selection desaturation factor (0 = full color, 1 = grayscale).
+        /// </summary>
+        public void SetSelectionDesaturation(float desaturation)
+        {
+            if (terrainMaterial == null) return;
+            terrainMaterial.SetFloat(SelectionDesaturationId, Mathf.Clamp01(desaturation));
+        }
+
+        /// <summary>
         /// Set the hover intensity (0 = no effect, 1 = full effect).
         /// </summary>
         public void SetHoverIntensity(float intensity)
@@ -1416,66 +1297,6 @@ namespace EconSim.Renderer
                 cellDataTexture.SetPixels(cellDataPixels);
                 cellDataTexture.Apply();
             }
-        }
-
-        /// <summary>
-        /// Deterministic hash-based noise for domain warping.
-        /// Returns value in range [-1, 1].
-        /// </summary>
-        private static float HashNoise(float x, float y, int seed)
-        {
-            // Simple hash function for deterministic noise
-            int ix = Mathf.FloorToInt(x);
-            int iy = Mathf.FloorToInt(y);
-            float fx = x - ix;
-            float fy = y - iy;
-
-            // Smoothstep for interpolation
-            fx = fx * fx * (3f - 2f * fx);
-            fy = fy * fy * (3f - 2f * fy);
-
-            // Hash corners
-            float n00 = HashToFloat(ix, iy, seed);
-            float n10 = HashToFloat(ix + 1, iy, seed);
-            float n01 = HashToFloat(ix, iy + 1, seed);
-            float n11 = HashToFloat(ix + 1, iy + 1, seed);
-
-            // Bilinear interpolation
-            float nx0 = Mathf.Lerp(n00, n10, fx);
-            float nx1 = Mathf.Lerp(n01, n11, fx);
-            return Mathf.Lerp(nx0, nx1, fy);
-        }
-
-        /// <summary>
-        /// Hash integer coordinates to float in [-1, 1].
-        /// </summary>
-        private static float HashToFloat(int x, int y, int seed)
-        {
-            // Robert Jenkins' 96 bit mix function (simplified)
-            uint h = (uint)(x * 374761393 + y * 668265263 + seed * 1013904223);
-            h = (h ^ (h >> 13)) * 1274126177;
-            h = h ^ (h >> 16);
-            return (h & 0x7FFFFFFF) / (float)0x7FFFFFFF * 2f - 1f;
-        }
-
-        /// <summary>
-        /// Multi-octave noise for richer detail.
-        /// </summary>
-        private static float FractalNoise(float x, float y, int seed, int octaves, float frequency)
-        {
-            float value = 0f;
-            float amplitude = 1f;
-            float totalAmplitude = 0f;
-
-            for (int i = 0; i < octaves; i++)
-            {
-                value += HashNoise(x * frequency, y * frequency, seed + i * 1000) * amplitude;
-                totalAmplitude += amplitude;
-                frequency *= 2f;
-                amplitude *= 0.5f;
-            }
-
-            return value / totalAmplitude;
         }
 
         /// <summary>

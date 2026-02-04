@@ -2,9 +2,6 @@ Shader "EconSim/MapOverlay"
 {
     Properties
     {
-        _Glossiness ("Smoothness", Range(0,1)) = 0.2
-        _Metallic ("Metallic", Range(0,1)) = 0.0
-
         // Heightmap for terrain (Phase 6)
         _HeightmapTex ("Heightmap", 2D) = "gray" {}
         _HeightScale ("Height Scale", Float) = 3
@@ -28,16 +25,6 @@ Shader "EconSim/MapOverlay"
         // Biome-elevation matrix (64x64: biome × elevation)
         _BiomeMatrixTex ("Biome Elevation Matrix", 2D) = "white" {}
 
-        // Border settings
-        _StateBorderColor ("State Border Color", Color) = (0.1, 0.1, 0.1, 1)
-        _ProvinceBorderColor ("Province Border Color", Color) = (0.3, 0.3, 0.3, 0.8)
-        _MarketBorderColor ("Market Border Color", Color) = (0.5, 0.3, 0.1, 1)
-        _CountyBorderColor ("County Border Color", Color) = (0.4, 0.4, 0.4, 0.6)
-        _StateBorderWidth ("State Border Width (pixels)", Range(0.5, 5)) = 2.0
-        _ProvinceBorderWidth ("Province Border Width (pixels)", Range(0.5, 3)) = 1.0
-        _MarketBorderWidth ("Market Border Width (pixels)", Range(0.5, 3)) = 1.5
-        _CountyBorderWidth ("County Border Width (pixels)", Range(0.5, 2)) = 0.8
-
         // Selection highlight (only one should be >= 0 at a time)
         _SelectedStateId ("Selected State ID (normalized)", Float) = -1
         _SelectedProvinceId ("Selected Province ID (normalized)", Float) = -1
@@ -45,8 +32,8 @@ Shader "EconSim/MapOverlay"
         _SelectedMarketId ("Selected Market ID (normalized)", Float) = -1
         _SelectionBorderColor ("Selection Border Color", Color) = (1, 0.9, 0.2, 1)
         _SelectionBorderWidth ("Selection Border Width (pixels)", Range(1, 6)) = 3.0
-        _SelectionFillAlpha ("Selection Fill Alpha", Range(0, 1)) = 0.15
         _SelectionDimming ("Selection Dimming", Range(0, 1)) = 0.5
+        _SelectionDesaturation ("Selection Desaturation", Range(0, 1)) = 0
 
         // Hover highlight (only one should be >= 0 at a time, separate from selection)
         _HoveredStateId ("Hovered State ID (normalized)", Float) = -1
@@ -63,11 +50,9 @@ Shader "EconSim/MapOverlay"
         _GradientEdgeDarkening ("Gradient Edge Darkening", Range(0, 1)) = 0.5
         _GradientCenterOpacity ("Gradient Center Opacity", Range(0, 1)) = 0.5
 
-        // Border visibility flags
-        _ShowStateBorders ("Show State Borders", Int) = 1
-        _ShowProvinceBorders ("Show Province Borders", Int) = 0
-        _ShowMarketBorders ("Show Market Borders", Int) = 0
-        _ShowCountyBorders ("Show County Borders", Int) = 0
+        // State border (world-space, in texels of data texture)
+        _StateBorderWidth ("State Border Width (texels)", Range(10, 200)) = 80
+        _StateBorderOpacity ("State Border Opacity", Range(0, 1)) = 1.0
     }
     SubShader
     {
@@ -120,26 +105,12 @@ Shader "EconSim/MapOverlay"
             // Water color constant
             static const fixed3 WATER_COLOR = fixed3(0.12, 0.2, 0.35);
 
-            half _Glossiness;
-            half _Metallic;
-
-            fixed4 _StateBorderColor;
-            fixed4 _ProvinceBorderColor;
-            fixed4 _MarketBorderColor;
-            fixed4 _CountyBorderColor;
-            float _StateBorderWidth;
-            float _ProvinceBorderWidth;
-            float _MarketBorderWidth;
-            float _CountyBorderWidth;
-
             int _MapMode;
             float _GradientRadius;
             float _GradientEdgeDarkening;
             float _GradientCenterOpacity;
-            int _ShowStateBorders;
-            int _ShowProvinceBorders;
-            int _ShowMarketBorders;
-            int _ShowCountyBorders;
+            float _StateBorderWidth;
+            float _StateBorderOpacity;
 
             float _SelectedStateId;
             float _SelectedProvinceId;
@@ -147,8 +118,8 @@ Shader "EconSim/MapOverlay"
             float _SelectedMarketId;
             fixed4 _SelectionBorderColor;
             float _SelectionBorderWidth;
-            float _SelectionFillAlpha;
             float _SelectionDimming;
+            float _SelectionDesaturation;
 
             float _HoveredStateId;
             float _HoveredProvinceId;
@@ -364,6 +335,53 @@ Shader "EconSim/MapOverlay"
                 return saturate(minEdgeDistance / (maxRadius * 0.5));
             }
 
+            // Calculate proximity to state borders ONLY (ignores water/rivers)
+            // Returns 0 at state boundaries, 1 deep in interior
+            // Uses world-space (UV) sampling, not screen-space
+            float CalculateStateBorderProximity(float2 uv, float centerStateId, bool centerIsWater, float borderWidthUV)
+            {
+                // Water has no border
+                if (centerIsWater) return 1;
+
+                static const float2 sampleDirs8[8] = {
+                    float2(1, 0), float2(0.707, 0.707), float2(0, 1), float2(-0.707, 0.707),
+                    float2(-1, 0), float2(-0.707, -0.707), float2(0, -1), float2(0.707, -0.707)
+                };
+
+                // Sample at 8 radii from 12.5% to 100% of border width (UV units)
+                float radii[8] = {
+                    borderWidthUV * 0.125, borderWidthUV * 0.25, borderWidthUV * 0.375, borderWidthUV * 0.5,
+                    borderWidthUV * 0.625, borderWidthUV * 0.75, borderWidthUV * 0.875, borderWidthUV
+                };
+
+                float minEdgeDistance = borderWidthUV;
+
+                for (int r = 0; r < 8; r++)
+                {
+                    float radius = radii[r];
+
+                    for (int i = 0; i < 8; i++)
+                    {
+                        float2 sampleUV = uv + sampleDirs8[i] * radius;
+                        float4 sampleData = SampleCellData(sampleUV);
+
+                        // Check if sample is water - skip it (don't count as edge)
+                        float samplePackedBiome = sampleData.b * 65535.0;
+                        bool sampleIsWater = samplePackedBiome >= 32000.0;
+                        if (sampleIsWater) continue;
+
+                        // Only check state ID difference
+                        float sampleStateId = sampleData.r;
+                        if (abs(centerStateId - sampleStateId) > 0.00001)
+                        {
+                            minEdgeDistance = min(minEdgeDistance, radius);
+                        }
+                    }
+                }
+
+                return saturate(minEdgeDistance / borderWidthUV);
+            }
+
             // Look up market ID for a cell
             float GetMarketIdForCell(float cellIdNorm)
             {
@@ -431,111 +449,6 @@ Shader "EconSim/MapOverlay"
 
                 // Convert distance to proximity factor (0 at edge, 1 in interior)
                 return saturate(minEdgeDistance / (maxRadius * 0.5));
-            }
-
-            // Calculate anti-aliased border coverage for state/province/county (direct from data texture)
-            // channel: 0=state (R), 1=province (G), 2=county (A)
-            // Only draws borders between land cells - skips water cells entirely
-            float CalculateBorderAA(float2 uv, float centerValue, bool centerIsWater, int channel, float borderWidth, float uvPerPixel)
-            {
-                // No borders on water
-                if (centerIsWater) return 0;
-
-                float innerRadius = max(0.0, borderWidth - 1.0);
-                float outerRadius = borderWidth + 0.5;
-
-                float totalWeight = 0;
-                float borderWeight = 0;
-
-                float radii[3] = { innerRadius, borderWidth, outerRadius };
-                float weights[3] = { 0.5, 1.0, 0.25 };
-
-                for (int r = 0; r < 3; r++)
-                {
-                    float radius = radii[r];
-                    float weight = weights[r];
-
-                    if (radius < 0.1) continue;
-
-                    for (int i = 0; i < 16; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        // Check if sampled cell is water - skip water cells for political borders
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-
-                        if (sampleIsWater)
-                        {
-                            // Don't count water as a border difference
-                            continue;
-                        }
-
-                        float sampleValue;
-                        if (channel == 0) sampleValue = sampleData.r;       // State
-                        else if (channel == 1) sampleValue = sampleData.g;  // Province
-                        else sampleValue = sampleData.a;                    // County
-
-                        float isDifferent = abs(centerValue - sampleValue) > 0.00001 ? 1.0 : 0.0;
-
-                        borderWeight += isDifferent * weight;
-                        totalWeight += weight;
-                    }
-                }
-
-                float coverage = borderWeight / max(totalWeight, 0.001);
-                return smoothstep(0.0, 0.5, coverage);
-            }
-
-            // Calculate anti-aliased border coverage for markets (requires cell-to-market lookup)
-            // Ignores water cells - only draws borders between land cells with different markets
-            float CalculateMarketBorderAA(float2 uv, float centerMarketId, bool centerIsWater, float borderWidth, float uvPerPixel)
-            {
-                // No market borders on water
-                if (centerIsWater) return 0;
-
-                float innerRadius = max(0.0, borderWidth - 1.0);
-                float outerRadius = borderWidth + 0.5;
-
-                float totalWeight = 0;
-                float borderWeight = 0;
-
-                float radii[3] = { innerRadius, borderWidth, outerRadius };
-                float weights[3] = { 0.5, 1.0, 0.25 };
-
-                for (int r = 0; r < 3; r++)
-                {
-                    float radius = radii[r];
-                    float weight = weights[r];
-
-                    if (radius < 0.1) continue;
-
-                    for (int i = 0; i < 16; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        // Check if sampled cell is water - skip water cells for market borders
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-
-                        if (sampleIsWater)
-                        {
-                            // Don't count water as a border difference
-                            continue;
-                        }
-
-                        float sampleMarketId = GetMarketIdForCell(sampleData.a);
-                        float isDifferent = abs(centerMarketId - sampleMarketId) > 0.00001 ? 1.0 : 0.0;
-
-                        borderWeight += isDifferent * weight;
-                        totalWeight += weight;
-                    }
-                }
-
-                float coverage = borderWeight / max(totalWeight, 0.001);
-                return smoothstep(0.0, 0.5, coverage);
             }
 
             // Calculate anti-aliased selection border for state/province/county
@@ -834,32 +747,6 @@ Shader "EconSim/MapOverlay"
                     terrainColor = tex2D(_BiomeMatrixTex, float2(biomeU, landHeight)).rgb;
                 }
 
-                // Calculate border coverage early (needed for gradient modes to draw borders under fill)
-                float stateBorderAA = 0;
-                float provinceBorderAA = 0;
-                float countyBorderAA = 0;
-                float marketBorderAA = 0;
-
-                // For gradient modes (political 1/2/3 and market 4), always calculate borders for under-fill rendering
-                bool isGradientMode = (_MapMode >= 1 && _MapMode <= 4);
-
-                if (_ShowStateBorders > 0)
-                {
-                    stateBorderAA = CalculateBorderAA(uv, stateId, isWater, 0, _StateBorderWidth, uvPerPixel);
-                }
-                if (_ShowProvinceBorders > 0 || isGradientMode)
-                {
-                    provinceBorderAA = CalculateBorderAA(uv, provinceId, isWater, 1, _ProvinceBorderWidth, uvPerPixel);
-                }
-                if (_ShowCountyBorders > 0 || isGradientMode)
-                {
-                    countyBorderAA = CalculateBorderAA(uv, countyId, isWater, 2, _CountyBorderWidth, uvPerPixel);
-                }
-                if (_ShowMarketBorders > 0 || _MapMode == 4)
-                {
-                    marketBorderAA = CalculateMarketBorderAA(uv, marketId, isWater, _MarketBorderWidth, uvPerPixel);
-                }
-
                 // Base color depends on map mode
                 fixed3 baseColor;
 
@@ -910,74 +797,45 @@ Shader "EconSim/MapOverlay"
                 }
                 else if (_MapMode == 1 || _MapMode == 2 || _MapMode == 3)
                 {
-                    // Political modes - state gradient fill with province/county borders underneath
+                    // Political modes - inner border with gradient fill
 
                     // Use pure heightmap for grayscale terrain (normalized land height)
                     float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
                     fixed3 grayTerrain = fixed3(landHeight, landHeight, landHeight);
 
-                    // Start with heightmap-based grayscale terrain, apply province/county borders to it
-                    fixed3 terrainWithBorders = grayTerrain;
-
-                    // County borders on terrain (bottom layer)
-                    if (countyBorderAA > 0)
-                    {
-                        float alpha = countyBorderAA * _CountyBorderColor.a;
-                        terrainWithBorders = lerp(terrainWithBorders, _CountyBorderColor.rgb, alpha);
-                    }
-
-                    // Province borders on terrain
-                    if (provinceBorderAA > 0)
-                    {
-                        float alpha = provinceBorderAA * _ProvinceBorderColor.a;
-                        terrainWithBorders = lerp(terrainWithBorders, _ProvinceBorderColor.rgb, alpha);
-                    }
-
-                    // Get political color and calculate gradient
+                    // Get political color
                     fixed3 politicalColor = LookupPaletteColor(_StatePaletteTex, stateId);
 
-                    // Calculate edge proximity for gradient (based on state boundaries and rivers)
-                    // 0 = at edge, 1 = in interior
-                    float edgeProximity = CalculateEdgeProximity(uv, IN.heightUV, stateId, isWater, 0, _GradientRadius, uvPerPixel);
+                    // Calculate state border proximity (ONLY state-to-state edges, ignores water/rivers)
+                    // Uses world-space (texels), not screen-space pixels
+                    float borderWidthUV = _StateBorderWidth * _CellDataTex_TexelSize.x;
+                    float stateBorderProximity = CalculateStateBorderProximity(uv, stateId, isWater, borderWidthUV);
 
-                    // Multiply blend: terrain * political color (like Photoshop multiply layer)
-                    // This darkens terrain while preserving texture and tinting with political color
-                    fixed3 multiplied = terrainWithBorders * politicalColor;
+                    // Interior color: blend terrain with political color
+                    fixed3 interiorColor = lerp(grayTerrain, politicalColor, _GradientCenterOpacity);
 
-                    // Edge color: blend from political to multiplied based on darkening setting
-                    fixed3 edgeColor = lerp(politicalColor, multiplied, _GradientEdgeDarkening);
-
-                    // Center color: blend from terrain to political based on center opacity
-                    fixed3 centerColor = lerp(terrainWithBorders, politicalColor, _GradientCenterOpacity);
-
-                    // Gradient from edge (multiplied/dark) to center (political/light)
-                    baseColor = lerp(edgeColor, centerColor, edgeProximity);
+                    // Inner border band: multiply terrain with darkened state color
+                    // Only on state-to-state boundaries
+                    if (stateBorderProximity < 0.5)
+                    {
+                        float3 hsv = rgb2hsv(politicalColor);
+                        hsv.z = max(hsv.z * 0.65, 0.35);  // 35% darker, clamp at 35% V
+                        fixed3 borderTint = hsv2rgb(hsv);
+                        fixed3 borderColor = grayTerrain * borderTint;
+                        baseColor = lerp(interiorColor, borderColor, _StateBorderOpacity);
+                    }
+                    else
+                    {
+                        baseColor = interiorColor;
+                    }
                 }
                 else if (_MapMode == 4)
                 {
                     // Market mode - same gradient style as political modes
-                    // Country/province/county borders under fill, market borders on top
 
                     // Use pure heightmap for grayscale terrain (normalized land height)
                     float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
                     fixed3 grayTerrain = fixed3(landHeight, landHeight, landHeight);
-
-                    // Start with heightmap-based grayscale terrain, apply political borders to it (same layering as political modes)
-                    fixed3 terrainWithBorders = grayTerrain;
-
-                    // County borders on terrain (bottom layer)
-                    if (countyBorderAA > 0)
-                    {
-                        float alpha = countyBorderAA * _CountyBorderColor.a;
-                        terrainWithBorders = lerp(terrainWithBorders, _CountyBorderColor.rgb, alpha);
-                    }
-
-                    // Province borders on terrain
-                    if (provinceBorderAA > 0)
-                    {
-                        float alpha = provinceBorderAA * _ProvinceBorderColor.a;
-                        terrainWithBorders = lerp(terrainWithBorders, _ProvinceBorderColor.rgb, alpha);
-                    }
 
                     // Get market color and calculate gradient
                     fixed3 marketColor = LookupPaletteColor(_MarketPaletteTex, marketId);
@@ -986,13 +844,13 @@ Shader "EconSim/MapOverlay"
                     float edgeProximity = CalculateMarketEdgeProximity(uv, IN.heightUV, marketId, isWater, _GradientRadius, uvPerPixel);
 
                     // Multiply blend: terrain * market color (like Photoshop multiply layer)
-                    fixed3 multiplied = terrainWithBorders * marketColor;
+                    fixed3 multiplied = grayTerrain * marketColor;
 
                     // Edge color: blend from market to multiplied based on darkening setting
                     fixed3 edgeColor = lerp(marketColor, multiplied, _GradientEdgeDarkening);
 
                     // Center color: blend from terrain to market based on center opacity
-                    fixed3 centerColor = lerp(terrainWithBorders, marketColor, _GradientCenterOpacity);
+                    fixed3 centerColor = lerp(grayTerrain, marketColor, _GradientCenterOpacity);
 
                     // Gradient from edge (multiplied/dark) to center (market/light)
                     baseColor = lerp(edgeColor, centerColor, edgeProximity);
@@ -1049,50 +907,13 @@ Shader "EconSim/MapOverlay"
                     finalColor = hsv2rgb(hsv);
                 }
 
-                // For non-gradient modes (height, terrain), apply all borders on top
-                if (_MapMode == 0 || _MapMode == 5)
-                {
-                    // Market borders (bottom layer)
-                    if (marketBorderAA > 0)
-                    {
-                        float alpha = marketBorderAA * _MarketBorderColor.a;
-                        finalColor = lerp(finalColor, _MarketBorderColor.rgb, alpha);
-                    }
-
-                    // County borders
-                    if (countyBorderAA > 0)
-                    {
-                        float alpha = countyBorderAA * _CountyBorderColor.a;
-                        finalColor = lerp(finalColor, _CountyBorderColor.rgb, alpha);
-                    }
-
-                    // Province borders
-                    if (provinceBorderAA > 0)
-                    {
-                        float alpha = provinceBorderAA * _ProvinceBorderColor.a;
-                        finalColor = lerp(finalColor, _ProvinceBorderColor.rgb, alpha);
-                    }
-                }
-
-                // Market borders on top of fill (for market mode)
-                if (_MapMode == 4 && marketBorderAA > 0)
-                {
-                    float alpha = marketBorderAA * _MarketBorderColor.a;
-                    finalColor = lerp(finalColor, _MarketBorderColor.rgb, alpha);
-                }
-
-                // State borders always on top (for all modes)
-                if (stateBorderAA > 0)
-                {
-                    float alpha = stateBorderAA * _StateBorderColor.a;
-                    finalColor = lerp(finalColor, _StateBorderColor.rgb, alpha);
-                }
-
-                // Selection dimming - darken everything EXCEPT the selected zone
+                // Selection dimming - darken and desaturate everything EXCEPT the selected zone
                 bool hasSelection = _SelectedStateId >= 0 || _SelectedProvinceId >= 0 || _SelectedMarketId >= 0 || _SelectedCountyId >= 0;
                 if (hasSelection && !isInSelection && !isWater)
                 {
-                    // Darken non-selected land areas
+                    // Desaturate then darken non-selected land areas (both animated)
+                    fixed3 gray = ToGrayscale(finalColor);
+                    finalColor = lerp(finalColor, gray, _SelectionDesaturation);
                     finalColor *= _SelectionDimming;
                 }
 

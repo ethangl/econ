@@ -23,7 +23,7 @@ namespace EconSim.Renderer
         // Set to true to use a simple debug material instead of the terrain shader
         private const bool UseDebugMaterial = false;
 
-        // Grid resolution: 0.1x source map (192x108 for 1920x1080)
+        // Grid resolution for testing (should match 0.1x source map dimensions)
         private const int GridWidth = 192;
         private const int GridHeight = 108;
 
@@ -165,8 +165,8 @@ namespace EconSim.Renderer
             mesh.name = "GridMeshTest";
 
             // World size (matching existing scale from MapView)
-            float worldWidth = mapData.Info.Width * CellScale;   // 14.4 units for 1440 width
-            float worldHeight = mapData.Info.Height * CellScale; // 8.1 units for 810 height
+            float worldWidth = mapData.Info.Width * CellScale;
+            float worldHeight = mapData.Info.Height * CellScale;
 
             // +1 to vertex count because we need corners (grid cells have 4 corners each)
             int vertCountX = GridWidth + 1;
@@ -264,15 +264,13 @@ namespace EconSim.Renderer
             }
 
             overlayManager.SetMapMode(MapView.MapMode.County);
-            overlayManager.SetStateBordersVisible(true);
-            overlayManager.SetProvinceBordersVisible(true);
 
             // Enable height displacement for 3D terrain
             overlayManager.SetHeightDisplacementEnabled(true);
             overlayManager.SetHeightScale(3f);
             overlayManager.SetSeaLevel(0.2f);
 
-            Debug.Log("GridMeshTest: Set to County mode with borders and height displacement");
+            Debug.Log("GridMeshTest: Set to County mode with height displacement");
         }
 
     }

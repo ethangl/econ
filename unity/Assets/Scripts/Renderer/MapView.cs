@@ -25,7 +25,7 @@ namespace EconSim.Renderer
         private MapMode currentMode = MapMode.Political;
 
         [Header("Shader Overlays")]
-        [SerializeField] private bool useShaderOverlays = true;
+        private bool useShaderOverlays = true;
         [SerializeField] [Range(1, 8)] private int overlayResolutionMultiplier = 6;  // Higher = smoother borders, more memory
 
         // Grid mesh with height displacement (Phase 6c)
@@ -35,7 +35,7 @@ namespace EconSim.Renderer
         private float gridHeightScale = 3f;
 
         [Header("Borders")]
-        [SerializeField] private bool enableBorders = true;
+        private bool enableBorders = true;
         [SerializeField] private Material borderMaterial;
 
         [Header("Selection")]
@@ -44,10 +44,12 @@ namespace EconSim.Renderer
 
         [Header("Selection Settings")]
         [SerializeField] [Range(0f, 1f)] private float selectionDimmingTarget = 0.5f;
+        [SerializeField] [Range(0f, 1f)] private float selectionDesaturationTarget = 0.8f;
         [SerializeField] private float dimmingAnimationSpeed = 8f;
 
         // Animation state (not serialized)
         private float currentSelectionDimming = 1f;
+        private float currentSelectionDesaturation = 0f;
         private bool hasActiveSelection;
         private float currentHoverIntensity = 0f;
         private bool hasActiveHover;
@@ -188,9 +190,14 @@ namespace EconSim.Renderer
             float dt = Time.deltaTime * dimmingAnimationSpeed;
 
             // Animate toward target (selectionDimmingTarget when selected, 1 when not)
-            float target = hasActiveSelection ? selectionDimmingTarget : 1f;
-            currentSelectionDimming = Mathf.Lerp(currentSelectionDimming, target, dt);
+            float dimmingTarget = hasActiveSelection ? selectionDimmingTarget : 1f;
+            currentSelectionDimming = Mathf.Lerp(currentSelectionDimming, dimmingTarget, dt);
             overlayManager.SetSelectionDimming(currentSelectionDimming);
+
+            // Animate desaturation (0 = full color, target when selected)
+            float desatTarget = hasActiveSelection ? selectionDesaturationTarget : 0f;
+            currentSelectionDesaturation = Mathf.Lerp(currentSelectionDesaturation, desatTarget, dt);
+            overlayManager.SetSelectionDesaturation(currentSelectionDesaturation);
 
             // Animate hover intensity (1 when hovered, 0 when not)
             float hoverTarget = hasActiveHover ? 1f : 0f;
@@ -428,8 +435,7 @@ namespace EconSim.Renderer
 
         private void InitializeBorders()
         {
-            // Skip mesh-based borders if using shader overlays
-            if (useShaderOverlays || !enableBorders || mapData == null) return;
+            if (!enableBorders || mapData == null) return;
 
             // Create or get BorderRenderer component
             borderRenderer = GetComponent<BorderRenderer>();
@@ -605,14 +611,14 @@ namespace EconSim.Renderer
         /// </summary>
         private void HandleDrillDownSelection(Cell cell)
         {
-            Vector3? centerPosition = null;
+            Bounds? selectionBounds = null;
 
             switch (selectionDepth)
             {
                 case SelectionDepth.None:
                     // No selection yet - select state
                     SelectAtDepth(SelectionDepth.State, cell);
-                    centerPosition = GetStateCentroid(cell.StateId);
+                    selectionBounds = GetStateBounds(cell.StateId);
                     break;
 
                 case SelectionDepth.State:
@@ -620,13 +626,13 @@ namespace EconSim.Renderer
                     {
                         // Clicking same state - drill down to province
                         SelectAtDepth(SelectionDepth.Province, cell);
-                        centerPosition = GetProvinceCentroid(cell.ProvinceId);
+                        selectionBounds = GetProvinceBounds(cell.ProvinceId);
                     }
                     else
                     {
                         // Clicking different state - select new state
                         SelectAtDepth(SelectionDepth.State, cell);
-                        centerPosition = GetStateCentroid(cell.StateId);
+                        selectionBounds = GetStateBounds(cell.StateId);
                     }
                     break;
 
@@ -635,19 +641,19 @@ namespace EconSim.Renderer
                     {
                         // Clicking same province - drill down to county
                         SelectAtDepth(SelectionDepth.County, cell);
-                        centerPosition = GetCountyCentroid(cell.CountyId);
+                        selectionBounds = GetCountyBounds(cell.CountyId);
                     }
                     else if (cell.StateId == selectedStateId)
                     {
                         // Clicking different province in same state - select new province
                         SelectAtDepth(SelectionDepth.Province, cell);
-                        centerPosition = GetProvinceCentroid(cell.ProvinceId);
+                        selectionBounds = GetProvinceBounds(cell.ProvinceId);
                     }
                     else
                     {
                         // Clicking different state - reset to state level
                         SelectAtDepth(SelectionDepth.State, cell);
-                        centerPosition = GetStateCentroid(cell.StateId);
+                        selectionBounds = GetStateBounds(cell.StateId);
                     }
                     break;
 
@@ -661,27 +667,27 @@ namespace EconSim.Renderer
                     {
                         // Clicking different county in same province - select new county
                         SelectAtDepth(SelectionDepth.County, cell);
-                        centerPosition = GetCountyCentroid(cell.CountyId);
+                        selectionBounds = GetCountyBounds(cell.CountyId);
                     }
                     else if (cell.StateId == selectedStateId)
                     {
                         // Clicking different province in same state - go back to province level
                         SelectAtDepth(SelectionDepth.Province, cell);
-                        centerPosition = GetProvinceCentroid(cell.ProvinceId);
+                        selectionBounds = GetProvinceBounds(cell.ProvinceId);
                     }
                     else
                     {
                         // Clicking different state - reset to state level
                         SelectAtDepth(SelectionDepth.State, cell);
-                        centerPosition = GetStateCentroid(cell.StateId);
+                        selectionBounds = GetStateBounds(cell.StateId);
                     }
                     break;
             }
 
-            // Pan camera to center on selection
-            if (centerPosition.HasValue && mapCameraController != null)
+            // Zoom and pan camera to frame selection
+            if (selectionBounds.HasValue && mapCameraController != null)
             {
-                mapCameraController.FocusOn(centerPosition.Value);
+                mapCameraController.FocusOnBounds(selectionBounds.Value);
             }
         }
 
@@ -723,30 +729,7 @@ namespace EconSim.Renderer
         /// </summary>
         private void UpdateBordersForSelectionDepth()
         {
-            if (overlayManager == null) return;
-
-            // In political modes, show borders appropriate to selection depth
-            if (currentMode == MapMode.Political || currentMode == MapMode.Province || currentMode == MapMode.County)
-            {
-                switch (selectionDepth)
-                {
-                    case SelectionDepth.State:
-                        overlayManager.SetStateBordersVisible(true);
-                        overlayManager.SetProvinceBordersVisible(false);
-                        overlayManager.SetCountyBordersVisible(false);
-                        break;
-                    case SelectionDepth.Province:
-                        overlayManager.SetStateBordersVisible(true);
-                        overlayManager.SetProvinceBordersVisible(true);
-                        overlayManager.SetCountyBordersVisible(false);
-                        break;
-                    case SelectionDepth.County:
-                        overlayManager.SetStateBordersVisible(true);
-                        overlayManager.SetProvinceBordersVisible(true);
-                        overlayManager.SetCountyBordersVisible(true);
-                        break;
-                }
-            }
+            // Shader-based borders disabled - using mesh-based BorderRenderer
         }
 
         /// <summary>
@@ -771,13 +754,13 @@ namespace EconSim.Renderer
         /// </summary>
         private void HandleMarketSelection(Cell cell, int cellId)
         {
-            Vector3? centerPosition = null;
+            Bounds? selectionBounds = null;
 
             if (economyState != null && economyState.CellToMarket.TryGetValue(cellId, out int marketId))
             {
                 SetSelectionActive(true);
                 overlayManager.SetSelectedMarket(marketId);
-                centerPosition = GetMarketCentroid(marketId);
+                selectionBounds = GetMarketBounds(marketId);
             }
             else
             {
@@ -785,9 +768,9 @@ namespace EconSim.Renderer
                 overlayManager.ClearSelection();
             }
 
-            if (centerPosition.HasValue && mapCameraController != null)
+            if (selectionBounds.HasValue && mapCameraController != null)
             {
-                mapCameraController.FocusOn(centerPosition.Value);
+                mapCameraController.FocusOnBounds(selectionBounds.Value);
             }
         }
 
@@ -904,6 +887,107 @@ namespace EconSim.Renderer
             return AzgaarToWorld(sumX / count, sumY / count);
         }
 
+        /// <summary>
+        /// Get world-space bounds of a county.
+        /// </summary>
+        private Bounds? GetCountyBounds(int countyId)
+        {
+            if (countyId <= 0) return null;
+            if (!mapData.CountyById.TryGetValue(countyId, out var county)) return null;
+
+            return GetCellListBounds(county.CellIds);
+        }
+
+        /// <summary>
+        /// Get world-space bounds of a province.
+        /// </summary>
+        private Bounds? GetProvinceBounds(int provinceId)
+        {
+            if (provinceId <= 0) return null;
+            if (!mapData.ProvinceById.TryGetValue(provinceId, out var province)) return null;
+
+            return GetCellListBounds(province.CellIds);
+        }
+
+        /// <summary>
+        /// Get world-space bounds of a state.
+        /// </summary>
+        private Bounds? GetStateBounds(int stateId)
+        {
+            if (stateId <= 0) return null;
+
+            // Collect all cells belonging to this state
+            var cellIds = new List<int>();
+            foreach (var cell in mapData.Cells)
+            {
+                if (cell.StateId == stateId && cell.IsLand)
+                {
+                    cellIds.Add(cell.Id);
+                }
+            }
+
+            return GetCellListBounds(cellIds);
+        }
+
+        /// <summary>
+        /// Get world-space bounds of a market zone.
+        /// </summary>
+        private Bounds? GetMarketBounds(int marketId)
+        {
+            if (marketId <= 0 || economyState == null) return null;
+
+            // Collect all cells assigned to this market
+            var cellIds = new List<int>();
+            foreach (var kvp in economyState.CellToMarket)
+            {
+                if (kvp.Value == marketId)
+                {
+                    cellIds.Add(kvp.Key);
+                }
+            }
+
+            return GetCellListBounds(cellIds);
+        }
+
+        /// <summary>
+        /// Calculate world-space bounds from a list of cell IDs.
+        /// </summary>
+        private Bounds? GetCellListBounds(IEnumerable<int> cellIds)
+        {
+            if (cellIds == null) return null;
+
+            float minX = float.MaxValue, maxX = float.MinValue;
+            float minY = float.MaxValue, maxY = float.MinValue;
+            int count = 0;
+
+            foreach (int cellId in cellIds)
+            {
+                if (mapData.CellById.TryGetValue(cellId, out var cell))
+                {
+                    minX = Mathf.Min(minX, cell.Center.X);
+                    maxX = Mathf.Max(maxX, cell.Center.X);
+                    minY = Mathf.Min(minY, cell.Center.Y);
+                    maxY = Mathf.Max(maxY, cell.Center.Y);
+                    count++;
+                }
+            }
+
+            if (count == 0) return null;
+
+            // Convert Azgaar corners to world space
+            Vector3 worldMin = AzgaarToWorld(minX, maxY);  // maxY because Y is flipped
+            Vector3 worldMax = AzgaarToWorld(maxX, minY);
+
+            Vector3 center = (worldMin + worldMax) / 2f;
+            Vector3 size = new Vector3(
+                Mathf.Abs(worldMax.x - worldMin.x),
+                0.1f,
+                Mathf.Abs(worldMax.z - worldMin.z)
+            );
+
+            return new Bounds(center, size);
+        }
+
         public void SetMapMode(MapMode mode)
         {
             if (currentMode != mode)
@@ -927,103 +1011,19 @@ namespace EconSim.Renderer
 
         private void UpdateOverlayVisibility()
         {
-            if (overlayManager == null) return;
-
-            switch (currentMode)
-            {
-                case MapMode.Political:
-                    overlayManager.SetStateBordersVisible(true);
-                    overlayManager.SetProvinceBordersVisible(false);
-                    overlayManager.SetCountyBordersVisible(false);
-                    overlayManager.SetMarketBordersVisible(false);
-                    break;
-                case MapMode.Province:
-                    overlayManager.SetStateBordersVisible(true);
-                    overlayManager.SetProvinceBordersVisible(true);
-                    overlayManager.SetCountyBordersVisible(false);
-                    overlayManager.SetMarketBordersVisible(false);
-                    break;
-                case MapMode.County:
-                    overlayManager.SetStateBordersVisible(true);
-                    overlayManager.SetProvinceBordersVisible(true);
-                    overlayManager.SetCountyBordersVisible(true);
-                    overlayManager.SetMarketBordersVisible(false);
-                    break;
-                case MapMode.Terrain:
-                    overlayManager.SetStateBordersVisible(false);
-                    overlayManager.SetProvinceBordersVisible(false);
-                    overlayManager.SetCountyBordersVisible(false);
-                    overlayManager.SetMarketBordersVisible(false);
-                    break;
-                case MapMode.Market:
-                    overlayManager.SetStateBordersVisible(false);
-                    overlayManager.SetProvinceBordersVisible(false);
-                    overlayManager.SetCountyBordersVisible(false);
-                    overlayManager.SetMarketBordersVisible(true);
-                    break;
-            }
+            // Shader-based borders disabled - using mesh-based BorderRenderer
         }
 
         private void UpdateBorderVisibility()
         {
-            if (borderRenderer == null) return;
-
-            switch (currentMode)
-            {
-                case MapMode.Political:
-                    borderRenderer.SetStateBordersVisible(true);
-                    borderRenderer.SetProvinceBordersVisible(false);
-                    break;
-                case MapMode.Province:
-                    borderRenderer.SetStateBordersVisible(true);
-                    borderRenderer.SetProvinceBordersVisible(true);
-                    break;
-                case MapMode.County:
-                    // Show province borders to group counties visually
-                    borderRenderer.SetStateBordersVisible(true);
-                    borderRenderer.SetProvinceBordersVisible(true);
-                    break;
-                case MapMode.Terrain:
-                    borderRenderer.SetStateBordersVisible(false);
-                    borderRenderer.SetProvinceBordersVisible(false);
-                    break;
-                case MapMode.Market:
-                    // Hide political borders, market zones speak for themselves
-                    borderRenderer.SetStateBordersVisible(false);
-                    borderRenderer.SetProvinceBordersVisible(false);
-                    break;
-            }
-        }
-
-        public void SetStateBordersVisible(bool visible)
-        {
-            if (useShaderOverlays && overlayManager != null)
-            {
-                overlayManager.SetStateBordersVisible(visible);
-            }
-            else if (borderRenderer != null)
-            {
-                borderRenderer.SetStateBordersVisible(visible);
-            }
+            // Show all borders for now
         }
 
         public void SetProvinceBordersVisible(bool visible)
         {
-            if (useShaderOverlays && overlayManager != null)
-            {
-                overlayManager.SetProvinceBordersVisible(visible);
-            }
-            else if (borderRenderer != null)
+            if (borderRenderer != null)
             {
                 borderRenderer.SetProvinceBordersVisible(visible);
-            }
-        }
-
-        public void SetCountyBordersVisible(bool visible)
-        {
-            if (useShaderOverlays && overlayManager != null)
-            {
-                overlayManager.SetCountyBordersVisible(visible);
             }
         }
 
@@ -1661,9 +1661,14 @@ namespace EconSim.Renderer
             }
 
             // Fallback to full map bounds if mesh not ready
-            float width = mapData?.Info.Width * cellScale ?? 14.4f;
-            float height = mapData?.Info.Height * cellScale ?? 8.1f;
-            return new Bounds(Vector3.zero, new Vector3(width, 0.1f, height));
+            if (mapData != null)
+            {
+                float width = mapData.Info.Width * cellScale;
+                float height = mapData.Info.Height * cellScale;
+                return new Bounds(Vector3.zero, new Vector3(width, 0.1f, height));
+            }
+            // No map data yet - return empty bounds
+            return new Bounds(Vector3.zero, Vector3.zero);
         }
 
 #if UNITY_EDITOR
@@ -1690,21 +1695,6 @@ namespace EconSim.Renderer
 
         [ContextMenu("Set Mode: Market")]
         private void SetModeMarket() => SetMapMode(MapMode.Market);
-
-        [ContextMenu("Toggle State Borders")]
-        private void ToggleStateBorders()
-        {
-            if (borderRenderer != null)
-            {
-                var field = typeof(BorderRenderer).GetField("showStateBorders",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (field != null)
-                {
-                    bool current = (bool)field.GetValue(borderRenderer);
-                    borderRenderer.SetStateBordersVisible(!current);
-                }
-            }
-        }
 
         [ContextMenu("Toggle Province Borders")]
         private void ToggleProvinceBorders()

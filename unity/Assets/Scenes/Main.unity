@@ -221,7 +221,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7cd7ba835769b440ebb904a3a0ae1cb3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EconSim::EconSim.Camera.MapCamera
-  minZoomFraction: 0.2
+  minZoomFraction: 0.1
   absoluteMinZoom: 0.5
   zoomSpeed: 5
   zoomSmoothTime: 0.1
@@ -230,8 +230,6 @@ MonoBehaviour:
   focusSmoothTime: 0.3
   pitchAtMaxZoom: 75
   pitchAtMinZoom: 60
-  constrainToBounds: 1
-  mapSize: {x: 14.4, y: 8.1}
   panModifierKey: 325
   spacebarPanKey: 32
   invertPan: 0
@@ -475,13 +473,12 @@ MonoBehaviour:
   cellScale: 0.01
   terrainMaterial: {fileID: 0}
   renderLandOnly: 0
-  useShaderOverlays: 1
   overlayResolutionMultiplier: 6
-  enableBorders: 1
   borderMaterial: {fileID: 2100000, guid: 68122421a08414a3498952b5510cd8cb, type: 2}
   selectionCamera: {fileID: 0}
   mapCameraController: {fileID: 1070810156}
   selectionDimmingTarget: 0.25
+  selectionDesaturationTarget: 0.8
   dimmingAnimationSpeed: 8
 --- !u!23 &2039203592
 MeshRenderer:

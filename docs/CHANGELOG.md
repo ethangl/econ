@@ -16,6 +16,25 @@ Development phases and completed work for the Economic Simulator project.
   - `GameManager.IsMapReady` property for synchronous checks
   - UI panels subscribe to OnMapReady before accessing simulation
 
+- **Removed domain warping from spatial grid generation**
+  - Cell boundaries now use clean Voronoi edges (straight lines to cell centers)
+  - Removed `WarpAmplitude`, `WarpFrequency`, `WarpOctaves` constants
+  - Removed fractal noise functions (`HashNoise`, `HashToFloat`, `FractalNoise`)
+  - Simplified `BuildSpatialGridFromScratch` to use direct coordinates
+  - Updated cache key to invalidate old warped grids
+
+- **Border rendering overhaul** (Phase 10b)
+  - Province/county borders: mesh-based polyline rendering
+    - `BorderRenderer.cs`: chains Voronoi edges into polylines
+    - Per-state coloring derived from `PoliticalPalette` (darkened, saturated)
+    - `SimpleBorder.shader`: vertex color rendering for border meshes
+  - State borders: shader-based double border effect
+    - `CalculateStateBorderProximity()` detects only state-to-state boundaries (ignores water/rivers)
+    - World-space sizing via `_StateBorderWidth` (texels of data texture, default 24)
+    - Border color: state color at 65% V (floor 35%), multiplied with terrain
+    - `_StateBorderOpacity` slider for blend control
+    - Each country's border band in its own hue → parallel double-line effect at boundaries
+
 ---
 
 ## Phase 9: Gradient Fill System ✓
@@ -53,12 +72,6 @@ Development phases and completed work for the Economic Simulator project.
 - **Rivers treated as edges for gradient fill**
   - Water cells and rivers both count as edges
   - Gradient darkens near coastlines and rivers
-
-- **Domain warping for organic cell boundaries**
-  - Hash-based fractal noise warps lookup coordinates during spatial grid generation
-  - Creates jigsaw-style meandering edges instead of straight Voronoi lines
-  - Deterministic: same parameters produce identical results
-  - Parameters: amplitude 3.0, frequency 0.1, octaves 3
 
 - **Startup performance optimization** (68s → 12.7s)
   - `StartupProfiler` utility for hierarchical timing of startup phases
