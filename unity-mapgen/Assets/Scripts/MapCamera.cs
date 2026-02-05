@@ -14,6 +14,9 @@ namespace MapGen
         public float MinZoom = 100f;
         public float MaxZoom = 2000f;
 
+        [Tooltip("Padding around map edges (fraction of map size)")]
+        public float Padding = 0.02f;
+
         private UnityEngine.Camera _camera;
 
         void Awake()
@@ -24,9 +27,48 @@ namespace MapGen
 
         void Start()
         {
-            // Center on default map size
-            transform.position = new Vector3(960, 540, -10);
-            _camera.orthographicSize = 540;
+            FitToMap();
+        }
+
+        /// <summary>
+        /// Center camera and zoom to fit the entire map.
+        /// </summary>
+        public void FitToMap()
+        {
+            var generator = FindObjectOfType<CellMeshGenerator>();
+            float width, height;
+
+            if (generator != null)
+            {
+                width = generator.MapWidth;
+                height = generator.MapHeight;
+            }
+            else
+            {
+                // Fallback to default
+                width = 1920f;
+                height = 1080f;
+            }
+
+            // Center camera on map
+            transform.position = new Vector3(width / 2f, height / 2f, -10f);
+
+            // Size to fit map with padding
+            float aspect = _camera.aspect;
+            float mapAspect = width / height;
+
+            if (mapAspect > aspect)
+            {
+                // Map is wider than screen - fit to width
+                _camera.orthographicSize = (width / aspect / 2f) * (1f + Padding);
+            }
+            else
+            {
+                // Map is taller than screen - fit to height
+                _camera.orthographicSize = (height / 2f) * (1f + Padding);
+            }
+
+            MaxZoom = _camera.orthographicSize * 2f;
         }
 
         void Update()

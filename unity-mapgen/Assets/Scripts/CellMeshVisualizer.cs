@@ -9,22 +9,29 @@ namespace MapGen
     [RequireComponent(typeof(CellMeshGenerator))]
     public class CellMeshVisualizer : MonoBehaviour
     {
+        [Header("Display Options")]
         public bool ShowCells = true;
-        public bool ShowEdges = true;
+        public bool ShowEdges = false;
         public bool ShowCenters = false;
         public bool ShowVertices = false;
 
-        public Color CellColor = new Color(0.2f, 0.4f, 0.8f, 0.3f);
+        [Header("Coloring")]
+        [Tooltip("Use heightmap colors if HeightmapGenerator is present")]
+        public bool UseHeightmapColors = true;
+
+        public Color CellColor = new Color(0.2f, 0.4f, 0.8f, 1f);
         public Color EdgeColor = new Color(0.1f, 0.1f, 0.1f, 0.8f);
         public Color CenterColor = Color.red;
         public Color VertexColor = Color.green;
 
         private CellMeshGenerator _generator;
+        private HeightmapGenerator _heightmapGenerator;
         private Material _glMaterial;
 
         void Awake()
         {
             _generator = GetComponent<CellMeshGenerator>();
+            _heightmapGenerator = GetComponent<HeightmapGenerator>();
 
             // Create simple material for GL drawing
             var shader = Shader.Find("Hidden/Internal-Colored");
@@ -32,8 +39,8 @@ namespace MapGen
             {
                 hideFlags = HideFlags.HideAndDontSave
             };
-            _glMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            _glMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            _glMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
+            _glMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
             _glMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
             _glMaterial.SetInt("_ZWrite", 0);
         }
@@ -67,15 +74,29 @@ namespace MapGen
         {
             GL.Begin(GL.TRIANGLES);
 
+            if (_heightmapGenerator == null)
+                _heightmapGenerator = GetComponent<HeightmapGenerator>();
+
+            var heightGrid = UseHeightmapColors ? _heightmapGenerator?.HeightGrid : null;
+
             for (int c = 0; c < mesh.CellCount; c++)
             {
                 var verts = mesh.CellVertices[c];
                 if (verts == null || verts.Length < 3) continue;
 
-                // Simple color variation per cell
-                float hue = (c * 0.618034f) % 1f; // Golden ratio for distribution
-                Color color = Color.HSVToRGB(hue, 0.5f, 0.7f);
-                color.a = CellColor.a;
+                Color color;
+                if (heightGrid != null)
+                {
+                    // Heightmap coloring
+                    color = GetHeightColor(heightGrid.Heights[c]);
+                }
+                else
+                {
+                    // Simple color variation per cell
+                    float hue = (c * 0.618034f) % 1f; // Golden ratio for distribution
+                    color = Color.HSVToRGB(hue, 0.5f, 0.7f);
+                }
+                color.a = 1f;
                 GL.Color(color);
 
                 // Fan triangulation from first vertex
@@ -92,6 +113,48 @@ namespace MapGen
             }
 
             GL.End();
+        }
+
+        /// <summary>
+        /// Get color for a height value.
+        /// Water: blue shades, Land: green to brown to white.
+        /// </summary>
+        private Color GetHeightColor(float height)
+        {
+            const float seaLevel = HeightGrid.SeaLevel;
+            const float maxHeight = HeightGrid.MaxHeight;
+
+            if (height <= seaLevel)
+            {
+                // Water: dark blue (deep) to light blue (shallow)
+                float t = height / seaLevel;
+                return Color.Lerp(new Color(0.05f, 0.1f, 0.3f), new Color(0.2f, 0.4f, 0.7f), t);
+            }
+            else
+            {
+                // Land: green (low) to brown (mid) to white (high)
+                float t = (height - seaLevel) / (maxHeight - seaLevel);
+                if (t < 0.3f)
+                {
+                    // Green lowlands
+                    return Color.Lerp(new Color(0.2f, 0.5f, 0.2f), new Color(0.4f, 0.6f, 0.3f), t / 0.3f);
+                }
+                else if (t < 0.6f)
+                {
+                    // Brown hills
+                    return Color.Lerp(new Color(0.4f, 0.6f, 0.3f), new Color(0.5f, 0.4f, 0.25f), (t - 0.3f) / 0.3f);
+                }
+                else if (t < 0.85f)
+                {
+                    // Gray mountains
+                    return Color.Lerp(new Color(0.5f, 0.4f, 0.25f), new Color(0.6f, 0.6f, 0.6f), (t - 0.6f) / 0.25f);
+                }
+                else
+                {
+                    // Snow caps
+                    return Color.Lerp(new Color(0.6f, 0.6f, 0.6f), Color.white, (t - 0.85f) / 0.15f);
+                }
+            }
         }
 
         private void DrawEdges(CellMesh mesh)
