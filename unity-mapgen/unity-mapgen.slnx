@@ -1,2 +1,4 @@
 ﻿<Solution>
+  <Project Path="MapGen.csproj" />
+  <Project Path="MapGen.Editor.csproj" />
 </Solution>

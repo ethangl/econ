@@ -4,17 +4,32 @@ Native map generation for EconSim, replacing Azgaar dependency.
 
 ## Status
 
-Stub project. Open in Unity Hub to initialize.
+Phase A.1: Cell Mesh (Voronoi/Delaunay) — in progress
+
+## Quick Start
+
+1. Open in Unity
+2. Create empty GameObject, add `CellMeshGenerator` and `CellMeshVisualizer`
+3. Create Camera, add `MapCamera` component
+4. Click "Generate" in inspector (or enter Play mode)
 
 ## Structure
 
 ```
 Assets/
-├── Scripts/     # MapGen.asmdef - runtime code
-├── Editor/      # MapGen.Editor.asmdef - editor tools
-├── Shaders/     # Rendering
-└── UI/          # UI Toolkit documents
+├── Scripts/
+│   ├── Core/           # Engine-independent (CellMesh, Delaunay, Voronoi)
+│   ├── CellMeshGenerator.cs
+│   ├── CellMeshVisualizer.cs
+│   └── MapCamera.cs
+├── Editor/             # Inspector extensions
+├── Shaders/
+└── UI/
 ```
+
+## Dependencies
+
+- **DelaunatorSharp** — Fast Delaunay triangulation (vendored, MIT license)
 
 ## See Also
 

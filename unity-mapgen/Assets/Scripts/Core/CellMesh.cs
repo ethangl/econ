@@ -1,0 +1,80 @@
+namespace MapGen.Core
+{
+    /// <summary>
+    /// Core data structure for Voronoi cell mesh.
+    /// Stores cells, vertices, and edges with full adjacency information.
+    /// </summary>
+    public class CellMesh
+    {
+        /// <summary>Cell seed points (Voronoi generators)</summary>
+        public Vec2[] CellCenters;
+
+        /// <summary>For each cell: indices of vertices forming its polygon (CCW order)</summary>
+        public int[][] CellVertices;
+
+        /// <summary>For each cell: indices of neighboring cells</summary>
+        public int[][] CellNeighbors;
+
+        /// <summary>For each cell: indices of edges forming its boundary</summary>
+        public int[][] CellEdges;
+
+        /// <summary>Is this cell on the map boundary?</summary>
+        public bool[] CellIsBoundary;
+
+        /// <summary>Voronoi vertex positions (circumcenters of Delaunay triangles)</summary>
+        public Vec2[] Vertices;
+
+        /// <summary>For each vertex: indices of cells that meet at this vertex</summary>
+        public int[][] VertexCells;
+
+        /// <summary>For each vertex: indices of neighboring vertices</summary>
+        public int[][] VertexNeighbors;
+
+        /// <summary>Edge endpoints (pairs of vertex indices)</summary>
+        public (int V0, int V1)[] EdgeVertices;
+
+        /// <summary>For each edge: the two cells it separates (C1 may be -1 for boundary)</summary>
+        public (int C0, int C1)[] EdgeCells;
+
+        /// <summary>Map dimensions</summary>
+        public float Width;
+        public float Height;
+
+        /// <summary>Number of cells (excluding boundary padding)</summary>
+        public int CellCount => CellCenters?.Length ?? 0;
+
+        /// <summary>Number of vertices</summary>
+        public int VertexCount => Vertices?.Length ?? 0;
+
+        /// <summary>Number of edges</summary>
+        public int EdgeCount => EdgeVertices?.Length ?? 0;
+    }
+
+    /// <summary>
+    /// Simple 2D vector for engine-independent code.
+    /// </summary>
+    public struct Vec2
+    {
+        public float X;
+        public float Y;
+
+        public Vec2(float x, float y)
+        {
+            X = x;
+            Y = y;
+        }
+
+        public static Vec2 operator +(Vec2 a, Vec2 b) => new Vec2(a.X + b.X, a.Y + b.Y);
+        public static Vec2 operator -(Vec2 a, Vec2 b) => new Vec2(a.X - b.X, a.Y - b.Y);
+        public static Vec2 operator *(Vec2 v, float s) => new Vec2(v.X * s, v.Y * s);
+        public static Vec2 operator *(float s, Vec2 v) => new Vec2(v.X * s, v.Y * s);
+
+        public float SqrMagnitude => X * X + Y * Y;
+        public float Magnitude => (float)System.Math.Sqrt(SqrMagnitude);
+
+        public static float Distance(Vec2 a, Vec2 b) => (a - b).Magnitude;
+        public static float SqrDistance(Vec2 a, Vec2 b) => (a - b).SqrMagnitude;
+
+        public override string ToString() => $"({X:F2}, {Y:F2})";
+    }
+}
