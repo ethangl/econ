@@ -164,6 +164,7 @@ For generating maps with England-like characteristics (~130k km², ~40 provinces
 
 | Setting        | Value      |
 | -------------- | ---------- |
+| Seed           | 123        |
 | Resolution     | 1920×1080  |
 | Points         | 60,000     |
 | Template       | Low Island |

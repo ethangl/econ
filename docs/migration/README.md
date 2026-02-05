@@ -55,6 +55,23 @@ Azgaar JSON ──► AzgaarParser ──► MapConverter ──► MapData ─�
                                             upstream of MapData
 ```
 
+### Project Structure
+
+We maintain parallel Unity projects during migration:
+
+```
+econ/
+├── unity/           # Azgaar-based (reference, frozen)
+├── unity-mapgen/    # New native generation
+└── src/EconSim.Core/  # Forked into new project as needed
+```
+
+**Rationale:** MapData's structure is shaped by Azgaar's output — trying to maintain compatibility between both systems would constrain the new design and litter the codebase with adapter code. A clean separation lets us:
+
+- Design MapData around what we actually need (e.g., edge-based rivers for transport modeling)
+- Keep the old project as a working reference
+- Cherry-pick simulation code (economy, trade) forward when ready
+
 ### Proposed Order
 
 **Phase A: Foundation**
@@ -76,4 +93,4 @@ Azgaar JSON ──► AzgaarParser ──► MapConverter ──► MapData ─�
 
 ---
 
-_Last updated: 2026-02-03_
+_Last updated: 2026-02-05_
