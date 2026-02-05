@@ -29,6 +29,7 @@ namespace EconSim.Renderer
 
         private Material terrainMaterial;
         private MapData mapData;
+        private RelaxedCellGeometry relaxedGeometry;
         private MapOverlayManager overlayManager;
         private MeshFilter meshFilter;
         private MeshRenderer meshRenderer;
@@ -145,8 +146,17 @@ namespace EconSim.Renderer
                 return;
             }
 
+            // Build relaxed geometry for organic curved borders
+            relaxedGeometry = new RelaxedCellGeometry
+            {
+                Amplitude = 1.0f,
+                Frequency = 0.3f,
+                SamplesPerSegment = 4
+            };
+            relaxedGeometry.Build(mapData);
+
             // Use resolution multiplier of 4 (same as default MapView)
-            overlayManager = new MapOverlayManager(mapData, terrainMaterial, 4);
+            overlayManager = new MapOverlayManager(mapData, relaxedGeometry, terrainMaterial, 4);
             Debug.Log("GridMeshTest: Initialized overlay manager");
         }
 

@@ -1,6 +1,6 @@
 # Plan: Relaxed Border System
 
-**Status:** Not started
+**Status:** Complete
 
 **Current state (Phase 10):** Domain warping was removed; borders and textures now use straight Voronoi edges. This plan adds organic curved edges to replace those straight lines.
 

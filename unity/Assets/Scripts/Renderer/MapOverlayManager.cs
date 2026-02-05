@@ -46,6 +46,7 @@ namespace EconSim.Renderer
         private MapData mapData;
         private EconomyState economyState;
         private Material terrainMaterial;
+        private RelaxedCellGeometry relaxedGeometry;
 
         // Resolution multiplier for higher quality borders
         private int resolutionMultiplier;
@@ -108,11 +109,13 @@ namespace EconSim.Renderer
         /// Create overlay manager with specified resolution multiplier.
         /// </summary>
         /// <param name="mapData">Map data source</param>
+        /// <param name="relaxedGeometry">Relaxed cell geometry for organic borders</param>
         /// <param name="terrainMaterial">Material to apply textures to</param>
         /// <param name="resolutionMultiplier">Multiplier for data texture resolution (1=base, 2=2x, 3=3x). Higher = smoother borders but more memory.</param>
-        public MapOverlayManager(MapData mapData, Material terrainMaterial, int resolutionMultiplier = 2)
+        public MapOverlayManager(MapData mapData, RelaxedCellGeometry relaxedGeometry, Material terrainMaterial, int resolutionMultiplier = 2)
         {
             this.mapData = mapData;
+            this.relaxedGeometry = relaxedGeometry;
             this.terrainMaterial = terrainMaterial;
             this.resolutionMultiplier = Mathf.Clamp(resolutionMultiplier, 1, 8);
 
@@ -186,7 +189,8 @@ namespace EconSim.Renderer
         private string ComputeSpatialGridCacheKey()
         {
             // Include all parameters that affect the grid output
-            string input = $"{mapData.Info.Name}_{mapData.Info.Width}x{mapData.Info.Height}_{mapData.Cells.Count}cells_{resolutionMultiplier}x_v2";
+            // v10: Voronoi base + larger boundary refinement radius
+            string input = $"{mapData.Info.Name}_{mapData.Info.Width}x{mapData.Info.Height}_{mapData.Cells.Count}cells_{resolutionMultiplier}x_relaxed_{relaxedGeometry.Amplitude}_{relaxedGeometry.Frequency}_{relaxedGeometry.SamplesPerSegment}_v10";
 
             // Simple hash
             int hash = input.GetHashCode();
@@ -277,8 +281,8 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
-        /// Build the spatial grid from scratch (expensive operation).
-        /// Uses parallel processing for performance.
+        /// Build the spatial grid using nearest-center Voronoi, then refine boundary pixels
+        /// using point-in-polygon testing against relaxed geometry.
         /// </summary>
         private void BuildSpatialGridFromScratch()
         {
@@ -294,15 +298,14 @@ namespace EconSim.Renderer
 
             float scale = resolutionMultiplier;
 
-            // Pre-compute cell bounding boxes and centers
-            var cellInfos = new List<(Cell cell, int x0, int y0, int x1, int y1, float cx, float cy)>();
+            // PHASE 1: Fast Voronoi fill using cell centers (complete coverage, no gaps)
+            var cellInfos = new List<(int cellId, int x0, int y0, int x1, int y1, float cx, float cy)>();
 
             foreach (var cell in mapData.Cells)
             {
                 if (cell.VertexIndices == null || cell.VertexIndices.Count < 3)
                     continue;
 
-                // Find bounding box of cell vertices (in scaled coordinates)
                 float minX = float.MaxValue, maxX = float.MinValue;
                 float minY = float.MaxValue, maxY = float.MinValue;
 
@@ -318,7 +321,6 @@ namespace EconSim.Renderer
                     }
                 }
 
-                // Clamp bounding box to grid
                 int x0 = Mathf.Max(0, Mathf.FloorToInt(minX));
                 int x1 = Mathf.Min(gridWidth - 1, Mathf.CeilToInt(maxX));
                 int y0 = Mathf.Max(0, Mathf.FloorToInt(minY));
@@ -327,29 +329,24 @@ namespace EconSim.Renderer
                 float cx = cell.Center.X * scale;
                 float cy = cell.Center.Y * scale;
 
-                cellInfos.Add((cell, x0, y0, x1, y1, cx, cy));
+                cellInfos.Add((cell.Id, x0, y0, x1, y1, cx, cy));
             }
 
-            // Process cells in parallel, using distance comparison for conflict resolution
-            // Use striped locks (one per row) to reduce contention
             var rowLocks = new object[gridHeight];
             for (int i = 0; i < gridHeight; i++)
                 rowLocks[i] = new object();
 
             Parallel.ForEach(cellInfos, info =>
             {
-                var (cell, x0, y0, x1, y1, cx, cy) = info;
+                var (cellId, x0, y0, x1, y1, cx, cy) = info;
 
                 for (int y = y0; y <= y1; y++)
                 {
-                    // Lock only this row
                     lock (rowLocks[y])
                     {
                         for (int x = x0; x <= x1; x++)
                         {
                             int gridIdx = y * gridWidth + x;
-
-                            // Check if this grid position is closer to this cell
                             float dx = x - cx;
                             float dy = y - cy;
                             float distSq = dx * dx + dy * dy;
@@ -357,12 +354,141 @@ namespace EconSim.Renderer
                             if (distSq < distanceSqGrid[gridIdx])
                             {
                                 distanceSqGrid[gridIdx] = distSq;
-                                spatialGrid[gridIdx] = cell.Id;
+                                spatialGrid[gridIdx] = cellId;
                             }
                         }
                     }
                 }
             });
+
+            // PHASE 2: Refine boundary pixels using point-in-polygon
+            RefineBoundaryPixels(scale);
+        }
+
+        /// <summary>
+        /// Find boundary pixels (where neighbors differ) and refine using point-in-polygon.
+        /// Uses expanded radius based on relaxed geometry amplitude.
+        /// </summary>
+        private void RefineBoundaryPixels(float scale)
+        {
+            // Pre-convert polygons to grid coordinates
+            var gridPolygons = new Dictionary<int, List<Vector2>>();
+            foreach (var kvp in relaxedGeometry.CellPolygons)
+            {
+                var gridPoly = new List<Vector2>(kvp.Value.Count);
+                foreach (var p in kvp.Value)
+                {
+                    gridPoly.Add(new Vector2(p.x * scale, p.y * scale));
+                }
+                gridPolygons[kvp.Key] = gridPoly;
+            }
+
+            // Expand boundary detection radius based on amplitude
+            int boundaryRadius = Mathf.CeilToInt(relaxedGeometry.Amplitude * scale) + 1;
+            int margin = boundaryRadius + 1;
+
+            // First pass: mark all pixels near Voronoi boundaries
+            var needsRefinement = new bool[gridWidth * gridHeight];
+
+            Parallel.For(margin, gridHeight - margin, y =>
+            {
+                for (int x = margin; x < gridWidth - margin; x++)
+                {
+                    int idx = y * gridWidth + x;
+                    int currentCell = spatialGrid[idx];
+
+                    // Check if any pixel within radius has a different cell
+                    bool nearBoundary = false;
+                    for (int dy = -boundaryRadius; dy <= boundaryRadius && !nearBoundary; dy++)
+                    {
+                        for (int dx = -boundaryRadius; dx <= boundaryRadius && !nearBoundary; dx++)
+                        {
+                            if (dx == 0 && dy == 0) continue;
+                            int nidx = (y + dy) * gridWidth + (x + dx);
+                            if (spatialGrid[nidx] != currentCell)
+                            {
+                                nearBoundary = true;
+                            }
+                        }
+                    }
+
+                    needsRefinement[idx] = nearBoundary;
+                }
+            });
+
+            // Second pass: refine marked pixels using PIP
+            Parallel.For(margin, gridHeight - margin, y =>
+            {
+                for (int x = margin; x < gridWidth - margin; x++)
+                {
+                    int idx = y * gridWidth + x;
+                    if (!needsRefinement[idx]) continue;
+
+                    int currentCell = spatialGrid[idx];
+                    float px = x + 0.5f;
+                    float py = y + 0.5f;
+
+                    // Test against current cell's polygon
+                    if (gridPolygons.TryGetValue(currentCell, out var currentPoly))
+                    {
+                        if (PointInPolygon(px, py, currentPoly))
+                        {
+                            continue; // Current assignment is correct
+                        }
+                    }
+
+                    // Find which nearby cell contains this point
+                    // Collect unique neighbor cell IDs within radius
+                    var candidateCells = new HashSet<int>();
+                    for (int dy = -boundaryRadius; dy <= boundaryRadius; dy++)
+                    {
+                        for (int dx = -boundaryRadius; dx <= boundaryRadius; dx++)
+                        {
+                            int nidx = (y + dy) * gridWidth + (x + dx);
+                            int neighborCell = spatialGrid[nidx];
+                            if (neighborCell != currentCell)
+                            {
+                                candidateCells.Add(neighborCell);
+                            }
+                        }
+                    }
+
+                    foreach (int candidateCell in candidateCells)
+                    {
+                        if (gridPolygons.TryGetValue(candidateCell, out var candidatePoly))
+                        {
+                            if (PointInPolygon(px, py, candidatePoly))
+                            {
+                                spatialGrid[idx] = candidateCell;
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        /// <summary>
+        /// Ray casting algorithm for point-in-polygon testing.
+        /// </summary>
+        private bool PointInPolygon(float px, float py, List<Vector2> polygon)
+        {
+            int n = polygon.Count;
+            bool inside = false;
+
+            for (int i = 0, j = n - 1; i < n; j = i++)
+            {
+                float xi = polygon[i].x, yi = polygon[i].y;
+                float xj = polygon[j].x, yj = polygon[j].y;
+
+                if (((yi > py) != (yj > py)) &&
+                    (px < (xj - xi) * (py - yi) / (yj - yi) + xi))
+                {
+                    inside = !inside;
+                }
+            }
+
+            return inside;
         }
 
         /// <summary>

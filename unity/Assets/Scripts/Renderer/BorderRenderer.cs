@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using EconSim.Core.Data;
 using EconSim.Core.Rendering;
@@ -29,14 +30,18 @@ namespace EconSim.Renderer
         private Mesh provinceBorderMesh;
         private Mesh countyBorderMesh;
 
+        // Relaxed geometry for organic curved edges
+        private RelaxedCellGeometry relaxedGeometry;
+
         // Edge storage to avoid duplicates (store as sorted pair)
         private HashSet<(int, int)> processedProvinceEdges = new HashSet<(int, int)>();
         private HashSet<(int, int)> processedCountyEdges = new HashSet<(int, int)>();
 
 
-        public void Initialize(MapData data, float cellScale, float heightScale)
+        public void Initialize(MapData data, RelaxedCellGeometry relaxedGeom, float cellScale, float heightScale)
         {
             this.mapData = data;
+            this.relaxedGeometry = relaxedGeom;
             this.cellScale = cellScale;
             this.heightScale = heightScale;
             this.palette = new PoliticalPalette(data);
@@ -289,15 +294,17 @@ namespace EconSim.Renderer
             if (v1 >= mapData.Vertices.Count || v2 >= mapData.Vertices.Count)
                 return null;
 
-            Vector2 pos1 = mapData.Vertices[v1].ToUnity();
-            Vector2 pos2 = mapData.Vertices[v2].ToUnity();
+            // Get relaxed edge from geometry (2D map coords)
+            List<Vector2> relaxedEdge2D = relaxedGeometry.GetEdge(v1, v2);
 
-            float avgHeight = 0f;
+            // Convert to 3D world coords
+            var points = relaxedEdge2D
+                .Select(p => new Vector3(p.x * cellScale, 0f, -p.y * cellScale))
+                .ToList();
 
             return new BorderEdge
             {
-                Start = new Vector3(pos1.x * cellScale, avgHeight, -pos1.y * cellScale),
-                End = new Vector3(pos2.x * cellScale, avgHeight, -pos2.y * cellScale),
+                Points = points,
                 StartVertexIdx = v1,
                 EndVertexIdx = v2
             };
@@ -311,7 +318,7 @@ namespace EconSim.Renderer
 
         /// <summary>
         /// Chains individual edge segments into continuous polylines by connecting
-        /// edges that share vertex indices.
+        /// edges that share vertex indices. Handles multi-point relaxed edges.
         /// </summary>
         private List<List<Vector3>> ChainEdgesIntoPolylines(List<BorderEdge> edges)
         {
@@ -349,8 +356,8 @@ namespace EconSim.Renderer
                 usedEdges.Add(startEdgeIdx);
 
                 var startEdge = edges[startEdgeIdx];
-                polyline.Add(startEdge.Start);
-                polyline.Add(startEdge.End);
+                // Add all points from the first edge
+                polyline.AddRange(startEdge.Points);
                 vertexIndices.Add(startEdge.StartVertexIdx);
                 vertexIndices.Add(startEdge.EndVertexIdx);
 
@@ -393,28 +400,37 @@ namespace EconSim.Renderer
                 usedEdges.Add(nextEdgeIdx);
                 var nextEdge = edges[nextEdgeIdx];
 
-                // Determine which end connects and add the other end
-                Vector3 nextPoint;
+                // Determine which end connects and get points in correct order
+                List<Vector3> pointsToAdd;
                 int nextVertexIdx;
                 if (nextEdge.StartVertexIdx == endpointIdx)
                 {
-                    nextPoint = nextEdge.End;
+                    // Edge goes from endpoint to EndVertexIdx - use points as-is
+                    pointsToAdd = nextEdge.Points;
                     nextVertexIdx = nextEdge.EndVertexIdx;
                 }
                 else
                 {
-                    nextPoint = nextEdge.Start;
+                    // Edge goes from EndVertexIdx to endpoint - reverse points
+                    pointsToAdd = new List<Vector3>(nextEdge.Points);
+                    pointsToAdd.Reverse();
                     nextVertexIdx = nextEdge.StartVertexIdx;
                 }
 
                 if (forward)
                 {
-                    polyline.Add(nextPoint);
+                    // Skip first point (duplicate of current end)
+                    polyline.AddRange(pointsToAdd.Skip(1));
                     vertexIndices.Add(nextVertexIdx);
                 }
                 else
                 {
-                    polyline.Insert(0, nextPoint);
+                    // We're prepending - points are already oriented toward our current start
+                    // Reverse them so they go from nextVertexIdx toward current start
+                    var reversed = new List<Vector3>(pointsToAdd);
+                    reversed.Reverse();
+                    // Skip first point (now the duplicate of current start)
+                    polyline.InsertRange(0, reversed.Skip(1));
                     vertexIndices.Insert(0, nextVertexIdx);
                 }
             }
@@ -445,9 +461,8 @@ namespace EconSim.Renderer
 
         private struct BorderEdge
         {
-            public Vector3 Start;
-            public Vector3 End;
-            public int StartVertexIdx;  // Original vertex index for chaining
+            public List<Vector3> Points;  // Full relaxed edge (multiple points)
+            public int StartVertexIdx;    // Original vertex index for chaining
             public int EndVertexIdx;
         }
 

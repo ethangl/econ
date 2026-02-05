@@ -67,7 +67,9 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 - `GameManager` - Entry point, loads map, owns simulation
 - `MapView` - Generates grid mesh (default) or Voronoi mesh, map modes (1=political cycle, 2=terrain with elevation tinting, 3=market), click-to-select
 - `GridMeshTest` - Test harness for grid mesh rendering (validates UV mapping, winding order)
-- `BorderRenderer` - State/province borders (legacy, replaced by shader system)
+- `RelaxedCellGeometry` - Generates organic curved cell boundaries using Catmull-Rom splines
+- `NoiseUtils` - Deterministic hash utilities for procedural generation
+- `BorderRenderer` - Province/county borders as curved polyline meshes (state borders via shader)
 - `MapOverlayManager` - Generates data textures, palettes, and biome-elevation matrix for shader overlays
 - `RiverRenderer` - River line strips (blue, tapered)
 - `RoadRenderer` - Emergent road segments (brown)
@@ -150,14 +152,28 @@ The map uses a GPU-driven overlay system for borders and map modes:
 - `_StateBorderOpacity` controls blend with interior color
 - Each country gets its own colored border band → parallel double-line effect at boundaries
 
-**Province/county border rendering (mesh-based):**
+**Province/county border rendering (mesh-based with relaxed geometry):**
 
-- `BorderRenderer.cs` generates polyline meshes from Voronoi cell edges
-- Edges chained into continuous polylines
-- Province/county borders use shared edge positions (single line)
-- Colors derived from `PoliticalPalette` (darkened, saturated state colors)
+- `RelaxedCellGeometry.cs` generates organic curved cell boundaries
+  - Catmull-Rom splines with deterministic noise displacement
+  - Parameters: Amplitude=1.2, Frequency=0.36, SamplesPerSegment=5
+  - Shared edges cached and reused (keyed by sorted vertex pair)
+  - Map boundary edges kept straight (no relaxation)
+- `BorderRenderer.cs` generates polyline meshes from relaxed edges
+  - Multi-point edges chained into continuous curved polylines
+  - Province/county borders use shared relaxed edge positions
+  - Colors derived from `PoliticalPalette` (darkened, saturated state colors)
 - `SimpleBorder.shader` renders vertex-colored border meshes
 - Border layer order (bottom to top): county → province → state
+
+**Relaxed geometry rasterization (texture boundaries):**
+
+- `MapOverlayManager` uses hybrid approach for spatial grid:
+  1. Fast Voronoi fill using cell centers (complete coverage, no gaps)
+  2. Boundary pixel refinement using point-in-polygon testing
+- Refinement radius scales with amplitude to catch all affected pixels
+- Texture edges align with mesh borders (both use same relaxed geometry)
+- Spatial grid cached with relaxed parameters in cache key
 
 **River mask texture (Phase 8):**
 

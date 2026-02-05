@@ -2,6 +2,35 @@
 
 Development phases and completed work for the Economic Simulator project.
 
+## Phase 11: Relaxed Border System ✓
+
+- **Relaxed cell geometry** (`RelaxedCellGeometry.cs`)
+  - Organic curved cell boundaries replace straight Voronoi edges
+  - Catmull-Rom spline interpolation for smooth curves
+  - Deterministic noise displacement (amplitude, frequency parameters)
+  - Shared edges cached by sorted vertex pair (ensures symmetry)
+  - Map boundary edges kept straight (no relaxation at map edges)
+  - Parameters: Amplitude=1.2, Frequency=0.36, SamplesPerSegment=5
+
+- **Noise utilities** (`NoiseUtils.cs`)
+  - `HashToFloat()` - deterministic hash to [-1, 1] range
+  - `HashCombine()` - combine multiple ints into single seed
+
+- **Border rendering updates** (`BorderRenderer.cs`)
+  - Uses multi-point relaxed edges instead of straight vertex-to-vertex
+  - Edge chaining updated to concatenate point lists
+  - Curved province/county borders align with texture boundaries
+
+- **Texture rasterization** (`MapOverlayManager.cs`)
+  - Hybrid approach: fast Voronoi base + boundary refinement
+  - Phase 1: Nearest-center fill for complete coverage (no gaps)
+  - Phase 2: Point-in-polygon refinement for boundary pixels only
+  - Refinement radius scales with amplitude parameter
+  - Texture edges align with mesh borders (shared relaxed geometry)
+  - Spatial grid cache key includes relaxed parameters
+
+---
+
 ## Phase 10: Startup Screen & UI Polish
 
 - **Startup screen modal**

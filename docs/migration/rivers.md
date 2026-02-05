@@ -72,7 +72,7 @@ This ensures water can always find a path to the sea.
 | Query "has river?" | `cell.riverId > 0`                 | Check adjacent edges                |
 | Political borders  | Rivers inside territory            | Rivers ARE borders naturally        |
 | Transport routing  | Ambiguous (cross cell? alongside?) | Clear (travel along edge)           |
-| Rendering          | Interpolate through cell centers   | Draw edge polyline directly         |
+| Rendering          | Interpolate through cell centers   | Draw edge polyline (relaxed curves) |
 | Flow direction     | Cell A → Cell B                    | Edge has upstream/downstream vertex |
 
 ## Why Edge-Based is Better for Us
