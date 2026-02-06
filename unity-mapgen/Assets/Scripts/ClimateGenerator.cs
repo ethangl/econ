@@ -10,12 +10,7 @@ namespace MapGen
     [RequireComponent(typeof(HeightmapGenerator))]
     public class ClimateGenerator : MonoBehaviour
     {
-        [Header("Map Position")]
-        [Tooltip("Latitude of the map's southern edge (degrees, positive = north)")]
-        public float LatitudeSouth = 30f;
-
-        [Header("Debug Overlay")]
-        public ClimateOverlay Overlay = ClimateOverlay.None;
+        [System.NonSerialized] public float LatitudeSouth = 30f;
 
         private HeightmapGenerator _heightmapGenerator;
         private CellMeshGenerator _meshGenerator;
@@ -110,92 +105,5 @@ namespace MapGen
             }
         }
 
-        void OnDrawGizmosSelected()
-        {
-            if (Overlay == ClimateOverlay.None || _climateData == null || _meshGenerator?.Mesh == null)
-                return;
-
-            var mesh = _meshGenerator.Mesh;
-
-            if (Overlay == ClimateOverlay.Temperature)
-                DrawTemperatureGizmos(mesh);
-            else if (Overlay == ClimateOverlay.Precipitation)
-                DrawPrecipitationGizmos(mesh);
-        }
-
-        void DrawTemperatureGizmos(CellMesh mesh)
-        {
-            var (tMin, tMax) = _climateData.TemperatureRange();
-            float range = tMax - tMin;
-            if (range < 0.01f) range = 1f;
-
-            for (int i = 0; i < mesh.CellCount; i++)
-            {
-                Vec2 center = mesh.CellCenters[i];
-                float t = (_climateData.Temperature[i] - tMin) / range;
-
-                // Blue (cold) → white (mid) → red (hot)
-                Color color;
-                if (t < 0.5f)
-                    color = Color.Lerp(new Color(0.1f, 0.2f, 0.9f), Color.white, t * 2f);
-                else
-                    color = Color.Lerp(Color.white, new Color(0.9f, 0.1f, 0.1f), (t - 0.5f) * 2f);
-
-                Gizmos.color = color;
-                Gizmos.DrawSphere(new Vector3(center.X, center.Y, 0), 6f);
-            }
-        }
-
-        void DrawPrecipitationGizmos(CellMesh mesh)
-        {
-            var heights = GetComponent<HeightmapGenerator>()?.HeightGrid;
-            if (heights == null) return;
-
-            // Find precip range among land cells only for better contrast
-            float landMin = float.MaxValue, landMax = float.MinValue;
-            for (int i = 0; i < mesh.CellCount; i++)
-            {
-                if (heights.IsWater(i)) continue;
-                float v = _climateData.Precipitation[i];
-                if (v < landMin) landMin = v;
-                if (v > landMax) landMax = v;
-            }
-            float landRange = landMax - landMin;
-            if (landRange < 0.01f) landRange = 1f;
-
-            for (int i = 0; i < mesh.CellCount; i++)
-            {
-                Vec2 center = mesh.CellCenters[i];
-
-                Color color;
-                if (heights.IsWater(i))
-                {
-                    // Water: dark gray, not part of gradient
-                    color = new Color(0.2f, 0.2f, 0.25f);
-                }
-                else
-                {
-                    // Land: normalize within land range only
-                    float p = (_climateData.Precipitation[i] - landMin) / landRange;
-
-                    // Red (dry) → white (mid) → blue (wet)
-                    if (p < 0.5f)
-                        color = Color.Lerp(new Color(0.9f, 0.1f, 0.1f), Color.white, p * 2f);
-                    else
-                        color = Color.Lerp(Color.white, new Color(0.1f, 0.2f, 0.9f), (p - 0.5f) * 2f);
-                }
-
-                Gizmos.color = color;
-                Gizmos.DrawSphere(new Vector3(center.X, center.Y, 0), 6f);
-            }
-        }
-
-    }
-
-    public enum ClimateOverlay
-    {
-        None,
-        Temperature,
-        Precipitation
     }
 }

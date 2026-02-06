@@ -10,9 +10,9 @@ namespace MapGen
     /// </summary>
     public class CellMeshGenerator : MonoBehaviour
     {
-        public int Seed = 12345;
-        public int CellCount = 10000;
-        public float AspectRatio = 16f / 9f;
+        [System.NonSerialized] public int Seed = 12345;
+        [System.NonSerialized] public int CellCount = 10000;
+        [System.NonSerialized] public float AspectRatio = 16f / 9f;
 
         const float CellSizeKm = 2.5f;
 
@@ -39,9 +39,5 @@ namespace MapGen
                       $"size {mapWidth:F0} x {mapHeight:F0} km");
         }
 
-        void Start()
-        {
-            Generate();
-        }
     }
 }

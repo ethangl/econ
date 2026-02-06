@@ -5,14 +5,27 @@ namespace MapGen
 {
     public enum ColorMode
     {
-        Heightmap,
-        Soil,
-        Biome,
-        CellIndex
+        // Base modes
+        Heightmap, Soil, Biome, CellIndex,
+        // Climate
+        Temperature, Precipitation,
+        // Derived inputs
+        Slope, SaltEffect, Loess, CellFlux,
+        // Geology
+        RockType,
+        // Soil detail
+        Fertility,
+        // Biome detail
+        BiomeType, Habitability,
+        // Vegetation
+        VegetationType, VegetationDensity,
+        // Economy
+        Subsistence, MovementCost
     }
 
     /// <summary>
     /// Debug visualization for CellMesh using Unity's GL immediate mode.
+    /// All overlay modes consolidated here — no gizmos needed.
     /// </summary>
     [RequireComponent(typeof(CellMeshGenerator))]
     public class CellMeshVisualizer : MonoBehaviour
@@ -33,8 +46,14 @@ namespace MapGen
 
         private CellMeshGenerator _generator;
         private HeightmapGenerator _heightmapGenerator;
+        private ClimateGenerator _climateGenerator;
         private BiomeGenerator _biomeGenerator;
         private Material _glMaterial;
+
+        // Cached heatmap ranges for temperature/precipitation (computed from data)
+        private float _tempMin, _tempMax;
+        private float _precipLandMin, _precipLandMax;
+        private bool _climateCacheValid;
 
         // Soil palette (8 types, indexed by SoilType enum)
         private static readonly Color[] SoilColors = new Color[]
@@ -52,20 +71,52 @@ namespace MapGen
         // Vegetation palette (7 types, indexed by VegetationType enum)
         private static readonly Color[] VegetationColors = new Color[]
         {
-            new Color(0f, 0f, 0f, 0f),      // None - transparent
-            new Color(0.55f, 0.60f, 0.50f),  // LichenMoss - muted gray-green
-            new Color(0.65f, 0.70f, 0.30f),  // Grass - gold-green
-            new Color(0.50f, 0.52f, 0.32f),  // Shrub - dusty olive
-            new Color(0.28f, 0.55f, 0.22f),  // DeciduousForest - green
-            new Color(0.15f, 0.35f, 0.30f),  // ConiferousForest - dark blue-green
-            new Color(0.10f, 0.42f, 0.18f),  // BroadleafForest - deep green
+            new Color(0.70f, 0.65f, 0.55f), // None - bare ground
+            new Color(0.55f, 0.60f, 0.50f), // LichenMoss - muted gray-green
+            new Color(0.70f, 0.75f, 0.30f), // Grass - gold-green
+            new Color(0.50f, 0.55f, 0.30f), // Shrub - dusty olive
+            new Color(0.30f, 0.60f, 0.20f), // DeciduousForest - green
+            new Color(0.15f, 0.35f, 0.30f), // ConiferousForest - dark blue-green
+            new Color(0.10f, 0.40f, 0.15f), // BroadleafForest - deep green
         };
+
+        // 18 biome colors - visually distinct for overlay
+        private static readonly Color[] BiomeColors = new Color[]
+        {
+            new Color(0.85f, 0.92f, 0.98f), // Glacier - ice white-blue
+            new Color(0.70f, 0.75f, 0.65f), // Tundra - gray-green
+            new Color(0.95f, 0.93f, 0.85f), // SaltFlat - off-white
+            new Color(0.45f, 0.60f, 0.45f), // CoastalMarsh - muted green
+            new Color(0.60f, 0.58f, 0.55f), // AlpineBarren - gray
+            new Color(0.55f, 0.58f, 0.40f), // MountainShrub - olive
+            new Color(0.40f, 0.65f, 0.25f), // Floodplain - bright green
+            new Color(0.30f, 0.50f, 0.40f), // Wetland - teal
+            new Color(0.92f, 0.82f, 0.45f), // HotDesert - sand yellow
+            new Color(0.75f, 0.72f, 0.60f), // ColdDesert - pale brown
+            new Color(0.70f, 0.65f, 0.40f), // Scrubland - dusty olive
+            new Color(0.10f, 0.45f, 0.15f), // TropicalRainforest - deep green
+            new Color(0.25f, 0.50f, 0.20f), // TropicalDryForest - medium green
+            new Color(0.75f, 0.70f, 0.30f), // Savanna - gold-green
+            new Color(0.20f, 0.35f, 0.30f), // BorealForest - dark blue-green
+            new Color(0.25f, 0.55f, 0.20f), // TemperateForest - green
+            new Color(0.65f, 0.72f, 0.35f), // Grassland - gold-green
+            new Color(0.35f, 0.55f, 0.25f), // Woodland - medium green
+        };
+
+        // Rock type colors (4 types)
+        private static readonly Color[] RockColors = new Color[]
+        {
+            new Color(0.55f, 0.55f, 0.55f), // Granite - gray
+            new Color(0.76f, 0.70f, 0.50f), // Sedimentary - sandy
+            new Color(0.85f, 0.85f, 0.75f), // Limestone - pale cream
+            new Color(0.40f, 0.25f, 0.25f), // Volcanic - dark red-brown
+        };
+
+        private static readonly Color WaterColor = new Color(0.2f, 0.2f, 0.25f);
 
         void Awake()
         {
-            _generator = GetComponent<CellMeshGenerator>();
-            _heightmapGenerator = GetComponent<HeightmapGenerator>();
-            _biomeGenerator = GetComponent<BiomeGenerator>();
+            CacheComponents();
 
             // Create simple material for GL drawing
             var shader = Shader.Find("Hidden/Internal-Colored");
@@ -77,6 +128,14 @@ namespace MapGen
             _glMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
             _glMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
             _glMaterial.SetInt("_ZWrite", 0);
+        }
+
+        private void CacheComponents()
+        {
+            _generator = GetComponent<CellMeshGenerator>();
+            _heightmapGenerator = GetComponent<HeightmapGenerator>();
+            _climateGenerator = GetComponent<ClimateGenerator>();
+            _biomeGenerator = GetComponent<BiomeGenerator>();
         }
 
         void OnRenderObject()
@@ -108,20 +167,23 @@ namespace MapGen
         {
             GL.Begin(GL.TRIANGLES);
 
-            if (_heightmapGenerator == null)
-                _heightmapGenerator = GetComponent<HeightmapGenerator>();
-            if (_biomeGenerator == null)
-                _biomeGenerator = GetComponent<BiomeGenerator>();
+            if (_heightmapGenerator == null || _climateGenerator == null || _biomeGenerator == null)
+                CacheComponents();
 
             var heightGrid = _heightmapGenerator?.HeightGrid;
             var biomeData = _biomeGenerator?.BiomeData;
+            var climateData = _climateGenerator?.ClimateData;
+
+            // Refresh cached climate ranges when needed
+            if (NeedsClimateRange() && climateData != null && heightGrid != null)
+                ComputeClimateRanges(mesh, climateData, heightGrid);
 
             for (int c = 0; c < mesh.CellCount; c++)
             {
                 var verts = mesh.CellVertices[c];
                 if (verts == null || verts.Length < 3) continue;
 
-                Color color = GetCellColor(c, heightGrid, biomeData);
+                Color color = GetCellColor(c, heightGrid, biomeData, climateData);
                 color.a = 1f;
                 GL.Color(color);
 
@@ -141,41 +203,153 @@ namespace MapGen
             GL.End();
         }
 
-        private Color GetCellColor(int c, HeightGrid heightGrid, BiomeData biomeData)
+        private bool NeedsClimateRange()
+        {
+            return !_climateCacheValid &&
+                   (ColorMode == ColorMode.Temperature || ColorMode == ColorMode.Precipitation);
+        }
+
+        private void ComputeClimateRanges(CellMesh mesh, ClimateData climate, HeightGrid heights)
+        {
+            var (tMin, tMax) = climate.TemperatureRange();
+            _tempMin = tMin;
+            _tempMax = tMax;
+
+            float pMin = float.MaxValue, pMax = float.MinValue;
+            for (int i = 0; i < mesh.CellCount; i++)
+            {
+                if (heights.IsWater(i)) continue;
+                float p = climate.Precipitation[i];
+                if (p < pMin) pMin = p;
+                if (p > pMax) pMax = p;
+            }
+            _precipLandMin = pMin == float.MaxValue ? 0 : pMin;
+            _precipLandMax = pMax == float.MinValue ? 1 : pMax;
+            _climateCacheValid = true;
+        }
+
+        /// <summary>
+        /// Invalidate cached ranges (call when data changes, e.g. after regeneration).
+        /// </summary>
+        public void InvalidateCache()
+        {
+            _climateCacheValid = false;
+        }
+
+        private Color GetCellColor(int c, HeightGrid heightGrid, BiomeData biomeData, ClimateData climateData)
         {
             bool isWater = heightGrid != null && heightGrid.IsWater(c);
 
             switch (ColorMode)
             {
-                case ColorMode.Soil:
-                case ColorMode.Biome:
-                    if (biomeData == null || isWater)
-                        return GetWaterOrFallback(c, heightGrid);
-
-                    Color soil = SoilColors[(int)biomeData.Soil[c]];
-                    if (ColorMode == ColorMode.Soil)
-                        return soil;
-
-                    // Biome: soil + vegetation composite
-                    Color veg = VegetationColors[(int)biomeData.Vegetation[c]];
-                    float density = biomeData.VegetationDensity[c];
-                    return Color.Lerp(soil, veg, density);
-
+                // --- Original modes ---
                 case ColorMode.Heightmap:
                     if (heightGrid != null)
                         return GetHeightColor(heightGrid.Heights[c]);
                     goto case ColorMode.CellIndex;
 
+                case ColorMode.Soil:
+                    if (biomeData == null || isWater) return GetWaterOrFallback(c, heightGrid);
+                    return SoilColors[(int)biomeData.Soil[c]];
+
+                case ColorMode.Biome:
+                    if (biomeData == null || isWater) return GetWaterOrFallback(c, heightGrid);
+                    // Composite: soil + vegetation by density
+                    Color soil = SoilColors[(int)biomeData.Soil[c]];
+                    Color veg = VegetationColors[(int)biomeData.Vegetation[c]];
+                    return Color.Lerp(soil, veg, biomeData.VegetationDensity[c]);
+
                 case ColorMode.CellIndex:
-                default:
                     float hue = (c * 0.618034f) % 1f;
                     return Color.HSVToRGB(hue, 0.5f, 0.7f);
+
+                // --- Climate ---
+                case ColorMode.Temperature:
+                    if (climateData == null) return WaterColor;
+                    // Temperature uses blue(cold)->white->red(hot), includes water cells
+                    return GetHeatmapColor(climateData.Temperature[c], _tempMin, _tempMax);
+
+                case ColorMode.Precipitation:
+                    if (climateData == null || isWater) return WaterColor;
+                    return GetHeatmapColor(climateData.Precipitation[c], _precipLandMin, _precipLandMax);
+
+                // --- Derived inputs (heatmaps) ---
+                case ColorMode.Slope:
+                    if (biomeData == null || isWater) return WaterColor;
+                    return GetHeatmapColor(biomeData.Slope[c], 0f, 1f);
+
+                case ColorMode.SaltEffect:
+                    if (biomeData == null || isWater) return WaterColor;
+                    return GetHeatmapColor(biomeData.SaltEffect[c], 0f, 1f);
+
+                case ColorMode.Loess:
+                    if (biomeData == null || isWater) return WaterColor;
+                    return GetHeatmapColor(biomeData.Loess[c], 0f, 1f);
+
+                case ColorMode.CellFlux:
+                    if (biomeData == null || isWater) return WaterColor;
+                    return GetHeatmapColor(biomeData.CellFlux[c], 0f, 1f);
+
+                // --- Geology (categorical) ---
+                case ColorMode.RockType:
+                    if (biomeData == null || isWater) return WaterColor;
+                    return RockColors[(int)biomeData.Rock[c]];
+
+                // --- Soil detail ---
+                case ColorMode.Fertility:
+                    if (biomeData == null || isWater) return WaterColor;
+                    return GetHeatmapColor(biomeData.Fertility[c], 0f, 1f);
+
+                // --- Biome detail (categorical) ---
+                case ColorMode.BiomeType:
+                    if (biomeData == null || isWater) return WaterColor;
+                    return BiomeColors[(int)biomeData.Biome[c]];
+
+                case ColorMode.Habitability:
+                    if (biomeData == null || isWater) return WaterColor;
+                    return GetHeatmapColor(biomeData.Habitability[c], 0f, 100f);
+
+                // --- Vegetation ---
+                case ColorMode.VegetationType:
+                    if (biomeData == null || isWater) return WaterColor;
+                    return VegetationColors[(int)biomeData.Vegetation[c]];
+
+                case ColorMode.VegetationDensity:
+                    if (biomeData == null || isWater) return WaterColor;
+                    return GetHeatmapColor(biomeData.VegetationDensity[c], 0f, 1f);
+
+                // --- Economy ---
+                case ColorMode.Subsistence:
+                    if (biomeData == null || isWater) return WaterColor;
+                    return GetHeatmapColor(biomeData.Subsistence[c], 0f, 1f);
+
+                case ColorMode.MovementCost:
+                    if (biomeData == null || isWater) return WaterColor;
+                    return GetHeatmapColor(biomeData.MovementCost[c], 1f, 8f);
+
+                default:
+                    return WaterColor;
             }
         }
 
         /// <summary>
-        /// For Soil/Biome modes: water cells use height color if available, else default blue.
+        /// Red(low) -> white(mid) -> blue(high) heatmap gradient.
         /// </summary>
+        private Color GetHeatmapColor(float value, float min, float max)
+        {
+            float range = max - min;
+            if (range < 1e-6f) range = 1f;
+
+            float t = (value - min) / range;
+            if (t < 0f) t = 0f;
+            if (t > 1f) t = 1f;
+
+            if (t < 0.5f)
+                return Color.Lerp(new Color(0.9f, 0.1f, 0.1f), Color.white, t * 2f);
+            else
+                return Color.Lerp(Color.white, new Color(0.1f, 0.2f, 0.9f), (t - 0.5f) * 2f);
+        }
+
         private Color GetWaterOrFallback(int c, HeightGrid heightGrid)
         {
             if (heightGrid != null)
@@ -183,10 +357,6 @@ namespace MapGen
             return new Color(0.1f, 0.2f, 0.5f);
         }
 
-        /// <summary>
-        /// Get color for a height value.
-        /// Water: blue shades, Land: green to brown to white.
-        /// </summary>
         private Color GetHeightColor(float height)
         {
             const float seaLevel = HeightGrid.SeaLevel;
@@ -194,34 +364,20 @@ namespace MapGen
 
             if (height <= seaLevel)
             {
-                // Water: dark blue (deep) to light blue (shallow)
                 float t = height / seaLevel;
                 return Color.Lerp(new Color(0.05f, 0.1f, 0.3f), new Color(0.2f, 0.4f, 0.7f), t);
             }
             else
             {
-                // Land: green (low) to brown (mid) to white (high)
                 float t = (height - seaLevel) / (maxHeight - seaLevel);
                 if (t < 0.3f)
-                {
-                    // Green lowlands
                     return Color.Lerp(new Color(0.2f, 0.5f, 0.2f), new Color(0.4f, 0.6f, 0.3f), t / 0.3f);
-                }
                 else if (t < 0.6f)
-                {
-                    // Brown hills
                     return Color.Lerp(new Color(0.4f, 0.6f, 0.3f), new Color(0.5f, 0.4f, 0.25f), (t - 0.3f) / 0.3f);
-                }
                 else if (t < 0.85f)
-                {
-                    // Gray mountains
                     return Color.Lerp(new Color(0.5f, 0.4f, 0.25f), new Color(0.6f, 0.6f, 0.6f), (t - 0.6f) / 0.25f);
-                }
                 else
-                {
-                    // Snow caps
                     return Color.Lerp(new Color(0.6f, 0.6f, 0.6f), Color.white, (t - 0.85f) / 0.15f);
-                }
             }
         }
 

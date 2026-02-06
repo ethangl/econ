@@ -25,21 +25,10 @@ public class BiomeGeneratorEditor : Editor
 
         var generator = (BiomeGenerator)target;
 
-        EditorGUILayout.Space();
-
-        if (GUILayout.Button("Generate Biomes"))
-        {
-            generator.Generate();
-            SceneView.RepaintAll();
-        }
-
         if (generator.BiomeData != null)
         {
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField("Biome Stats", EditorStyles.boldLabel);
-
-            var data = generator.BiomeData;
-            EditorGUILayout.LabelField("Cells", data.CellCount.ToString());
+            EditorGUILayout.LabelField("Hover over cells in Scene view for details", EditorStyles.miniLabel);
         }
     }
 

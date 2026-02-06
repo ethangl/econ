@@ -4,19 +4,19 @@ This directory documents our plan to migrate away from Azgaar's Fantasy Map Gene
 
 ## Contents
 
-| Document                                | Topic                                                          |
-| --------------------------------------- | -------------------------------------------------------------- |
-| [Philosophy & Overview](./overview.md)  | Goals, dependencies, migration boundary                        |
-| [Persistence](./persistence.md)         | Caching MapData, file formats                                  |
-| [Heightmap](./heightmap.md)             | Terrain generation, template DSL                               |
-| [Rivers](./rivers.md)                   | Flow accumulation, edge-based design                           |
-| [Climate & Biomes](./climate-biomes.md) | Temperature, precipitation, biome matrix                       |
-| [Soil & Biomes](../biomes/)             | Soil model, geology, biome assignment (moved to own directory) |
-| [Resources](../biomes/resources.md)     | Resource types, production chains, geological ores (moved)     |
-| [Settlements](./settlements.md)         | Suitability scoring, population                                |
-| [Cultures](./cultures.md)               | Culture types, expansion, naming                               |
-| [Political](./political.md)             | States, provinces, borders                                     |
-| [Shortcomings](./shortcomings.md)       | Azgaar issues we want to address                               |
+| Document                               | Topic                                                          |
+| -------------------------------------- | -------------------------------------------------------------- |
+| [Philosophy & Overview](./overview.md) | Goals, dependencies, migration boundary                        |
+| [Persistence](./persistence.md)        | Caching MapData, file formats                                  |
+| [Heightmap](./heightmap.md)            | Terrain generation, template DSL                               |
+| [Rivers](./rivers.md)                  | Flow accumulation, edge-based design                           |
+| [Climate & Biomes](./biomes/README.md) | Temperature, precipitation, biome matrix                       |
+| [Soil & Biomes](../biomes/)            | Soil model, geology, biome assignment (moved to own directory) |
+| [Resources](../biomes/resources.md)    | Resource types, production chains, geological ores (moved)     |
+| [Settlements](./settlements.md)        | Suitability scoring, population                                |
+| [Cultures](./cultures.md)              | Culture types, expansion, naming                               |
+| [Political](./political.md)            | States, provinces, borders                                     |
+| [Shortcomings](./shortcomings.md)      | Azgaar issues we want to address                               |
 
 ## Quick Reference
 
@@ -78,21 +78,21 @@ econ/
 
 **Phase A: Foundation**
 
-[x] Cell Mesh (Voronoi/Delaunay)
-[x] Heightmap (noise + templates)
-[x] Climate Model
-[x] Rivers (flow accumulation)
+- [x] Cell Mesh (Voronoi/Delaunay)
+- [x] Heightmap (noise + templates)
+- [x] Climate Model
+- [x] Rivers (flow accumulation)
 
 **Phase B: Economic Geography**
 
-[ ] Biomes
-[ ] Resource Placement
-[ ] Settlement/Population
-[ ] Political Boundaries
+- [x] Biomes
+- [x] Resource Placement
+- [ ] Settlement/Population
+- [ ] Political Boundaries
 
 **Phase C: Polish**
 
-[ ] Naming
+- [ ] Naming
 
 ## References
 

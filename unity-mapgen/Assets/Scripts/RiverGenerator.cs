@@ -6,8 +6,8 @@ namespace MapGen
     [RequireComponent(typeof(ClimateGenerator))]
     public class RiverGenerator : MonoBehaviour
     {
-        public float Threshold = 90f;
-        public int MinVertices = 2;
+        [System.NonSerialized] public float Threshold = 90f;
+        [System.NonSerialized] public int MinVertices = 2;
 
         [Header("Debug Overlay")]
         public RiverOverlay Overlay = RiverOverlay.None;
@@ -125,7 +125,6 @@ namespace MapGen
                     new Color(0.4f, 0.6f, 1f),
                     new Color(0f, 0.1f, 0.8f), t);
 
-                // Consecutive vertices are connected by Voronoi edges — just draw lines
                 for (int i = 0; i < river.Vertices.Length - 1; i++)
                 {
                     Vec2 p0 = mesh.Vertices[river.Vertices[i]];
