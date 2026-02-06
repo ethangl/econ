@@ -90,7 +90,7 @@ namespace MapGen
         public float PrecipLandMin, PrecipLandMax, PrecipLandAvg;
 
         // Rivers
-        public int RiverCount, RiverSegments, LakeVertices;
+        public int RiverCount, RiverSegments, LakeVertices, LakeCells;
         public float MaxFlux;
 
         // Biomes
@@ -178,6 +178,13 @@ namespace MapGen
             }
             stats.LakeVertices = lakeCount;
             stats.MaxFlux = maxFlux;
+
+            int lakeCellCount = 0;
+            for (int i = 0; i < mesh.CellCount; i++)
+            {
+                if (biomes.IsLakeCell[i]) lakeCellCount++;
+            }
+            stats.LakeCells = lakeCellCount;
 
             // Biomes
             stats.BiomeCounts = biomes.BiomeCounts(heights);

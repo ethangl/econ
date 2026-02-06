@@ -10,6 +10,37 @@ namespace MapGen.Core
     public static class BiomeOps
     {
         /// <summary>
+        /// Identify lake cells: a cell is a lake if majority (&gt; 50%) of its vertices are lake vertices.
+        /// Must run before all other pipeline steps so IsLakeCell is available for skip checks.
+        /// </summary>
+        public static void ComputeLakeCells(BiomeData biome, HeightGrid heights, RiverData rivers)
+        {
+            var mesh = biome.Mesh;
+            int n = mesh.CellCount;
+
+            for (int i = 0; i < n; i++)
+            {
+                if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
+
+                int[] verts = mesh.CellVertices[i];
+                if (verts == null || verts.Length == 0) continue;
+
+                int lakeCount = 0;
+                for (int v = 0; v < verts.Length; v++)
+                {
+                    if (rivers.IsLake(verts[v]))
+                        lakeCount++;
+                }
+
+                if (lakeCount > verts.Length / 2)
+                {
+                    biome.IsLakeCell[i] = true;
+                    biome.Biome[i] = BiomeId.Lake;
+                }
+            }
+        }
+
+        /// <summary>
         /// Compute slope for each cell: max height gradient to any neighbor, normalized 0-1.
         /// </summary>
         public static void ComputeSlope(BiomeData biome, HeightGrid heights)
@@ -21,7 +52,7 @@ namespace MapGen.Core
             float globalMax = 0f;
             for (int i = 0; i < n; i++)
             {
-                if (heights.IsWater(i)) continue;
+                if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
 
                 float maxGrad = 0f;
                 Vec2 ci = mesh.CellCenters[i];
@@ -44,7 +75,7 @@ namespace MapGen.Core
             {
                 for (int i = 0; i < n; i++)
                 {
-                    if (heights.IsWater(i)) continue;
+                    if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
                     biome.Slope[i] /= globalMax;
                 }
             }
@@ -69,7 +100,7 @@ namespace MapGen.Core
 
             var queue = new Queue<int>();
 
-            // Seed: all water cells at distance 0
+            // Seed: ocean cells at distance 0
             for (int i = 0; i < n; i++)
             {
                 if (heights.IsWater(i))
@@ -97,7 +128,7 @@ namespace MapGen.Core
             // Compute salt effect
             for (int i = 0; i < n; i++)
             {
-                if (heights.IsWater(i) || dist[i] == int.MaxValue)
+                if (heights.IsWater(i) || biome.IsLakeCell[i] || dist[i] == int.MaxValue)
                 {
                     biome.SaltEffect[i] = 0f;
                     continue;
@@ -107,6 +138,58 @@ namespace MapGen.Core
                 float elevAboveSea = heights.Heights[i] - HeightGrid.SeaLevel;
                 float elevFactor = Math.Max(0f, 1f - elevAboveSea / saltElevCutoff);
                 biome.SaltEffect[i] = distFactor * elevFactor;
+            }
+        }
+
+        /// <summary>
+        /// BFS moisture proximity from freshwater lake cells.
+        /// lakeEffect decays with cell-hop distance, boosting fertility of nearby land.
+        /// </summary>
+        public static void ComputeLakeProximity(BiomeData biome, HeightGrid heights)
+        {
+            const int maxLakeReach = 3;
+
+            var mesh = biome.Mesh;
+            int n = mesh.CellCount;
+
+            int[] dist = new int[n];
+            for (int i = 0; i < n; i++)
+                dist[i] = int.MaxValue;
+
+            var queue = new Queue<int>();
+
+            // Seed: lake cells at distance 0
+            for (int i = 0; i < n; i++)
+            {
+                if (biome.IsLakeCell[i])
+                {
+                    dist[i] = 0;
+                    queue.Enqueue(i);
+                }
+            }
+
+            // BFS outward across land cells
+            while (queue.Count > 0)
+            {
+                int c = queue.Dequeue();
+                int nextDist = dist[c] + 1;
+                if (nextDist > maxLakeReach) continue;
+
+                foreach (int nb in mesh.CellNeighbors[c])
+                {
+                    if (dist[nb] <= nextDist) continue;
+                    if (heights.IsWater(nb)) continue; // don't spread through ocean
+                    dist[nb] = nextDist;
+                    queue.Enqueue(nb);
+                }
+            }
+
+            for (int i = 0; i < n; i++)
+            {
+                if (heights.IsWater(i) || biome.IsLakeCell[i] || dist[i] == int.MaxValue)
+                    continue;
+
+                biome.LakeEffect[i] = Math.Max(0f, 1f - (float)dist[i] / maxLakeReach);
             }
         }
 
@@ -183,7 +266,7 @@ namespace MapGen.Core
                 float overlapFraction = (overlapMax - overlapMin) /
                                         (config.LatitudeNorth - config.LatitudeSouth);
 
-                float[] bandLoess = SweepLoessBand(mesh, heights, climate, band.WindVector);
+                float[] bandLoess = SweepLoessBand(mesh, heights, climate, biome.IsLakeCell, band.WindVector);
 
                 for (int i = 0; i < n; i++)
                     loessAccum[i] += bandLoess[i] * overlapFraction;
@@ -202,7 +285,7 @@ namespace MapGen.Core
         }
 
         static float[] SweepLoessBand(CellMesh mesh, HeightGrid heights,
-            ClimateData climate, Vec2 windDir)
+            ClimateData climate, bool[] isLakeCell, Vec2 windDir)
         {
             int n = mesh.CellCount;
             float[] carry = new float[n];
@@ -244,8 +327,8 @@ namespace MapGen.Core
                 if (hasUpwind)
                     carry[i] = gatheredCarry / totalWeight;
 
-                // Skip water cells
-                if (heights.IsWater(i))
+                // Skip water and lake cells
+                if (heights.IsWater(i) || isLakeCell[i])
                 {
                     visited[i] = true;
                     continue;
@@ -296,7 +379,7 @@ namespace MapGen.Core
             var mesh = biome.Mesh;
             for (int i = 0; i < mesh.CellCount; i++)
             {
-                if (heights.IsWater(i)) continue;
+                if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
 
                 float temp = climate.Temperature[i];
                 float precip = climate.Precipitation[i];
@@ -326,14 +409,14 @@ namespace MapGen.Core
         }
 
         /// <summary>
-        /// Fertility = baseFertility * rockModifier * (1 + loess) * drainageModifier.
+        /// Fertility = baseFertility * rockModifier * (1 + loess) * drainageModifier * (1 + lakeEffect).
         /// </summary>
         public static void ComputeFertility(BiomeData biome, HeightGrid heights, ClimateData climate)
         {
             var mesh = biome.Mesh;
             for (int i = 0; i < mesh.CellCount; i++)
             {
-                if (heights.IsWater(i)) continue;
+                if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
 
                 float baseFert = BaseFertility[(int)biome.Soil[i]];
                 float rockMod = RockFertilityModifier[(int)biome.Rock[i]];
@@ -357,7 +440,9 @@ namespace MapGen.Core
                     drainageMod = 1f - dryPenalty - wetPenalty;
                 }
 
-                float fertility = baseFert * rockMod * loessMod * drainageMod;
+                float lakeMod = 1f + biome.LakeEffect[i];
+
+                float fertility = baseFert * rockMod * loessMod * drainageMod * lakeMod;
                 biome.Fertility[i] = fertility < 0f ? 0f : (fertility > 1f ? 1f : fertility);
             }
         }
@@ -385,6 +470,7 @@ namespace MapGen.Core
             70f, // TemperateForest
             80f, // Grassland
             85f, // Woodland
+            0f,  // Lake
         };
 
         const float RiverBonusMax = 15f;
@@ -398,7 +484,7 @@ namespace MapGen.Core
             var mesh = biome.Mesh;
             for (int i = 0; i < mesh.CellCount; i++)
             {
-                if (heights.IsWater(i)) continue;
+                if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
 
                 float temp = climate.Temperature[i];
                 float precip = climate.Precipitation[i];
@@ -451,7 +537,7 @@ namespace MapGen.Core
             var mesh = biome.Mesh;
             for (int i = 0; i < mesh.CellCount; i++)
             {
-                if (heights.IsWater(i)) continue;
+                if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
 
                 float baseHab = BiomeHabitability[(int)biome.Biome[i]];
 
@@ -527,6 +613,8 @@ namespace MapGen.Core
             new VegInfo { Type = VegetationType.Grass,            DensityMin = 0.4f, DensityMax = 0.7f, PrecipMin = 15f, PrecipMax = 45f  },
             // Woodland
             new VegInfo { Type = VegetationType.DeciduousForest,  DensityMin = 0.3f, DensityMax = 0.5f, PrecipMin = 45f, PrecipMax = 100f },
+            // Lake
+            new VegInfo { Type = VegetationType.None,             DensityMin = 0f,   DensityMax = 0f,   PrecipMin = 0f,  PrecipMax = 100f },
         };
 
         // Temperature thresholds for vegetation type downgrade
@@ -546,7 +634,7 @@ namespace MapGen.Core
             var mesh = biome.Mesh;
             for (int i = 0; i < mesh.CellCount; i++)
             {
-                if (heights.IsWater(i)) continue;
+                if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
 
                 int biomeIdx = (int)biome.Biome[i];
                 var veg = BiomeVeg[biomeIdx];
@@ -603,7 +691,7 @@ namespace MapGen.Core
         // ── Fauna ───────────────────────────────────────────────────────────
 
         // Per-biome base values: [game, waterfowl, fur]
-        static readonly float[,] BiomeFaunaBase = new float[18, 3]
+        static readonly float[,] BiomeFaunaBase = new float[19, 3]
         {
             { 0f,   0f,   0f   }, // Glacier
             { 0f,   0f,   0.3f }, // Tundra
@@ -623,6 +711,7 @@ namespace MapGen.Core
             { 0.8f, 0f,   0.5f }, // TemperateForest
             { 0.8f, 0f,   0f   }, // Grassland
             { 0.5f, 0f,   0.3f }, // Woodland
+            { 0f,   0f,   0f   }, // Lake
         };
 
         // Fish parameters
@@ -670,7 +759,7 @@ namespace MapGen.Core
             var mesh = biome.Mesh;
             for (int i = 0; i < mesh.CellCount; i++)
             {
-                if (heights.IsWater(i)) continue;
+                if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
 
                 int biomeIdx = (int)biome.Biome[i];
                 float temp = climate.Temperature[i];
@@ -697,7 +786,8 @@ namespace MapGen.Core
                             continue;
                         }
                         var (c0, c1) = mesh.EdgeCells[edges[e]];
-                        if ((c0 >= 0 && heights.IsWater(c0)) || (c1 >= 0 && heights.IsWater(c1)))
+                        if ((c0 >= 0 && (heights.IsWater(c0) || biome.IsLakeCell[c0])) ||
+                            (c1 >= 0 && (heights.IsWater(c1) || biome.IsLakeCell[c1])))
                             waterEdgeCount += 1f;
                     }
                 }
@@ -722,18 +812,22 @@ namespace MapGen.Core
                 {
                     if (heights.IsWater(nb))
                         hasCoast = true;
-                    // Lakes: check vertex-level lake detection
+                    if (biome.IsLakeCell[nb])
+                        hasLake = true;
                 }
-                // Check for lake vertices among cell's vertices
-                int[] verts = mesh.CellVertices[i];
-                if (verts != null)
+                // Also check vertex-level lake detection (shore cells share vertices with lake)
+                if (!hasLake)
                 {
-                    for (int v = 0; v < verts.Length; v++)
+                    int[] verts = mesh.CellVertices[i];
+                    if (verts != null)
                     {
-                        if (rivers.IsLake(verts[v]))
+                        for (int v = 0; v < verts.Length; v++)
                         {
-                            hasLake = true;
-                            break;
+                            if (rivers.IsLake(verts[v]))
+                            {
+                                hasLake = true;
+                                break;
+                            }
                         }
                     }
                 }
@@ -754,7 +848,7 @@ namespace MapGen.Core
             var mesh = biome.Mesh;
             for (int i = 0; i < mesh.CellCount; i++)
             {
-                if (heights.IsWater(i)) continue;
+                if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
 
                 // Vegetation food
                 int vegIdx = (int)biome.Vegetation[i];
@@ -804,7 +898,7 @@ namespace MapGen.Core
             var mesh = biome.Mesh;
             for (int i = 0; i < mesh.CellCount; i++)
             {
-                if (heights.IsWater(i)) continue;
+                if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
 
                 float slope = biome.Slope[i];
                 float height = heights.Heights[i];
@@ -848,7 +942,7 @@ namespace MapGen.Core
 
             for (int i = 0; i < mesh.CellCount; i++)
             {
-                if (heights.IsWater(i)) continue;
+                if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
 
                 Vec2 c = mesh.CellCenters[i];
                 float height = heights.Heights[i];
@@ -882,7 +976,7 @@ namespace MapGen.Core
         {
             for (int i = 0; i < biome.Mesh.CellCount; i++)
             {
-                if (heights.IsWater(i)) continue;
+                if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
 
                 // Salt only in saline soil biomes (SaltFlat, CoastalMarsh)
                 if (biome.Soil[i] != SoilType.Saline) continue;
@@ -899,7 +993,7 @@ namespace MapGen.Core
         {
             for (int i = 0; i < biome.Mesh.CellCount; i++)
             {
-                if (heights.IsWater(i)) continue;
+                if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
 
                 // Stone from hard rock types or thin soil exposing bedrock
                 float rockBonus = 0f;

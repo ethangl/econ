@@ -50,7 +50,8 @@ namespace MapGen.Core
         BorealForest,
         TemperateForest,
         Grassland,
-        Woodland
+        Woodland,
+        Lake
     }
 
     /// <summary>
@@ -63,9 +64,13 @@ namespace MapGen.Core
         public CellMesh Mesh { get; }
         public int CellCount => Mesh.CellCount;
 
+        // Lake detection (set before other derived inputs)
+        public bool[] IsLakeCell;       // true for cells where majority of vertices are lake vertices
+
         // Derived inputs
         public float[] Slope;           // 0-1, normalized max height gradient to neighbors
         public float[] SaltEffect;      // 0-1, BFS decay from ocean cells
+        public float[] LakeEffect;      // 0-1, BFS decay from freshwater lake cells
         public float[] CellFlux;        // averaged vertex flux onto cells
         public float[] Loess;           // 0-1, wind-deposited silt
 
@@ -102,8 +107,11 @@ namespace MapGen.Core
             Mesh = mesh;
             int n = mesh.CellCount;
 
+            IsLakeCell = new bool[n];
+
             Slope = new float[n];
             SaltEffect = new float[n];
+            LakeEffect = new float[n];
             CellFlux = new float[n];
             Loess = new float[n];
 
@@ -146,7 +154,8 @@ namespace MapGen.Core
         /// <summary>Count cells per biome (land cells only).</summary>
         public int[] BiomeCounts(HeightGrid heights)
         {
-            int[] counts = new int[18];
+            int biomeCount = System.Enum.GetValues(typeof(BiomeId)).Length;
+            int[] counts = new int[biomeCount];
             for (int i = 0; i < CellCount; i++)
             {
                 if (heights.IsWater(i)) continue;

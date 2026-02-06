@@ -100,6 +100,12 @@ public class BiomeGeneratorEditor : Editor
             return $"Cell {cell}  |  Water  |  Height: {h:F1}";
         }
 
+        if (data.IsLakeCell[cell])
+        {
+            float h = heightGrid != null ? heightGrid.Heights[cell] : 0f;
+            return $"Cell {cell}  |  Lake  |  Height: {h:F1}";
+        }
+
         var soil = data.Soil[cell];
         var biome = data.Biome[cell];
         var veg = data.Vegetation[cell];

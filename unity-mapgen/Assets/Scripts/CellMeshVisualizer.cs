@@ -101,6 +101,7 @@ namespace MapGen
             new Color(0.25f, 0.55f, 0.20f), // TemperateForest - green
             new Color(0.65f, 0.72f, 0.35f), // Grassland - gold-green
             new Color(0.35f, 0.55f, 0.25f), // Woodland - medium green
+            new Color(0.25f, 0.45f, 0.65f), // Lake - inland water blue
         };
 
         // Rock type colors (4 types)
@@ -238,7 +239,8 @@ namespace MapGen
 
         private Color GetCellColor(int c, HeightGrid heightGrid, BiomeData biomeData, ClimateData climateData)
         {
-            bool isWater = heightGrid != null && heightGrid.IsWater(c);
+            bool isWater = (heightGrid != null && heightGrid.IsWater(c))
+                        || (biomeData != null && biomeData.IsLakeCell[c]);
 
             switch (ColorMode)
             {
@@ -249,11 +251,11 @@ namespace MapGen
                     goto case ColorMode.CellIndex;
 
                 case ColorMode.Soil:
-                    if (biomeData == null || isWater) return GetWaterOrFallback(c, heightGrid);
+                    if (biomeData == null || isWater) return GetWaterOrFallback(c, heightGrid, biomeData);
                     return SoilColors[(int)biomeData.Soil[c]];
 
                 case ColorMode.Biome:
-                    if (biomeData == null || isWater) return GetWaterOrFallback(c, heightGrid);
+                    if (biomeData == null || isWater) return GetWaterOrFallback(c, heightGrid, biomeData);
                     // Composite: soil + vegetation by density
                     Color soil = SoilColors[(int)biomeData.Soil[c]];
                     Color veg = VegetationColors[(int)biomeData.Vegetation[c]];
@@ -350,8 +352,11 @@ namespace MapGen
                 return Color.Lerp(Color.white, new Color(0.1f, 0.2f, 0.9f), (t - 0.5f) * 2f);
         }
 
-        private Color GetWaterOrFallback(int c, HeightGrid heightGrid)
+        private Color GetWaterOrFallback(int c, HeightGrid heightGrid, BiomeData biomeData = null)
         {
+            // Lake cells render as shallow water regardless of their terrain height
+            if (biomeData != null && biomeData.IsLakeCell[c])
+                return new Color(0.25f, 0.45f, 0.65f);
             if (heightGrid != null)
                 return GetHeightColor(heightGrid.Heights[c]);
             return new Color(0.1f, 0.2f, 0.5f);

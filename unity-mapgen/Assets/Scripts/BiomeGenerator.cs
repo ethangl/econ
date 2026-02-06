@@ -72,9 +72,13 @@ namespace MapGen
 
             var config = _climateGenerator.Config;
 
+            // Lake detection (must be first — all other steps skip lake cells)
+            BiomeOps.ComputeLakeCells(_biomeData, heights, rivers);
+
             // Derived inputs
             BiomeOps.ComputeSlope(_biomeData, heights);
             BiomeOps.ComputeSaltProximity(_biomeData, heights);
+            BiomeOps.ComputeLakeProximity(_biomeData, heights);
             BiomeOps.ComputeCellFlux(_biomeData, rivers);
             BiomeOps.ComputeRockType(_biomeData, RockSeed);
             BiomeOps.ComputeLoess(_biomeData, heights, climate, config);

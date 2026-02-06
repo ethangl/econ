@@ -102,9 +102,6 @@ namespace MapGen
                 case RiverOverlay.Flux:
                     DrawFluxGizmos(mesh);
                     break;
-                case RiverOverlay.Lakes:
-                    DrawLakeGizmos(mesh);
-                    break;
             }
         }
 
@@ -166,29 +163,12 @@ namespace MapGen
             }
         }
 
-        void DrawLakeGizmos(CellMesh mesh)
-        {
-            for (int v = 0; v < mesh.VertexCount; v++)
-            {
-                Vec2 pos = mesh.Vertices[v];
-
-                if (_riverData.IsOcean(v))
-                    Gizmos.color = new Color(0.1f, 0.1f, 0.3f);
-                else if (_riverData.IsLake(v))
-                    Gizmos.color = new Color(0.2f, 0.4f, 0.9f);
-                else
-                    Gizmos.color = new Color(0.4f, 0.35f, 0.25f);
-
-                Gizmos.DrawSphere(new Vector3(pos.X, pos.Y, 0), 4f);
-            }
-        }
     }
 
     public enum RiverOverlay
     {
         None,
         Rivers,
-        Flux,
-        Lakes
+        Flux
     }
 }

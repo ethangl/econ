@@ -68,7 +68,7 @@ public class MapGeneratorEditor : Editor
         {
             EditorGUI.indentLevel++;
             EditorGUILayout.LabelField($"{stats.RiverCount} rivers, {stats.RiverSegments} segments");
-            EditorGUILayout.LabelField($"{stats.LakeVertices} lake vertices, max flux {stats.MaxFlux:F0}");
+            EditorGUILayout.LabelField($"{stats.LakeVertices} lake vertices, {stats.LakeCells} lake cells, max flux {stats.MaxFlux:F0}");
             EditorGUI.indentLevel--;
         }
 

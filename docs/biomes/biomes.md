@@ -17,7 +17,7 @@ Each soil type maps to 1-3 possible biomes. Temperature and precipitation select
 | Podzol     | Boreal Forest, Temperate Forest                   | temp < 5 → Boreal; else Temperate                                |
 | Chernozem  | Grassland, Woodland                               | precip > 45 → Woodland; else Grassland                           |
 
-This gives 18 biomes, each with a clear physical basis.
+This gives 18 land biomes, each with a clear physical basis. A 19th biome — **Lake** — is assigned to inland water cells detected by the river pipeline (see below).
 
 ## Biome Properties
 
@@ -41,6 +41,17 @@ This gives 18 biomes, each with a clear physical basis.
 | Temperate Forest    | Podzol      | 70           |
 | Grassland           | Chernozem   | 80           |
 | Woodland            | Chernozem   | 85           |
+| Lake                | —           | 0            |
+
+## Lake Cells
+
+Lakes are inland depressions filled by the river pipeline. They are detected at vertex level (`RiverData.IsLake`); a cell is classified as Lake if a majority (> 50%) of its vertices are lake vertices. Lake cells are excluded from the entire biome pipeline — no soil, vegetation, fauna, resources, or movement cost. They render as water.
+
+**Lake proximity effect.** Freshwater lakes increase soil moisture in surrounding land. A BFS spreads outward from lake cells up to 3 hops, producing a `lakeEffect` value (1.0 adjacent, decaying to 0). Fertility is multiplied by `(1 + lakeEffect)`, so cells directly adjacent to a lake get up to 2× fertility. The BFS does not spread through ocean cells.
+
+Lakes also contribute to fauna on neighboring land cells: lake neighbors get fish abundance (lake fish base = 0.3) and lake edges count as water for waterfowl proximity.
+
+Note: lakes are freshwater and do **not** seed salt proximity (only ocean cells do).
 
 ## Habitability vs. Subsistence
 
@@ -83,6 +94,7 @@ Subsistence is a per-cell float (0-1) representing natural food production witho
 | Temperate Forest    | 0.15        | Hunting, nuts, berries                |
 | Grassland           | 0.35        | Grazing, wild grain                   |
 | Woodland            | 0.25        | Mixed hunting, foraging, some grazing |
+| Lake                | 0           | Water body, no land food production   |
 
 These are typical values including fauna contributions. A grassland cell on a river gets ~0.50 (fish fauna boosts subsistence). A coastal floodplain at a river mouth could reach ~0.80 — the most naturally productive land on the map.
 

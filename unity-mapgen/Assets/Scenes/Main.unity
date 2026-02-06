@@ -128,6 +128,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1015571341}
+  - component: {fileID: 1015571348}
   - component: {fileID: 1015571344}
   - component: {fileID: 1015571342}
   - component: {fileID: 1015571345}
@@ -168,9 +169,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9342908a280f347148367d2299f22fe7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: MapGen::MapGen.HeightmapGenerator
-  Template: 5
-  HeightmapSeed: 444
-  ShowDebugHeights: 0
 --- !u!114 &1015571343
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -198,9 +196,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5d5c2babc7a9f44ccbd19d9a4e7192f1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: MapGen::MapGen.CellMeshGenerator
-  Seed: 12345
-  CellCount: 60000
-  AspectRatio: 1.7777778
 --- !u!114 &1015571345
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -213,8 +208,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 54446f8bb3b7b4c38b6edd00a0ff4320, type: 3}
   m_Name: 
   m_EditorClassIdentifier: MapGen::MapGen.ClimateGenerator
-  LatitudeSouth: 30
-  Overlay: 0
 --- !u!114 &1015571346
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -227,9 +220,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c361d349017194af497bbc87f4107f47, type: 3}
   m_Name: 
   m_EditorClassIdentifier: MapGen::MapGen.RiverGenerator
-  Threshold: 80
-  MinVertices: 4
-  Overlay: 0
+  Overlay: 1
 --- !u!114 &1015571347
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -242,7 +233,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 503d3dc57b7bd4a109c2c3affdc83705, type: 3}
   m_Name: 
   m_EditorClassIdentifier: MapGen::MapGen.BiomeGenerator
-  Overlay: 0
+--- !u!114 &1015571348
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1015571340}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99cab8700d5954d06ae5c8d2649603a2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MapGen::MapGen.MapGenerator
+  Seed: 12345
+  CellCount: 100000
+  AspectRatio: 1.7777778
+  Template: 5
+  LatitudeSouth: 30
 --- !u!1 &1284084470
 GameObject:
   m_ObjectHideFlags: 0
