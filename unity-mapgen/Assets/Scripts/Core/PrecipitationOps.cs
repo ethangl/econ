@@ -9,8 +9,8 @@ namespace MapGen.Core
     public static class PrecipitationOps
     {
         const float OceanHumidity = 0.9f;
-        const float BasePrecipLoss = 0.03f;
-        const float CoastalBonus = 0.10f;
+        const float BasePrecipLoss = 0.025f;
+        const float CoastalBonus = 0.05f;
         const float WaterPickupRate = 0.08f;
         const float PermafrostThreshold = -5f;
         const float PermafrostDamping = 0.1f;
@@ -52,7 +52,7 @@ namespace MapGen.Core
 
             if (maxVal > 1e-6f)
             {
-                const double exp = 0.25;
+                const double exp = 0.225;
                 float normMax = (float)Math.Pow(maxVal, exp);
                 for (int i = 0; i < n; i++)
                     climate.Precipitation[i] = ((float)Math.Pow(totalPrecip[i], exp) / normMax) * 100f;

@@ -1,106 +1,92 @@
 # River Generation
 
-Azgaar uses classic **flow accumulation** algorithm.
+## Model
+
+Water falls on cells as precipitation. Heights and precipitation are interpolated onto Voronoi vertices (circumcenters of Delaunay triangles). Water flows between adjacent vertices along Voronoi edges, downhill. Accumulated flow above a threshold is a river. A vertex where water level exceeds terrain height is a lake vertex.
+
+## Why Vertex-Based
+
+Rivers flow on Voronoi vertices, not cells. Each Voronoi vertex has ~3 neighbors. Two flow steps from the same vertex always share that vertex, so river paths are automatically connected polylines along Voronoi edges. No edge stitching or vertex ring walking needed.
+
+This follows the Red Blob Games mapgen4 approach: Delaunay triangle circumcenter = Voronoi vertex. Flow between adjacent triangles = flow between Voronoi vertices = Voronoi edge.
+
+Rivers still follow cell boundaries, so they remain natural political borders. Cells on opposite banks are in different jurisdictions without special-case code.
 
 ## Algorithm
 
-```
-1. Resolve depressions (fill so water can always flow downhill)
-2. Sort land cells by height (highest first)
-3. For each cell:
-   a. Add precipitation to flux
-   b. Find lowest neighbor
-   c. If flux > threshold (30): declare river
-   d. Flow to lowest neighbor, accumulating flux
-4. Handle confluences (larger flux wins river identity)
-5. Handle lakes (accumulate flux, outlet continues river)
-6. Optional: erode terrain (downcut river beds)
-```
+### 1. Interpolate Cell Data onto Vertices
 
-## Key Data Structures
+For each Voronoi vertex v, average the heights and precipitation of its surrounding cells (~3):
 
-| Array        | Type   | Purpose                 |
-| ------------ | ------ | ----------------------- |
-| `cells.fl`   | Uint16 | Water flux per cell     |
-| `cells.r`    | Uint16 | River ID (0 = no river) |
-| `cells.conf` | Uint8  | Confluence marker       |
+    VertexHeight[v] = avg(Heights[c] for c in VertexCells[v])
+    VertexPrecip[v] = avg(Precipitation[c] for c in VertexCells[v])
 
-## River Properties
+A vertex is "ocean" if VertexHeight <= SeaLevel (20).
 
-| Property     | Calculation                             |
-| ------------ | --------------------------------------- |
-| Discharge    | Flux at mouth cell                      |
-| Width        | `(discharge^0.7 / 500)` capped at 1     |
-| Length       | Sum of segment lengths after meandering |
-| Source width | `(source_flux^0.9 / 500)`               |
+### 2. Depression Fill (Priority Flood on Vertex Graph)
 
-## Meandering
+Use a priority queue (min-heap) seeded with land vertices adjacent to ocean vertices (or boundary cells). Process vertices lowest-first. For each vertex, visit its VertexNeighbors:
 
-Points interpolated between cells based on:
+- If the neighbor's terrain height >= current vertex's water level: the neighbor's water level = its terrain height (no flooding needed).
+- If the neighbor's terrain height < current vertex's water level: the neighbor's water level = current vertex's water level (water fills the depression). Set the neighbor's **flow target** to the current vertex.
 
-- Distance between cells (more points for longer segments)
-- River length (less meandering for young rivers)
-- Perpendicular offset using sin/cos of flow angle
+Ocean vertices are skipped (marked visited immediately). After processing, every land vertex has `WaterLevel >= VertexHeight`. Where `WaterLevel > VertexHeight`, the vertex is a lake vertex. Lake vertices already have their flow targets assigned.
 
-## Lake Integration
+### 3. Flow Accumulation
 
-- Lakes accumulate flux from all inlet rivers
-- Outlet cell drains to lowest shoreline neighbor
-- Evaporation reduces outflow: `outlet_flux = inlet_flux - evaporation`
+Sort all land vertices by water level, highest first. Tiebreak: terrain height ascending (lake interiors before rim). For each vertex:
 
-## Depression Resolution
+1. Add the vertex's precipitation to its flux.
+2. If the vertex has no flow target yet (not a lake vertex): find the neighbor with the lowest water level. That neighbor is this vertex's **flow target**.
+3. Add this vertex's flux to the flow target's flux (if the target is land).
 
-Before flow simulation, depressions are filled:
+After this pass, every land vertex has a flux value and a flow target.
 
-```
-for each land cell (sorted low to high):
-    if height <= min(neighbor heights):
-        height = min(neighbor heights) + 0.1
-```
+### 4. Edge Flux
 
-This ensures water can always find a path to the sea.
+Each land vertex drains to exactly one neighbor. That drainage crosses the Voronoi edge connecting the two vertices. Assign each such edge the flux of the draining vertex.
 
-## Design Decision: Cell-Based vs Edge-Based Rivers
+Look up which edge connects vertex A to vertex B using a dictionary keyed by `(min(A,B), max(A,B))` → edge index. Built once from the mesh topology.
 
-**Azgaar:** Rivers flow cell-to-cell. River "occupies" cells.
+### 5. River Extraction
 
-**Our preference:** Rivers flow along edges (Voronoi cell boundaries).
+A vertex with flux above a threshold is a river vertex.
 
-| Aspect             | Cell-based (Azgaar)                | Edge-based (ours)                   |
-| ------------------ | ---------------------------------- | ----------------------------------- |
-| Topology           | River path = list of cells         | River path = list of edges          |
-| Query "has river?" | `cell.riverId > 0`                 | Check adjacent edges                |
-| Political borders  | Rivers inside territory            | Rivers ARE borders naturally        |
-| Transport routing  | Ambiguous (cross cell? alongside?) | Clear (travel along edge)           |
-| Rendering          | Interpolate through cell centers   | Draw edge polyline (relaxed curves) |
-| Flow direction     | Cell A → Cell B                    | Edge has upstream/downstream vertex |
+1. **Find mouths.** A mouth is a land vertex whose flow target is an ocean vertex, with flux >= threshold.
+2. **Trace upstream.** From the mouth vertex, follow the inflow with the highest flux that's above threshold. Repeat until no upstream vertex qualifies. This trace is one river.
+3. **Tributaries.** BFS from vertices on existing rivers. Any upstream inflow vertex with flux >= threshold that isn't already claimed starts a new tributary river.
+4. **Filter.** Remove rivers with fewer than `minVertices` vertices.
 
-## Why Edge-Based is Better for Us
+## Data Structures
 
-1. **Rivers as natural borders** — Historical pattern. If rivers are edges, political boundaries that "follow the river" come for free. Counties don't get bisected by rivers — that's not how administrative boundaries form. People on opposite banks are in different jurisdictions.
+### Per-Vertex Arrays
 
-2. **Inland islands** — Where rivers fork and rejoin, the enclosed area is naturally a separate region (cells surrounded by river edges). Cell-based rivers can't represent this cleanly.
+| Array          | Type    | Description                                                        |
+| -------------- | ------- | ------------------------------------------------------------------ |
+| `VertexHeight` | float[] | Interpolated terrain height (avg of surrounding cells).            |
+| `VertexPrecip` | float[] | Interpolated precipitation (avg of surrounding cells).             |
+| `WaterLevel`   | float[] | After depression fill. >= VertexHeight. Lake if >.                 |
+| `VertexFlux`   | float[] | Accumulated water flux through this vertex.                        |
+| `FlowTarget`   | int[]   | Index of the vertex this vertex drains to. -1 if none/unresolved.  |
 
-3. **Cleaner transport model** — River transport follows edges, land transport crosses edges. No ambiguity.
+### Per-Edge Arrays
 
-4. **Dual graph elegance** — Voronoi edges are Delaunay edges. Water flows along Delaunay triangulation, land is partitioned by Voronoi. Clean separation.
+| Array      | Type    | Description                                          |
+| ---------- | ------- | ---------------------------------------------------- |
+| `EdgeFlux` | float[] | Flux crossing this edge (= flux of draining vertex). |
 
-5. **Rendering** — Our current `RiverRenderer` already draws polylines. Edge-based rivers map directly.
-
-6. **County grouping** — Our `CountyGrouper` flood-fills across cell neighbors. If rivers are edges, flood fill naturally stops at rivers (can't cross a river edge). Counties form on one side or the other without special-case code.
-
-## Implementation Notes
-
-- Flow accumulation still happens per-cell (precipitation falls on cells)
-- When flow crosses to neighbor, it exits via the shared edge
-- Edge accumulates flux from all cells draining through it
-- River threshold applies to edges, not cells
-- Cells adjacent to river edges get `HasRiver` flag for gameplay queries
+### River Struct
 
 ```
-Cell data:          Edge data:
-- precipitation     - flux (accumulated)
-- height            - riverId (0 = no river)
-- biome             - width (derived from flux)
-                    - upstream/downstream vertex
+River {
+    Id: int
+    Vertices: int[]     // ordered vertex indices, mouth-first
+    MouthVertex: int    // vertex at ocean/confluence end
+    SourceVertex: int   // vertex at upstream end
+    Discharge: float    // flux at mouth
+}
 ```
+
+## Rendering
+
+A river's geometry is its sequence of Voronoi vertices. Consecutive vertices are connected by Voronoi edges. The renderer draws these as a polyline. Width is derived from flux (tapers from source to mouth).

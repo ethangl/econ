@@ -79,7 +79,7 @@ econ/
 [x] Cell Mesh (Voronoi/Delaunay)
 [x] Heightmap (noise + templates)
 [x] Climate Model
-[ ] Rivers (flow accumulation)
+[x] Rivers (flow accumulation)
 
 **Phase B: Economic Geography**
 
