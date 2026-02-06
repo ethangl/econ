@@ -11,7 +11,7 @@ namespace MapGen
     public class ClimateGenerator : MonoBehaviour
     {
         [Header("Map Position")]
-        [Tooltip("Southern latitude of the map (degrees, positive = north)")]
+        [Tooltip("Latitude of the map's southern edge (degrees, positive = north)")]
         public float LatitudeSouth = 30f;
 
         [Header("Debug Overlay")]
@@ -71,7 +71,7 @@ namespace MapGen
             Debug.Log($"Climate generated: temp [{tMin:F1}°C, {tMax:F1}°C], " +
                       $"precip [{pMin:F0}, {pMax:F0}], " +
                       $"lat [{_config.LatitudeSouth:F1}°, {_config.LatitudeNorth:F1}°], " +
-                      $"scale {_config.KmPerMeshUnit:F3} km/unit");
+                      $"map {mesh.Width:F0} x {mesh.Height:F0} km");
 
             // Diagnostic: land precipitation distribution
             int[] buckets = new int[10]; // 0-10, 10-20, ..., 90-100

@@ -67,6 +67,12 @@ Smooth 2                     # Blend terrain
 
 See `Assets/Scripts/Core/README.md` for full DSL documentation.
 
+## TODO
+
+- **Heightmap ops need aspect ratio awareness.** The DSL operations (Hill, Range, Pit, etc.) use normalized 0-100 coordinates that assume a square-ish map. With dimensions now derived from aspect ratio, ops need to account for non-square maps so shapes don't stretch.
+- **CellCount should mean landmass cells, not total cells.** The `CellCount` parameter currently controls total cells including ocean. What you actually want to control is the number of land cells — total cells should be back-derived from that plus the expected land/water ratio of the chosen template.
+- **Add a pure land template (no ocean).** A continent-filling map with no surrounding water — useful for landlocked regional maps.
+
 ## Dependencies
 
 - **DelaunatorSharp** — Fast Delaunay triangulation (vendored, MIT license)

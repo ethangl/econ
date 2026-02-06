@@ -12,6 +12,11 @@ namespace MapGen.Editor
 
             var generator = (CellMeshGenerator)target;
 
+            // Show derived map dimensions
+            var (w, h) = CellMeshGenerator.ComputeMapSize(generator.CellCount, generator.AspectRatio);
+            float area = w * h;
+            EditorGUILayout.HelpBox($"Map Size: {w:F0} x {h:F0} km ({area:F0} km²)", MessageType.Info);
+
             EditorGUILayout.Space();
 
             if (GUILayout.Button("Generate"))

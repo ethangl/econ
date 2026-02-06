@@ -43,16 +43,13 @@ namespace MapGen.Core
         public float SouthPoleTemp = -25f;
         public float LapseRate = 6.5f; // °C per 1000m
 
-        // Scale
+        // Scale (1 mesh unit = 1 km)
         public float CellSizeKm = 2.5f;
         public float MaxElevationMeters = 5000f;
 
         // Position (latitude in degrees, negative = south)
         public float LatitudeSouth = 30f;
         public float LatitudeNorth; // derived from mesh
-
-        // Computed scale
-        public float KmPerMeshUnit;
 
         // Wind bands (Earth defaults)
         public WindBand[] WindBands = new WindBand[]
@@ -76,23 +73,13 @@ namespace MapGen.Core
         }
 
         /// <summary>
-        /// Compute scale factor from mesh dimensions: km per mesh unit.
-        /// </summary>
-        public void ComputeScale(CellMesh mesh)
-        {
-            float avgCellArea = (mesh.Width * mesh.Height) / mesh.CellCount;
-            float avgCellSize = (float)Math.Sqrt(avgCellArea);
-            KmPerMeshUnit = CellSizeKm / avgCellSize;
-        }
-
-        /// <summary>
         /// Auto-derive latitude span from mesh dimensions.
         /// Sets LatitudeNorth based on LatitudeSouth + map height in degrees.
+        /// 1 mesh unit = 1 km, so mesh.Height is directly in km.
         /// </summary>
         public void AutoLatitudeSpan(CellMesh mesh)
         {
-            ComputeScale(mesh);
-            float mapHeightKm = mesh.Height * KmPerMeshUnit;
+            float mapHeightKm = mesh.Height; // 1 mesh unit = 1 km
             float latSpan = mapHeightKm / 111f; // ~111 km per degree latitude
             LatitudeNorth = LatitudeSouth + latSpan;
         }

@@ -134,6 +134,32 @@ Reframing: which geographic features actually drive interesting economic dynamic
 
 This is a fixed constant across all maps, enabling tessellated submaps that stitch together seamlessly.
 
+### Map Dimensions Are Derived, Not Specified
+
+Since cell size is fixed, map dimensions follow from cell count and aspect ratio:
+
+| Input          | Example    | Notes                           |
+| -------------- | ---------- | ------------------------------- |
+| Cell count     | 20,000     | Controls map complexity/detail  |
+| Aspect ratio   | 16:9       | Controls map shape              |
+| Cell size      | 2.5 km     | Fixed constant (~1.5 mi)        |
+
+**Derivation:**
+
+```
+cellArea     = 2.5² = 6.25 km²
+mapArea      = cellCount × cellArea
+mapWidthKm   = sqrt(mapArea × aspectRatio)
+mapHeightKm  = mapWidthKm / aspectRatio
+```
+
+**Example:** 20,000 cells at 16:9 → 125,000 km² total → 471 km × 265 km
+
+This means:
+- Changing cell count changes map size, not cell density
+- Templates define shape and land ratio, not cell density
+- All downstream systems (climate sweep, river accumulation, settlement spacing) can rely on consistent cell dimensions
+
 ### Derivation from River Constraints
 
 Rivers flow along cell edges (see [rivers.md](./rivers.md)). River width as a percentage of cell width determines visibility:
@@ -158,27 +184,27 @@ Rivers wider than ~750m (Mississippi, Amazon) become cell-filling geographic fea
 
 **Mental model:** A cell is about 1.5 miles across.
 
-### Azgaar Reference Settings (England-scale)
+### Reference Configurations
 
-For generating maps with England-like characteristics (~130k km², ~40 provinces, ~10 kingdoms):
+| Name          | Cell Count | Ratio | Map Size        | Land Area*   | Comparable To |
+| ------------- | ---------- | ----- | --------------- | ------------ | ------------- |
+| Small island  | 5,000      | 16:9  | 236 × 133 km   | ~16,000 km²  | Jamaica       |
+| Large island  | 20,000     | 16:9  | 471 × 265 km   | ~63,000 km²  | Sri Lanka     |
+| England-scale | 40,000     | 16:9  | 667 × 375 km   | ~125,000 km² | England       |
+| Subcontinent  | 100,000    | 3:2   | 968 × 645 km   | ~313,000 km² | Italy         |
 
-| Setting        | Value      |
-| -------------- | ---------- |
-| Seed           | 123        |
-| Resolution     | 1920×1080  |
-| Points         | 60,000     |
-| Template       | Low Island |
-| States         | 9          |
-| Burgs          | 39         |
-| Province ratio | 100        |
-| Size variety   | 4          |
-| Growth rate    | 1.5        |
+\* Land area depends on template land ratio (assumes ~50% here)
 
-These settings produce ~21,500 land cells, ~50 provinces, ~10 states — close to historic England's 39 counties across the Anglo-Saxon heptarchy.
+### Azgaar Reference (for comparison)
+
+Azgaar uses Resolution + Points as independent inputs, so cell density varies with map dimensions. Our approach avoids this by deriving dimensions from cell count.
+
+Original Azgaar settings for England-scale: seed 123, 1920×1080, 60k points, Low Island template → ~21,500 land cells, ~50 provinces, 9 states.
+
+Equivalent in our model: ~40,000 cells at 16:9 → 667 × 375 km total map area, ~50% land → ~130,000 km² land (England).
 
 ### Implications
 
-- Templates define _shape and land ratio_, not cell density
 - A "continent" template means more cells, not larger cells
 - CountyGrouper parameters may need adjustment (currently tuned for ~400 km² Azgaar cells)
 - Historic English county (~3,300 km²) contains ~530 cells — good granularity

@@ -37,7 +37,7 @@ public class ClimateGeneratorEditor : Editor
             {
                 var config = generator.Config;
                 EditorGUILayout.LabelField("Latitude", $"{config.LatitudeSouth:F1}° to {config.LatitudeNorth:F1}°");
-                EditorGUILayout.LabelField("Scale", $"{config.KmPerMeshUnit:F3} km/unit");
+                EditorGUILayout.LabelField("Scale", "1 mesh unit = 1 km");
             }
         }
     }

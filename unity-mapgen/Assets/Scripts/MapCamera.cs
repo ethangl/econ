@@ -38,16 +38,20 @@ namespace MapGen
             var generator = FindObjectOfType<CellMeshGenerator>();
             float width, height;
 
-            if (generator != null)
+            if (generator != null && generator.Mesh != null)
             {
-                width = generator.MapWidth;
-                height = generator.MapHeight;
+                width = generator.Mesh.Width;
+                height = generator.Mesh.Height;
+            }
+            else if (generator != null)
+            {
+                // Mesh not yet generated, derive from settings
+                (width, height) = CellMeshGenerator.ComputeMapSize(generator.CellCount, generator.AspectRatio);
             }
             else
             {
                 // Fallback to default
-                width = 1920f;
-                height = 1080f;
+                (width, height) = CellMeshGenerator.ComputeMapSize(10000, 16f / 9f);
             }
 
             // Center camera on map
