@@ -20,7 +20,7 @@ namespace MapGen
         // Vegetation
         VegetationType, VegetationDensity,
         // Economy
-        Subsistence, MovementCost
+        Subsistence, MovementCost, Suitability
     }
 
     /// <summary>
@@ -329,6 +329,10 @@ namespace MapGen
                     if (biomeData == null || isWater) return WaterColor;
                     return GetHeatmapColor(biomeData.MovementCost[c], 1f, 8f);
 
+                case ColorMode.Suitability:
+                    if (biomeData == null || isWater) return WaterColor;
+                    return GetSuitabilityColor(biomeData.Suitability[c], 0f, 100f);
+
                 default:
                     return WaterColor;
             }
@@ -350,6 +354,21 @@ namespace MapGen
                 return Color.Lerp(new Color(0.9f, 0.1f, 0.1f), Color.white, t * 2f);
             else
                 return Color.Lerp(Color.white, new Color(0.1f, 0.2f, 0.9f), (t - 0.5f) * 2f);
+        }
+
+        /// <summary>
+        /// White(low) -> red(high) suitability gradient.
+        /// </summary>
+        private Color GetSuitabilityColor(float value, float min, float max)
+        {
+            float range = max - min;
+            if (range < 1e-6f) range = 1f;
+
+            float t = (value - min) / range;
+            if (t < 0f) t = 0f;
+            if (t > 1f) t = 1f;
+
+            return Color.Lerp(Color.white, new Color(0.8f, 0.05f, 0.05f), t);
         }
 
         private Color GetWaterOrFallback(int c, HeightGrid heightGrid, BiomeData biomeData = null)

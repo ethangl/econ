@@ -80,8 +80,9 @@ public class BiomeGeneratorEditor : Editor
         // Draw status bar at bottom of scene view
         Handles.BeginGUI();
         var rect = new Rect(0, sceneView.position.height - 48, sceneView.position.width, 20);
-        GUI.Box(rect, GUIContent.none);
-        GUI.Label(rect, " " + _hoverText, EditorStyles.miniLabel);
+        EditorGUI.DrawRect(rect, new Color(0f, 0f, 0f, 0.9f));
+        var labelStyle = new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = Color.white } };
+        GUI.Label(rect, " " + _hoverText, labelStyle);
         Handles.EndGUI();
 
         // Force repaint on mouse move so the bar updates
@@ -115,7 +116,8 @@ public class BiomeGeneratorEditor : Editor
         float height = heightGrid != null ? heightGrid.Heights[cell] : 0f;
 
         var sb = new System.Text.StringBuilder();
-        sb.Append($"Cell {cell}  |  {biome}  |  {soil} soil  |  {veg} ({density:P0})  |  Fertility: {fertility:F2}  |  Habitability: {habit:F0}  |  Height: {height:F1}");
+        float sub = data.Subsistence[cell];
+        sb.Append($"Cell {cell}  |  {biome}  |  {soil} soil  |  {veg} ({density:P0})  |  Fertility: {fertility:F2}  |  Habitability: {habit:F0}  |  Sub: {sub:F2}  |  Height: {height:F1}");
 
         // Append non-zero resources
         if (data.IronAbundance[cell] > 0.01f) sb.Append($"  |  Iron: {data.IronAbundance[cell]:F2}");
@@ -123,6 +125,8 @@ public class BiomeGeneratorEditor : Editor
         if (data.LeadAbundance[cell] > 0.01f) sb.Append($"  |  Lead: {data.LeadAbundance[cell]:F2}");
         if (data.SaltAbundance[cell] > 0.01f) sb.Append($"  |  Salt: {data.SaltAbundance[cell]:F2}");
         if (data.StoneAbundance[cell] > 0.01f) sb.Append($"  |  Stone: {data.StoneAbundance[cell]:F2}");
+
+        sb.Append($"  |  Suit: {data.Suitability[cell]:F1} (geo: {data.SuitabilityGeo[cell]:F1})");
 
         return sb.ToString();
     }

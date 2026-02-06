@@ -13,6 +13,7 @@ public class MapGeneratorEditor : Editor
     private bool _showSoil = true;
     private bool _showVegetation = true;
     private bool _showResources = true;
+    private bool _showSuitability = true;
 
     public override void OnInspectorGUI()
     {
@@ -123,6 +124,15 @@ public class MapGeneratorEditor : Editor
             EditorGUILayout.LabelField("Lead", $"{stats.LeadCells} cells");
             EditorGUILayout.LabelField("Salt", $"{stats.SaltCells} cells");
             EditorGUILayout.LabelField("Stone", $"{stats.StoneCells} cells");
+            EditorGUI.indentLevel--;
+        }
+
+        // Suitability
+        _showSuitability = EditorGUILayout.Foldout(_showSuitability, "Suitability", true);
+        if (_showSuitability)
+        {
+            EditorGUI.indentLevel++;
+            EditorGUILayout.LabelField($"Range: [{stats.SuitabilityMin:F1}, {stats.SuitabilityMax:F1}], avg {stats.SuitabilityAvg:F1}");
             EditorGUI.indentLevel--;
         }
 

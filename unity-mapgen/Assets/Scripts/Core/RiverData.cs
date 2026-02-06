@@ -43,10 +43,13 @@ namespace MapGen.Core
                 FlowTarget[i] = -1;
         }
 
-        /// <summary>Is this vertex a lake? (water level above interpolated terrain height)</summary>
+        /// <summary>Minimum depth (water level - terrain) for a vertex to count as lake.</summary>
+        public const float MinLakeDepth = 2f;
+
+        /// <summary>Is this vertex a lake? (water level sufficiently above terrain height)</summary>
         public bool IsLake(int vertex)
         {
-            return !IsOcean(vertex) && WaterLevel[vertex] > VertexHeight[vertex];
+            return !IsOcean(vertex) && WaterLevel[vertex] - VertexHeight[vertex] > MinLakeDepth;
         }
 
         /// <summary>Is this vertex in the ocean? (interpolated height at or below sea level)</summary>

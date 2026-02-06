@@ -110,6 +110,9 @@ namespace MapGen
         // Resources
         public int IronCells, GoldCells, LeadCells, SaltCells, StoneCells;
 
+        // Suitability
+        public float SuitabilityMin, SuitabilityMax, SuitabilityAvg;
+
         public bool IsValid;
 
         public static MapStats Compute(
@@ -227,6 +230,20 @@ namespace MapGen
                 if (biomes.SaltAbundance[i] > 0.01f) stats.SaltCells++;
                 if (biomes.StoneAbundance[i] > 0.01f) stats.StoneCells++;
             }
+
+            // Suitability
+            float suitMin = float.MaxValue, suitMax = float.MinValue, suitSum = 0f;
+            for (int i = 0; i < mesh.CellCount; i++)
+            {
+                if (heights.IsWater(i) || biomes.IsLakeCell[i]) continue;
+                float s = biomes.Suitability[i];
+                suitSum += s;
+                if (s < suitMin) suitMin = s;
+                if (s > suitMax) suitMax = s;
+            }
+            stats.SuitabilityMin = landCount > 0 ? suitMin : 0;
+            stats.SuitabilityMax = landCount > 0 ? suitMax : 0;
+            stats.SuitabilityAvg = landCount > 0 ? suitSum / landCount : 0;
 
             return stats;
         }

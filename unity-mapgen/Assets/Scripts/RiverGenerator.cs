@@ -6,8 +6,8 @@ namespace MapGen
     [RequireComponent(typeof(ClimateGenerator))]
     public class RiverGenerator : MonoBehaviour
     {
-        [System.NonSerialized] public float Threshold = 90f;
-        [System.NonSerialized] public int MinVertices = 2;
+        [System.NonSerialized] public float Threshold = 120f;
+        [System.NonSerialized] public int MinVertices = 6;
 
         [Header("Debug Overlay")]
         public RiverOverlay Overlay = RiverOverlay.None;
@@ -115,22 +115,23 @@ namespace MapGen
             }
             if (maxDischarge < 1f) maxDischarge = 1f;
 
+#if UNITY_EDITOR
             foreach (var river in _riverData.Rivers)
             {
                 float t = river.Discharge / maxDischarge;
-                Gizmos.color = Color.Lerp(
+                UnityEditor.Handles.color = Color.Lerp(
                     new Color(0.4f, 0.6f, 1f),
                     new Color(0f, 0.1f, 0.8f), t);
 
-                for (int i = 0; i < river.Vertices.Length - 1; i++)
+                var points = new Vector3[river.Vertices.Length];
+                for (int i = 0; i < river.Vertices.Length; i++)
                 {
-                    Vec2 p0 = mesh.Vertices[river.Vertices[i]];
-                    Vec2 p1 = mesh.Vertices[river.Vertices[i + 1]];
-                    Gizmos.DrawLine(
-                        new Vector3(p0.X, p0.Y, 0),
-                        new Vector3(p1.X, p1.Y, 0));
+                    Vec2 p = mesh.Vertices[river.Vertices[i]];
+                    points[i] = new Vector3(p.X, p.Y, 0);
                 }
+                UnityEditor.Handles.DrawAAPolyLine(4f, points);
             }
+#endif
         }
 
         void DrawFluxGizmos(CellMesh mesh)

@@ -103,6 +103,9 @@ namespace MapGen
             BiomeOps.ComputeGeologicalResources(_biomeData, heights, IronSeed, GoldSeed, LeadSeed);
             BiomeOps.ComputeSaltResource(_biomeData, heights);
             BiomeOps.ComputeStoneResource(_biomeData, heights);
+
+            // Suitability scoring (depends on all above)
+            SuitabilityOps.ComputeSuitability(_biomeData, heights, climate, rivers);
         }
     }
 }

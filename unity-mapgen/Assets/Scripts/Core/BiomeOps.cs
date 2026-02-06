@@ -13,11 +13,15 @@ namespace MapGen.Core
         /// Identify lake cells: a cell is a lake if majority (&gt; 50%) of its vertices are lake vertices.
         /// Must run before all other pipeline steps so IsLakeCell is available for skip checks.
         /// </summary>
+        /// <summary>Minimum number of connected lake cells to keep a lake.</summary>
+        const int MinLakeCells = 2;
+
         public static void ComputeLakeCells(BiomeData biome, HeightGrid heights, RiverData rivers)
         {
             var mesh = biome.Mesh;
             int n = mesh.CellCount;
 
+            // Pass 1: mark candidate lake cells by vertex majority
             for (int i = 0; i < n; i++)
             {
                 if (heights.IsWater(i) || biome.IsLakeCell[i]) continue;
@@ -36,6 +40,51 @@ namespace MapGen.Core
                 {
                     biome.IsLakeCell[i] = true;
                     biome.Biome[i] = BiomeId.Lake;
+                }
+            }
+
+            // Pass 2: remove lake clusters smaller than MinLakeCells
+            int[] component = new int[n];
+            for (int i = 0; i < n; i++) component[i] = -1;
+
+            var clusterSizes = new List<int>();
+            var stack = new List<int>();
+
+            for (int i = 0; i < n; i++)
+            {
+                if (!biome.IsLakeCell[i] || component[i] >= 0) continue;
+
+                int clusterId = clusterSizes.Count;
+                int size = 0;
+                stack.Add(i);
+                component[i] = clusterId;
+
+                while (stack.Count > 0)
+                {
+                    int c = stack[stack.Count - 1];
+                    stack.RemoveAt(stack.Count - 1);
+                    size++;
+
+                    foreach (int nb in mesh.CellNeighbors[c])
+                    {
+                        if (biome.IsLakeCell[nb] && component[nb] < 0)
+                        {
+                            component[nb] = clusterId;
+                            stack.Add(nb);
+                        }
+                    }
+                }
+
+                clusterSizes.Add(size);
+            }
+
+            // Clear undersized clusters
+            for (int i = 0; i < n; i++)
+            {
+                if (biome.IsLakeCell[i] && component[i] >= 0 && clusterSizes[component[i]] < MinLakeCells)
+                {
+                    biome.IsLakeCell[i] = false;
+                    biome.Biome[i] = default; // will be reassigned by biome classification
                 }
             }
         }
@@ -440,7 +489,7 @@ namespace MapGen.Core
                     drainageMod = 1f - dryPenalty - wetPenalty;
                 }
 
-                float lakeMod = 1f + biome.LakeEffect[i];
+                float lakeMod = 1f + 0.3f * biome.LakeEffect[i];
 
                 float fertility = baseFert * rockMod * loessMod * drainageMod * lakeMod;
                 biome.Fertility[i] = fertility < 0f ? 0f : (fertility > 1f ? 1f : fertility);
@@ -716,7 +765,7 @@ namespace MapGen.Core
 
         // Fish parameters
         const float RiverFishBase = 0.6f;
-        const float CoastalFishBase = 0.4f;
+        const float CoastalFishBase = 0.2f;
         const float LakeFishBase = 0.3f;
         const float EstuaryFishBonus = 0.3f;
         // ReferenceFlux already defined above (1000)

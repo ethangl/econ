@@ -102,6 +102,10 @@ namespace MapGen.Core
         public float[] SaltAbundance;       // 0-1, biome-derived (saline soil + salt effect)
         public float[] StoneAbundance;      // 0-1, rock type + slope
 
+        // Suitability scoring
+        public float[] Suitability;         // composite settlement score
+        public float[] SuitabilityGeo;      // geographic bonus subtotal (debug)
+
         public BiomeData(CellMesh mesh)
         {
             Mesh = mesh;
@@ -137,6 +141,9 @@ namespace MapGen.Core
             LeadAbundance = new float[n];
             SaltAbundance = new float[n];
             StoneAbundance = new float[n];
+
+            Suitability = new float[n];
+            SuitabilityGeo = new float[n];
         }
 
         /// <summary>Count cells per soil type (land cells only).</summary>
