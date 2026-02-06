@@ -76,13 +76,21 @@ econ/
 
 **Phase A: Foundation**
 
-1. Cell Mesh (Voronoi/Delaunay)
-2. Heightmap (noise + templates)
-3. Rivers (flow accumulation)
+[x] Cell Mesh (Voronoi/Delaunay)
+[x] Heightmap (noise + templates)
+[x] Climate Model
+[ ] Rivers (flow accumulation)
 
-**Phase B: Economic Geography** 4. Resource Placement 5. Settlement/Population 6. Political Boundaries
+**Phase B: Economic Geography**
 
-**Phase C: Polish** 7. Climate Model 8. Biome Refinement 9. Naming
+[ ] Resource Placement
+[ ] Settlement/Population
+[ ] Political Boundaries
+
+**Phase C: Polish**
+
+[ ] Biome Refinement
+[ ] Naming
 
 ## References
 

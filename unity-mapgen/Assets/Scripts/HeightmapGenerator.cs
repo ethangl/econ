@@ -119,7 +119,7 @@ namespace MapGen
                 }
 
                 Gizmos.color = color;
-                Gizmos.DrawSphere(new Vector3(center.X, center.Y, 0), 2f);
+                Gizmos.DrawSphere(new Vector3(center.X, center.Y, 0), 6f);
             }
         }
     }

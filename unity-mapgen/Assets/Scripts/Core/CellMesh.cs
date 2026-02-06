@@ -72,6 +72,16 @@ namespace MapGen.Core
         public float SqrMagnitude => X * X + Y * Y;
         public float Magnitude => (float)System.Math.Sqrt(SqrMagnitude);
 
+        public Vec2 Normalized
+        {
+            get
+            {
+                float m = Magnitude;
+                return m > 1e-6f ? new Vec2(X / m, Y / m) : new Vec2(0, 0);
+            }
+        }
+
+        public static float Dot(Vec2 a, Vec2 b) => a.X * b.X + a.Y * b.Y;
         public static float Distance(Vec2 a, Vec2 b) => (a - b).Magnitude;
         public static float SqrDistance(Vec2 a, Vec2 b) => (a - b).SqrMagnitude;
 

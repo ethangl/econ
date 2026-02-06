@@ -131,6 +131,7 @@ GameObject:
   - component: {fileID: 1015571344}
   - component: {fileID: 1015571343}
   - component: {fileID: 1015571342}
+  - component: {fileID: 1015571345}
   m_Layer: 0
   m_Name: MapGenerator
   m_TagString: Untagged
@@ -165,8 +166,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9342908a280f347148367d2299f22fe7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: MapGen::MapGen.HeightmapGenerator
-  Template: 7
-  HeightmapSeed: 42
+  Template: 5
+  HeightmapSeed: 444
   CustomScript: 
   ShowDebugHeights: 0
 --- !u!114 &1015571343
@@ -203,9 +204,23 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: MapGen::MapGen.CellMeshGenerator
   Seed: 12345
-  CellCount: 60000
+  CellCount: 30000
   MapWidth: 1920
   MapHeight: 1080
+--- !u!114 &1015571345
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1015571340}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 54446f8bb3b7b4c38b6edd00a0ff4320, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MapGen::MapGen.ClimateGenerator
+  LatitudeSouth: 30
+  Overlay: 0
 --- !u!1 &1284084470
 GameObject:
   m_ObjectHideFlags: 0
