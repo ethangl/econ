@@ -3,6 +3,14 @@ using MapGen.Core;
 
 namespace MapGen
 {
+    public enum ColorMode
+    {
+        Heightmap,
+        Soil,
+        Biome,
+        CellIndex
+    }
+
     /// <summary>
     /// Debug visualization for CellMesh using Unity's GL immediate mode.
     /// </summary>
@@ -10,28 +18,54 @@ namespace MapGen
     public class CellMeshVisualizer : MonoBehaviour
     {
         [Header("Display Options")]
-        public bool ShowCells = true;
+        [System.NonSerialized] public bool ShowCells = true;
         public bool ShowEdges = false;
-        public bool ShowCenters = false;
-        public bool ShowVertices = false;
+        [System.NonSerialized] public bool ShowCenters = false;
+        [System.NonSerialized] public bool ShowVertices = false;
 
         [Header("Coloring")]
-        [Tooltip("Use heightmap colors if HeightmapGenerator is present")]
-        public bool UseHeightmapColors = true;
+        public ColorMode ColorMode = ColorMode.Heightmap;
 
-        public Color CellColor = new Color(0.2f, 0.4f, 0.8f, 1f);
+        [System.NonSerialized] public Color CellColor = new Color(0.2f, 0.4f, 0.8f, 1f);
         public Color EdgeColor = new Color(0.1f, 0.1f, 0.1f, 0.8f);
-        public Color CenterColor = Color.red;
-        public Color VertexColor = Color.green;
+        [System.NonSerialized] public Color CenterColor = Color.red;
+        [System.NonSerialized] public Color VertexColor = Color.green;
 
         private CellMeshGenerator _generator;
         private HeightmapGenerator _heightmapGenerator;
+        private BiomeGenerator _biomeGenerator;
         private Material _glMaterial;
+
+        // Soil palette (8 types, indexed by SoilType enum)
+        private static readonly Color[] SoilColors = new Color[]
+        {
+            new Color(0.60f, 0.65f, 0.72f), // Permafrost - blue-gray
+            new Color(0.90f, 0.88f, 0.85f), // Saline - white/pale
+            new Color(0.55f, 0.55f, 0.53f), // Lithosol - rocky gray
+            new Color(0.30f, 0.22f, 0.14f), // Alluvial - dark brown
+            new Color(0.82f, 0.75f, 0.50f), // Aridisol - sandy yellow
+            new Color(0.78f, 0.38f, 0.18f), // Laterite - red-orange
+            new Color(0.50f, 0.44f, 0.38f), // Podzol - gray-brown
+            new Color(0.15f, 0.12f, 0.10f), // Chernozem - near-black
+        };
+
+        // Vegetation palette (7 types, indexed by VegetationType enum)
+        private static readonly Color[] VegetationColors = new Color[]
+        {
+            new Color(0f, 0f, 0f, 0f),      // None - transparent
+            new Color(0.55f, 0.60f, 0.50f),  // LichenMoss - muted gray-green
+            new Color(0.65f, 0.70f, 0.30f),  // Grass - gold-green
+            new Color(0.50f, 0.52f, 0.32f),  // Shrub - dusty olive
+            new Color(0.28f, 0.55f, 0.22f),  // DeciduousForest - green
+            new Color(0.15f, 0.35f, 0.30f),  // ConiferousForest - dark blue-green
+            new Color(0.10f, 0.42f, 0.18f),  // BroadleafForest - deep green
+        };
 
         void Awake()
         {
             _generator = GetComponent<CellMeshGenerator>();
             _heightmapGenerator = GetComponent<HeightmapGenerator>();
+            _biomeGenerator = GetComponent<BiomeGenerator>();
 
             // Create simple material for GL drawing
             var shader = Shader.Find("Hidden/Internal-Colored");
@@ -76,26 +110,18 @@ namespace MapGen
 
             if (_heightmapGenerator == null)
                 _heightmapGenerator = GetComponent<HeightmapGenerator>();
+            if (_biomeGenerator == null)
+                _biomeGenerator = GetComponent<BiomeGenerator>();
 
-            var heightGrid = UseHeightmapColors ? _heightmapGenerator?.HeightGrid : null;
+            var heightGrid = _heightmapGenerator?.HeightGrid;
+            var biomeData = _biomeGenerator?.BiomeData;
 
             for (int c = 0; c < mesh.CellCount; c++)
             {
                 var verts = mesh.CellVertices[c];
                 if (verts == null || verts.Length < 3) continue;
 
-                Color color;
-                if (heightGrid != null)
-                {
-                    // Heightmap coloring
-                    color = GetHeightColor(heightGrid.Heights[c]);
-                }
-                else
-                {
-                    // Simple color variation per cell
-                    float hue = (c * 0.618034f) % 1f; // Golden ratio for distribution
-                    color = Color.HSVToRGB(hue, 0.5f, 0.7f);
-                }
+                Color color = GetCellColor(c, heightGrid, biomeData);
                 color.a = 1f;
                 GL.Color(color);
 
@@ -113,6 +139,48 @@ namespace MapGen
             }
 
             GL.End();
+        }
+
+        private Color GetCellColor(int c, HeightGrid heightGrid, BiomeData biomeData)
+        {
+            bool isWater = heightGrid != null && heightGrid.IsWater(c);
+
+            switch (ColorMode)
+            {
+                case ColorMode.Soil:
+                case ColorMode.Biome:
+                    if (biomeData == null || isWater)
+                        return GetWaterOrFallback(c, heightGrid);
+
+                    Color soil = SoilColors[(int)biomeData.Soil[c]];
+                    if (ColorMode == ColorMode.Soil)
+                        return soil;
+
+                    // Biome: soil + vegetation composite
+                    Color veg = VegetationColors[(int)biomeData.Vegetation[c]];
+                    float density = biomeData.VegetationDensity[c];
+                    return Color.Lerp(soil, veg, density);
+
+                case ColorMode.Heightmap:
+                    if (heightGrid != null)
+                        return GetHeightColor(heightGrid.Heights[c]);
+                    goto case ColorMode.CellIndex;
+
+                case ColorMode.CellIndex:
+                default:
+                    float hue = (c * 0.618034f) % 1f;
+                    return Color.HSVToRGB(hue, 0.5f, 0.7f);
+            }
+        }
+
+        /// <summary>
+        /// For Soil/Biome modes: water cells use height color if available, else default blue.
+        /// </summary>
+        private Color GetWaterOrFallback(int c, HeightGrid heightGrid)
+        {
+            if (heightGrid != null)
+                return GetHeightColor(heightGrid.Heights[c]);
+            return new Color(0.1f, 0.2f, 0.5f);
         }
 
         /// <summary>

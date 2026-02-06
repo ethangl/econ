@@ -17,11 +17,6 @@ namespace MapGen
         [Tooltip("Random seed for heightmap generation")]
         public int HeightmapSeed = 42;
 
-        [Header("Custom Script")]
-        [Tooltip("Custom DSL script (overrides template if not empty)")]
-        [TextArea(5, 15)]
-        public string CustomScript = "";
-
         [Header("Debug")]
         [Tooltip("Show height values in scene view")]
         public bool ShowDebugHeights = false;
@@ -76,14 +71,8 @@ namespace MapGen
             }
         }
 
-        /// <summary>
-        /// Get the script to execute (custom or from template).
-        /// </summary>
         private string GetScript()
         {
-            if (!string.IsNullOrWhiteSpace(CustomScript))
-                return CustomScript;
-
             return HeightmapTemplates.GetTemplate(Template.ToString());
         }
 

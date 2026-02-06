@@ -129,10 +129,11 @@ GameObject:
   m_Component:
   - component: {fileID: 1015571341}
   - component: {fileID: 1015571344}
-  - component: {fileID: 1015571343}
   - component: {fileID: 1015571342}
   - component: {fileID: 1015571345}
   - component: {fileID: 1015571346}
+  - component: {fileID: 1015571347}
+  - component: {fileID: 1015571343}
   m_Layer: 0
   m_Name: MapGenerator
   m_TagString: Untagged
@@ -169,7 +170,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: MapGen::MapGen.HeightmapGenerator
   Template: 5
   HeightmapSeed: 444
-  CustomScript: 
   ShowDebugHeights: 0
 --- !u!114 &1015571343
 MonoBehaviour:
@@ -183,15 +183,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6c7215e995e044914b8785ccdb272946, type: 3}
   m_Name: 
   m_EditorClassIdentifier: MapGen::MapGen.CellMeshVisualizer
-  ShowCells: 1
   ShowEdges: 0
-  ShowCenters: 0
-  ShowVertices: 0
-  UseHeightmapColors: 1
-  CellColor: {r: 0.2, g: 0.4, b: 0.8, a: 1}
+  ColorMode: 2
   EdgeColor: {r: 0.1, g: 0.1, b: 0.1, a: 0.8}
-  CenterColor: {r: 1, g: 0, b: 0, a: 1}
-  VertexColor: {r: 0, g: 1, b: 0, a: 1}
 --- !u!114 &1015571344
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -235,6 +229,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: MapGen::MapGen.RiverGenerator
   Threshold: 80
   MinVertices: 4
+  Overlay: 0
+--- !u!114 &1015571347
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1015571340}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 503d3dc57b7bd4a109c2c3affdc83705, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MapGen::MapGen.BiomeGenerator
   Overlay: 0
 --- !u!1 &1284084470
 GameObject:
