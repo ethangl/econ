@@ -31,6 +31,20 @@ namespace MapGen.Core
         BroadleafForest
     }
 
+    public enum WaterFeatureType : byte
+    {
+        Ocean,
+        Lake
+    }
+
+    public struct WaterFeature
+    {
+        public int Id;
+        public WaterFeatureType Type;
+        public bool TouchesBorder;
+        public int CellCount;
+    }
+
     public enum BiomeId : byte
     {
         Glacier,
@@ -109,6 +123,11 @@ namespace MapGen.Core
         // Population
         public float[] Population;          // suitability * area-normalized
 
+        // Geography (post-biome)
+        public int[] CoastDistance;          // BFS hops from coastline; + land, - water
+        public int[] FeatureId;             // water body ID (0 = none/land)
+        public WaterFeature[] Features;     // distinct water bodies
+
         public BiomeData(CellMesh mesh)
         {
             Mesh = mesh;
@@ -149,6 +168,10 @@ namespace MapGen.Core
             SuitabilityGeo = new float[n];
 
             Population = new float[n];
+
+            CoastDistance = new int[n];
+            FeatureId = new int[n];
+            Features = System.Array.Empty<WaterFeature>();
         }
 
         /// <summary>Count cells per soil type (land cells only).</summary>

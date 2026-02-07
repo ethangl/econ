@@ -58,11 +58,25 @@ namespace EconSim.Core.Import
             for (int v = 0; v < mesh.VertexCount; v++)
                 vertices.Add(ToECVec2(mesh.Vertices[v]));
 
-            // CoastDistance via BFS from coastline
-            ComputeCoastDistance(cells, heights);
+            // CoastDistance + FeatureId: pre-computed by MapGen's GeographyOps
+            for (int i = 0; i < cellCount; i++)
+            {
+                cells[i].CoastDistance = biomes.CoastDistance[i];
+                cells[i].FeatureId = biomes.FeatureId[i];
+            }
 
-            // Features: flood-fill water cells into oceans and lakes
-            var features = BuildFeatures(cells, biomes, mesh);
+            // Features: convert from MapGen WaterFeature to EconSim Feature
+            var features = new List<Feature>();
+            foreach (var wf in biomes.Features)
+            {
+                features.Add(new Feature
+                {
+                    Id = wf.Id,
+                    Type = wf.Type == MapGen.Core.WaterFeatureType.Lake ? "lake" : "ocean",
+                    IsBorder = wf.TouchesBorder,
+                    CellCount = wf.CellCount
+                });
+            }
 
             // Rivers: convert vertex paths to point lists for rendering
             var riverList = ConvertRivers(rivers, mesh);
@@ -119,137 +133,6 @@ namespace EconSim.Core.Import
 
         static ECVec2 ToECVec2(MGVec2 v) => new ECVec2(v.X, v.Y);
 
-        #region CoastDistance
-
-        /// <summary>
-        /// BFS from coastline. Land cells get positive distance, water cells get negative.
-        /// A coastline cell is a land cell adjacent to water (or vice versa).
-        /// </summary>
-        static void ComputeCoastDistance(List<Cell> cells, HeightGrid heights)
-        {
-            int n = cells.Count;
-            var dist = new int[n];
-            var queue = new Queue<int>();
-
-            // Initialize: find coast cells (land adjacent to water)
-            for (int i = 0; i < n; i++)
-                dist[i] = int.MaxValue;
-
-            for (int i = 0; i < n; i++)
-            {
-                bool iLand = cells[i].IsLand;
-                bool isCoast = false;
-                foreach (int nb in cells[i].NeighborIds)
-                {
-                    if (nb >= 0 && nb < n && cells[nb].IsLand != iLand)
-                    {
-                        isCoast = true;
-                        break;
-                    }
-                }
-                if (isCoast)
-                {
-                    dist[i] = 0;
-                    queue.Enqueue(i);
-                }
-            }
-
-            // BFS
-            while (queue.Count > 0)
-            {
-                int cur = queue.Dequeue();
-                int nextDist = dist[cur] + 1;
-                foreach (int nb in cells[cur].NeighborIds)
-                {
-                    if (nb >= 0 && nb < n && dist[nb] == int.MaxValue)
-                    {
-                        dist[nb] = nextDist;
-                        queue.Enqueue(nb);
-                    }
-                }
-            }
-
-            // Apply: land = positive, water = negative
-            for (int i = 0; i < n; i++)
-            {
-                int d = dist[i] == int.MaxValue ? 0 : dist[i];
-                cells[i].CoastDistance = cells[i].IsLand ? d : -d;
-            }
-        }
-
-        #endregion
-
-        #region Features
-
-        static List<Feature> BuildFeatures(List<Cell> cells, BiomeData biomes, CellMesh mesh)
-        {
-            int n = cells.Count;
-            var featureId = new int[n];
-            for (int i = 0; i < n; i++) featureId[i] = -1;
-
-            var features = new List<Feature>();
-            int nextId = 1;
-
-            // Flood-fill water cells
-            for (int i = 0; i < n; i++)
-            {
-                if (cells[i].IsLand) continue;
-                if (featureId[i] >= 0) continue;
-
-                // Flood fill this water body
-                int fid = nextId++;
-                var queue = new Queue<int>();
-                queue.Enqueue(i);
-                featureId[i] = fid;
-                int count = 0;
-                bool touchesBorder = false;
-                bool hasLakeCell = false;
-
-                while (queue.Count > 0)
-                {
-                    int cur = queue.Dequeue();
-                    count++;
-                    if (mesh.CellIsBoundary[cur])
-                        touchesBorder = true;
-                    if (biomes.IsLakeCell[cur])
-                        hasLakeCell = true;
-
-                    foreach (int nb in cells[cur].NeighborIds)
-                    {
-                        if (nb >= 0 && nb < n && !cells[nb].IsLand && featureId[nb] < 0)
-                        {
-                            featureId[nb] = fid;
-                            queue.Enqueue(nb);
-                        }
-                    }
-                }
-
-                // Classify: lakes are small non-border water bodies with lake cells
-                string type;
-                if (hasLakeCell && !touchesBorder && count < 500)
-                    type = "lake";
-                else
-                    type = "ocean";
-
-                features.Add(new Feature
-                {
-                    Id = fid,
-                    Type = type,
-                    IsBorder = touchesBorder,
-                    CellCount = count
-                });
-            }
-
-            // Assign feature IDs to cells
-            for (int i = 0; i < n; i++)
-            {
-                cells[i].FeatureId = featureId[i] >= 0 ? featureId[i] : 0;
-            }
-
-            return features;
-        }
-
-        #endregion
 
         #region Rivers
 
