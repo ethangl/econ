@@ -43,11 +43,6 @@ namespace EconSim.Core.Import
             PopulateProvinceCells(mapData);
             Profiler.End();
 
-            // Group cells into counties
-            Profiler.Begin("CountyGrouper");
-            CountyGrouper.GroupCells(mapData);
-            Profiler.End();
-
             return mapData;
         }
 

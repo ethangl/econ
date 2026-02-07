@@ -390,6 +390,56 @@ Shader "EconSim/MapOverlay"
                 return tex2D(_CellToMarketTex, float2(marketU, 0.5)).r;
             }
 
+            // Calculate edge proximity for political modes (state boundaries, water, rivers)
+            // Returns 0 at edges, 1 deep in interior
+            float CalculatePoliticalEdgeProximity(float2 uv, float2 heightUV, float centerStateId, bool centerIsWater, float maxRadius, float uvPerPixel)
+            {
+                if (centerIsWater) return 1;
+
+                static const float2 dirs8[8] = {
+                    float2(1, 0), float2(0.707, 0.707), float2(0, 1), float2(-0.707, 0.707),
+                    float2(-1, 0), float2(-0.707, -0.707), float2(0, -1), float2(0.707, -0.707)
+                };
+
+                float radii[8] = {
+                    maxRadius * 0.0625, maxRadius * 0.125, maxRadius * 0.1875, maxRadius * 0.25,
+                    maxRadius * 0.3125, maxRadius * 0.375, maxRadius * 0.4375, maxRadius * 0.5
+                };
+
+                float minEdgeDistance = maxRadius * 0.5;
+
+                for (int r = 0; r < 8; r++)
+                {
+                    float radius = radii[r];
+                    for (int i = 0; i < 8; i++)
+                    {
+                        float2 sampleUV = uv + dirs8[i] * uvPerPixel * radius;
+                        float2 sampleHeightUV = heightUV + dirs8[i] * uvPerPixel * radius;
+                        float4 sampleData = SampleCellData(sampleUV);
+
+                        float samplePackedBiome = sampleData.b * 65535.0;
+                        bool sampleIsWater = samplePackedBiome >= 32000.0;
+
+                        float sampleRiver = tex2D(_RiverMaskTex, sampleHeightUV).r;
+                        bool sampleIsRiver = sampleRiver > 0.5;
+
+                        if (sampleIsWater || sampleIsRiver)
+                        {
+                            minEdgeDistance = min(minEdgeDistance, radius);
+                            continue;
+                        }
+
+                        float sampleStateId = sampleData.r;
+                        if (abs(centerStateId - sampleStateId) > 0.00001)
+                        {
+                            minEdgeDistance = min(minEdgeDistance, radius);
+                        }
+                    }
+                }
+
+                return saturate(minEdgeDistance / (maxRadius * 0.5));
+            }
+
             // Calculate edge proximity for market zones (requires cell-to-market lookup)
             // Returns 0 at edges (near different market, water, or river), 1 deep in interior
             float CalculateMarketEdgeProximity(float2 uv, float2 heightUV, float centerMarketId, bool centerIsWater, float maxRadius, float uvPerPixel)
@@ -797,7 +847,7 @@ Shader "EconSim/MapOverlay"
                 }
                 else if (_MapMode == 1 || _MapMode == 2 || _MapMode == 3)
                 {
-                    // Political modes - inner border with gradient fill
+                    // Political modes - gradient fill with darkening near water/rivers/borders
 
                     // Use pure heightmap for grayscale terrain (normalized land height)
                     float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
@@ -806,27 +856,31 @@ Shader "EconSim/MapOverlay"
                     // Get political color
                     fixed3 politicalColor = LookupPaletteColor(_StatePaletteTex, stateId);
 
-                    // Calculate state border proximity (ONLY state-to-state edges, ignores water/rivers)
-                    // Uses world-space (texels), not screen-space pixels
+                    // Calculate edge proximity for gradient (state boundaries, water, rivers)
+                    float edgeProximity = CalculatePoliticalEdgeProximity(uv, IN.heightUV, stateId, isWater, _GradientRadius, uvPerPixel);
+
+                    // Multiply blend: terrain * political color (like Photoshop multiply layer)
+                    fixed3 multiplied = grayTerrain * politicalColor;
+
+                    // Edge color: blend from political to multiplied based on darkening setting
+                    fixed3 edgeColor = lerp(politicalColor, multiplied, _GradientEdgeDarkening);
+
+                    // Center color: blend from terrain to political based on center opacity
+                    fixed3 centerColor = lerp(grayTerrain, politicalColor, _GradientCenterOpacity);
+
+                    // Gradient from edge (multiplied/dark) to center (political/light)
+                    baseColor = lerp(edgeColor, centerColor, edgeProximity);
+
+                    // State border band overlay
                     float borderWidthUV = _StateBorderWidth * _CellDataTex_TexelSize.x;
                     float stateBorderProximity = CalculateStateBorderProximity(uv, stateId, isWater, borderWidthUV);
-
-                    // Interior color: blend terrain with political color
-                    fixed3 interiorColor = lerp(grayTerrain, politicalColor, _GradientCenterOpacity);
-
-                    // Inner border band: multiply terrain with darkened state color
-                    // Only on state-to-state boundaries
                     if (stateBorderProximity < 0.5)
                     {
                         float3 hsv = rgb2hsv(politicalColor);
-                        hsv.z = max(hsv.z * 0.65, 0.35);  // 35% darker, clamp at 35% V
+                        hsv.z = max(hsv.z * 0.65, 0.35);
                         fixed3 borderTint = hsv2rgb(hsv);
                         fixed3 borderColor = grayTerrain * borderTint;
-                        baseColor = lerp(interiorColor, borderColor, _StateBorderOpacity);
-                    }
-                    else
-                    {
-                        baseColor = interiorColor;
+                        baseColor = lerp(baseColor, borderColor, _StateBorderOpacity);
                     }
                 }
                 else if (_MapMode == 4)

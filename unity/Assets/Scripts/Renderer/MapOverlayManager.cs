@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.IO;
 using System.Threading.Tasks;
 using UnityEngine;
 using EconSim.Core.Data;
@@ -161,123 +160,11 @@ namespace EconSim.Renderer
         /// Build spatial lookup grid mapping Azgaar coordinates to cell IDs.
         /// Uses cell centers to determine ownership of each grid position.
         /// Applies domain warping for organic, meandering borders.
-        /// Results are cached to disk for fast subsequent loads.
         /// </summary>
         private void BuildSpatialGrid()
         {
-            // Try to load from cache first
-            string cacheKey = ComputeSpatialGridCacheKey();
-            string cachePath = GetSpatialGridCachePath(cacheKey);
-
-            if (TryLoadSpatialGridFromCache(cachePath))
-            {
-                Debug.Log($"MapOverlayManager: Loaded spatial grid from cache ({gridWidth}x{gridHeight})");
-                return;
-            }
-
-            // Build the grid from scratch
             BuildSpatialGridFromScratch();
-
-            // Save to cache for next time
-            SaveSpatialGridToCache(cachePath);
-            Debug.Log($"MapOverlayManager: Built and cached spatial grid {gridWidth}x{gridHeight} ({resolutionMultiplier}x resolution)");
-        }
-
-        /// <summary>
-        /// Compute a cache key based on parameters that affect the spatial grid.
-        /// </summary>
-        private string ComputeSpatialGridCacheKey()
-        {
-            // Include all parameters that affect the grid output
-            // v10: Voronoi base + larger boundary refinement radius
-            string input = $"{mapData.Info.Name}_{mapData.Info.Width}x{mapData.Info.Height}_{mapData.Cells.Count}cells_{resolutionMultiplier}x_relaxed_{relaxedGeometry.Amplitude}_{relaxedGeometry.Frequency}_{relaxedGeometry.SamplesPerSegment}_v10";
-
-            // Simple hash
-            int hash = input.GetHashCode();
-            return $"spatial_grid_{hash:X8}";
-        }
-
-        /// <summary>
-        /// Get the cache file path for a given cache key.
-        /// </summary>
-        private string GetSpatialGridCachePath(string cacheKey)
-        {
-            // Use Unity's persistent data path for cache
-            string cacheDir = Path.Combine(Application.persistentDataPath, "MapCache");
-            if (!Directory.Exists(cacheDir))
-            {
-                Directory.CreateDirectory(cacheDir);
-            }
-            return Path.Combine(cacheDir, $"{cacheKey}.bin");
-        }
-
-        /// <summary>
-        /// Try to load the spatial grid from a cache file.
-        /// </summary>
-        private bool TryLoadSpatialGridFromCache(string cachePath)
-        {
-            if (!File.Exists(cachePath))
-                return false;
-
-            try
-            {
-                using (var stream = File.OpenRead(cachePath))
-                using (var reader = new BinaryReader(stream))
-                {
-                    // Read and verify header
-                    int cachedWidth = reader.ReadInt32();
-                    int cachedHeight = reader.ReadInt32();
-
-                    if (cachedWidth != gridWidth || cachedHeight != gridHeight)
-                    {
-                        Debug.LogWarning($"MapOverlayManager: Cache size mismatch ({cachedWidth}x{cachedHeight} vs {gridWidth}x{gridHeight}), rebuilding");
-                        return false;
-                    }
-
-                    // Read grid data
-                    int length = gridWidth * gridHeight;
-                    spatialGrid = new int[length];
-
-                    for (int i = 0; i < length; i++)
-                    {
-                        spatialGrid[i] = reader.ReadInt32();
-                    }
-
-                    return true;
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogWarning($"MapOverlayManager: Failed to load cache: {ex.Message}");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Save the spatial grid to a cache file.
-        /// </summary>
-        private void SaveSpatialGridToCache(string cachePath)
-        {
-            try
-            {
-                using (var stream = File.Create(cachePath))
-                using (var writer = new BinaryWriter(stream))
-                {
-                    // Write header
-                    writer.Write(gridWidth);
-                    writer.Write(gridHeight);
-
-                    // Write grid data
-                    for (int i = 0; i < spatialGrid.Length; i++)
-                    {
-                        writer.Write(spatialGrid[i]);
-                    }
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogWarning($"MapOverlayManager: Failed to save cache: {ex.Message}");
-            }
+            Debug.Log($"MapOverlayManager: Built spatial grid {gridWidth}x{gridHeight} ({resolutionMultiplier}x resolution)");
         }
 
         /// <summary>
@@ -593,7 +480,6 @@ namespace EconSim.Renderer
         /// <summary>
         /// Generate river mask texture by rasterizing river paths.
         /// Rivers are "knocked out" of the land in the shader, showing water underneath.
-        /// Results are cached to disk.
         /// </summary>
         private void GenerateRiverMaskTexture()
         {
@@ -602,20 +488,8 @@ namespace EconSim.Renderer
             riverMaskTexture.filterMode = FilterMode.Bilinear;
             riverMaskTexture.wrapMode = TextureWrapMode.Clamp;
 
-            // Try to load from cache
-            string cacheKey = ComputeRiverMaskCacheKey();
-            string cachePath = GetRiverMaskCachePath(cacheKey);
-
-            if (TryLoadRiverMaskFromCache(cachePath))
-            {
-                Debug.Log($"MapOverlayManager: Loaded river mask from cache ({gridWidth}x{gridHeight})");
-                return;
-            }
-
-            // Generate from scratch
             var pixels = GenerateRiverMaskPixels();
 
-            // Upload to texture
             var colorPixels = new Color[pixels.Length];
             for (int i = 0; i < pixels.Length; i++)
             {
@@ -625,70 +499,8 @@ namespace EconSim.Renderer
             riverMaskTexture.SetPixels(colorPixels);
             riverMaskTexture.Apply();
 
-            // Save to cache
-            SaveRiverMaskToCache(cachePath, pixels);
-
             TextureDebugger.SaveTexture(riverMaskTexture, "river_mask");
-            Debug.Log($"MapOverlayManager: Generated and cached river mask {gridWidth}x{gridHeight} ({mapData.Rivers.Count} rivers)");
-        }
-
-        private string ComputeRiverMaskCacheKey()
-        {
-            // Include parameters that affect river mask output
-            int riverHash = 0;
-            foreach (var river in mapData.Rivers)
-            {
-                riverHash ^= river.Id * 31 + river.CellPath?.Count ?? 0;
-            }
-            string input = $"{mapData.Info.Name}_{gridWidth}x{gridHeight}_{mapData.Rivers.Count}rivers_{riverHash}";
-            return $"river_mask_{input.GetHashCode():X8}";
-        }
-
-        private string GetRiverMaskCachePath(string cacheKey)
-        {
-            string cacheDir = Path.Combine(Application.persistentDataPath, "MapCache");
-            if (!Directory.Exists(cacheDir))
-                Directory.CreateDirectory(cacheDir);
-            return Path.Combine(cacheDir, $"{cacheKey}.bin");
-        }
-
-        private bool TryLoadRiverMaskFromCache(string cachePath)
-        {
-            if (!File.Exists(cachePath))
-                return false;
-
-            try
-            {
-                var pixels = File.ReadAllBytes(cachePath);
-                if (pixels.Length != gridWidth * gridHeight)
-                    return false;
-
-                var colorPixels = new Color[pixels.Length];
-                for (int i = 0; i < pixels.Length; i++)
-                {
-                    float v = pixels[i] / 255f;
-                    colorPixels[i] = new Color(v, v, v, 1f);
-                }
-                riverMaskTexture.SetPixels(colorPixels);
-                riverMaskTexture.Apply();
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private void SaveRiverMaskToCache(string cachePath, byte[] pixels)
-        {
-            try
-            {
-                File.WriteAllBytes(cachePath, pixels);
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogWarning($"Failed to save river mask cache: {ex.Message}");
-            }
+            Debug.Log($"MapOverlayManager: Generated river mask {gridWidth}x{gridHeight} ({mapData.Rivers.Count} rivers)");
         }
 
         private byte[] GenerateRiverMaskPixels()
@@ -698,24 +510,33 @@ namespace EconSim.Renderer
             float scale = resolutionMultiplier;
 
             // River width settings
-            float baseWidth = 2.5f * resolutionMultiplier;  // Minimum river width in pixels
-            float widthScale = 1.2f * resolutionMultiplier; // Scale factor for discharge-based width
+            float baseWidth = 0.6f * resolutionMultiplier;  // Minimum river width in pixels
+            float widthScale = 0.3f * resolutionMultiplier; // Scale factor for discharge-based width
 
             foreach (var river in mapData.Rivers)
             {
-                if (river.CellPath == null || river.CellPath.Count < 2)
-                    continue;
-
-                // Get river path points (cell centers)
+                // Get river path points from vertex positions or cell centers
                 var pathPoints = new List<Vector2>();
-                foreach (int cellId in river.CellPath)
+                if (river.Points != null && river.Points.Count >= 2)
                 {
-                    if (mapData.CellById.TryGetValue(cellId, out var cell))
+                    foreach (var pt in river.Points)
                     {
-                        // Scale to texture coordinates and flip Y for Unity
-                        float x = cell.Center.X * scale;
-                        float y = (baseHeight - cell.Center.Y) * scale;  // Y-flip
+                        // Points are already Y-flipped by adapter, flip again for texture coords
+                        float x = pt.X * scale;
+                        float y = (baseHeight - pt.Y) * scale;
                         pathPoints.Add(new Vector2(x, y));
+                    }
+                }
+                else if (river.CellPath != null && river.CellPath.Count >= 2)
+                {
+                    foreach (int cellId in river.CellPath)
+                    {
+                        if (mapData.CellById.TryGetValue(cellId, out var cell))
+                        {
+                            float x = cell.Center.X * scale;
+                            float y = (baseHeight - cell.Center.Y) * scale;
+                            pathPoints.Add(new Vector2(x, y));
+                        }
                     }
                 }
 

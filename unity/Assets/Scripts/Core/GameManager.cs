@@ -7,6 +7,7 @@ using EconSim.Core.Simulation;
 using EconSim.Core.Simulation.Systems;
 using EconSim.Renderer;
 using EconSim.Camera;
+using MapGen.Core;
 using Profiler = EconSim.Core.Common.StartupProfiler;
 
 namespace EconSim.Core
@@ -70,6 +71,37 @@ namespace EconSim.Core
             Profiler.Reset();
             Profiler.Begin("Total Startup");
             LoadMap();
+            Profiler.End();
+            Profiler.LogResults();
+        }
+
+        /// <summary>
+        /// Generate a map procedurally using the MapGen pipeline.
+        /// </summary>
+        public void GenerateMap(MapGenConfig config = null)
+        {
+            Profiler.Reset();
+            Profiler.Begin("Total Startup");
+
+            config ??= new MapGenConfig
+            {
+                CellCount = 60000,
+                Seed = UnityEngine.Random.Range(1, int.MaxValue)
+            };
+
+            Profiler.Begin("MapGen Pipeline");
+            var result = MapGenPipeline.Generate(config);
+            Profiler.End();
+
+            Profiler.Begin("MapGenAdapter Convert");
+            MapData = MapGenAdapter.Convert(result);
+            Profiler.End();
+
+            // Update info with seed
+            MapData.Info.Seed = config.Seed.ToString();
+
+            InitializeWithMapData();
+
             Profiler.End();
             Profiler.LogResults();
         }

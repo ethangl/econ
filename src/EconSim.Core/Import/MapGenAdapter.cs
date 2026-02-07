@@ -1,0 +1,691 @@
+using System;
+using System.Collections.Generic;
+using EconSim.Core.Common;
+using EconSim.Core.Data;
+using MapGen.Core;
+using MGVec2 = MapGen.Core.Vec2;
+using ECVec2 = EconSim.Core.Common.Vec2;
+using ECRiver = EconSim.Core.Data.River;
+
+namespace EconSim.Core.Import
+{
+    /// <summary>
+    /// Converts MapGen pipeline output into EconSim MapData.
+    /// </summary>
+    public static class MapGenAdapter
+    {
+        private const int SeaLevel = 20;
+
+        /// <summary>
+        /// Convert a MapGenResult into a fully populated MapData ready for simulation.
+        /// </summary>
+        public static MapData Convert(MapGenResult result)
+        {
+            var mesh = result.Mesh;
+            var heights = result.Heights;
+            var biomes = result.Biomes;
+            var rivers = result.Rivers;
+            var political = result.Political;
+
+            // MapGen uses Y-up (Y=0 south), but EconSim/renderer expects Azgaar-style
+            // Y-down (Y=0 north). Flip all positions at the import boundary.
+            float mapHeight = mesh.Height;
+
+            int cellCount = mesh.CellCount;
+
+            // Build cells
+            var cells = new List<Cell>(cellCount);
+            for (int i = 0; i < cellCount; i++)
+            {
+                var center = mesh.CellCenters[i];
+                var cell = new Cell
+                {
+                    Id = i,
+                    Center = FlipY(center, mapHeight),
+                    VertexIndices = new List<int>(mesh.CellVertices[i]),
+                    NeighborIds = new List<int>(mesh.CellNeighbors[i]),
+                    Height = (int)Math.Round(heights.Heights[i]),
+                    BiomeId = (int)biomes.Biome[i],
+                    IsLand = !heights.IsWater(i) && !biomes.IsLakeCell[i],
+                    StateId = political.RealmId[i],
+                    ProvinceId = political.ProvinceId[i],
+                    CountyId = political.CountyId[i],
+                    Population = biomes.Population[i],
+                };
+                cells.Add(cell);
+            }
+
+            // Vertices (Y-flipped)
+            var vertices = new List<ECVec2>(mesh.VertexCount);
+            for (int v = 0; v < mesh.VertexCount; v++)
+                vertices.Add(FlipY(mesh.Vertices[v], mapHeight));
+
+            // CoastDistance via BFS from coastline
+            ComputeCoastDistance(cells, heights);
+
+            // Features: flood-fill water cells into oceans and lakes
+            var features = BuildFeatures(cells, biomes, mesh);
+
+            // Rivers: convert vertex paths to point lists for rendering
+            var riverList = ConvertRivers(rivers, mesh, mapHeight);
+
+            // Burgs: county seats become burgs
+            var burgs = BuildBurgs(cells, political);
+
+            // States
+            var states = BuildStates(cells, political);
+
+            // Provinces
+            var provinces = BuildProvinces(cells, political);
+
+            // Counties
+            var counties = BuildCounties(cells, political, biomes);
+
+            // Biome definitions (static table for the 18+1 MapGen biomes)
+            var biomeDefs = BuildBiomeDefinitions();
+
+            // Map info
+            int landCells = 0;
+            foreach (var c in cells)
+                if (c.IsLand) landCells++;
+
+            var info = new MapInfo
+            {
+                Name = "Generated Map",
+                Width = (int)Math.Round(mesh.Width),
+                Height = (int)Math.Round(mesh.Height),
+                Seed = "",
+                TotalCells = cellCount,
+                LandCells = landCells,
+                SeaLevel = SeaLevel
+            };
+
+            var mapData = new MapData
+            {
+                Info = info,
+                Cells = cells,
+                Vertices = vertices,
+                States = states,
+                Provinces = provinces,
+                Rivers = riverList,
+                Biomes = biomeDefs,
+                Burgs = burgs,
+                Features = features,
+                Counties = counties
+            };
+
+            mapData.BuildLookups();
+
+            return mapData;
+        }
+
+        static ECVec2 ToECVec2(MGVec2 v) => new ECVec2(v.X, v.Y);
+        static ECVec2 FlipY(MGVec2 v, float mapHeight) => new ECVec2(v.X, mapHeight - v.Y);
+
+        #region CoastDistance
+
+        /// <summary>
+        /// BFS from coastline. Land cells get positive distance, water cells get negative.
+        /// A coastline cell is a land cell adjacent to water (or vice versa).
+        /// </summary>
+        static void ComputeCoastDistance(List<Cell> cells, HeightGrid heights)
+        {
+            int n = cells.Count;
+            var dist = new int[n];
+            var queue = new Queue<int>();
+
+            // Initialize: find coast cells (land adjacent to water)
+            for (int i = 0; i < n; i++)
+                dist[i] = int.MaxValue;
+
+            for (int i = 0; i < n; i++)
+            {
+                bool iLand = cells[i].IsLand;
+                bool isCoast = false;
+                foreach (int nb in cells[i].NeighborIds)
+                {
+                    if (nb >= 0 && nb < n && cells[nb].IsLand != iLand)
+                    {
+                        isCoast = true;
+                        break;
+                    }
+                }
+                if (isCoast)
+                {
+                    dist[i] = 0;
+                    queue.Enqueue(i);
+                }
+            }
+
+            // BFS
+            while (queue.Count > 0)
+            {
+                int cur = queue.Dequeue();
+                int nextDist = dist[cur] + 1;
+                foreach (int nb in cells[cur].NeighborIds)
+                {
+                    if (nb >= 0 && nb < n && dist[nb] == int.MaxValue)
+                    {
+                        dist[nb] = nextDist;
+                        queue.Enqueue(nb);
+                    }
+                }
+            }
+
+            // Apply: land = positive, water = negative
+            for (int i = 0; i < n; i++)
+            {
+                int d = dist[i] == int.MaxValue ? 0 : dist[i];
+                cells[i].CoastDistance = cells[i].IsLand ? d : -d;
+            }
+        }
+
+        #endregion
+
+        #region Features
+
+        static List<Feature> BuildFeatures(List<Cell> cells, BiomeData biomes, CellMesh mesh)
+        {
+            int n = cells.Count;
+            var featureId = new int[n];
+            for (int i = 0; i < n; i++) featureId[i] = -1;
+
+            var features = new List<Feature>();
+            int nextId = 1;
+
+            // Flood-fill water cells
+            for (int i = 0; i < n; i++)
+            {
+                if (cells[i].IsLand) continue;
+                if (featureId[i] >= 0) continue;
+
+                // Flood fill this water body
+                int fid = nextId++;
+                var queue = new Queue<int>();
+                queue.Enqueue(i);
+                featureId[i] = fid;
+                int count = 0;
+                bool touchesBorder = false;
+                bool hasLakeCell = false;
+
+                while (queue.Count > 0)
+                {
+                    int cur = queue.Dequeue();
+                    count++;
+                    if (mesh.CellIsBoundary[cur])
+                        touchesBorder = true;
+                    if (biomes.IsLakeCell[cur])
+                        hasLakeCell = true;
+
+                    foreach (int nb in cells[cur].NeighborIds)
+                    {
+                        if (nb >= 0 && nb < n && !cells[nb].IsLand && featureId[nb] < 0)
+                        {
+                            featureId[nb] = fid;
+                            queue.Enqueue(nb);
+                        }
+                    }
+                }
+
+                // Classify: lakes are small non-border water bodies with lake cells
+                string type;
+                if (hasLakeCell && !touchesBorder && count < 500)
+                    type = "lake";
+                else
+                    type = "ocean";
+
+                features.Add(new Feature
+                {
+                    Id = fid,
+                    Type = type,
+                    IsBorder = touchesBorder,
+                    CellCount = count
+                });
+            }
+
+            // Assign feature IDs to cells
+            for (int i = 0; i < n; i++)
+            {
+                cells[i].FeatureId = featureId[i] >= 0 ? featureId[i] : 0;
+            }
+
+            return features;
+        }
+
+        #endregion
+
+        #region Rivers
+
+        static List<ECRiver> ConvertRivers(RiverData riverData, CellMesh mesh, float mapHeight)
+        {
+            var rivers = new List<ECRiver>();
+
+            for (int r = 0; r < riverData.Rivers.Length; r++)
+            {
+                ref var mgRiver = ref riverData.Rivers[r];
+                if (mgRiver.Vertices.Length < 2) continue;
+
+                // MapGen vertices are mouth-first; reverse for source→mouth
+                var points = new List<ECVec2>(mgRiver.Vertices.Length);
+                for (int vi = mgRiver.Vertices.Length - 1; vi >= 0; vi--)
+                {
+                    int vertIdx = mgRiver.Vertices[vi];
+                    if (vertIdx < 0 || vertIdx >= mesh.VertexCount) continue;
+                    points.Add(FlipY(mesh.Vertices[vertIdx], mapHeight));
+                }
+
+                if (points.Count < 2) continue;
+
+                int riverId = r + 1;
+                rivers.Add(new ECRiver
+                {
+                    Id = riverId,
+                    Name = $"River {riverId}",
+                    Type = "River",
+                    Points = points,
+                    CellPath = new List<int>(),
+                    Width = Math.Min(5f, Math.Max(0.5f, (float)Math.Log(mgRiver.Discharge + 1) * 0.4f)),
+                    Discharge = (int)mgRiver.Discharge,
+                    Length = points.Count,
+                });
+            }
+
+            return rivers;
+        }
+
+        #endregion
+
+        #region Burgs
+
+        static List<Burg> BuildBurgs(List<Cell> cells, PoliticalData political)
+        {
+            var burgs = new List<Burg>();
+            if (political.CountySeats == null) return burgs;
+
+            // County seats become burgs
+            for (int ci = 0; ci < political.CountySeats.Length; ci++)
+            {
+                int countyId = ci + 1; // 1-based
+                int cellId = political.CountySeats[ci];
+                if (cellId < 0 || cellId >= cells.Count) continue;
+
+                var cell = cells[cellId];
+                int burgId = ci + 1; // 1-based
+
+                bool isCapital = false;
+                if (political.Capitals != null)
+                {
+                    for (int ri = 0; ri < political.Capitals.Length; ri++)
+                    {
+                        if (political.Capitals[ri] == cellId)
+                        {
+                            isCapital = true;
+                            break;
+                        }
+                    }
+                }
+
+                var burg = new Burg
+                {
+                    Id = burgId,
+                    Name = $"Town {burgId}",
+                    Position = cell.Center,
+                    CellId = cellId,
+                    StateId = cell.StateId,
+                    CultureId = 0,
+                    Population = cell.Population,
+                    IsCapital = isCapital,
+                    IsPort = false,
+                    Type = isCapital ? "Capital" : "Town",
+                    Group = isCapital ? "capital" : "town",
+                };
+                burgs.Add(burg);
+
+                cell.BurgId = burgId;
+            }
+
+            return burgs;
+        }
+
+        #endregion
+
+        #region States
+
+        static List<State> BuildStates(List<Cell> cells, PoliticalData political)
+        {
+            var states = new List<State>();
+            if (political.RealmCount == 0) return states;
+
+            // Gather cells per realm
+            var realmCells = new Dictionary<int, List<int>>();
+            for (int i = 0; i < cells.Count; i++)
+            {
+                int rid = political.RealmId[i];
+                if (rid <= 0) continue;
+                if (!realmCells.TryGetValue(rid, out var list))
+                {
+                    list = new List<int>();
+                    realmCells[rid] = list;
+                }
+                list.Add(i);
+            }
+
+            // Gather provinces per realm
+            var realmProvinces = new Dictionary<int, HashSet<int>>();
+            for (int i = 0; i < cells.Count; i++)
+            {
+                int rid = political.RealmId[i];
+                int pid = political.ProvinceId[i];
+                if (rid <= 0 || pid <= 0) continue;
+                if (!realmProvinces.TryGetValue(rid, out var set))
+                {
+                    set = new HashSet<int>();
+                    realmProvinces[rid] = set;
+                }
+                set.Add(pid);
+            }
+
+            // Generate state colors using even hue distribution
+            for (int si = 0; si < political.RealmCount; si++)
+            {
+                int realmId = si + 1;
+                if (!realmCells.TryGetValue(realmId, out var rCells)) continue;
+
+                float h = (float)si / political.RealmCount;
+                float s = 0.42f + (HashToFloat(realmId + 3000) - 0.5f) * 0.16f;
+                float v = 0.70f + (HashToFloat(realmId + 4000) - 0.5f) * 0.16f;
+                s = Math.Max(0.28f, Math.Min(0.55f, s));
+                v = Math.Max(0.58f, Math.Min(0.85f, v));
+
+                int capitalCell = (political.Capitals != null && si < political.Capitals.Length)
+                    ? political.Capitals[si]
+                    : rCells[0];
+
+                // Find capital burg ID
+                int capitalBurgId = 0;
+                if (capitalCell >= 0 && capitalCell < cells.Count)
+                    capitalBurgId = cells[capitalCell].BurgId;
+
+                // Province IDs
+                var provIds = new List<int>();
+                if (realmProvinces.TryGetValue(realmId, out var pset))
+                    provIds.AddRange(pset);
+
+                // Population
+                float totalPop = 0;
+                foreach (int ci in rCells)
+                    totalPop += cells[ci].Population;
+
+                // Center = capital cell
+                var centerPos = capitalCell >= 0 && capitalCell < cells.Count
+                    ? cells[capitalCell].Center
+                    : ECVec2.Zero;
+
+                states.Add(new State
+                {
+                    Id = realmId,
+                    Name = $"Kingdom {realmId}",
+                    FullName = $"Kingdom of Region {realmId}",
+                    GovernmentForm = "",
+                    CapitalBurgId = capitalBurgId,
+                    CenterCellId = capitalCell,
+                    CultureId = 0,
+                    Color = HsvToColor32(h, s, v),
+                    LabelPosition = centerPos,
+                    ProvinceIds = provIds,
+                    NeighborStateIds = new List<int>(),
+                    UrbanPopulation = 0,
+                    RuralPopulation = totalPop,
+                    TotalArea = rCells.Count
+                });
+            }
+
+            // Compute neighbor states
+            var stateById = new Dictionary<int, State>();
+            foreach (var st in states)
+                stateById[st.Id] = st;
+
+            for (int i = 0; i < cells.Count; i++)
+            {
+                int rid = political.RealmId[i];
+                if (rid <= 0) continue;
+                foreach (int nb in cells[i].NeighborIds)
+                {
+                    if (nb >= 0 && nb < cells.Count)
+                    {
+                        int nrid = political.RealmId[nb];
+                        if (nrid > 0 && nrid != rid)
+                        {
+                            if (stateById.TryGetValue(rid, out var st) && !st.NeighborStateIds.Contains(nrid))
+                                st.NeighborStateIds.Add(nrid);
+                        }
+                    }
+                }
+            }
+
+            return states;
+        }
+
+        #endregion
+
+        #region Provinces
+
+        static List<Province> BuildProvinces(List<Cell> cells, PoliticalData political)
+        {
+            var provinces = new List<Province>();
+            if (political.ProvinceCount == 0) return provinces;
+
+            // Gather cells per province
+            var provCells = new Dictionary<int, List<int>>();
+            var provRealm = new Dictionary<int, int>();
+            for (int i = 0; i < cells.Count; i++)
+            {
+                int pid = political.ProvinceId[i];
+                if (pid <= 0) continue;
+                if (!provCells.TryGetValue(pid, out var list))
+                {
+                    list = new List<int>();
+                    provCells[pid] = list;
+                }
+                list.Add(i);
+                provRealm[pid] = political.RealmId[i];
+            }
+
+            foreach (var kvp in provCells)
+            {
+                int pid = kvp.Key;
+                var pCells = kvp.Value;
+                int stateId = provRealm.TryGetValue(pid, out var sid) ? sid : 0;
+
+                // Find highest-pop cell as center
+                int centerCell = pCells[0];
+                float maxPop = 0;
+                foreach (int ci in pCells)
+                {
+                    if (cells[ci].Population > maxPop)
+                    {
+                        maxPop = cells[ci].Population;
+                        centerCell = ci;
+                    }
+                }
+
+                // Province color derived from state color with small variance
+                float h = HashToFloat(pid * 7919);
+                float s = 0.35f + HashToFloat(pid + 5000) * 0.15f;
+                float v = 0.65f + HashToFloat(pid + 6000) * 0.15f;
+
+                provinces.Add(new Province
+                {
+                    Id = pid,
+                    Name = $"Province {pid}",
+                    FullName = $"Province {pid}",
+                    StateId = stateId,
+                    CenterCellId = centerCell,
+                    CapitalBurgId = cells[centerCell].BurgId,
+                    Color = HsvToColor32(h, s, v),
+                    LabelPosition = cells[centerCell].Center,
+                    CellIds = new List<int>(pCells)
+                });
+            }
+
+            return provinces;
+        }
+
+        #endregion
+
+        #region Counties
+
+        static List<County> BuildCounties(List<Cell> cells, PoliticalData political, BiomeData biomes)
+        {
+            var counties = new List<County>();
+            if (political.CountyCount == 0) return counties;
+
+            // Gather cells per county
+            var countyCells = new Dictionary<int, List<int>>();
+            for (int i = 0; i < cells.Count; i++)
+            {
+                int cid = political.CountyId[i];
+                if (cid <= 0) continue;
+                if (!countyCells.TryGetValue(cid, out var list))
+                {
+                    list = new List<int>();
+                    countyCells[cid] = list;
+                }
+                list.Add(i);
+            }
+
+            foreach (var kvp in countyCells)
+            {
+                int cid = kvp.Key;
+                var cCells = kvp.Value;
+
+                int seatCell = (political.CountySeats != null && cid - 1 >= 0 && cid - 1 < political.CountySeats.Length)
+                    ? political.CountySeats[cid - 1]
+                    : cCells[0];
+
+                float totalPop = 0;
+                float sumX = 0, sumY = 0, sumW = 0;
+                int provinceId = 0;
+                int stateId = 0;
+
+                foreach (int ci in cCells)
+                {
+                    var cell = cells[ci];
+                    totalPop += cell.Population;
+                    float w = cell.Population > 0 ? cell.Population : 1;
+                    sumX += cell.Center.X * w;
+                    sumY += cell.Center.Y * w;
+                    sumW += w;
+                    if (provinceId == 0) provinceId = cell.ProvinceId;
+                    if (stateId == 0) stateId = cell.StateId;
+                }
+
+                var centroid = sumW > 0
+                    ? new ECVec2(sumX / sumW, sumY / sumW)
+                    : cells[seatCell].Center;
+
+                // Name from burg if seat has one
+                string name = cells[seatCell].BurgId > 0
+                    ? $"Town {cells[seatCell].BurgId}"
+                    : $"County {cid}";
+
+                counties.Add(new County
+                {
+                    Id = cid,
+                    Name = name,
+                    SeatCellId = seatCell,
+                    CellIds = new List<int>(cCells),
+                    ProvinceId = provinceId,
+                    StateId = stateId,
+                    TotalPopulation = totalPop,
+                    Centroid = centroid
+                });
+            }
+
+            return counties;
+        }
+
+        #endregion
+
+        #region Biome Definitions
+
+        /// <summary>
+        /// Static table matching the 19 MapGen BiomeId enum values.
+        /// </summary>
+        static List<Biome> BuildBiomeDefinitions()
+        {
+            return new List<Biome>
+            {
+                new Biome { Id = 0,  Name = "Glacier",             Color = new Color32(220, 235, 250, 255), Habitability = 2,  MovementCost = 200 },
+                new Biome { Id = 1,  Name = "Tundra",              Color = new Color32(180, 210, 200, 255), Habitability = 8,  MovementCost = 140 },
+                new Biome { Id = 2,  Name = "Salt Flat",           Color = new Color32(230, 220, 200, 255), Habitability = 3,  MovementCost = 80  },
+                new Biome { Id = 3,  Name = "Coastal Marsh",       Color = new Color32(140, 175, 140, 255), Habitability = 25, MovementCost = 160 },
+                new Biome { Id = 4,  Name = "Alpine Barren",       Color = new Color32(170, 170, 170, 255), Habitability = 5,  MovementCost = 180 },
+                new Biome { Id = 5,  Name = "Mountain Shrub",      Color = new Color32(140, 160, 120, 255), Habitability = 15, MovementCost = 150 },
+                new Biome { Id = 6,  Name = "Floodplain",          Color = new Color32(90,  160, 70,  255), Habitability = 80, MovementCost = 100 },
+                new Biome { Id = 7,  Name = "Wetland",             Color = new Color32(100, 150, 120, 255), Habitability = 20, MovementCost = 170 },
+                new Biome { Id = 8,  Name = "Hot Desert",          Color = new Color32(220, 200, 140, 255), Habitability = 5,  MovementCost = 120 },
+                new Biome { Id = 9,  Name = "Cold Desert",         Color = new Color32(200, 195, 170, 255), Habitability = 8,  MovementCost = 110 },
+                new Biome { Id = 10, Name = "Scrubland",           Color = new Color32(180, 180, 100, 255), Habitability = 30, MovementCost = 100 },
+                new Biome { Id = 11, Name = "Tropical Rainforest", Color = new Color32(40,  120, 40,  255), Habitability = 40, MovementCost = 160 },
+                new Biome { Id = 12, Name = "Tropical Dry Forest", Color = new Color32(100, 140, 60,  255), Habitability = 50, MovementCost = 130 },
+                new Biome { Id = 13, Name = "Savanna",             Color = new Color32(170, 180, 80,  255), Habitability = 45, MovementCost = 90  },
+                new Biome { Id = 14, Name = "Boreal Forest",       Color = new Color32(70,  110, 80,  255), Habitability = 20, MovementCost = 140 },
+                new Biome { Id = 15, Name = "Temperate Forest",    Color = new Color32(60,  140, 60,  255), Habitability = 60, MovementCost = 120 },
+                new Biome { Id = 16, Name = "Grassland",           Color = new Color32(150, 190, 90,  255), Habitability = 70, MovementCost = 80  },
+                new Biome { Id = 17, Name = "Woodland",            Color = new Color32(90,  150, 70,  255), Habitability = 55, MovementCost = 110 },
+                new Biome { Id = 18, Name = "Lake",                Color = new Color32(80,  130, 190, 255), Habitability = 0,  MovementCost = 250 },
+            };
+        }
+
+        #endregion
+
+        #region Color Utilities
+
+        static float HashToFloat(int value)
+        {
+            uint h = (uint)value;
+            h ^= h >> 16;
+            h *= 0x85ebca6b;
+            h ^= h >> 13;
+            h *= 0xc2b2ae35;
+            h ^= h >> 16;
+            return (h & 0x7FFFFFFF) / (float)0x7FFFFFFF;
+        }
+
+        static Color32 HsvToColor32(float h, float s, float v)
+        {
+            float r, g, b;
+            if (s <= 0)
+            {
+                r = g = b = v;
+            }
+            else
+            {
+                float hh = h * 6f;
+                int i = (int)hh;
+                float ff = hh - i;
+                float p = v * (1f - s);
+                float q = v * (1f - (s * ff));
+                float t = v * (1f - (s * (1f - ff)));
+                switch (i)
+                {
+                    case 0: r = v; g = t; b = p; break;
+                    case 1: r = q; g = v; b = p; break;
+                    case 2: r = p; g = v; b = t; break;
+                    case 3: r = p; g = q; b = v; break;
+                    case 4: r = t; g = p; b = v; break;
+                    default: r = v; g = p; b = q; break;
+                }
+            }
+            return new Color32(
+                (byte)(r * 255),
+                (byte)(g * 255),
+                (byte)(b * 255),
+                255
+            );
+        }
+
+        #endregion
+    }
+}

@@ -191,6 +191,7 @@ namespace EconSim.Core.Data
         public int SourceCellId;
         public int MouthCellId;
         public List<int> CellPath;      // Ordered list of cell IDs from source to mouth
+        public List<Vec2> Points;       // Vertex positions source→mouth (for edge-based rendering)
         public float Length;
         public float Width;
         public int Discharge;           // Water volume

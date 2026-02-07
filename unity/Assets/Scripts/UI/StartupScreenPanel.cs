@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UIElements;
+using MapGen.Core;
 
 namespace EconSim.UI
 {
@@ -92,7 +93,21 @@ namespace EconSim.UI
         {
             if (_isLoading) return;
 
-            SetStatus("Map generation coming soon!");
+            _isLoading = true;
+            SetStatus("Generating map...");
+            DisableButtons();
+
+            var gameManager = EconSim.Core.GameManager.Instance;
+            if (gameManager != null)
+            {
+                gameManager.GenerateMap();
+            }
+            else
+            {
+                SetStatus("Error: GameManager not found");
+                _isLoading = false;
+                EnableButtons();
+            }
         }
 
         private void OnMapReady()

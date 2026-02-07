@@ -64,22 +64,34 @@ namespace EconSim.Renderer
 
             foreach (var river in mapData.Rivers)
             {
-                if (river.CellPath == null || river.CellPath.Count < 2)
-                    continue;
-
-                // Get world positions for each cell in the path
+                // Prefer vertex-based Points if available, fall back to cell path
                 var pathPoints = new List<Vector3>();
-                foreach (int cellId in river.CellPath)
+                if (river.Points != null && river.Points.Count >= 2)
                 {
-                    if (mapData.CellById.TryGetValue(cellId, out var cell))
+                    foreach (var pt in river.Points)
                     {
-                        float height = GetCellHeight(cell) + heightOffset;
                         Vector3 pos = new Vector3(
-                            cell.Center.X * cellScale,
-                            height,
-                            -cell.Center.Y * cellScale
+                            pt.X * cellScale,
+                            heightOffset,
+                            -pt.Y * cellScale
                         );
                         pathPoints.Add(pos);
+                    }
+                }
+                else if (river.CellPath != null && river.CellPath.Count >= 2)
+                {
+                    foreach (int cellId in river.CellPath)
+                    {
+                        if (mapData.CellById.TryGetValue(cellId, out var cell))
+                        {
+                            float height = GetCellHeight(cell) + heightOffset;
+                            Vector3 pos = new Vector3(
+                                cell.Center.X * cellScale,
+                                height,
+                                -cell.Center.Y * cellScale
+                            );
+                            pathPoints.Add(pos);
+                        }
                     }
                 }
 

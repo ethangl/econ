@@ -1,4 +1,5 @@
 ﻿<Solution>
+  <Project Path="MapGen.csproj" />
   <Project Path="EconSim.csproj" />
   <Project Path="EconSim.Editor.csproj" />
 </Solution>

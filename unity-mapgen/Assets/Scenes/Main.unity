@@ -134,6 +134,7 @@ GameObject:
   - component: {fileID: 1015571345}
   - component: {fileID: 1015571346}
   - component: {fileID: 1015571347}
+  - component: {fileID: 1015571349}
   - component: {fileID: 1015571343}
   m_Layer: 0
   m_Name: MapGenerator
@@ -182,7 +183,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: MapGen::MapGen.CellMeshVisualizer
   ShowEdges: 0
-  ColorMode: 2
+  ColorMode: 19
   EdgeColor: {r: 0.1, g: 0.1, b: 0.1, a: 0.8}
 --- !u!114 &1015571344
 MonoBehaviour:
@@ -250,6 +251,18 @@ MonoBehaviour:
   AspectRatio: 1.7777778
   Template: 5
   LatitudeSouth: 30
+--- !u!114 &1015571349
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1015571340}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efa1aac75bf6047de87fbb0355a34d3f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MapGen::MapGen.PoliticalGenerator
 --- !u!1 &1284084470
 GameObject:
   m_ObjectHideFlags: 0
