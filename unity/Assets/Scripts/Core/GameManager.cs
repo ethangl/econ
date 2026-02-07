@@ -1,30 +1,28 @@
 using System;
 using UnityEngine;
-using EconSim.Core.Import;
 using EconSim.Core.Data;
 using EconSim.Core.Common;
+using EconSim.Core.Import;
 using EconSim.Core.Simulation;
 using EconSim.Core.Simulation.Systems;
 using EconSim.Renderer;
 using EconSim.Camera;
+using MapGen.Core;
 using Profiler = EconSim.Core.Common.StartupProfiler;
 
 namespace EconSim.Core
 {
     /// <summary>
-    /// Main entry point. Initializes map loading and wires together simulation and rendering.
+    /// Main entry point. Generates map and wires together simulation and rendering.
     /// </summary>
     public class GameManager : MonoBehaviour
     {
-        [Header("Map Settings")]
-        [SerializeField] private string mapFileName = "preston.json";
-        [SerializeField] private bool loadFromResources = false;
-
         [Header("References")]
         [SerializeField] private MapView mapView;
         [SerializeField] private MapCamera mapCamera;
 
         public MapData MapData { get; private set; }
+        public MapGenResult MapGenResult { get; private set; }
         public ISimulation Simulation => _simulation;
 
         /// <summary>
@@ -58,95 +56,40 @@ namespace EconSim.Core
 
         private void Start()
         {
-            // Map loading is now triggered by StartupScreenPanel
-            // Do not auto-load on start
+            // Map generation is triggered by StartupScreenPanel
         }
 
         /// <summary>
-        /// Called by StartupScreenPanel when the user chooses to load a map.
+        /// Generate a map procedurally using the MapGen pipeline.
         /// </summary>
-        public void LoadMapFromStartup()
+        public void GenerateMap(MapGenConfig config = null)
         {
             Profiler.Reset();
             Profiler.Begin("Total Startup");
-            LoadMap();
-            Profiler.End();
-            Profiler.LogResults();
-        }
 
-        private void LoadMap()
-        {
-            Debug.Log($"Loading map: {mapFileName}");
-
-            if (loadFromResources)
+            config ??= new MapGenConfig
             {
-                // Load from Resources/Maps folder (no caching for embedded resources)
-                string resourcePath = $"Maps/{System.IO.Path.GetFileNameWithoutExtension(mapFileName)}";
-                var textAsset = Resources.Load<TextAsset>(resourcePath);
+                CellCount = 60000,
+                Seed = UnityEngine.Random.Range(1, int.MaxValue)
+            };
 
-                if (textAsset == null)
-                {
-                    Debug.LogError($"Failed to load map from Resources: {resourcePath}");
-                    Debug.Log("Trying to load from file path...");
-                    LoadMapFromFile();
-                    return;
-                }
-
-                Profiler.Begin("Parse JSON");
-                var azgaarMap = AzgaarParser.Parse(textAsset.text);
-                Profiler.End();
-
-                Profiler.Begin("Convert Map");
-                MapData = MapConverter.Convert(azgaarMap);
-                Profiler.End();
-
-                InitializeWithMapData();
-            }
-            else
-            {
-                LoadMapFromFile();
-            }
-        }
-
-        private void LoadMapFromFile()
-        {
-            // Application.dataPath is unity/Assets, so go up two levels to reach project root
-            string filePath = System.IO.Path.Combine(Application.dataPath, "..", "..", "reference", mapFileName);
-
-            if (!System.IO.File.Exists(filePath))
-            {
-                Debug.LogError($"Map file not found: {filePath}");
-                return;
-            }
-
-            // Try to load from cache first
-            string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "MapCache");
-
-            Profiler.Begin("Load MapData");
-            if (MapDataCache.TryLoad(filePath, cacheDir, out var cachedMapData))
-            {
-                Profiler.End();
-                MapData = cachedMapData;
-                InitializeWithMapData();
-                return;
-            }
+            Profiler.Begin("MapGen Pipeline");
+            var result = MapGenPipeline.Generate(config);
             Profiler.End();
 
-            // Cache miss - parse and convert
-            Profiler.Begin("Parse JSON");
-            var azgaarMap = AzgaarParser.ParseFile(filePath);
+            MapGenResult = result;
+
+            Profiler.Begin("MapGenAdapter Convert");
+            MapData = MapGenAdapter.Convert(result);
             Profiler.End();
 
-            Profiler.Begin("Convert Map");
-            MapData = MapConverter.Convert(azgaarMap);
-            Profiler.End();
-
-            // Save to cache for next time
-            Profiler.Begin("Save MapData Cache");
-            MapDataCache.Save(filePath, cacheDir, MapData);
-            Profiler.End();
+            // Update info with seed
+            MapData.Info.Seed = config.Seed.ToString();
 
             InitializeWithMapData();
+
+            Profiler.End();
+            Profiler.LogResults();
         }
 
         private void InitializeWithMapData()
@@ -154,7 +97,7 @@ namespace EconSim.Core
             Debug.Log($"Map loaded: {MapData.Info.Name}");
             Debug.Log($"  Dimensions: {MapData.Info.Width}x{MapData.Info.Height}");
             Debug.Log($"  Cells: {MapData.Cells.Count}");
-            Debug.Log($"  States: {MapData.States.Count}");
+            Debug.Log($"  Realms: {MapData.Realms.Count}");
             Debug.Log($"  Provinces: {MapData.Provinces.Count}");
             Debug.Log($"  Rivers: {MapData.Rivers.Count}");
             Debug.Log($"  Counties: {MapData.Counties.Count}");
@@ -318,26 +261,5 @@ namespace EconSim.Core
             }
         }
 
-#if UNITY_EDITOR
-        [ContextMenu("Clear Map Cache")]
-        private void ClearMapCache()
-        {
-            string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "MapCache");
-            if (System.IO.Directory.Exists(cacheDir))
-            {
-                var files = System.IO.Directory.GetFiles(cacheDir);
-                foreach (var file in files)
-                {
-                    System.IO.File.Delete(file);
-                    Debug.Log($"Deleted cache file: {System.IO.Path.GetFileName(file)}");
-                }
-                Debug.Log($"Cleared {files.Length} cache file(s) from {cacheDir}");
-            }
-            else
-            {
-                Debug.Log("No cache directory found.");
-            }
-        }
-#endif
     }
 }

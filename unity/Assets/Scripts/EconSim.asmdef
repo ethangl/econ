@@ -1,7 +1,9 @@
 {
     "name": "EconSim",
     "rootNamespace": "EconSim",
-    "references": [],
+    "references": [
+        "MapGen"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

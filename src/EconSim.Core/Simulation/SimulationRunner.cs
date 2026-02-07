@@ -111,7 +111,7 @@ namespace EconSim.Core.Simulation
             InitializeBlackMarket();
 
             var usedCells = new HashSet<int>();
-            var usedStates = new HashSet<int>();
+            var usedRealms = new HashSet<int>();
             int marketCount = 3;
 
             for (int i = 0; i < marketCount; i++)
@@ -119,7 +119,7 @@ namespace EconSim.Core.Simulation
                 int cellId = MarketPlacer.FindBestMarketLocation(
                     _mapData, _state.Transport, _state.Economy,
                     excludeCells: usedCells,
-                    excludeStates: usedStates);
+                    excludeRealms: usedRealms);
 
                 if (cellId < 0) break;
 
@@ -154,12 +154,12 @@ namespace EconSim.Core.Simulation
                 _state.Economy.Markets[market.Id] = market;
 
                 usedCells.Add(cellId);
-                usedStates.Add(cell.StateId);
+                usedRealms.Add(cell.RealmId);
 
-                var stateName = _mapData.StateById.TryGetValue(cell.StateId, out var state)
-                    ? state.Name
+                var realmName = _mapData.RealmById.TryGetValue(cell.RealmId, out var realm)
+                    ? realm.Name
                     : "Unknown";
-                SimLog.Log("Market", $"Placed market '{market.Name}' at cell {cellId} in {stateName} (score: {market.SuitabilityScore:F1})");
+                SimLog.Log("Market", $"Placed market '{market.Name}' at cell {cellId} in {realmName} (score: {market.SuitabilityScore:F1})");
             }
 
             // Build lookup table (assigns cells and counties to markets)

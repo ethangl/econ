@@ -112,7 +112,7 @@ namespace EconSim.Core.Economy
             TransportGraph transport,
             EconomyState economy,
             HashSet<int> excludeCells = null,
-            HashSet<int> excludeStates = null)
+            HashSet<int> excludeRealms = null)
         {
             float bestScore = float.MinValue;
             int bestCellId = -1;
@@ -121,7 +121,7 @@ namespace EconSim.Core.Economy
             {
                 if (!cell.IsLand) continue;
                 if (excludeCells != null && excludeCells.Contains(cell.Id)) continue;
-                if (excludeStates != null && excludeStates.Contains(cell.StateId)) continue;
+                if (excludeRealms != null && excludeRealms.Contains(cell.RealmId)) continue;
 
                 float score = ComputeSuitability(cell, mapData, transport, economy);
                 if (score > bestScore)

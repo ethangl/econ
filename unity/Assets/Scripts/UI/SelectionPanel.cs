@@ -10,7 +10,7 @@ namespace EconSim.UI
 {
     /// <summary>
     /// UI Toolkit controller for the political selection/inspection panel.
-    /// Shows different info based on map mode: country, province, or county.
+    /// Shows different info based on map mode: realm, province, or county.
     /// </summary>
     public class SelectionPanel : MonoBehaviour
     {
@@ -45,7 +45,7 @@ namespace EconSim.UI
         // Selection state - what's currently selected based on mode
         private int _selectedCountyId = -1;
         private int _selectedProvinceId = -1;
-        private int _selectedStateId = -1;
+        private int _selectedRealmId = -1;
 
         private void Start()
         {
@@ -117,8 +117,8 @@ namespace EconSim.UI
             // Use the drill-down selection depth from MapView
             switch (depth)
             {
-                case MapView.SelectionDepth.State:
-                    SelectState(_mapView.SelectedStateId);
+                case MapView.SelectionDepth.Realm:
+                    SelectRealm(_mapView.SelectedRealmId);
                     break;
                 case MapView.SelectionDepth.Province:
                     SelectProvince(_mapView.SelectedProvinceId);
@@ -187,19 +187,19 @@ namespace EconSim.UI
             }
         }
 
-        public void SelectState(int stateId)
+        public void SelectRealm(int realmId)
         {
             ClearSelection();
-            _selectedStateId = stateId;
+            _selectedRealmId = realmId;
 
-            if (stateId <= 0 || _mapData == null || !_mapData.StateById.ContainsKey(stateId))
+            if (realmId <= 0 || _mapData == null || !_mapData.RealmById.ContainsKey(realmId))
             {
                 Hide();
                 return;
             }
 
             Show();
-            UpdateStateDisplay();
+            UpdateRealmDisplay();
         }
 
         public void SelectProvince(int provinceId)
@@ -236,10 +236,10 @@ namespace EconSim.UI
         {
             _selectedCountyId = -1;
             _selectedProvinceId = -1;
-            _selectedStateId = -1;
+            _selectedRealmId = -1;
         }
 
-        private bool HasSelection => _selectedCountyId > 0 || _selectedProvinceId > 0 || _selectedStateId > 0;
+        private bool HasSelection => _selectedCountyId > 0 || _selectedProvinceId > 0 || _selectedRealmId > 0;
 
         public void Show()
         {
@@ -264,8 +264,8 @@ namespace EconSim.UI
             // Refresh display periodically if something is selected
             if (HasSelection && Time.frameCount % 30 == 0)
             {
-                if (_selectedStateId > 0)
-                    UpdateStateDisplay();
+                if (_selectedRealmId > 0)
+                    UpdateRealmDisplay();
                 else if (_selectedProvinceId > 0)
                     UpdateProvinceDisplay();
                 else if (_selectedCountyId > 0)
@@ -273,22 +273,22 @@ namespace EconSim.UI
             }
         }
 
-        private void UpdateStateDisplay()
+        private void UpdateRealmDisplay()
         {
-            if (_selectedStateId <= 0 || _mapData == null) return;
-            if (!_mapData.StateById.TryGetValue(_selectedStateId, out var state)) return;
+            if (_selectedRealmId <= 0 || _mapData == null) return;
+            if (!_mapData.RealmById.TryGetValue(_selectedRealmId, out var realm)) return;
 
             // Title
-            SetLabel(_entityName, state.Name ?? $"Country {state.Id}");
+            SetLabel(_entityName, realm.Name ?? $"Realm {realm.Id}");
 
             // Location section - show capital
             SetLabel(_provinceValue, "-");
             SetLabel(_stateValue, "-");
 
             string capitalName = "-";
-            if (state.CapitalBurgId > 0 && state.CapitalBurgId < _mapData.Burgs.Count)
+            if (realm.CapitalBurgId > 0 && realm.CapitalBurgId < _mapData.Burgs.Count)
             {
-                capitalName = _mapData.Burgs[state.CapitalBurgId].Name ?? "-";
+                capitalName = _mapData.Burgs[realm.CapitalBurgId].Name ?? "-";
             }
             SetLabel(_terrainValue, capitalName);
 
@@ -301,7 +301,7 @@ namespace EconSim.UI
                     label.text = "Capital";
             }
 
-            // Population - aggregate from all counties in this state
+            // Population - aggregate from all counties in this realm
             long totalPop = 0;
             long totalWorkers = 0;
             long totalEmployed = 0;
@@ -309,7 +309,7 @@ namespace EconSim.UI
 
             foreach (var cell in _mapData.Cells)
             {
-                if (cell.StateId != _selectedStateId || !cell.IsLand) continue;
+                if (cell.RealmId != _selectedRealmId || !cell.IsLand) continue;
                 countyCount++;
 
                 if (_economy != null && _economy.Counties.TryGetValue(cell.Id, out var countyEcon))
@@ -329,7 +329,7 @@ namespace EconSim.UI
             SetLabel(_popEmployed, totalEmployed.ToString("N0"));
 
             // Show provinces list in resources section
-            ShowSectionAsProvincesList(state);
+            ShowSectionAsProvincesList(realm);
 
             // Hide stockpile and facilities sections
             SetSectionVisible(_stockpileSection, false);
@@ -347,12 +347,12 @@ namespace EconSim.UI
             // Location section
             SetLabel(_provinceValue, "-");
 
-            string stateName = "-";
-            if (province.StateId > 0 && _mapData.StateById.TryGetValue(province.StateId, out var state))
+            string realmName = "-";
+            if (province.RealmId > 0 && _mapData.RealmById.TryGetValue(province.RealmId, out var realm))
             {
-                stateName = state.Name;
+                realmName = realm.Name;
             }
-            SetLabel(_stateValue, stateName);
+            SetLabel(_stateValue, realmName);
 
             string capitalName = "-";
             if (province.CapitalBurgId > 0 && province.CapitalBurgId < _mapData.Burgs.Count)
@@ -430,13 +430,13 @@ namespace EconSim.UI
             }
             SetLabel(_provinceValue, provinceName);
 
-            // State
-            string stateName = "-";
-            if (county.StateId > 0 && _mapData.StateById.TryGetValue(county.StateId, out var state))
+            // Realm
+            string realmName = "-";
+            if (county.RealmId > 0 && _mapData.RealmById.TryGetValue(county.RealmId, out var realm))
             {
-                stateName = state.Name;
+                realmName = realm.Name;
             }
-            SetLabel(_stateValue, stateName);
+            SetLabel(_stateValue, realmName);
 
             // Cell count
             SetLabel(_terrainValue, $"{county.CellCount}");
@@ -482,7 +482,7 @@ namespace EconSim.UI
             }
         }
 
-        private void ShowSectionAsProvincesList(State state)
+        private void ShowSectionAsProvincesList(Realm realm)
         {
             if (_resourcesSection == null || _resourcesList == null) return;
 
@@ -495,7 +495,7 @@ namespace EconSim.UI
 
             _resourcesList.Clear();
 
-            if (state.ProvinceIds == null || state.ProvinceIds.Count == 0)
+            if (realm.ProvinceIds == null || realm.ProvinceIds.Count == 0)
             {
                 var noneLabel = new Label("None");
                 noneLabel.style.color = new Color(0.5f, 0.5f, 0.5f);
@@ -504,7 +504,7 @@ namespace EconSim.UI
                 return;
             }
 
-            foreach (var provId in state.ProvinceIds)
+            foreach (var provId in realm.ProvinceIds)
             {
                 if (!_mapData.ProvinceById.TryGetValue(provId, out var prov)) continue;
 

@@ -2,7 +2,8 @@
     "name": "EconSim.Editor",
     "rootNamespace": "EconSim.Editor",
     "references": [
-        "EconSim"
+        "EconSim",
+        "MapGen"
     ],
     "includePlatforms": [
         "Editor"

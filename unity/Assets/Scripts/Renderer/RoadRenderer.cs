@@ -87,12 +87,12 @@ namespace EconSim.Renderer
                 Vector3 posA = new Vector3(
                     cellDataA.Center.X * cellScale,
                     heightA,
-                    -cellDataA.Center.Y * cellScale
+                    cellDataA.Center.Y * cellScale
                 );
                 Vector3 posB = new Vector3(
                     cellDataB.Center.X * cellScale,
                     heightB,
-                    -cellDataB.Center.Y * cellScale
+                    cellDataB.Center.Y * cellScale
                 );
 
                 // Get width and color based on tier

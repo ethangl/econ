@@ -78,9 +78,9 @@ namespace EconSim.Renderer
             processedProvinceEdges.Clear();
             processedCountyEdges.Clear();
 
-            // Province/county borders: grouped by state for coloring
-            var provinceEdgesByState = new Dictionary<int, List<BorderEdge>>();
-            var countyEdgesByState = new Dictionary<int, List<BorderEdge>>();
+            // Province/county borders: grouped by realm for coloring
+            var provinceEdgesByRealm = new Dictionary<int, List<BorderEdge>>();
+            var countyEdgesByRealm = new Dictionary<int, List<BorderEdge>>();
 
             // Find all border edges
             foreach (var cell in mapData.Cells)
@@ -95,8 +95,8 @@ namespace EconSim.Renderer
                     // For province/county borders, require both cells to be land
                     if (!neighbor.IsLand) continue;
 
-                    // Check for province border (within same state only)
-                    if (cell.StateId == neighbor.StateId &&
+                    // Check for province border (within same realm only)
+                    if (cell.RealmId == neighbor.RealmId &&
                         cell.ProvinceId != neighbor.ProvinceId &&
                         cell.ProvinceId > 0 && neighbor.ProvinceId > 0)
                     {
@@ -107,9 +107,9 @@ namespace EconSim.Renderer
                             var edge = FindSharedEdge(cell, neighbor);
                             if (edge.HasValue)
                             {
-                                if (!provinceEdgesByState.ContainsKey(cell.StateId))
-                                    provinceEdgesByState[cell.StateId] = new List<BorderEdge>();
-                                provinceEdgesByState[cell.StateId].Add(edge.Value);
+                                if (!provinceEdgesByRealm.ContainsKey(cell.RealmId))
+                                    provinceEdgesByRealm[cell.RealmId] = new List<BorderEdge>();
+                                provinceEdgesByRealm[cell.RealmId].Add(edge.Value);
                             }
                         }
                     }
@@ -124,9 +124,9 @@ namespace EconSim.Renderer
                             var edge = FindSharedEdge(cell, neighbor);
                             if (edge.HasValue)
                             {
-                                if (!countyEdgesByState.ContainsKey(cell.StateId))
-                                    countyEdgesByState[cell.StateId] = new List<BorderEdge>();
-                                countyEdgesByState[cell.StateId].Add(edge.Value);
+                                if (!countyEdgesByRealm.ContainsKey(cell.RealmId))
+                                    countyEdgesByRealm[cell.RealmId] = new List<BorderEdge>();
+                                countyEdgesByRealm[cell.RealmId].Add(edge.Value);
                             }
                         }
                     }
@@ -135,36 +135,36 @@ namespace EconSim.Renderer
 
             Debug.Log($"BorderRenderer: Found {processedProvinceEdges.Count} province, {processedCountyEdges.Count} county border edges");
 
-            // Generate border meshes with per-state colors
-            provinceBorderMesh = GenerateColoredBorderMesh(provinceEdgesByState, 0.75f, borderWidth * 0.5f);
+            // Generate border meshes with per-realm colors
+            provinceBorderMesh = GenerateColoredBorderMesh(provinceEdgesByRealm, 0.75f, borderWidth * 0.5f);
             provinceBorderMeshFilter.mesh = provinceBorderMesh;
 
-            countyBorderMesh = GenerateColoredBorderMesh(countyEdgesByState, 0.5f, borderWidth * 0.25f);
+            countyBorderMesh = GenerateColoredBorderMesh(countyEdgesByRealm, 0.5f, borderWidth * 0.25f);
             countyBorderMeshFilter.mesh = countyBorderMesh;
         }
 
         /// <summary>
-        /// Generate border mesh with per-state colors.
+        /// Generate border mesh with per-realm colors.
         /// </summary>
-        private Mesh GenerateColoredBorderMesh(Dictionary<int, List<BorderEdge>> edgesByState, float opacity, float width = -1f)
+        private Mesh GenerateColoredBorderMesh(Dictionary<int, List<BorderEdge>> edgesByRealm, float opacity, float width = -1f)
         {
             if (width < 0) width = borderWidth;
             var allPolylines = new List<(List<Vector3> polyline, Color color)>();
 
-            foreach (var kvp in edgesByState)
+            foreach (var kvp in edgesByRealm)
             {
-                int stateId = kvp.Key;
+                int realmId = kvp.Key;
                 var edges = kvp.Value;
 
-                // Get state color from palette, darkened and desaturated for border
-                var coreColor = palette.GetStateColor(stateId);
+                // Get realm color from palette, darkened and desaturated for border
+                var coreColor = palette.GetRealmColor(realmId);
                 Color.RGBToHSV(new Color(coreColor.R / 255f, coreColor.G / 255f, coreColor.B / 255f), out float h, out float s, out float v);
                 s = Mathf.Min(1f, s * 1.5f);  // Increase saturation
                 v *= 0.15f;  // Darken significantly
                 Color unityColor = Color.HSVToRGB(h, s, v);
                 unityColor.a = opacity;
 
-                // Chain this state's edges into polylines
+                // Chain this realm's edges into polylines
                 var polylines = ChainEdgesIntoPolylines(edges);
 
                 foreach (var poly in polylines)
@@ -299,7 +299,7 @@ namespace EconSim.Renderer
 
             // Convert to 3D world coords
             var points = relaxedEdge2D
-                .Select(p => new Vector3(p.x * cellScale, 0f, -p.y * cellScale))
+                .Select(p => new Vector3(p.x * cellScale, 0f, p.y * cellScale))
                 .ToList();
 
             return new BorderEdge

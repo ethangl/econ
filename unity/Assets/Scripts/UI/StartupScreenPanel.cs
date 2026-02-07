@@ -1,11 +1,12 @@
 using UnityEngine;
 using UnityEngine.UIElements;
+using MapGen.Core;
 
 namespace EconSim.UI
 {
     /// <summary>
     /// UI Toolkit controller for the startup screen.
-    /// Allows user to choose between loading an Azgaar map or generating a new one.
+    /// Allows the user to generate a new map.
     /// </summary>
     public class StartupScreenPanel : MonoBehaviour
     {
@@ -13,7 +14,6 @@ namespace EconSim.UI
         [SerializeField] private StyleSheet _styleSheet;
 
         private VisualElement _overlay;
-        private Button _loadMapButton;
         private Button _generateButton;
         private Label _statusLabel;
 
@@ -57,42 +57,32 @@ namespace EconSim.UI
 
             // Query elements
             _overlay = root.Q<VisualElement>("startup-overlay");
-            _loadMapButton = root.Q<Button>("load-map-button");
             _generateButton = root.Q<Button>("generate-button");
             _statusLabel = root.Q<Label>("startup-status");
 
             // Wire up buttons
-            _loadMapButton?.RegisterCallback<ClickEvent>(evt => OnLoadMapClicked());
             _generateButton?.RegisterCallback<ClickEvent>(evt => OnGenerateClicked());
-        }
-
-        private void OnLoadMapClicked()
-        {
-            if (_isLoading) return;
-
-            _isLoading = true;
-            SetStatus("Loading map...");
-            DisableButtons();
-
-            // Trigger map loading
-            var gameManager = EconSim.Core.GameManager.Instance;
-            if (gameManager != null)
-            {
-                gameManager.LoadMapFromStartup();
-            }
-            else
-            {
-                SetStatus("Error: GameManager not found");
-                _isLoading = false;
-                EnableButtons();
-            }
         }
 
         private void OnGenerateClicked()
         {
             if (_isLoading) return;
 
-            SetStatus("Map generation coming soon!");
+            _isLoading = true;
+            SetStatus("Generating map...");
+            DisableButtons();
+
+            var gameManager = EconSim.Core.GameManager.Instance;
+            if (gameManager != null)
+            {
+                gameManager.GenerateMap();
+            }
+            else
+            {
+                SetStatus("Error: GameManager not found");
+                _isLoading = false;
+                _generateButton?.SetEnabled(true);
+            }
         }
 
         private void OnMapReady()
@@ -118,23 +108,9 @@ namespace EconSim.UI
 
         private void DisableButtons()
         {
-            if (_loadMapButton != null)
-            {
-                _loadMapButton.SetEnabled(false);
-                _loadMapButton.AddToClassList("startup-button-disabled");
-            }
             if (_generateButton != null)
             {
                 _generateButton.SetEnabled(false);
-            }
-        }
-
-        private void EnableButtons()
-        {
-            if (_loadMapButton != null)
-            {
-                _loadMapButton.SetEnabled(true);
-                _loadMapButton.RemoveFromClassList("startup-button-disabled");
             }
         }
     }

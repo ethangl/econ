@@ -9,7 +9,7 @@
                 <ui:Label name="province-value" text="-" />
             </ui:VisualElement>
             <ui:VisualElement class="stat-row">
-                <ui:Label text="State" />
+                <ui:Label text="Realm" />
                 <ui:Label name="state-value" text="-" />
             </ui:VisualElement>
             <ui:VisualElement class="stat-row">

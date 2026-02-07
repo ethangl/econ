@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.IO;
 using System.Threading.Tasks;
 using UnityEngine;
 using EconSim.Core.Data;
@@ -20,7 +19,7 @@ namespace EconSim.Renderer
         private static readonly int CellDataTexId = Shader.PropertyToID("_CellDataTex");
         private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
         private static readonly int RiverMaskTexId = Shader.PropertyToID("_RiverMaskTex");
-        private static readonly int StatePaletteTexId = Shader.PropertyToID("_StatePaletteTex");
+        private static readonly int RealmPaletteTexId = Shader.PropertyToID("_RealmPaletteTex");
         private static readonly int MarketPaletteTexId = Shader.PropertyToID("_MarketPaletteTex");
         private static readonly int BiomePaletteTexId = Shader.PropertyToID("_BiomePaletteTex");
         private static readonly int BiomeMatrixTexId = Shader.PropertyToID("_BiomeMatrixTex");
@@ -29,13 +28,13 @@ namespace EconSim.Renderer
         private static readonly int UseHeightDisplacementId = Shader.PropertyToID("_UseHeightDisplacement");
         private static readonly int HeightScaleId = Shader.PropertyToID("_HeightScale");
         private static readonly int SeaLevelId = Shader.PropertyToID("_SeaLevel");
-        private static readonly int SelectedStateIdId = Shader.PropertyToID("_SelectedStateId");
+        private static readonly int SelectedRealmIdId = Shader.PropertyToID("_SelectedRealmId");
         private static readonly int SelectedProvinceIdId = Shader.PropertyToID("_SelectedProvinceId");
         private static readonly int SelectedCountyIdId = Shader.PropertyToID("_SelectedCountyId");
         private static readonly int SelectedMarketIdId = Shader.PropertyToID("_SelectedMarketId");
         private static readonly int SelectionBorderColorId = Shader.PropertyToID("_SelectionBorderColor");
         private static readonly int SelectionBorderWidthId = Shader.PropertyToID("_SelectionBorderWidth");
-        private static readonly int HoveredStateIdId = Shader.PropertyToID("_HoveredStateId");
+        private static readonly int HoveredRealmIdId = Shader.PropertyToID("_HoveredRealmId");
         private static readonly int HoveredProvinceIdId = Shader.PropertyToID("_HoveredProvinceId");
         private static readonly int HoveredCountyIdId = Shader.PropertyToID("_HoveredCountyId");
         private static readonly int HoveredMarketIdId = Shader.PropertyToID("_HoveredMarketId");
@@ -54,7 +53,7 @@ namespace EconSim.Renderer
         private int baseHeight;
 
         // Data textures
-        private Texture2D cellDataTexture;      // RGBAFloat: StateId, ProvinceId, BiomeId+WaterFlag, CountyId
+        private Texture2D cellDataTexture;      // RGBAFloat: RealmId, ProvinceId, BiomeId+WaterFlag, CountyId
 
         /// <summary>
         /// Public accessor for the cell data texture (for border masking).
@@ -63,12 +62,12 @@ namespace EconSim.Renderer
         private Texture2D cellToMarketTexture;  // R16: CellId -> MarketId mapping (dynamic)
         private Texture2D heightmapTexture;     // RFloat: smoothed height values
         private Texture2D riverMaskTexture;     // R8: river mask (1 = river, 0 = not river)
-        private Texture2D statePaletteTexture;  // 256x1: state colors
+        private Texture2D realmPaletteTexture;  // 256x1: realm colors
         private Texture2D marketPaletteTexture; // 256x1: market colors
         private Texture2D biomePaletteTexture;  // 256x1: biome colors
         private Texture2D biomeElevationMatrix; // 64x64: biome × elevation colors
 
-        // Spatial lookup grid: maps Azgaar pixel coordinates to cell IDs
+        // Spatial lookup grid: maps data pixel coordinates to cell IDs
         private int[] spatialGrid;
         private int gridWidth;
         private int gridHeight;
@@ -158,126 +157,14 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
-        /// Build spatial lookup grid mapping Azgaar coordinates to cell IDs.
+        /// Build spatial lookup grid mapping data coordinates to cell IDs.
         /// Uses cell centers to determine ownership of each grid position.
         /// Applies domain warping for organic, meandering borders.
-        /// Results are cached to disk for fast subsequent loads.
         /// </summary>
         private void BuildSpatialGrid()
         {
-            // Try to load from cache first
-            string cacheKey = ComputeSpatialGridCacheKey();
-            string cachePath = GetSpatialGridCachePath(cacheKey);
-
-            if (TryLoadSpatialGridFromCache(cachePath))
-            {
-                Debug.Log($"MapOverlayManager: Loaded spatial grid from cache ({gridWidth}x{gridHeight})");
-                return;
-            }
-
-            // Build the grid from scratch
             BuildSpatialGridFromScratch();
-
-            // Save to cache for next time
-            SaveSpatialGridToCache(cachePath);
-            Debug.Log($"MapOverlayManager: Built and cached spatial grid {gridWidth}x{gridHeight} ({resolutionMultiplier}x resolution)");
-        }
-
-        /// <summary>
-        /// Compute a cache key based on parameters that affect the spatial grid.
-        /// </summary>
-        private string ComputeSpatialGridCacheKey()
-        {
-            // Include all parameters that affect the grid output
-            // v10: Voronoi base + larger boundary refinement radius
-            string input = $"{mapData.Info.Name}_{mapData.Info.Width}x{mapData.Info.Height}_{mapData.Cells.Count}cells_{resolutionMultiplier}x_relaxed_{relaxedGeometry.Amplitude}_{relaxedGeometry.Frequency}_{relaxedGeometry.SamplesPerSegment}_v10";
-
-            // Simple hash
-            int hash = input.GetHashCode();
-            return $"spatial_grid_{hash:X8}";
-        }
-
-        /// <summary>
-        /// Get the cache file path for a given cache key.
-        /// </summary>
-        private string GetSpatialGridCachePath(string cacheKey)
-        {
-            // Use Unity's persistent data path for cache
-            string cacheDir = Path.Combine(Application.persistentDataPath, "MapCache");
-            if (!Directory.Exists(cacheDir))
-            {
-                Directory.CreateDirectory(cacheDir);
-            }
-            return Path.Combine(cacheDir, $"{cacheKey}.bin");
-        }
-
-        /// <summary>
-        /// Try to load the spatial grid from a cache file.
-        /// </summary>
-        private bool TryLoadSpatialGridFromCache(string cachePath)
-        {
-            if (!File.Exists(cachePath))
-                return false;
-
-            try
-            {
-                using (var stream = File.OpenRead(cachePath))
-                using (var reader = new BinaryReader(stream))
-                {
-                    // Read and verify header
-                    int cachedWidth = reader.ReadInt32();
-                    int cachedHeight = reader.ReadInt32();
-
-                    if (cachedWidth != gridWidth || cachedHeight != gridHeight)
-                    {
-                        Debug.LogWarning($"MapOverlayManager: Cache size mismatch ({cachedWidth}x{cachedHeight} vs {gridWidth}x{gridHeight}), rebuilding");
-                        return false;
-                    }
-
-                    // Read grid data
-                    int length = gridWidth * gridHeight;
-                    spatialGrid = new int[length];
-
-                    for (int i = 0; i < length; i++)
-                    {
-                        spatialGrid[i] = reader.ReadInt32();
-                    }
-
-                    return true;
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogWarning($"MapOverlayManager: Failed to load cache: {ex.Message}");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Save the spatial grid to a cache file.
-        /// </summary>
-        private void SaveSpatialGridToCache(string cachePath)
-        {
-            try
-            {
-                using (var stream = File.Create(cachePath))
-                using (var writer = new BinaryWriter(stream))
-                {
-                    // Write header
-                    writer.Write(gridWidth);
-                    writer.Write(gridHeight);
-
-                    // Write grid data
-                    for (int i = 0; i < spatialGrid.Length; i++)
-                    {
-                        writer.Write(spatialGrid[i]);
-                    }
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogWarning($"MapOverlayManager: Failed to save cache: {ex.Message}");
-            }
+            Debug.Log($"MapOverlayManager: Built spatial grid {gridWidth}x{gridHeight} ({resolutionMultiplier}x resolution)");
         }
 
         /// <summary>
@@ -493,7 +380,7 @@ namespace EconSim.Renderer
 
         /// <summary>
         /// Generate the cell data texture from the spatial grid and cell data.
-        /// Format: RGBAFloat with StateId, ProvinceId, BiomeId+WaterFlag, CountyId normalized to 0-1.
+        /// Format: RGBAFloat with RealmId, ProvinceId, BiomeId+WaterFlag, CountyId normalized to 0-1.
         /// B channel encodes: BiomeId in low bits, water flag in high bit (add 32768 if water)
         /// Uses 32-bit float for precise ID storage (half-precision caused banding artifacts).
         /// Parallelized for performance.
@@ -520,7 +407,7 @@ namespace EconSim.Renderer
                     if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
                     {
                         // Normalize IDs to 0-1 range (divide by 65535)
-                        pixel.r = cell.StateId / 65535f;
+                        pixel.r = cell.RealmId / 65535f;
                         pixel.g = cell.ProvinceId / 65535f;
                         // Pack biome ID and water flag: biomeId + (isWater ? 32768 : 0)
                         int packedBiome = cell.BiomeId + (cell.IsLand ? 0 : 32768);
@@ -555,18 +442,17 @@ namespace EconSim.Renderer
         /// </summary>
         private void GenerateHeightmapTexture()
         {
-            // 1. Sample raw heights from spatial grid and flip Y in one pass (parallelized)
-            float[] flipped = new float[gridWidth * gridHeight];
+            // Sample raw heights from spatial grid (Y-up matches texture row order, no flip needed)
+            float[] heightData = new float[gridWidth * gridHeight];
 
             Parallel.For(0, gridHeight, y =>
             {
-                int srcRow = (gridHeight - 1 - y) * gridWidth;
-                int dstRow = y * gridWidth;
+                int row = y * gridWidth;
 
                 for (int x = 0; x < gridWidth; x++)
                 {
-                    int srcIdx = srcRow + x;
-                    int cellId = spatialGrid[srcIdx];
+                    int idx = row + x;
+                    int cellId = spatialGrid[idx];
 
                     float height = 0f;
                     if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
@@ -575,16 +461,16 @@ namespace EconSim.Renderer
                         height = cell.Height / 100f;
                     }
 
-                    flipped[dstRow + x] = height;
+                    heightData[idx] = height;
                 }
             });
 
-            // 2. Create texture
+            // Create texture
             heightmapTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RFloat, false);
             heightmapTexture.name = "HeightmapTexture";
             heightmapTexture.filterMode = FilterMode.Bilinear;
             heightmapTexture.wrapMode = TextureWrapMode.Clamp;
-            heightmapTexture.SetPixelData(flipped, 0);
+            heightmapTexture.SetPixelData(heightData, 0);
             heightmapTexture.Apply();
 
             Debug.Log($"MapOverlayManager: Generated heightmap {gridWidth}x{gridHeight}");
@@ -593,7 +479,6 @@ namespace EconSim.Renderer
         /// <summary>
         /// Generate river mask texture by rasterizing river paths.
         /// Rivers are "knocked out" of the land in the shader, showing water underneath.
-        /// Results are cached to disk.
         /// </summary>
         private void GenerateRiverMaskTexture()
         {
@@ -602,20 +487,8 @@ namespace EconSim.Renderer
             riverMaskTexture.filterMode = FilterMode.Bilinear;
             riverMaskTexture.wrapMode = TextureWrapMode.Clamp;
 
-            // Try to load from cache
-            string cacheKey = ComputeRiverMaskCacheKey();
-            string cachePath = GetRiverMaskCachePath(cacheKey);
-
-            if (TryLoadRiverMaskFromCache(cachePath))
-            {
-                Debug.Log($"MapOverlayManager: Loaded river mask from cache ({gridWidth}x{gridHeight})");
-                return;
-            }
-
-            // Generate from scratch
             var pixels = GenerateRiverMaskPixels();
 
-            // Upload to texture
             var colorPixels = new Color[pixels.Length];
             for (int i = 0; i < pixels.Length; i++)
             {
@@ -625,70 +498,8 @@ namespace EconSim.Renderer
             riverMaskTexture.SetPixels(colorPixels);
             riverMaskTexture.Apply();
 
-            // Save to cache
-            SaveRiverMaskToCache(cachePath, pixels);
-
             TextureDebugger.SaveTexture(riverMaskTexture, "river_mask");
-            Debug.Log($"MapOverlayManager: Generated and cached river mask {gridWidth}x{gridHeight} ({mapData.Rivers.Count} rivers)");
-        }
-
-        private string ComputeRiverMaskCacheKey()
-        {
-            // Include parameters that affect river mask output
-            int riverHash = 0;
-            foreach (var river in mapData.Rivers)
-            {
-                riverHash ^= river.Id * 31 + river.CellPath?.Count ?? 0;
-            }
-            string input = $"{mapData.Info.Name}_{gridWidth}x{gridHeight}_{mapData.Rivers.Count}rivers_{riverHash}";
-            return $"river_mask_{input.GetHashCode():X8}";
-        }
-
-        private string GetRiverMaskCachePath(string cacheKey)
-        {
-            string cacheDir = Path.Combine(Application.persistentDataPath, "MapCache");
-            if (!Directory.Exists(cacheDir))
-                Directory.CreateDirectory(cacheDir);
-            return Path.Combine(cacheDir, $"{cacheKey}.bin");
-        }
-
-        private bool TryLoadRiverMaskFromCache(string cachePath)
-        {
-            if (!File.Exists(cachePath))
-                return false;
-
-            try
-            {
-                var pixels = File.ReadAllBytes(cachePath);
-                if (pixels.Length != gridWidth * gridHeight)
-                    return false;
-
-                var colorPixels = new Color[pixels.Length];
-                for (int i = 0; i < pixels.Length; i++)
-                {
-                    float v = pixels[i] / 255f;
-                    colorPixels[i] = new Color(v, v, v, 1f);
-                }
-                riverMaskTexture.SetPixels(colorPixels);
-                riverMaskTexture.Apply();
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private void SaveRiverMaskToCache(string cachePath, byte[] pixels)
-        {
-            try
-            {
-                File.WriteAllBytes(cachePath, pixels);
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogWarning($"Failed to save river mask cache: {ex.Message}");
-            }
+            Debug.Log($"MapOverlayManager: Generated river mask {gridWidth}x{gridHeight} ({mapData.Rivers.Count} rivers)");
         }
 
         private byte[] GenerateRiverMaskPixels()
@@ -698,24 +509,33 @@ namespace EconSim.Renderer
             float scale = resolutionMultiplier;
 
             // River width settings
-            float baseWidth = 2.5f * resolutionMultiplier;  // Minimum river width in pixels
-            float widthScale = 1.2f * resolutionMultiplier; // Scale factor for discharge-based width
+            float baseWidth = 0.6f * resolutionMultiplier;  // Minimum river width in pixels
+            float widthScale = 0.3f * resolutionMultiplier; // Scale factor for discharge-based width
 
             foreach (var river in mapData.Rivers)
             {
-                if (river.CellPath == null || river.CellPath.Count < 2)
-                    continue;
-
-                // Get river path points (cell centers)
+                // Get river path points from vertex positions or cell centers
                 var pathPoints = new List<Vector2>();
-                foreach (int cellId in river.CellPath)
+                if (river.Points != null && river.Points.Count >= 2)
                 {
-                    if (mapData.CellById.TryGetValue(cellId, out var cell))
+                    foreach (var pt in river.Points)
                     {
-                        // Scale to texture coordinates and flip Y for Unity
-                        float x = cell.Center.X * scale;
-                        float y = (baseHeight - cell.Center.Y) * scale;  // Y-flip
+                        // Y-up data coords match texture row order directly
+                        float x = pt.X * scale;
+                        float y = pt.Y * scale;
                         pathPoints.Add(new Vector2(x, y));
+                    }
+                }
+                else if (river.CellPath != null && river.CellPath.Count >= 2)
+                {
+                    foreach (int cellId in river.CellPath)
+                    {
+                        if (mapData.CellById.TryGetValue(cellId, out var cell))
+                        {
+                            float x = cell.Center.X * scale;
+                            float y = cell.Center.Y * scale;
+                            pathPoints.Add(new Vector2(x, y));
+                        }
                     }
                 }
 
@@ -883,33 +703,33 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
-        /// Generate color palette textures for states, markets, and biomes.
-        /// Province/county colors are derived from state colors in the shader.
+        /// Generate color palette textures for realms, markets, and biomes.
+        /// Province/county colors are derived from realm colors in the shader.
         /// </summary>
         private void GeneratePaletteTextures()
         {
-            // Generate state colors using HSV distribution
+            // Generate realm colors using HSV distribution
             politicalPalette = new PoliticalPalette(mapData);
 
-            // State palette
-            statePaletteTexture = new Texture2D(256, 1, TextureFormat.RGBA32, false);
-            statePaletteTexture.name = "StatePalette";
-            statePaletteTexture.filterMode = FilterMode.Point;
-            statePaletteTexture.wrapMode = TextureWrapMode.Clamp;
+            // Realm palette
+            realmPaletteTexture = new Texture2D(256, 1, TextureFormat.RGBA32, false);
+            realmPaletteTexture.name = "RealmPalette";
+            realmPaletteTexture.filterMode = FilterMode.Point;
+            realmPaletteTexture.wrapMode = TextureWrapMode.Clamp;
 
-            var stateColors = new Color[256];
-            stateColors[0] = new Color(0.5f, 0.5f, 0.5f);  // Neutral/no state
+            var realmColors = new Color[256];
+            realmColors[0] = new Color(0.5f, 0.5f, 0.5f);  // Neutral/no realm
 
-            foreach (var state in mapData.States)
+            foreach (var realm in mapData.Realms)
             {
-                if (state.Id > 0 && state.Id < 256)
+                if (realm.Id > 0 && realm.Id < 256)
                 {
-                    var c = politicalPalette.GetStateColor(state.Id);
-                    stateColors[state.Id] = new Color(c.R / 255f, c.G / 255f, c.B / 255f);
+                    var c = politicalPalette.GetRealmColor(realm.Id);
+                    realmColors[realm.Id] = new Color(c.R / 255f, c.G / 255f, c.B / 255f);
                 }
             }
-            statePaletteTexture.SetPixels(stateColors);
-            statePaletteTexture.Apply();
+            realmPaletteTexture.SetPixels(realmColors);
+            realmPaletteTexture.Apply();
 
             // Market palette (pre-populated with zone colors, updated when economy is set)
             marketPaletteTexture = new Texture2D(256, 1, TextureFormat.RGBA32, false);
@@ -951,7 +771,7 @@ namespace EconSim.Renderer
             biomePaletteTexture.SetPixels(biomeColors);
             biomePaletteTexture.Apply();
 
-            Debug.Log($"MapOverlayManager: Generated palette textures ({mapData.States.Count} states, {mapData.Biomes.Count} biomes)");
+            Debug.Log($"MapOverlayManager: Generated palette textures ({mapData.Realms.Count} realms, {mapData.Biomes.Count} biomes)");
         }
 
         /// <summary>
@@ -1036,7 +856,7 @@ namespace EconSim.Renderer
             terrainMaterial.SetTexture(CellDataTexId, cellDataTexture);
             terrainMaterial.SetTexture(HeightmapTexId, heightmapTexture);
             terrainMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
-            terrainMaterial.SetTexture(StatePaletteTexId, statePaletteTexture);
+            terrainMaterial.SetTexture(RealmPaletteTexId, realmPaletteTexture);
             terrainMaterial.SetTexture(MarketPaletteTexId, marketPaletteTexture);
             terrainMaterial.SetTexture(BiomePaletteTexId, biomePaletteTexture);
             terrainMaterial.SetTexture(BiomeMatrixTexId, biomeElevationMatrix);
@@ -1071,7 +891,7 @@ namespace EconSim.Renderer
             if (economy == null || economy.CountyToMarket == null)
                 return;
 
-            // Regenerate market palette based on hub state colors
+            // Regenerate market palette based on hub realm colors
             RegenerateMarketPalette(economy);
 
             // Update county-to-market lookup texture (indexed by countyId)
@@ -1095,7 +915,7 @@ namespace EconSim.Renderer
 
 
         /// <summary>
-        /// Regenerate market palette based on hub state colors.
+        /// Regenerate market palette based on hub realm colors.
         /// Each market's color is derived from its hub cell's state.
         /// </summary>
         private void RegenerateMarketPalette(EconomyState economy)
@@ -1111,10 +931,10 @@ namespace EconSim.Renderer
                 if (market.Id <= 0 || market.Id >= 256)
                     continue;
 
-                // Get the hub cell's state color
+                // Get the hub cell's realm color
                 if (mapData.CellById.TryGetValue(market.LocationCellId, out var hubCell))
                 {
-                    var c = politicalPalette.GetStateColor(hubCell.StateId);
+                    var c = politicalPalette.GetRealmColor(hubCell.RealmId);
                     marketColors[market.Id] = new Color(c.R / 255f, c.G / 255f, c.B / 255f);
                 }
                 else
@@ -1197,21 +1017,21 @@ namespace EconSim.Renderer
         public void ClearSelection()
         {
             if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SelectedStateIdId, -1f);
+            terrainMaterial.SetFloat(SelectedRealmIdId, -1f);
             terrainMaterial.SetFloat(SelectedProvinceIdId, -1f);
             terrainMaterial.SetFloat(SelectedCountyIdId, -1f);
             terrainMaterial.SetFloat(SelectedMarketIdId, -1f);
         }
 
         /// <summary>
-        /// Set the currently selected state for shader-based highlighting.
+        /// Set the currently selected realm for shader-based highlighting.
         /// Clears other selections.
         /// </summary>
-        public void SetSelectedState(int stateId)
+        public void SetSelectedRealm(int realmId)
         {
             if (terrainMaterial == null) return;
-            float normalizedId = stateId < 0 ? -1f : stateId / 65535f;
-            terrainMaterial.SetFloat(SelectedStateIdId, normalizedId);
+            float normalizedId = realmId < 0 ? -1f : realmId / 65535f;
+            terrainMaterial.SetFloat(SelectedRealmIdId, normalizedId);
             terrainMaterial.SetFloat(SelectedProvinceIdId, -1f);
             terrainMaterial.SetFloat(SelectedCountyIdId, -1f);
             terrainMaterial.SetFloat(SelectedMarketIdId, -1f);
@@ -1224,7 +1044,7 @@ namespace EconSim.Renderer
         public void SetSelectedProvince(int provinceId)
         {
             if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SelectedStateIdId, -1f);
+            terrainMaterial.SetFloat(SelectedRealmIdId, -1f);
             float normalizedId = provinceId < 0 ? -1f : provinceId / 65535f;
             terrainMaterial.SetFloat(SelectedProvinceIdId, normalizedId);
             terrainMaterial.SetFloat(SelectedCountyIdId, -1f);
@@ -1239,7 +1059,7 @@ namespace EconSim.Renderer
         public void SetSelectedCounty(int countyId)
         {
             if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SelectedStateIdId, -1f);
+            terrainMaterial.SetFloat(SelectedRealmIdId, -1f);
             terrainMaterial.SetFloat(SelectedProvinceIdId, -1f);
             float normalizedId = countyId < 0 ? -1f : countyId / 65535f;
             terrainMaterial.SetFloat(SelectedCountyIdId, normalizedId);
@@ -1253,7 +1073,7 @@ namespace EconSim.Renderer
         public void SetSelectedMarket(int marketId)
         {
             if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SelectedStateIdId, -1f);
+            terrainMaterial.SetFloat(SelectedRealmIdId, -1f);
             terrainMaterial.SetFloat(SelectedProvinceIdId, -1f);
             terrainMaterial.SetFloat(SelectedCountyIdId, -1f);
             float normalizedId = marketId < 0 ? -1f : marketId / 65535f;
@@ -1284,21 +1104,21 @@ namespace EconSim.Renderer
         public void ClearHover()
         {
             if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(HoveredStateIdId, -1f);
+            terrainMaterial.SetFloat(HoveredRealmIdId, -1f);
             terrainMaterial.SetFloat(HoveredProvinceIdId, -1f);
             terrainMaterial.SetFloat(HoveredCountyIdId, -1f);
             terrainMaterial.SetFloat(HoveredMarketIdId, -1f);
         }
 
         /// <summary>
-        /// Set the currently hovered state for shader-based highlighting.
+        /// Set the currently hovered realm for shader-based highlighting.
         /// Clears other hovers.
         /// </summary>
-        public void SetHoveredState(int stateId)
+        public void SetHoveredRealm(int realmId)
         {
             if (terrainMaterial == null) return;
-            float normalizedId = stateId < 0 ? -1f : stateId / 65535f;
-            terrainMaterial.SetFloat(HoveredStateIdId, normalizedId);
+            float normalizedId = realmId < 0 ? -1f : realmId / 65535f;
+            terrainMaterial.SetFloat(HoveredRealmIdId, normalizedId);
             terrainMaterial.SetFloat(HoveredProvinceIdId, -1f);
             terrainMaterial.SetFloat(HoveredCountyIdId, -1f);
             terrainMaterial.SetFloat(HoveredMarketIdId, -1f);
@@ -1311,7 +1131,7 @@ namespace EconSim.Renderer
         public void SetHoveredProvince(int provinceId)
         {
             if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(HoveredStateIdId, -1f);
+            terrainMaterial.SetFloat(HoveredRealmIdId, -1f);
             float normalizedId = provinceId < 0 ? -1f : provinceId / 65535f;
             terrainMaterial.SetFloat(HoveredProvinceIdId, normalizedId);
             terrainMaterial.SetFloat(HoveredCountyIdId, -1f);
@@ -1325,7 +1145,7 @@ namespace EconSim.Renderer
         public void SetHoveredCounty(int countyId)
         {
             if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(HoveredStateIdId, -1f);
+            terrainMaterial.SetFloat(HoveredRealmIdId, -1f);
             terrainMaterial.SetFloat(HoveredProvinceIdId, -1f);
             float normalizedId = countyId < 0 ? -1f : countyId / 65535f;
             terrainMaterial.SetFloat(HoveredCountyIdId, normalizedId);
@@ -1339,7 +1159,7 @@ namespace EconSim.Renderer
         public void SetHoveredMarket(int marketId)
         {
             if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(HoveredStateIdId, -1f);
+            terrainMaterial.SetFloat(HoveredRealmIdId, -1f);
             terrainMaterial.SetFloat(HoveredProvinceIdId, -1f);
             terrainMaterial.SetFloat(HoveredCountyIdId, -1f);
             float normalizedId = marketId < 0 ? -1f : marketId / 65535f;
@@ -1376,7 +1196,7 @@ namespace EconSim.Renderer
         /// <summary>
         /// Update cell data for a specific cell. Useful for dynamic changes (conquests, etc.).
         /// </summary>
-        public void UpdateCellData(int cellId, int? newStateId = null, int? newProvinceId = null, int? newCountyId = null)
+        public void UpdateCellData(int cellId, int? newRealmId = null, int? newProvinceId = null, int? newCountyId = null)
         {
             if (!mapData.CellById.TryGetValue(cellId, out var cell))
                 return;
@@ -1405,8 +1225,8 @@ namespace EconSim.Renderer
                     {
                         Color pixel = cellDataPixels[gridIdx];
 
-                        if (newStateId.HasValue)
-                            pixel.r = newStateId.Value / 65535f;
+                        if (newRealmId.HasValue)
+                            pixel.r = newRealmId.Value / 65535f;
                         if (newProvinceId.HasValue)
                             pixel.g = newProvinceId.Value / 65535f;
                         if (newCountyId.HasValue)
@@ -1436,8 +1256,8 @@ namespace EconSim.Renderer
                 Object.Destroy(heightmapTexture);
             if (riverMaskTexture != null)
                 Object.Destroy(riverMaskTexture);
-            if (statePaletteTexture != null)
-                Object.Destroy(statePaletteTexture);
+            if (realmPaletteTexture != null)
+                Object.Destroy(realmPaletteTexture);
             if (marketPaletteTexture != null)
                 Object.Destroy(marketPaletteTexture);
             if (biomePaletteTexture != null)
