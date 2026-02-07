@@ -14,6 +14,7 @@ public class MapGeneratorEditor : Editor
     private bool _showVegetation = true;
     private bool _showResources = true;
     private bool _showSuitability = true;
+    private bool _showPopulation = true;
 
     public override void OnInspectorGUI()
     {
@@ -133,6 +134,16 @@ public class MapGeneratorEditor : Editor
         {
             EditorGUI.indentLevel++;
             EditorGUILayout.LabelField($"Range: [{stats.SuitabilityMin:F1}, {stats.SuitabilityMax:F1}], avg {stats.SuitabilityAvg:F1}");
+            EditorGUI.indentLevel--;
+        }
+
+        // Population
+        _showPopulation = EditorGUILayout.Foldout(_showPopulation, "Population", true);
+        if (_showPopulation)
+        {
+            EditorGUI.indentLevel++;
+            EditorGUILayout.LabelField($"Total: {stats.PopTotal:F0}, {stats.PopulatedCells} populated cells");
+            EditorGUILayout.LabelField($"Range: [{stats.PopMin:F1}, {stats.PopMax:F1}], avg {stats.PopAvg:F1}");
             EditorGUI.indentLevel--;
         }
 

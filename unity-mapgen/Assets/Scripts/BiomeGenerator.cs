@@ -106,6 +106,9 @@ namespace MapGen
 
             // Suitability scoring (depends on all above)
             SuitabilityOps.ComputeSuitability(_biomeData, heights, climate, rivers);
+
+            // Population assignment (depends on suitability + cell areas)
+            PopulationOps.ComputePopulation(_biomeData, heights);
         }
     }
 }

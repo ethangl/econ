@@ -106,6 +106,9 @@ namespace MapGen.Core
         public float[] Suitability;         // composite settlement score
         public float[] SuitabilityGeo;      // geographic bonus subtotal (debug)
 
+        // Population
+        public float[] Population;          // suitability * area-normalized
+
         public BiomeData(CellMesh mesh)
         {
             Mesh = mesh;
@@ -144,6 +147,8 @@ namespace MapGen.Core
 
             Suitability = new float[n];
             SuitabilityGeo = new float[n];
+
+            Population = new float[n];
         }
 
         /// <summary>Count cells per soil type (land cells only).</summary>

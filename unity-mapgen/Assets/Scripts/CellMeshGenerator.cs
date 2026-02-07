@@ -34,6 +34,7 @@ namespace MapGen
             var boundaryPoints = PointGenerator.BoundaryPoints(mapWidth, mapHeight, spacing);
 
             Mesh = VoronoiBuilder.Build(mapWidth, mapHeight, gridPoints, boundaryPoints);
+            Mesh.ComputeAreas();
 
             Debug.Log($"Generated mesh: {Mesh.CellCount} cells, {Mesh.VertexCount} vertices, {Mesh.EdgeCount} edges, " +
                       $"size {mapWidth:F0} x {mapHeight:F0} km");

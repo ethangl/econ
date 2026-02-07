@@ -36,6 +36,9 @@ namespace MapGen.Core
         /// <summary>For each edge: the two cells it separates (C1 may be -1 for boundary)</summary>
         public (int C0, int C1)[] EdgeCells;
 
+        /// <summary>Area of each cell polygon (km²). Call ComputeAreas() to populate.</summary>
+        public float[] CellAreas;
+
         /// <summary>Map dimensions</summary>
         public float Width;
         public float Height;
@@ -48,6 +51,33 @@ namespace MapGen.Core
 
         /// <summary>Number of edges</summary>
         public int EdgeCount => EdgeVertices?.Length ?? 0;
+
+        /// <summary>
+        /// Compute area of each cell polygon using the shoelace formula.
+        /// Populates the CellAreas array.
+        /// </summary>
+        public void ComputeAreas()
+        {
+            int n = CellCount;
+            CellAreas = new float[n];
+
+            for (int c = 0; c < n; c++)
+            {
+                int[] verts = CellVertices[c];
+                if (verts == null || verts.Length < 3)
+                    continue;
+
+                float area = 0f;
+                int len = verts.Length;
+                for (int i = 0; i < len; i++)
+                {
+                    var a = Vertices[verts[i]];
+                    var b = Vertices[verts[(i + 1) % len]];
+                    area += a.X * b.Y - b.X * a.Y;
+                }
+                CellAreas[c] = System.Math.Abs(area) * 0.5f;
+            }
+        }
     }
 
     /// <summary>

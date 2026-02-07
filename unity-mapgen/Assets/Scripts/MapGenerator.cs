@@ -113,6 +113,10 @@ namespace MapGen
         // Suitability
         public float SuitabilityMin, SuitabilityMax, SuitabilityAvg;
 
+        // Population
+        public float PopTotal, PopMin, PopMax, PopAvg;
+        public int PopulatedCells;
+
         public bool IsValid;
 
         public static MapStats Compute(
@@ -244,6 +248,27 @@ namespace MapGen
             stats.SuitabilityMin = landCount > 0 ? suitMin : 0;
             stats.SuitabilityMax = landCount > 0 ? suitMax : 0;
             stats.SuitabilityAvg = landCount > 0 ? suitSum / landCount : 0;
+
+            // Population
+            float popTotal = 0f, popMin = float.MaxValue, popMax = float.MinValue;
+            int populatedCells = 0;
+            for (int i = 0; i < mesh.CellCount; i++)
+            {
+                if (heights.IsWater(i) || biomes.IsLakeCell[i]) continue;
+                float pop = biomes.Population[i];
+                if (pop > 0f)
+                {
+                    populatedCells++;
+                    popTotal += pop;
+                    if (pop < popMin) popMin = pop;
+                    if (pop > popMax) popMax = pop;
+                }
+            }
+            stats.PopTotal = popTotal;
+            stats.PopMin = populatedCells > 0 ? popMin : 0;
+            stats.PopMax = populatedCells > 0 ? popMax : 0;
+            stats.PopAvg = populatedCells > 0 ? popTotal / populatedCells : 0;
+            stats.PopulatedCells = populatedCells;
 
             return stats;
         }
