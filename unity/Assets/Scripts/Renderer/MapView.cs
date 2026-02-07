@@ -18,6 +18,7 @@ namespace EconSim.Renderer
         [Header("Rendering Settings")]
         [SerializeField] private float heightScale = 15f;
         [SerializeField] private float cellScale = 0.01f;  // Scale from map data pixels to Unity units
+        public float CellScale => cellScale;
         [SerializeField] private Material terrainMaterial;
         [SerializeField] private bool renderLandOnly = false;
 

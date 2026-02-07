@@ -22,6 +22,7 @@ namespace EconSim.Core
         [SerializeField] private MapCamera mapCamera;
 
         public MapData MapData { get; private set; }
+        public MapGenResult MapGenResult { get; private set; }
         public ISimulation Simulation => _simulation;
 
         /// <summary>
@@ -75,6 +76,8 @@ namespace EconSim.Core
             Profiler.Begin("MapGen Pipeline");
             var result = MapGenPipeline.Generate(config);
             Profiler.End();
+
+            MapGenResult = result;
 
             Profiler.Begin("MapGenAdapter Convert");
             MapData = MapGenAdapter.Convert(result);
