@@ -12,6 +12,7 @@ namespace MapGen
     [RequireComponent(typeof(ClimateGenerator))]
     [RequireComponent(typeof(RiverGenerator))]
     [RequireComponent(typeof(BiomeGenerator))]
+    [RequireComponent(typeof(PoliticalGenerator))]
     [RequireComponent(typeof(CellMeshVisualizer))]
     public class MapGenerator : MonoBehaviour
     {
@@ -37,6 +38,7 @@ namespace MapGen
             var climateGen = GetComponent<ClimateGenerator>();
             var riverGen = GetComponent<RiverGenerator>();
             var biomeGen = GetComponent<BiomeGenerator>();
+            var politicalGen = GetComponent<PoliticalGenerator>();
 
             // Push params to child generators
             meshGen.Seed = Seed;
@@ -61,6 +63,7 @@ namespace MapGen
             climateGen.Generate();
             riverGen.Generate();
             biomeGen.Generate();
+            politicalGen?.Generate();
 
             sw.Stop();
 
@@ -70,7 +73,7 @@ namespace MapGen
                 visualizer.InvalidateCache();
 
             // Compute stats
-            Stats = MapStats.Compute(meshGen, heightGen, climateGen, riverGen, biomeGen);
+            Stats = MapStats.Compute(meshGen, heightGen, climateGen, riverGen, biomeGen, politicalGen);
 
             Debug.Log($"Map generated in {sw.ElapsedMilliseconds}ms");
         }
@@ -117,6 +120,11 @@ namespace MapGen
         public float PopTotal, PopMin, PopMax, PopAvg;
         public int PopulatedCells;
 
+        // Political
+        public int RealmCount, ProvinceCount, CountyCount;
+        public int LandmassCount, QualifyingLandmasses;
+        public float AvgCellsPerRealm, AvgCellsPerProvince, AvgCellsPerCounty;
+
         public bool IsValid;
 
         public static MapStats Compute(
@@ -124,7 +132,8 @@ namespace MapGen
             HeightmapGenerator heightGen,
             ClimateGenerator climateGen,
             RiverGenerator riverGen,
-            BiomeGenerator biomeGen)
+            BiomeGenerator biomeGen,
+            PoliticalGenerator politicalGen)
         {
             var stats = new MapStats { IsValid = true };
 
@@ -269,6 +278,28 @@ namespace MapGen
             stats.PopMax = populatedCells > 0 ? popMax : 0;
             stats.PopAvg = populatedCells > 0 ? popTotal / populatedCells : 0;
             stats.PopulatedCells = populatedCells;
+
+            // Political
+            var political = politicalGen?.PoliticalData;
+            if (political != null)
+            {
+                stats.RealmCount = political.RealmCount;
+                stats.ProvinceCount = political.ProvinceCount;
+                stats.CountyCount = political.CountyCount;
+                stats.LandmassCount = political.LandmassCount;
+                stats.QualifyingLandmasses = political.QualifyingLandmasses;
+
+                int assignedCells = 0;
+                for (int i = 0; i < mesh.CellCount; i++)
+                    if (political.RealmId[i] > 0) assignedCells++;
+
+                stats.AvgCellsPerRealm = political.RealmCount > 0
+                    ? (float)assignedCells / political.RealmCount : 0;
+                stats.AvgCellsPerProvince = political.ProvinceCount > 0
+                    ? (float)assignedCells / political.ProvinceCount : 0;
+                stats.AvgCellsPerCounty = political.CountyCount > 0
+                    ? (float)assignedCells / political.CountyCount : 0;
+            }
 
             return stats;
         }

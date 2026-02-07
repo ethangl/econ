@@ -61,13 +61,13 @@ A vertex with flux above a threshold is a river vertex.
 
 ### Per-Vertex Arrays
 
-| Array          | Type    | Description                                                        |
-| -------------- | ------- | ------------------------------------------------------------------ |
-| `VertexHeight` | float[] | Interpolated terrain height (avg of surrounding cells).            |
-| `VertexPrecip` | float[] | Interpolated precipitation (avg of surrounding cells).             |
-| `WaterLevel`   | float[] | After depression fill. >= VertexHeight. Lake if >.                 |
-| `VertexFlux`   | float[] | Accumulated water flux through this vertex.                        |
-| `FlowTarget`   | int[]   | Index of the vertex this vertex drains to. -1 if none/unresolved.  |
+| Array          | Type    | Description                                                       |
+| -------------- | ------- | ----------------------------------------------------------------- |
+| `VertexHeight` | float[] | Interpolated terrain height (avg of surrounding cells).           |
+| `VertexPrecip` | float[] | Interpolated precipitation (avg of surrounding cells).            |
+| `WaterLevel`   | float[] | After depression fill. >= VertexHeight. Lake if >.                |
+| `VertexFlux`   | float[] | Accumulated water flux through this vertex.                       |
+| `FlowTarget`   | int[]   | Index of the vertex this vertex drains to. -1 if none/unresolved. |
 
 ### Per-Edge Arrays
 

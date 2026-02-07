@@ -15,6 +15,7 @@ public class MapGeneratorEditor : Editor
     private bool _showResources = true;
     private bool _showSuitability = true;
     private bool _showPopulation = true;
+    private bool _showPolitical = true;
 
     public override void OnInspectorGUI()
     {
@@ -144,6 +145,20 @@ public class MapGeneratorEditor : Editor
             EditorGUI.indentLevel++;
             EditorGUILayout.LabelField($"Total: {stats.PopTotal:F0}, {stats.PopulatedCells} populated cells");
             EditorGUILayout.LabelField($"Range: [{stats.PopMin:F1}, {stats.PopMax:F1}], avg {stats.PopAvg:F1}");
+            EditorGUI.indentLevel--;
+        }
+
+        // Political
+        _showPolitical = EditorGUILayout.Foldout(_showPolitical, "Political", true);
+        if (_showPolitical)
+        {
+            EditorGUI.indentLevel++;
+            EditorGUILayout.LabelField(
+                $"{stats.RealmCount} realms, {stats.ProvinceCount} provinces, {stats.CountyCount} counties");
+            EditorGUILayout.LabelField(
+                $"{stats.LandmassCount} landmasses ({stats.QualifyingLandmasses} qualifying)");
+            EditorGUILayout.LabelField(
+                $"Avg: {stats.AvgCellsPerRealm:F0} cells/realm, {stats.AvgCellsPerProvince:F0} cells/province, {stats.AvgCellsPerCounty:F0} cells/county");
             EditorGUI.indentLevel--;
         }
 

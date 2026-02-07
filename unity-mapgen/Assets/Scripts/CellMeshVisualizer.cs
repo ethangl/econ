@@ -20,7 +20,9 @@ namespace MapGen
         // Vegetation
         VegetationType, VegetationDensity,
         // Economy
-        Subsistence, MovementCost, Suitability
+        Subsistence, MovementCost, Suitability,
+        // Political
+        Realm
     }
 
     /// <summary>
@@ -48,6 +50,7 @@ namespace MapGen
         private HeightmapGenerator _heightmapGenerator;
         private ClimateGenerator _climateGenerator;
         private BiomeGenerator _biomeGenerator;
+        private PoliticalGenerator _politicalGenerator;
         private Material _glMaterial;
 
         // Cached heatmap ranges for temperature/precipitation (computed from data)
@@ -137,6 +140,7 @@ namespace MapGen
             _heightmapGenerator = GetComponent<HeightmapGenerator>();
             _climateGenerator = GetComponent<ClimateGenerator>();
             _biomeGenerator = GetComponent<BiomeGenerator>();
+            _politicalGenerator = GetComponent<PoliticalGenerator>();
         }
 
         void OnRenderObject()
@@ -332,6 +336,30 @@ namespace MapGen
                 case ColorMode.Suitability:
                     if (biomeData == null || isWater) return WaterColor;
                     return GetSuitabilityColor(biomeData.Suitability[c], 0f, 100f);
+
+                // --- Political ---
+                case ColorMode.Realm:
+                    var polData = _politicalGenerator?.PoliticalData;
+                    if (polData == null || isWater) return WaterColor;
+                    int realmId = polData.RealmId[c];
+                    if (realmId == 0) return WaterColor;
+                    float realmHue = (realmId * 0.618034f) % 1f;
+                    // Vary saturation/value by province for visual distinction
+                    int provId = polData.ProvinceId[c];
+                    float provHash = (provId * 0.381966f) % 1f; // 1 - golden ratio
+                    float provH = (realmHue + (provHash - 0.5f) * 0.12f + 1f) % 1f;
+                    float provS = 0.30f + provHash * 0.40f;     // 0.30 - 0.70
+                    float provV = 0.55f + provHash * 0.35f;     // 0.55 - 0.90
+                    // County seat highlight
+                    if (polData.IsCountySeat[c])
+                        return Color.HSVToRGB(provH, 1f, Mathf.Min(provV + 0.15f, 1f));
+                    // Vary by county
+                    int countyId = polData.CountyId[c];
+                    float countyHash = (countyId * 0.274917f) % 1f;
+                    float ch = (provH + (countyHash - 0.5f) * 0.05f + 1f) % 1f;
+                    float cs = Mathf.Clamp(provS + (countyHash - 0.5f) * 0.15f, 0.15f, 0.85f);
+                    float cv = Mathf.Clamp(provV + (countyHash - 0.5f) * 0.15f, 0.40f, 0.95f);
+                    return Color.HSVToRGB(ch, cs, cv);
 
                 default:
                     return WaterColor;

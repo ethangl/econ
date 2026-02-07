@@ -7,16 +7,13 @@ This directory documents our plan to migrate away from Azgaar's Fantasy Map Gene
 | Document                               | Topic                                                          |
 | -------------------------------------- | -------------------------------------------------------------- |
 | [Philosophy & Overview](./overview.md) | Goals, dependencies, migration boundary                        |
-| [Persistence](./persistence.md)        | Caching MapData, file formats                                  |
 | [Heightmap](./heightmap.md)            | Terrain generation, template DSL                               |
 | [Rivers](./rivers.md)                  | Flow accumulation, edge-based design                           |
 | [Climate & Biomes](./biomes/README.md) | Temperature, precipitation, biome matrix                       |
 | [Soil & Biomes](../biomes/)            | Soil model, geology, biome assignment (moved to own directory) |
 | [Resources](../biomes/resources.md)    | Resource types, production chains, geological ores (moved)     |
-| [Settlements](./settlements.md)        | Suitability scoring, population                                |
-| [Cultures](./cultures.md)              | Culture types, expansion, naming                               |
-| [Political](./political.md)            | States, provinces, borders                                     |
-| [Shortcomings](./shortcomings.md)      | Azgaar issues we want to address                               |
+| [Politics](./politics.md)              | Suitability scoring, population, political boundaries          |
+| [Improvements](./improvements.md)      | Issues we want to address in the future                        |
 
 ## Quick Reference
 
@@ -87,8 +84,9 @@ econ/
 
 - [x] Biomes
 - [x] Resource Placement
-- [ ] Settlement/Population
-- [ ] Political Boundaries
+- [x] Settlement/Population
+- [x] Political Boundaries
+- [ ] Market Boundaries
 
 **Phase C: Polish**
 
