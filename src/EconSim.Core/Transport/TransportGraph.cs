@@ -102,7 +102,7 @@ namespace EconSim.Core.Transport
             float baseCost = DefaultMovementCost;
 
             // Use biome movement cost if available
-            // Azgaar costs are on a 10-5000 scale, normalize to 1-10 range by dividing by 50
+            // Biome costs are on a 10-5000 scale, normalize to 1-10 range by dividing by 50
             if (_biomeById.TryGetValue(cell.BiomeId, out var biome) && biome.MovementCost > 0)
             {
                 baseCost = biome.MovementCost / 50f;

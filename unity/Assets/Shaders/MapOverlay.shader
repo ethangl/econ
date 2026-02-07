@@ -73,15 +73,13 @@ Shader "EconSim/MapOverlay"
                 float4 vertex : POSITION;
                 float4 color : COLOR;
                 float2 texcoord : TEXCOORD0;
-                float2 texcoord1 : TEXCOORD1;
             };
 
             struct v2f
             {
                 float4 pos : SV_POSITION;
                 float4 vertexColor : COLOR;
-                float2 dataUV : TEXCOORD0;    // UV for sampling data texture (Azgaar coordinates)
-                float2 heightUV : TEXCOORD1;  // UV for sampling heightmap (Unity coordinates, Y-flipped)
+                float2 dataUV : TEXCOORD0;    // Unified UV for all textures (Y-up coordinates)
             };
 
             sampler2D _HeightmapTex;
@@ -150,10 +148,8 @@ Shader "EconSim/MapOverlay"
 
                 o.pos = UnityObjectToClipPos(vertex);
                 o.vertexColor = v.color;
-                // UV0 for heightmap (Unity coordinates, Y-flipped)
-                o.heightUV = v.texcoord.xy;
-                // UV1 for data texture (Azgaar coordinates)
-                o.dataUV = v.texcoord1.xy;
+                // Single UV for all textures (Y-up coordinates, unified)
+                o.dataUV = v.texcoord.xy;
 
                 return o;
             }
@@ -272,7 +268,7 @@ Shader "EconSim/MapOverlay"
             // Calculate edge proximity for political gradient effect
             // Returns 0 at edges (near different region, water, or river), 1 deep in interior
             // channel: 0=state (R), 1=province (G), 2=county (A)
-            float CalculateEdgeProximity(float2 uv, float2 heightUV, float centerValue, bool centerIsWater, int channel, float maxRadius, float uvPerPixel)
+            float CalculateEdgeProximity(float2 uv, float centerValue, bool centerIsWater, int channel, float maxRadius, float uvPerPixel)
             {
                 // Water has no gradient
                 if (centerIsWater) return 1;
@@ -299,7 +295,6 @@ Shader "EconSim/MapOverlay"
                     for (int i = 0; i < 8; i++)
                     {
                         float2 sampleUV = uv + sampleDirs8[i] * uvPerPixel * radius;
-                        float2 sampleHeightUV = heightUV + sampleDirs8[i] * uvPerPixel * radius;
                         float4 sampleData = SampleCellData(sampleUV);
 
                         // Check if sample is water (cell water flag)
@@ -307,7 +302,7 @@ Shader "EconSim/MapOverlay"
                         bool sampleIsWater = samplePackedBiome >= 32000.0;
 
                         // Check if sample is river
-                        float sampleRiver = tex2D(_RiverMaskTex, sampleHeightUV).r;
+                        float sampleRiver = tex2D(_RiverMaskTex, sampleUV).r;
                         bool sampleIsRiver = sampleRiver > 0.5;
 
                         if (sampleIsWater || sampleIsRiver)
@@ -392,7 +387,7 @@ Shader "EconSim/MapOverlay"
 
             // Calculate edge proximity for political modes (state boundaries, water, rivers)
             // Returns 0 at edges, 1 deep in interior
-            float CalculatePoliticalEdgeProximity(float2 uv, float2 heightUV, float centerStateId, bool centerIsWater, float maxRadius, float uvPerPixel)
+            float CalculatePoliticalEdgeProximity(float2 uv, float centerStateId, bool centerIsWater, float maxRadius, float uvPerPixel)
             {
                 if (centerIsWater) return 1;
 
@@ -414,13 +409,12 @@ Shader "EconSim/MapOverlay"
                     for (int i = 0; i < 8; i++)
                     {
                         float2 sampleUV = uv + dirs8[i] * uvPerPixel * radius;
-                        float2 sampleHeightUV = heightUV + dirs8[i] * uvPerPixel * radius;
                         float4 sampleData = SampleCellData(sampleUV);
 
                         float samplePackedBiome = sampleData.b * 65535.0;
                         bool sampleIsWater = samplePackedBiome >= 32000.0;
 
-                        float sampleRiver = tex2D(_RiverMaskTex, sampleHeightUV).r;
+                        float sampleRiver = tex2D(_RiverMaskTex, sampleUV).r;
                         bool sampleIsRiver = sampleRiver > 0.5;
 
                         if (sampleIsWater || sampleIsRiver)
@@ -442,7 +436,7 @@ Shader "EconSim/MapOverlay"
 
             // Calculate edge proximity for market zones (requires cell-to-market lookup)
             // Returns 0 at edges (near different market, water, or river), 1 deep in interior
-            float CalculateMarketEdgeProximity(float2 uv, float2 heightUV, float centerMarketId, bool centerIsWater, float maxRadius, float uvPerPixel)
+            float CalculateMarketEdgeProximity(float2 uv, float centerMarketId, bool centerIsWater, float maxRadius, float uvPerPixel)
             {
                 // Water has no gradient
                 if (centerIsWater) return 1;
@@ -468,7 +462,6 @@ Shader "EconSim/MapOverlay"
                     for (int i = 0; i < 8; i++)
                     {
                         float2 sampleUV = uv + sampleDirs8[i] * uvPerPixel * radius;
-                        float2 sampleHeightUV = heightUV + sampleDirs8[i] * uvPerPixel * radius;
                         float4 sampleData = SampleCellData(sampleUV);
 
                         // Check if sample is water (cell water flag)
@@ -476,7 +469,7 @@ Shader "EconSim/MapOverlay"
                         bool sampleIsWater = samplePackedBiome >= 32000.0;
 
                         // Check if sample is river
-                        float sampleRiver = tex2D(_RiverMaskTex, sampleHeightUV).r;
+                        float sampleRiver = tex2D(_RiverMaskTex, sampleUV).r;
                         bool sampleIsRiver = sampleRiver > 0.5;
 
                         if (sampleIsWater || sampleIsRiver)
@@ -761,15 +754,15 @@ Shader "EconSim/MapOverlay"
                 bool isCellWater = packedBiome >= 32000.0;  // Water flag is 32768, biomes are < 100
                 float biomeId = (packedBiome - (isCellWater ? 32768.0 : 0.0)) / 65535.0;
 
-                // Sample river mask (uses same UV as heightmap - Unity coordinates)
-                float riverMask = tex2D(_RiverMaskTex, IN.heightUV).r;
+                // Sample river mask (same UV as data texture)
+                float riverMask = tex2D(_RiverMaskTex, IN.dataUV).r;
                 bool isRiver = riverMask > 0.5;
 
                 // Combine water sources: ocean/lake cells OR rivers
                 bool isWater = isCellWater || isRiver;
 
                 // Sample height for height-based coloring
-                float height = tex2D(_HeightmapTex, IN.heightUV).r;
+                float height = tex2D(_HeightmapTex, IN.dataUV).r;
 
                 // Calculate UV change per pixel (needed for gradient calculation)
                 float2 dx = ddx(uv);
@@ -857,7 +850,7 @@ Shader "EconSim/MapOverlay"
                     fixed3 politicalColor = LookupPaletteColor(_StatePaletteTex, stateId);
 
                     // Calculate edge proximity for gradient (state boundaries, water, rivers)
-                    float edgeProximity = CalculatePoliticalEdgeProximity(uv, IN.heightUV, stateId, isWater, _GradientRadius, uvPerPixel);
+                    float edgeProximity = CalculatePoliticalEdgeProximity(uv, stateId, isWater, _GradientRadius, uvPerPixel);
 
                     // Multiply blend: terrain * political color (like Photoshop multiply layer)
                     fixed3 multiplied = grayTerrain * politicalColor;
@@ -895,7 +888,7 @@ Shader "EconSim/MapOverlay"
                     fixed3 marketColor = LookupPaletteColor(_MarketPaletteTex, marketId);
 
                     // Calculate edge proximity for gradient (based on market boundaries and rivers)
-                    float edgeProximity = CalculateMarketEdgeProximity(uv, IN.heightUV, marketId, isWater, _GradientRadius, uvPerPixel);
+                    float edgeProximity = CalculateMarketEdgeProximity(uv, marketId, isWater, _GradientRadius, uvPerPixel);
 
                     // Multiply blend: terrain * market color (like Photoshop multiply layer)
                     fixed3 multiplied = grayTerrain * marketColor;

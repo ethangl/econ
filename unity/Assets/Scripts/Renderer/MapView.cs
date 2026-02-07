@@ -17,7 +17,7 @@ namespace EconSim.Renderer
     {
         [Header("Rendering Settings")]
         [SerializeField] private float heightScale = 15f;
-        [SerializeField] private float cellScale = 0.01f;  // Scale from Azgaar pixels to Unity units
+        [SerializeField] private float cellScale = 0.01f;  // Scale from map data pixels to Unity units
         [SerializeField] private Material terrainMaterial;
         [SerializeField] private bool renderLandOnly = false;
 
@@ -76,8 +76,7 @@ namespace EconSim.Renderer
         private List<Vector3> vertices = new List<Vector3>();
         private List<int> triangles = new List<int>();
         private List<Color32> colors = new List<Color32>();
-        private List<Vector2> uv0 = new List<Vector2>();  // Heightmap UVs (Unity coords, Y-flipped)
-        private List<Vector2> uv1 = new List<Vector2>();  // Data texture UVs (Azgaar coords normalized)
+        private List<Vector2> uv0 = new List<Vector2>();  // UVs for both heightmap and data texture (Y-up, unified)
 
         // Vertex heights (computed by averaging neighboring cells)
         private float[] vertexHeights;
@@ -347,10 +346,10 @@ namespace EconSim.Renderer
         {
             if (mapData == null) return -1;
 
-            // Convert world position back to Azgaar coordinates
+            // Convert world position back to data coordinates
             Vector3 localPos = worldPos - transform.position;
-            float azgaarX = localPos.x / cellScale;
-            float azgaarY = -localPos.z / cellScale;  // Z was negated during mesh generation
+            float dataX = localPos.x / cellScale;
+            float dataY = localPos.z / cellScale;
 
             // Find the closest cell center
             float minDistSq = float.MaxValue;
@@ -360,8 +359,8 @@ namespace EconSim.Renderer
             {
                 if (renderLandOnly && !cell.IsLand) continue;
 
-                float dx = cell.Center.X - azgaarX;
-                float dy = cell.Center.Y - azgaarY;
+                float dx = cell.Center.X - dataX;
+                float dy = cell.Center.Y - dataY;
                 float distSq = dx * dx + dy * dy;
 
                 if (distSq < minDistSq)
@@ -371,7 +370,7 @@ namespace EconSim.Renderer
                 }
             }
 
-            // Average cell radius is roughly 5-10 Azgaar units
+            // Average cell radius is roughly 5-10 map units
             // If click is more than 15 units from nearest cell center, ignore it
             const float maxDistSq = 15f * 15f;
             if (minDistSq > maxDistSq)
@@ -794,16 +793,14 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
-        /// Convert Azgaar coordinates to world position.
+        /// Convert data coordinates to world position.
         /// </summary>
-        private Vector3 AzgaarToWorld(float azgaarX, float azgaarY)
+        private Vector3 DataToWorld(float dataX, float dataY)
         {
-            // World position matches mesh generation: X scaled, Z negated and scaled
-            // transform.position offsets to center the map
             return new Vector3(
-                azgaarX * cellScale + transform.position.x,
+                dataX * cellScale + transform.position.x,
                 0f,
-                -azgaarY * cellScale + transform.position.z
+                dataY * cellScale + transform.position.z
             );
         }
 
@@ -815,7 +812,7 @@ namespace EconSim.Renderer
             if (countyId <= 0) return null;
             if (!mapData.CountyById.TryGetValue(countyId, out var county)) return null;
 
-            return AzgaarToWorld(county.Centroid.X, county.Centroid.Y);
+            return DataToWorld(county.Centroid.X, county.Centroid.Y);
         }
 
         /// <summary>
@@ -829,7 +826,7 @@ namespace EconSim.Renderer
             // Use center cell if available
             if (province.CenterCellId > 0 && mapData.CellById.TryGetValue(province.CenterCellId, out var centerCell))
             {
-                return AzgaarToWorld(centerCell.Center.X, centerCell.Center.Y);
+                return DataToWorld(centerCell.Center.X, centerCell.Center.Y);
             }
 
             // Fall back to calculating from cell list
@@ -848,7 +845,7 @@ namespace EconSim.Renderer
             }
             if (count == 0) return null;
 
-            return AzgaarToWorld(sumX / count, sumY / count);
+            return DataToWorld(sumX / count, sumY / count);
         }
 
         /// <summary>
@@ -862,7 +859,7 @@ namespace EconSim.Renderer
             // Use center cell if available
             if (state.CenterCellId > 0 && mapData.CellById.TryGetValue(state.CenterCellId, out var centerCell))
             {
-                return AzgaarToWorld(centerCell.Center.X, centerCell.Center.Y);
+                return DataToWorld(centerCell.Center.X, centerCell.Center.Y);
             }
 
             // Fall back to calculating from all cells with this state ID
@@ -879,7 +876,7 @@ namespace EconSim.Renderer
             }
             if (count == 0) return null;
 
-            return AzgaarToWorld(sumX / count, sumY / count);
+            return DataToWorld(sumX / count, sumY / count);
         }
 
         /// <summary>
@@ -903,7 +900,7 @@ namespace EconSim.Renderer
             }
             if (count == 0) return null;
 
-            return AzgaarToWorld(sumX / count, sumY / count);
+            return DataToWorld(sumX / count, sumY / count);
         }
 
         /// <summary>
@@ -993,9 +990,9 @@ namespace EconSim.Renderer
 
             if (count == 0) return null;
 
-            // Convert Azgaar corners to world space
-            Vector3 worldMin = AzgaarToWorld(minX, maxY);  // maxY because Y is flipped
-            Vector3 worldMax = AzgaarToWorld(maxX, minY);
+            // Convert data corners to world space
+            Vector3 worldMin = DataToWorld(minX, minY);
+            Vector3 worldMax = DataToWorld(maxX, maxY);
 
             Vector3 center = (worldMin + worldMax) / 2f;
             Vector3 size = new Vector3(
@@ -1105,7 +1102,7 @@ namespace EconSim.Renderer
 
         /// <summary>
         /// Generate a grid mesh for GPU height displacement.
-        /// Uses dual UV channels: UV0 for heightmap (Y-flipped), UV1 for data texture (Azgaar coords).
+        /// Single UV channel for both heightmap and data texture (Y-up coordinates).
         /// </summary>
         private void GenerateGridMesh()
         {
@@ -1125,7 +1122,6 @@ namespace EconSim.Renderer
             vertices.Clear();
             colors.Clear();
             uv0.Clear();
-            uv1.Clear();
             triangles.Clear();
 
             var oceanColor = new Color32(30, 50, 90, 255);
@@ -1138,22 +1134,19 @@ namespace EconSim.Renderer
                     float u = (float)x / gridWidth;
                     float v = (float)y / gridHeight;
 
-                    // World position: X right, Z negative (matches Voronoi convention)
+                    // World position: X right, Z positive (Y-up data maps to Z-positive)
                     float worldX = u * worldWidth;
-                    float worldZ = -v * worldHeight;
+                    float worldZ = v * worldHeight;
 
                     vertices.Add(new Vector3(worldX, 0f, worldZ));
                     colors.Add(oceanColor);
 
-                    // UV0 for heightmap: Y-flipped to match Unity texture coordinates
-                    uv0.Add(new Vector2(u, 1f - v));
-
-                    // UV1 for data texture: Azgaar coordinates (no flip)
-                    uv1.Add(new Vector2(u, v));
+                    // Single UV for both heightmap and data texture
+                    uv0.Add(new Vector2(u, v));
                 }
             }
 
-            // Generate triangles (clockwise winding for top-down view)
+            // Generate triangles (counter-clockwise winding for Z-positive top-down view)
             for (int y = 0; y < gridHeight; y++)
             {
                 for (int x = 0; x < gridWidth; x++)
@@ -1163,15 +1156,15 @@ namespace EconSim.Renderer
                     int tl = (y + 1) * vertCountX + x;
                     int tr = tl + 1;
 
-                    // Triangle 1: BL, TR, TL
+                    // Triangle 1: BL, TL, TR (reversed from before)
                     triangles.Add(bl);
-                    triangles.Add(tr);
                     triangles.Add(tl);
-
-                    // Triangle 2: BL, BR, TR
-                    triangles.Add(bl);
-                    triangles.Add(br);
                     triangles.Add(tr);
+
+                    // Triangle 2: BL, TR, BR (reversed from before)
+                    triangles.Add(bl);
+                    triangles.Add(tr);
+                    triangles.Add(br);
                 }
             }
 
@@ -1188,8 +1181,7 @@ namespace EconSim.Renderer
 
             mesh.SetVertices(vertices);
             mesh.SetColors(colors);
-            mesh.SetUVs(0, uv0);  // UV0 for heightmap
-            mesh.SetUVs(1, uv1);  // UV1 for data texture
+            mesh.SetUVs(0, uv0);
             mesh.SetTriangles(triangles, 0);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
@@ -1217,7 +1209,7 @@ namespace EconSim.Renderer
             vertices.Clear();
             triangles.Clear();
             colors.Clear();
-            uv1.Clear();
+            uv0.Clear();
 
             // Generate triangulated polygons for each cell
             int cellsRendered = 0;
@@ -1247,10 +1239,10 @@ namespace EconSim.Renderer
             mesh.SetTriangles(triangles, 0);
             mesh.SetColors(colors);
 
-            // Set UV1 for shader overlay data texture sampling
-            if (useShaderOverlays && uv1.Count == vertices.Count)
+            // Set UV0 for shader overlay sampling
+            if (useShaderOverlays && uv0.Count == vertices.Count)
             {
-                mesh.SetUVs(1, uv1);
+                mesh.SetUVs(0, uv0);
             }
 
             mesh.RecalculateNormals();
@@ -1277,10 +1269,10 @@ namespace EconSim.Renderer
 
             // Get vertex positions for this cell's polygon, using per-vertex heights
             var polyVerts = new List<Vector3>();
-            var polyUVs = new List<Vector2>();  // Azgaar coordinates normalized for data texture
+            var polyUVs = new List<Vector2>();  // Normalized data coordinates for texture sampling
             float heightSum = 0f;
 
-            // Normalization factors for UV1 (Azgaar coords -> 0-1)
+            // Normalization factors (data coords -> 0-1)
             float invWidth = 1f / mapData.Info.Width;
             float invHeight = 1f / mapData.Info.Height;
 
@@ -1294,10 +1286,10 @@ namespace EconSim.Renderer
                     polyVerts.Add(new Vector3(
                         pos2D.x * cellScale,
                         height,
-                        -pos2D.y * cellScale  // Flip Y to Z, negate for Unity coords
+                        pos2D.y * cellScale
                     ));
 
-                    // UV1: normalized Azgaar coordinates for data texture sampling
+                    // UV: normalized data coordinates for texture sampling
                     polyUVs.Add(new Vector2(pos2D.x * invWidth, pos2D.y * invHeight));
                 }
             }
@@ -1315,13 +1307,10 @@ namespace EconSim.Renderer
             center /= polyVerts.Count;
             centerUV /= polyUVs.Count;
 
-            // Center height is average of edge vertex heights (already computed in center.y from the sum)
-            // No need to adjust - it's already correct from averaging polyVerts
-
             int centerIdx = vertices.Count;
             vertices.Add(center);
             colors.Add(cellColor);
-            uv1.Add(centerUV);
+            uv0.Add(centerUV);
 
             // Add polygon vertices and create triangles
             int firstPolyIdx = vertices.Count;
@@ -1329,16 +1318,16 @@ namespace EconSim.Renderer
             {
                 vertices.Add(polyVerts[i]);
                 colors.Add(cellColor);
-                uv1.Add(polyUVs[i]);
+                uv0.Add(polyUVs[i]);
             }
 
-            // Create fan triangles
+            // Create fan triangles (reversed winding for Z-positive)
             for (int i = 0; i < polyVerts.Count; i++)
             {
                 int next = (i + 1) % polyVerts.Count;
                 triangles.Add(centerIdx);
-                triangles.Add(firstPolyIdx + i);
                 triangles.Add(firstPolyIdx + next);
+                triangles.Add(firstPolyIdx + i);
             }
         }
 
@@ -1613,7 +1602,7 @@ namespace EconSim.Renderer
             float halfWidth = mapData.Info.Width * cellScale * 0.5f;
             float halfHeight = mapData.Info.Height * cellScale * 0.5f;
 
-            transform.position = new Vector3(-halfWidth, 0, halfHeight);
+            transform.position = new Vector3(-halfWidth, 0, -halfHeight);
         }
 
         private void UpdateColors()

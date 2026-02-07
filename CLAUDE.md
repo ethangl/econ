@@ -25,9 +25,9 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 - `mesh.uv` = UV0 = shader `texcoord0`
 - `mesh.uv2` = UV1 = shader `texcoord1`
-- The MapOverlay shader uses `texcoord1` for data texture sampling
+- The MapOverlay shader uses a single UV channel (`texcoord0`) for all texture sampling
 
-**Triangle winding:** For top-down orthographic camera, triangles must be wound **clockwise** (reversed from typical). If mesh is invisible but exists in Scene view, check winding order.
+**Triangle winding:** With Z-positive (Y-up data), triangles are wound **counter-clockwise** for the top-down camera. If mesh is invisible but exists in Scene view, check winding order.
 
 **Material instances:** `meshRenderer.material` creates an instance; `meshRenderer.sharedMaterial` uses the asset directly. When overlay manager sets textures on a material, ensure the renderer uses the same material reference.
 
@@ -39,16 +39,13 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 | Changelog      | `docs/CHANGELOG.md`       |
 | Core library   | `src/EconSim.Core/`       |
 | Unity frontend | `unity/Assets/Scripts/`   |
-| Reference maps | `reference/` (gitignored) |
 
 ### Key Classes
 
 **EconSim.Core** (engine-independent):
 
-- `AzgaarParser` - Parses Azgaar JSON → `AzgaarMap`
-- `MapConverter` - Converts `AzgaarMap` → `MapData`
+- `MapGenAdapter` - Converts `MapGenResult` → `MapData`
 - `MapData`, `Cell`, `County`, `Province`, `State` - Core data structures
-- `CountyGrouper` - Groups cells into counties based on population density
 - `ISimulation`, `SimulationRunner` - Tick loop interface/implementation
 - `ITickSystem` - Interface for simulation subsystems
 - `EconomyState` - Global economy (registries, counties, facilities)
@@ -64,9 +61,8 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 **Unity** (symlinks `EconSim.Core/` from `src/`):
 
-- `GameManager` - Entry point, loads map, owns simulation
+- `GameManager` - Entry point, generates map, owns simulation
 - `MapView` - Generates grid mesh (default) or Voronoi mesh, map modes (1=political cycle, 2=terrain with elevation tinting, 3=market), click-to-select
-- `GridMeshTest` - Test harness for grid mesh rendering (validates UV mapping, winding order)
 - `RelaxedCellGeometry` - Generates organic curved cell boundaries using Catmull-Rom splines
 - `NoiseUtils` - Deterministic hash utilities for procedural generation
 - `BorderRenderer` - Province/county borders as curved polyline meshes (state borders via shader)
@@ -88,12 +84,7 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 ## Setup
 
-Reference data is gitignored. To set up:
-
-1. Export a map from [Azgaar's FMG](https://azgaar.github.io/Fantasy-Map-Generator/) as JSON
-2. Place in `reference/`
-
-Current map: seed 1234, low island, 40k points, 1920x1080 (map dimensions are read from JSON, not hardcoded)
+Maps are generated procedurally via the MapGen pipeline. Use the "Generate New" button on the startup screen.
 
 ## Shader-Based Overlay System
 
@@ -213,13 +204,9 @@ Shader renders terrain with gradient fill; borders are separate mesh layer on to
 
 ## Coordinate Systems
 
-**Azgaar (imported maps):** Y=0 at top, increases downward (screen coordinates)
+**Unity:** Y=0 at bottom for textures, Y-up in world space
 
-**Unity (native):** Y=0 at bottom for textures, Y-up in world space
-
-Currently, Azgaar coordinates are used internally in `MapData`, `Cell`, etc. The Y-flip happens at texture generation time in `MapOverlayManager`. This is a pragmatic choice to minimize refactoring.
-
-**Future consideration:** If we generate our own maps, use Unity coordinates natively and remove the Y-flip in texture generation. Ideally, the flip would happen once at the Azgaar import boundary (`AzgaarParser`/`MapConverter`) so all internal data uses Unity conventions.
+MapGen uses Y-up coordinates natively (Y=0=south). MapData stores these directly — no flip. In world space, data Y maps to Z-positive. A single UV channel handles both heightmap and data texture sampling.
 
 ## County Grouping System
 

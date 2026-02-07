@@ -116,7 +116,7 @@ namespace EconSim.Renderer
                     polyVerts.Add(new Vector3(
                         pos2D.x * cellScale,
                         cellHeight,
-                        -pos2D.y * cellScale
+                        pos2D.y * cellScale
                     ));
                 }
             }

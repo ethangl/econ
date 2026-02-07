@@ -73,7 +73,7 @@ namespace EconSim.Renderer
                         Vector3 pos = new Vector3(
                             pt.X * cellScale,
                             heightOffset,
-                            -pt.Y * cellScale
+                            pt.Y * cellScale
                         );
                         pathPoints.Add(pos);
                     }
@@ -88,7 +88,7 @@ namespace EconSim.Renderer
                             Vector3 pos = new Vector3(
                                 cell.Center.X * cellScale,
                                 height,
-                                -cell.Center.Y * cellScale
+                                cell.Center.Y * cellScale
                             );
                             pathPoints.Add(pos);
                         }

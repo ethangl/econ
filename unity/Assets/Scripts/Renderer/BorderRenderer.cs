@@ -299,7 +299,7 @@ namespace EconSim.Renderer
 
             // Convert to 3D world coords
             var points = relaxedEdge2D
-                .Select(p => new Vector3(p.x * cellScale, 0f, -p.y * cellScale))
+                .Select(p => new Vector3(p.x * cellScale, 0f, p.y * cellScale))
                 .ToList();
 
             return new BorderEdge

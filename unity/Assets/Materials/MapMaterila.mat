@@ -133,12 +133,12 @@ Material:
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0
+    - _HoverIntensity: 0.0000000021111508
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredStateId: -1
-    - _MapMode: 1
+    - _MapMode: 5
     - _MarketBorderWidth: 1
     - _Metallic: 0
     - _Mode: 0

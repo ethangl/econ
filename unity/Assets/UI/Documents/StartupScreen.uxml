@@ -2,15 +2,9 @@
     <Style src="project://database/Assets/UI/Styles/Main.uss" />
     <ui:VisualElement name="startup-overlay" class="startup-overlay">
         <ui:VisualElement name="startup-modal" class="startup-modal panel">
-            <ui:Label name="startup-title" text="Economic Simulator" class="startup-title" />
-            <ui:Label name="startup-subtitle" text="Choose how to begin" class="startup-subtitle" />
-
             <ui:VisualElement name="startup-buttons" class="startup-buttons">
-                <ui:Button name="load-map-button" text="Load Map" class="startup-button" />
                 <ui:Button name="generate-button" text="Generate New" class="startup-button" />
             </ui:VisualElement>
-
-            <ui:Label name="startup-status" text="" class="startup-status" />
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

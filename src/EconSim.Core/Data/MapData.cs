@@ -6,7 +6,7 @@ namespace EconSim.Core.Data
 {
     /// <summary>
     /// Processed map data ready for simulation and rendering.
-    /// This is the authoritative representation after Azgaar import.
+    /// This is the authoritative representation after MapGen conversion.
     /// </summary>
     [Serializable]
     public class MapData

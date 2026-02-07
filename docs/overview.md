@@ -31,48 +31,9 @@ Geographic systems are harder because:
 
 **But:** We don't need to boil the ocean. A naive heightmap + "water flows downhill" gets us 80% of the way to plausible rivers without modeling precipitation, wind patterns, or erosion.
 
-## Current Azgaar Dependencies
-
-Important distinction:
-
-1. **What Azgaar computes internally** — full simulation pipeline
-2. **What Azgaar exports to JSON** — subset of computed data
-3. **What we import/use** — subset of the export
-
-We only see outputs, not intermediate data. This matters because replacing a system means understanding the full chain, not just visible results.
-
-### What We Import
-
-Via `AzgaarParser` → `MapConverter`:
-
-| Data                                | Used For                           | Bucket     |
-| ----------------------------------- | ---------------------------------- | ---------- |
-| Cell geometry (vertices, neighbors) | Mesh generation, pathfinding       | Geographic |
-| Heightmap                           | Terrain rendering, transport costs | Geographic |
-| Biomes                              | Terrain colors, resource placement | Geographic |
-| Rivers (paths, widths)              | Rendering, transport routes        | Geographic |
-| Climate (temp, precipitation)       | Currently unused directly          | Geographic |
-| States                              | Political mode, borders            | Cultural   |
-| Provinces                           | Political subdivision              | Cultural   |
-| Burgs (settlements)                 | County seating, naming             | Cultural   |
-| Population per cell                 | County grouping, economy           | Cultural   |
-| Names                               | Display only                       | Cultural   |
-
-### What Azgaar Computes (but we don't see)
-
-These intermediate results aren't in the JSON export but are necessary for the outputs we use:
-
-| Hidden Data       | Needed For           | Notes                                |
-| ----------------- | -------------------- | ------------------------------------ |
-| Precipitation map | Rivers, biomes       | Derived from wind patterns + terrain |
-| Temperature map   | Biomes, habitability | From latitude + altitude             |
-| Wind patterns     | Precipitation        | Prevailing winds, rain shadows       |
-| Flow accumulation | River paths          | Water volume per cell                |
-| Soil/fertility    | Population placement | Affects where people settle          |
-
 ## MapData Contract
 
-Any world generator (Azgaar or ours) must produce a `MapData` that satisfies this contract:
+Any world generator must produce a `MapData` that satisfies this contract:
 
 ### Required Data
 
@@ -138,11 +99,11 @@ This is a fixed constant across all maps, enabling tessellated submaps that stit
 
 Since cell size is fixed, map dimensions follow from cell count and aspect ratio:
 
-| Input          | Example    | Notes                           |
-| -------------- | ---------- | ------------------------------- |
-| Cell count     | 20,000     | Controls map complexity/detail  |
-| Aspect ratio   | 16:9       | Controls map shape              |
-| Cell size      | 2.5 km     | Fixed constant (~1.5 mi)        |
+| Input        | Example | Notes                          |
+| ------------ | ------- | ------------------------------ |
+| Cell count   | 20,000  | Controls map complexity/detail |
+| Aspect ratio | 16:9    | Controls map shape             |
+| Cell size    | 2.5 km  | Fixed constant (~1.5 mi)       |
 
 **Derivation:**
 
@@ -156,6 +117,7 @@ mapHeightKm  = mapWidthKm / aspectRatio
 **Example:** 20,000 cells at 16:9 → 125,000 km² total → 471 km × 265 km
 
 This means:
+
 - Changing cell count changes map size, not cell density
 - Templates define shape and land ratio, not cell density
 - All downstream systems (climate sweep, river accumulation, settlement spacing) can rely on consistent cell dimensions
@@ -186,30 +148,11 @@ Rivers wider than ~750m (Mississippi, Amazon) become cell-filling geographic fea
 
 ### Reference Configurations
 
-| Name          | Cell Count | Ratio | Map Size        | Land Area*   | Comparable To |
-| ------------- | ---------- | ----- | --------------- | ------------ | ------------- |
-| Small island  | 5,000      | 16:9  | 236 × 133 km   | ~16,000 km²  | Jamaica       |
-| Large island  | 20,000     | 16:9  | 471 × 265 km   | ~63,000 km²  | Sri Lanka     |
-| England-scale | 40,000     | 16:9  | 667 × 375 km   | ~125,000 km² | England       |
-| Subcontinent  | 100,000    | 3:2   | 968 × 645 km   | ~313,000 km² | Italy         |
+| Name          | Cell Count | Ratio | Map Size     | Land Area\*  | Comparable To |
+| ------------- | ---------- | ----- | ------------ | ------------ | ------------- |
+| Small island  | 5,000      | 16:9  | 236 × 133 km | ~16,000 km²  | Jamaica       |
+| Large island  | 20,000     | 16:9  | 471 × 265 km | ~63,000 km²  | Sri Lanka     |
+| England-scale | 40,000     | 16:9  | 667 × 375 km | ~125,000 km² | England       |
+| Subcontinent  | 100,000    | 3:2   | 968 × 645 km | ~313,000 km² | Italy         |
 
 \* Land area depends on template land ratio (assumes ~50% here)
-
-### Azgaar Reference (for comparison)
-
-Azgaar uses Resolution + Points as independent inputs, so cell density varies with map dimensions. Our approach avoids this by deriving dimensions from cell count.
-
-Original Azgaar settings for England-scale: seed 123, 1920×1080, 60k points, Low Island template → ~21,500 land cells, ~50 provinces, 9 states.
-
-Equivalent in our model: ~40,000 cells at 16:9 → 667 × 375 km total map area, ~50% land → ~130,000 km² land (England).
-
-### Implications
-
-- A "continent" template means more cells, not larger cells
-- CountyGrouper parameters may need adjustment (currently tuned for ~400 km² Azgaar cells)
-- Historic English county (~3,300 km²) contains ~530 cells — good granularity
-
-## Open Questions
-
-- **Performance:** Generation time budget? Real-time editing?
-- **Art style:** Realistic vs. stylized terrain?

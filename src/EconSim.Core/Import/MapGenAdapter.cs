@@ -27,10 +27,8 @@ namespace EconSim.Core.Import
             var rivers = result.Rivers;
             var political = result.Political;
 
-            // MapGen uses Y-up (Y=0 south), but EconSim/renderer expects Azgaar-style
-            // Y-down (Y=0 north). Flip all positions at the import boundary.
-            float mapHeight = mesh.Height;
-
+            // MapGen uses Y-up (Y=0 south), same as Unity's texture convention.
+            // Pass coordinates through directly — no flip needed.
             int cellCount = mesh.CellCount;
 
             // Build cells
@@ -41,7 +39,7 @@ namespace EconSim.Core.Import
                 var cell = new Cell
                 {
                     Id = i,
-                    Center = FlipY(center, mapHeight),
+                    Center = ToECVec2(center),
                     VertexIndices = new List<int>(mesh.CellVertices[i]),
                     NeighborIds = new List<int>(mesh.CellNeighbors[i]),
                     Height = (int)Math.Round(heights.Heights[i]),
@@ -55,10 +53,10 @@ namespace EconSim.Core.Import
                 cells.Add(cell);
             }
 
-            // Vertices (Y-flipped)
+            // Vertices
             var vertices = new List<ECVec2>(mesh.VertexCount);
             for (int v = 0; v < mesh.VertexCount; v++)
-                vertices.Add(FlipY(mesh.Vertices[v], mapHeight));
+                vertices.Add(ToECVec2(mesh.Vertices[v]));
 
             // CoastDistance via BFS from coastline
             ComputeCoastDistance(cells, heights);
@@ -67,7 +65,7 @@ namespace EconSim.Core.Import
             var features = BuildFeatures(cells, biomes, mesh);
 
             // Rivers: convert vertex paths to point lists for rendering
-            var riverList = ConvertRivers(rivers, mesh, mapHeight);
+            var riverList = ConvertRivers(rivers, mesh);
 
             // Burgs: county seats become burgs
             var burgs = BuildBurgs(cells, political);
@@ -120,7 +118,6 @@ namespace EconSim.Core.Import
         }
 
         static ECVec2 ToECVec2(MGVec2 v) => new ECVec2(v.X, v.Y);
-        static ECVec2 FlipY(MGVec2 v, float mapHeight) => new ECVec2(v.X, mapHeight - v.Y);
 
         #region CoastDistance
 
@@ -256,7 +253,7 @@ namespace EconSim.Core.Import
 
         #region Rivers
 
-        static List<ECRiver> ConvertRivers(RiverData riverData, CellMesh mesh, float mapHeight)
+        static List<ECRiver> ConvertRivers(RiverData riverData, CellMesh mesh)
         {
             var rivers = new List<ECRiver>();
 
@@ -271,7 +268,7 @@ namespace EconSim.Core.Import
                 {
                     int vertIdx = mgRiver.Vertices[vi];
                     if (vertIdx < 0 || vertIdx >= mesh.VertexCount) continue;
-                    points.Add(FlipY(mesh.Vertices[vertIdx], mapHeight));
+                    points.Add(ToECVec2(mesh.Vertices[vertIdx]));
                 }
 
                 if (points.Count < 2) continue;

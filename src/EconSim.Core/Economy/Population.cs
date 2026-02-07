@@ -148,7 +148,7 @@ namespace EconSim.Core.Economy
         }
 
         /// <summary>
-        /// Initialize from a raw population count (from Azgaar import).
+        /// Initialize from a raw population count.
         /// Uses reasonable defaults for age/skill distribution.
         /// </summary>
         public static CountyPopulation FromTotal(float totalPopulation)

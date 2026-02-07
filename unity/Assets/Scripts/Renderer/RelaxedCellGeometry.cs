@@ -144,9 +144,9 @@ namespace EconSim.Renderer
             if (p1.x < threshold && p2.x < threshold) return true;
             // Right edge
             if (p1.x > width - threshold && p2.x > width - threshold) return true;
-            // Top edge (Azgaar Y=0 at top)
+            // Bottom edge (Y=0 at south)
             if (p1.y < threshold && p2.y < threshold) return true;
-            // Bottom edge
+            // Top edge (Y=height at north)
             if (p1.y > height - threshold && p2.y > height - threshold) return true;
 
             return false;

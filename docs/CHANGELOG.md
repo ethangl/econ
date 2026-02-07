@@ -2,6 +2,75 @@
 
 Development phases and completed work for the Economic Simulator project.
 
+## Phase 12: Procedural Map Generation Pipeline ✓
+
+Replaced Azgaar JSON import with a fully custom, engine-agnostic map generation library (`src/MapGen/`). Maps are now generated from scratch — no external data files required.
+
+- **Standalone MapGen library** (`src/MapGen/`)
+  - ~7,500 lines of C#, zero Unity dependencies (`noEngineReferences: true`)
+  - Symlinked into Unity project for seamless editor integration
+  - Fully deterministic: same seed + config → identical map every time
+  - Headless orchestrator (`MapGenPipeline.cs`) runs 6-stage pipeline in one call
+
+- **Stage 1: Voronoi mesh generation**
+  - Jittered grid point placement for ~10,000 cells (configurable)
+  - Delaunay triangulation → dual Voronoi diagram
+  - Cell/vertex/edge connectivity with neighbor graphs and boundary detection
+
+- **Stage 2: Heightmap sculpting via DSL**
+  - Domain-specific language with operations: Hill, Ridge, Smooth, Pit, Trough, Multiply, Mask
+  - 14 terrain templates: Volcano, LowIsland, Archipelago, Continents, Pangea, HighIsland, Atoll, Peninsula, Mediterranean, Isthmus, Shattered, Taklamakan, OldWorld, Fractious
+  - BFS blob growth matching Azgaar's integer-precision behavior
+  - Heights 0-100 with water threshold at 20
+
+- **Stage 3: Climate simulation**
+  - Temperature: latitude-based with tropical plateau, cosine polar falloff, altitude lapse rate
+  - Precipitation: wind-sweep moisture propagation across neighbor graph
+    - Multiple wind bands weighted by latitude overlap
+    - Orographic lift/rain shadow, coastal bonus, permafrost damping
+    - 4th-root normalization (exponent 0.225) for realistic distribution
+
+- **Stage 4: River extraction**
+  - Vertex-level height/precipitation interpolation
+  - Priority flood depression filling (handles sinks and plateaus)
+  - Steepest-descent flow accumulation on Voronoi vertices
+  - River polylines extracted for edges exceeding flux threshold
+
+- **Stage 5: Biomes, suitability & resources**
+  - 17-step biome pipeline: lakes, slope, soil, fertility, 16 biome categories
+  - Rock types (granite, basalt, sandstone, limestone, shale) via deterministic noise
+  - Geological resources: iron, gold, lead deposits; salt near coasts
+  - Suitability scoring with geographic bonuses (coastal, estuary, confluence, harbor, defensibility)
+  - Population derived from suitability × cell area
+
+- **Stage 6: Political hierarchy**
+  - Landmass detection (flood-fill, filters noise islands)
+  - Capital placement via suitability-weighted Voronoi with spacing constraints
+  - State growth from capitals (~200k pop target), merge small realms
+  - Province subdivision (~40k pop target) within state boundaries
+  - County grouping: cities (pop ≥ 20k) as single-cell; flood-fill rural clusters (~5k pop, max 64 cells)
+
+- **MapGenAdapter** (`src/EconSim.Core/Import/MapGenAdapter.cs`)
+  - Converts `MapGenResult` → `MapData` for the EconSim engine
+  - Computes coast distance (BFS), water features (flood-fill), river cell paths
+  - Builds full political hierarchy: states, provinces, counties with burgs
+
+- **Removed legacy import pipeline**
+  - Deleted `AzgaarParser`, `AzgaarData`, `MapConverter`, `CountyGrouper`, `MapDataCache`
+  - Deleted JSON loading infrastructure (~1,700 lines removed)
+  - No external map files needed — startup screen "Generate New" button works end-to-end
+
+- **Prototype Unity project** (`unity-mapgen/`)
+  - Standalone test project for iterating on MapGen stages
+  - Editor inspectors for each pipeline stage (heightmap, climate, biomes, politics)
+  - Cell mesh visualizer with per-stage gizmo overlays
+
+- **Biome/resource documentation** (`docs/biomes/`)
+  - Pipeline overview, soil classification, biome definitions
+  - Vegetation, fauna, movement cost, and resource extraction specs
+
+---
+
 ## Phase 11: Relaxed Border System ✓
 
 - **Relaxed cell geometry** (`RelaxedCellGeometry.cs`)

@@ -67,7 +67,7 @@ namespace EconSim.Renderer
         private Texture2D biomePaletteTexture;  // 256x1: biome colors
         private Texture2D biomeElevationMatrix; // 64x64: biome × elevation colors
 
-        // Spatial lookup grid: maps Azgaar pixel coordinates to cell IDs
+        // Spatial lookup grid: maps data pixel coordinates to cell IDs
         private int[] spatialGrid;
         private int gridWidth;
         private int gridHeight;
@@ -157,7 +157,7 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
-        /// Build spatial lookup grid mapping Azgaar coordinates to cell IDs.
+        /// Build spatial lookup grid mapping data coordinates to cell IDs.
         /// Uses cell centers to determine ownership of each grid position.
         /// Applies domain warping for organic, meandering borders.
         /// </summary>
@@ -442,18 +442,17 @@ namespace EconSim.Renderer
         /// </summary>
         private void GenerateHeightmapTexture()
         {
-            // 1. Sample raw heights from spatial grid and flip Y in one pass (parallelized)
-            float[] flipped = new float[gridWidth * gridHeight];
+            // Sample raw heights from spatial grid (Y-up matches texture row order, no flip needed)
+            float[] heightData = new float[gridWidth * gridHeight];
 
             Parallel.For(0, gridHeight, y =>
             {
-                int srcRow = (gridHeight - 1 - y) * gridWidth;
-                int dstRow = y * gridWidth;
+                int row = y * gridWidth;
 
                 for (int x = 0; x < gridWidth; x++)
                 {
-                    int srcIdx = srcRow + x;
-                    int cellId = spatialGrid[srcIdx];
+                    int idx = row + x;
+                    int cellId = spatialGrid[idx];
 
                     float height = 0f;
                     if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
@@ -462,16 +461,16 @@ namespace EconSim.Renderer
                         height = cell.Height / 100f;
                     }
 
-                    flipped[dstRow + x] = height;
+                    heightData[idx] = height;
                 }
             });
 
-            // 2. Create texture
+            // Create texture
             heightmapTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RFloat, false);
             heightmapTexture.name = "HeightmapTexture";
             heightmapTexture.filterMode = FilterMode.Bilinear;
             heightmapTexture.wrapMode = TextureWrapMode.Clamp;
-            heightmapTexture.SetPixelData(flipped, 0);
+            heightmapTexture.SetPixelData(heightData, 0);
             heightmapTexture.Apply();
 
             Debug.Log($"MapOverlayManager: Generated heightmap {gridWidth}x{gridHeight}");
@@ -521,9 +520,9 @@ namespace EconSim.Renderer
                 {
                     foreach (var pt in river.Points)
                     {
-                        // Points are already Y-flipped by adapter, flip again for texture coords
+                        // Y-up data coords match texture row order directly
                         float x = pt.X * scale;
-                        float y = (baseHeight - pt.Y) * scale;
+                        float y = pt.Y * scale;
                         pathPoints.Add(new Vector2(x, y));
                     }
                 }
@@ -534,7 +533,7 @@ namespace EconSim.Renderer
                         if (mapData.CellById.TryGetValue(cellId, out var cell))
                         {
                             float x = cell.Center.X * scale;
-                            float y = (baseHeight - cell.Center.Y) * scale;
+                            float y = cell.Center.Y * scale;
                             pathPoints.Add(new Vector2(x, y));
                         }
                     }
