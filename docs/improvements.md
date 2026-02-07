@@ -56,7 +56,7 @@ No modeling of:
 
 Everything is generated as a static snapshot. There's no simulation of:
 
-- How states formed and expanded over time
+- How realms formed and expanded over time
 - Historical borders that influence current culture
 - Ruins of previous civilizations
 - Established trade routes predating current political boundaries

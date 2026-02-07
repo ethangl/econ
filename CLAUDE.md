@@ -33,19 +33,19 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 ## Quick Reference
 
-| What           | Where                     |
-| -------------- | ------------------------- |
-| Design doc     | `docs/DESIGN.md`          |
-| Changelog      | `docs/CHANGELOG.md`       |
-| Core library   | `src/EconSim.Core/`       |
-| Unity frontend | `unity/Assets/Scripts/`   |
+| What           | Where                   |
+| -------------- | ----------------------- |
+| Design doc     | `docs/DESIGN.md`        |
+| Changelog      | `docs/CHANGELOG.md`     |
+| Core library   | `src/EconSim.Core/`     |
+| Unity frontend | `unity/Assets/Scripts/` |
 
 ### Key Classes
 
 **EconSim.Core** (engine-independent):
 
 - `MapGenAdapter` - Converts `MapGenResult` → `MapData`
-- `MapData`, `Cell`, `County`, `Province`, `State` - Core data structures
+- `MapData`, `Cell`, `County`, `Province`, `Realm` - Core data structures
 - `ISimulation`, `SimulationRunner` - Tick loop interface/implementation
 - `ITickSystem` - Interface for simulation subsystems
 - `EconomyState` - Global economy (registries, counties, facilities)
@@ -65,7 +65,7 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 - `MapView` - Generates grid mesh (default) or Voronoi mesh, map modes (1=political cycle, 2=terrain with elevation tinting, 3=market), click-to-select
 - `RelaxedCellGeometry` - Generates organic curved cell boundaries using Catmull-Rom splines
 - `NoiseUtils` - Deterministic hash utilities for procedural generation
-- `BorderRenderer` - Province/county borders as curved polyline meshes (state borders via shader)
+- `BorderRenderer` - Province/county borders as curved polyline meshes (realm borders via shader)
 - `MapOverlayManager` - Generates data textures, palettes, and biome-elevation matrix for shader overlays
 - `RiverRenderer` - River line strips (blue, tapered)
 - `RoadRenderer` - Emergent road segments (brown)
@@ -73,7 +73,7 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 - `MapCamera` - WASD + drag + zoom
 - `CoreExtensions` - Bridge (Vec2↔Vector2, etc.)
 - `TimeControlPanel` - UI Toolkit: day display, pause/play, speed controls
-- `SelectionPanel` - UI Toolkit: mode-aware political inspector (country/province/county)
+- `SelectionPanel` - UI Toolkit: mode-aware political inspector (realm/province/county)
 - `MarketInspectorPanel` - UI Toolkit: market inspection (hub, zone, goods table)
 - `EconomyPanel` - UI Toolkit: global economy (E key, tabbed: overview/production/trade)
 
@@ -94,19 +94,19 @@ The map uses a GPU-driven overlay system for borders and map modes:
 
 - `Assets/Shaders/MapOverlay.shader` - GPU border detection, color derivation
 - `Assets/Scripts/Renderer/MapOverlayManager.cs` - Data texture generation
-- `EconSim.Core/Rendering/PoliticalPalette.cs` - State color generation
+- `EconSim.Core/Rendering/PoliticalPalette.cs` - Realm color generation
 
 **Data texture format (RGBAFloat):**
 
-- R: StateId / 65535
+- R: RealmId / 65535
 - G: ProvinceId / 65535
 - B: (BiomeId + WaterFlag) / 65535 — water flag adds 32768 if cell is water
 - A: CountyId / 65535 — enables per-county coloring in county mode (32-bit float for precision)
 
 **Palette textures:**
 
-- State palette (256x1): colors from PoliticalPalette (even hue distribution)
-- Market palette (256x1): derived from hub state colors
+- Realm palette (256x1): colors from PoliticalPalette (even hue distribution)
+- Market palette (256x1): derived from hub realm colors
 - Biome palette (256x1): colors from Azgaar data (unused, kept for reference)
 - Biome-elevation matrix (64x64): biome colors with elevation-based shading
 - River mask (gridWidth×gridHeight, R8): rasterized river paths for water knockout
@@ -122,10 +122,10 @@ The map uses a GPU-driven overlay system for borders and map modes:
 
 **Color derivation (shader-based cascade):**
 
-- Political mode: state color from palette
-- Province mode: derived from state color + hash(provinceId) HSV variance (±0.07 S/V)
+- Political mode: realm color from palette
+- Province mode: derived from realm color + hash(provinceId) HSV variance (±0.07 S/V)
 - County mode: derived from province color + hash(countyId) HSV variance (±0.07 S/V)
-- State HSV: S base 0.52 [0.38, 0.68], V base 0.70 [0.58, 0.85]
+- Realm HSV: S base 0.52 [0.38, 0.68], V base 0.70 [0.58, 0.85]
 - Derived HSV clamp: S [0.15, 0.95], V [0.25, 0.95] (allows ± variance around parent)
 
 **Market zone mapping:**
@@ -134,14 +134,14 @@ The map uses a GPU-driven overlay system for borders and map modes:
 - Maps CellId → MarketId via CountyToMarket lookup
 - Updated when economy state changes
 
-**State border rendering (shader-based double borders):**
+**Realm border rendering (shader-based double borders):**
 
-- `CalculateStateBorderProximity()` detects only state-to-state boundaries (ignores water/rivers)
-- World-space sizing: `_StateBorderWidth` in texels of data texture (default 24)
-- Border band drawn when `stateBorderProximity < 0.5`
-- Border color: state color at 65% V (floor 35%), multiplied with grayscale terrain
-- `_StateBorderOpacity` controls blend with interior color
-- Each country gets its own colored border band → parallel double-line effect at boundaries
+- `CalculateRealmBorderProximity()` detects only realm-to-realm boundaries (ignores water/rivers)
+- World-space sizing: `_RealmBorderWidth` in texels of data texture (default 24)
+- Border band drawn when `realmBorderProximity < 0.5`
+- Border color: realm color at 65% V (floor 35%), multiplied with grayscale terrain
+- `_RealmBorderOpacity` controls blend with interior color
+- Each realm gets its own colored border band → parallel double-line effect at boundaries
 
 **Province/county border rendering (mesh-based with relaxed geometry):**
 
@@ -153,9 +153,9 @@ The map uses a GPU-driven overlay system for borders and map modes:
 - `BorderRenderer.cs` generates polyline meshes from relaxed edges
   - Multi-point edges chained into continuous curved polylines
   - Province/county borders use shared relaxed edge positions
-  - Colors derived from `PoliticalPalette` (darkened, saturated state colors)
+  - Colors derived from `PoliticalPalette` (darkened, saturated realm colors)
 - `SimpleBorder.shader` renders vertex-colored border meshes
-- Border layer order (bottom to top): county → province → state
+- Border layer order (bottom to top): county → province → realm
 
 **Relaxed geometry rasterization (texture boundaries):**
 
@@ -193,7 +193,7 @@ Shader uniforms for gradient control:
 
 Shader renders terrain with gradient fill; borders are separate mesh layer on top.
 
-**Selection highlight:** Mode-aware GPU selection using 16-sample multi-radius AA. Selects state in political mode, province in province mode, market zone in market mode, county otherwise. Uniforms: `_SelectedStateId`, `_SelectedProvinceId`, `_SelectedMarketId`, `_SelectedCountyId` (normalized, -1 = none).
+**Selection highlight:** Mode-aware GPU selection using 16-sample multi-radius AA. Selects realm in political mode, province in province mode, market zone in market mode, county otherwise. Uniforms: `_SelectedRealmId`, `_SelectedProvinceId`, `_SelectedMarketId`, `_SelectedCountyId` (normalized, -1 = none).
 
 **Future overlays supported by this infrastructure:**
 
@@ -223,7 +223,7 @@ Cells and counties have an N:1 relationship — multiple cells form a single cou
 **Data model:**
 
 - `Cell.CountyId` - which county a cell belongs to
-- `County` - id, name, seat cell, cell list, province/state, total population, centroid
+- `County` - id, name, seat cell, cell list, province/realm, total population, centroid
 - `MapData.Counties` / `MapData.CountyById` - county registry
 
 **Economic integration:**

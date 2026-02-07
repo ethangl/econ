@@ -53,7 +53,7 @@ Replaced Azgaar JSON import with a fully custom, engine-agnostic map generation 
 - **MapGenAdapter** (`src/EconSim.Core/Import/MapGenAdapter.cs`)
   - Converts `MapGenResult` → `MapData` for the EconSim engine
   - Computes coast distance (BFS), water features (flood-fill), river cell paths
-  - Builds full political hierarchy: states, provinces, counties with burgs
+  - Builds full political hierarchy: realms, provinces, counties with burgs
 
 - **Removed legacy import pipeline**
   - Deleted `AzgaarParser`, `AzgaarData`, `MapConverter`, `CountyGrouper`, `MapDataCache`
@@ -124,14 +124,14 @@ Replaced Azgaar JSON import with a fully custom, engine-agnostic map generation 
 - **Border rendering overhaul** (Phase 10b)
   - Province/county borders: mesh-based polyline rendering
     - `BorderRenderer.cs`: chains Voronoi edges into polylines
-    - Per-state coloring derived from `PoliticalPalette` (darkened, saturated)
+    - Per-realm coloring derived from `PoliticalPalette` (darkened, saturated)
     - `SimpleBorder.shader`: vertex color rendering for border meshes
   - State borders: shader-based double border effect
     - `CalculateStateBorderProximity()` detects only state-to-state boundaries (ignores water/rivers)
     - World-space sizing via `_StateBorderWidth` (texels of data texture, default 24)
-    - Border color: state color at 65% V (floor 35%), multiplied with terrain
+    - Border color: realm color at 65% V (floor 35%), multiplied with terrain
     - `_StateBorderOpacity` slider for blend control
-    - Each country's border band in its own hue → parallel double-line effect at boundaries
+    - Each realm's border band in its own hue → parallel double-line effect at boundaries
 
 ---
 
@@ -239,8 +239,8 @@ Replaced Azgaar JSON import with a fully custom, engine-agnostic map generation 
 ## Phase 7: Rendering Refinement ✓
 
 - **Political color generation**
-  - State colors: even hue distribution across spectrum, hash-based S/V variance
-  - Province colors: derived in shader from state color + hash(provinceId) variance
+  - Realm colors: even hue distribution across spectrum, hash-based S/V variance
+  - Province colors: derived in shader from realm color + hash(provinceId) variance
   - County colors: derived in shader from province color + hash(cellId) variance
   - HSV clamping: S [0.25, 0.60], V [0.45, 0.80] to avoid conflict with UI/borders
   - Unowned cells: neutral grey (0.5, 0.5, 0.5)
@@ -358,15 +358,15 @@ Replaced Azgaar JSON import with a fully custom, engine-agnostic map generation 
 - **UI improvements**
   - Click-through prevention: UI panels block clicks to map
   - County map mode: cells colored by province hue with S/V variation
-  - Political mode cycling: 1 key cycles Country → Province → County
+  - Political mode cycling: 1 key cycles Realm → Province → County
   - Hotkeys: 1=political modes, 2=terrain, 3=height, 4=market
-  - Mode-aware selection panel (country/province/county inspector)
+  - Mode-aware selection panel (realm/province/county inspector)
 
 ---
 
 ## Phase 5: Multiple Markets & Black Market ✓
 
-- Multiple markets (3 markets in different states, nearest-market assignment, distinct zone colors)
+- Multiple markets (3 markets in different realms, nearest-market assignment, distinct zone colors)
 - Black market (theft feeds underground economy, price-based market selection)
 
 ---
@@ -384,7 +384,7 @@ Replaced Azgaar JSON import with a fully custom, engine-agnostic map generation 
 
 ## Phase 3: Markets & Trade ✓
 
-- Market placement (3 markets in different states)
+- Market placement (3 markets in different realms)
 - Transport cost pathfinding
 - Trade flow simulation
 - Price discovery

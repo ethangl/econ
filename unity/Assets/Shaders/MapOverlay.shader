@@ -11,14 +11,14 @@ Shader "EconSim/MapOverlay"
         // River mask (Phase 8) - knocks out rivers from land, showing water underneath
         _RiverMaskTex ("River Mask", 2D) = "black" {}
 
-        // Data texture: R=StateId, G=ProvinceId, B=BiomeId+WaterFlag, A=CountyId (normalized to 0-1)
+        // Data texture: R=RealmId, G=ProvinceId, B=BiomeId+WaterFlag, A=CountyId (normalized to 0-1)
         _CellDataTex ("Cell Data", 2D) = "black" {}
 
         // Cell to market mapping (dynamic, updated when economy changes)
         _CellToMarketTex ("Cell To Market", 2D) = "black" {}
 
         // Color palettes (256 entries each)
-        _StatePaletteTex ("State Palette", 2D) = "white" {}
+        _RealmPaletteTex ("Realm Palette", 2D) = "white" {}
         _MarketPaletteTex ("Market Palette", 2D) = "white" {}
         _BiomePaletteTex ("Biome Palette", 2D) = "white" {}
 
@@ -26,7 +26,7 @@ Shader "EconSim/MapOverlay"
         _BiomeMatrixTex ("Biome Elevation Matrix", 2D) = "white" {}
 
         // Selection highlight (only one should be >= 0 at a time)
-        _SelectedStateId ("Selected State ID (normalized)", Float) = -1
+        _SelectedRealmId ("Selected Realm ID (normalized)", Float) = -1
         _SelectedProvinceId ("Selected Province ID (normalized)", Float) = -1
         _SelectedCountyId ("Selected County ID (normalized)", Float) = -1
         _SelectedMarketId ("Selected Market ID (normalized)", Float) = -1
@@ -36,7 +36,7 @@ Shader "EconSim/MapOverlay"
         _SelectionDesaturation ("Selection Desaturation", Range(0, 1)) = 0
 
         // Hover highlight (only one should be >= 0 at a time, separate from selection)
-        _HoveredStateId ("Hovered State ID (normalized)", Float) = -1
+        _HoveredRealmId ("Hovered Realm ID (normalized)", Float) = -1
         _HoveredProvinceId ("Hovered Province ID (normalized)", Float) = -1
         _HoveredCountyId ("Hovered County ID (normalized)", Float) = -1
         _HoveredMarketId ("Hovered Market ID (normalized)", Float) = -1
@@ -50,9 +50,9 @@ Shader "EconSim/MapOverlay"
         _GradientEdgeDarkening ("Gradient Edge Darkening", Range(0, 1)) = 0.5
         _GradientCenterOpacity ("Gradient Center Opacity", Range(0, 1)) = 0.5
 
-        // State border (world-space, in texels of data texture)
-        _StateBorderWidth ("State Border Width (texels)", Range(10, 200)) = 80
-        _StateBorderOpacity ("State Border Opacity", Range(0, 1)) = 1.0
+        // Realm border (world-space, in texels of data texture)
+        _RealmBorderWidth ("Realm Border Width (texels)", Range(10, 200)) = 80
+        _RealmBorderOpacity ("Realm Border Opacity", Range(0, 1)) = 1.0
     }
     SubShader
     {
@@ -95,7 +95,7 @@ Shader "EconSim/MapOverlay"
 
             sampler2D _CellToMarketTex;  // 16384x1 texture mapping cellId -> marketId
 
-            sampler2D _StatePaletteTex;
+            sampler2D _RealmPaletteTex;
             sampler2D _MarketPaletteTex;
             sampler2D _BiomePaletteTex;
             sampler2D _BiomeMatrixTex;
@@ -107,10 +107,10 @@ Shader "EconSim/MapOverlay"
             float _GradientRadius;
             float _GradientEdgeDarkening;
             float _GradientCenterOpacity;
-            float _StateBorderWidth;
-            float _StateBorderOpacity;
+            float _RealmBorderWidth;
+            float _RealmBorderOpacity;
 
-            float _SelectedStateId;
+            float _SelectedRealmId;
             float _SelectedProvinceId;
             float _SelectedCountyId;
             float _SelectedMarketId;
@@ -119,7 +119,7 @@ Shader "EconSim/MapOverlay"
             float _SelectionDimming;
             float _SelectionDesaturation;
 
-            float _HoveredStateId;
+            float _HoveredRealmId;
             float _HoveredProvinceId;
             float _HoveredCountyId;
             float _HoveredMarketId;
@@ -229,10 +229,10 @@ Shader "EconSim/MapOverlay"
                 return fixed3(luma, luma, luma);
             }
 
-            // Derive province color from state color with HSV variance
-            fixed3 DeriveProvinceColor(fixed3 stateColor, float provinceId)
+            // Derive province color from realm color with HSV variance
+            fixed3 DeriveProvinceColor(fixed3 realmColor, float provinceId)
             {
-                float3 hsv = rgb2hsv(stateColor);
+                float3 hsv = rgb2hsv(realmColor);
 
                 // Apply deterministic variance based on province ID (±relative to parent)
                 // Use large prime offsets to decorrelate H, S, V
@@ -267,7 +267,7 @@ Shader "EconSim/MapOverlay"
 
             // Calculate edge proximity for political gradient effect
             // Returns 0 at edges (near different region, water, or river), 1 deep in interior
-            // channel: 0=state (R), 1=province (G), 2=county (A)
+            // channel: 0=realm (R), 1=province (G), 2=county (A)
             float CalculateEdgeProximity(float2 uv, float centerValue, bool centerIsWater, int channel, float maxRadius, float uvPerPixel)
             {
                 // Water has no gradient
@@ -313,7 +313,7 @@ Shader "EconSim/MapOverlay"
                         }
 
                         float sampleValue;
-                        if (channel == 0) sampleValue = sampleData.r;       // State
+                        if (channel == 0) sampleValue = sampleData.r;       // Realm
                         else if (channel == 1) sampleValue = sampleData.g;  // Province
                         else sampleValue = sampleData.a;                    // County
 
@@ -330,10 +330,10 @@ Shader "EconSim/MapOverlay"
                 return saturate(minEdgeDistance / (maxRadius * 0.5));
             }
 
-            // Calculate proximity to state borders ONLY (ignores water/rivers)
-            // Returns 0 at state boundaries, 1 deep in interior
+            // Calculate proximity to realm borders ONLY (ignores water/rivers)
+            // Returns 0 at realm boundaries, 1 deep in interior
             // Uses world-space (UV) sampling, not screen-space
-            float CalculateStateBorderProximity(float2 uv, float centerStateId, bool centerIsWater, float borderWidthUV)
+            float CalculateRealmBorderProximity(float2 uv, float centerRealmId, bool centerIsWater, float borderWidthUV)
             {
                 // Water has no border
                 if (centerIsWater) return 1;
@@ -365,9 +365,9 @@ Shader "EconSim/MapOverlay"
                         bool sampleIsWater = samplePackedBiome >= 32000.0;
                         if (sampleIsWater) continue;
 
-                        // Only check state ID difference
-                        float sampleStateId = sampleData.r;
-                        if (abs(centerStateId - sampleStateId) > 0.00001)
+                        // Only check realm ID difference
+                        float sampleRealmId = sampleData.r;
+                        if (abs(centerRealmId - sampleRealmId) > 0.00001)
                         {
                             minEdgeDistance = min(minEdgeDistance, radius);
                         }
@@ -385,9 +385,9 @@ Shader "EconSim/MapOverlay"
                 return tex2D(_CellToMarketTex, float2(marketU, 0.5)).r;
             }
 
-            // Calculate edge proximity for political modes (state boundaries, water, rivers)
+            // Calculate edge proximity for political modes (realm boundaries, water, rivers)
             // Returns 0 at edges, 1 deep in interior
-            float CalculatePoliticalEdgeProximity(float2 uv, float centerStateId, bool centerIsWater, float maxRadius, float uvPerPixel)
+            float CalculatePoliticalEdgeProximity(float2 uv, float centerRealmId, bool centerIsWater, float maxRadius, float uvPerPixel)
             {
                 if (centerIsWater) return 1;
 
@@ -423,8 +423,8 @@ Shader "EconSim/MapOverlay"
                             continue;
                         }
 
-                        float sampleStateId = sampleData.r;
-                        if (abs(centerStateId - sampleStateId) > 0.00001)
+                        float sampleRealmId = sampleData.r;
+                        if (abs(centerRealmId - sampleRealmId) > 0.00001)
                         {
                             minEdgeDistance = min(minEdgeDistance, radius);
                         }
@@ -494,8 +494,8 @@ Shader "EconSim/MapOverlay"
                 return saturate(minEdgeDistance / (maxRadius * 0.5));
             }
 
-            // Calculate anti-aliased selection border for state/province/county
-            // channel: 0=state (R), 1=province (G), 2=county (A)
+            // Calculate anti-aliased selection border for realm/province/county
+            // channel: 0=realm (R), 1=province (G), 2=county (A)
             // Returns border coverage (0-1) for the current pixel
             // Only draws borders between land cells - skips water cells entirely
             float CalculateSelectionBorderAA(float2 uv, float centerValue, float selectedId, bool centerIsWater, int channel, float borderWidth, float uvPerPixel)
@@ -540,7 +540,7 @@ Shader "EconSim/MapOverlay"
                         }
 
                         float sampleValue;
-                        if (channel == 0) sampleValue = sampleData.r;       // State
+                        if (channel == 0) sampleValue = sampleData.r;       // Realm
                         else if (channel == 1) sampleValue = sampleData.g;  // Province
                         else sampleValue = sampleData.a;                    // County
 
@@ -620,7 +620,7 @@ Shader "EconSim/MapOverlay"
 
             // Calculate hover outline coverage with proper anti-aliasing
             // Samples at multiple radii and counts hits for smooth coverage
-            // channel: 0=state (R), 1=province (G), 2=county (A)
+            // channel: 0=realm (R), 1=province (G), 2=county (A)
             // NOTE: Outline CAN be drawn on water pixels if they're near a hovered land region
             float CalculateHoverOutlineAA(float2 uv, float centerValue, float hoveredId, bool centerIsWater, int channel, float offset, float width, float uvPerPixel)
             {
@@ -739,7 +739,7 @@ Shader "EconSim/MapOverlay"
 
                 // Sample center cell data
                 float4 centerData = SampleCellData(uv);
-                float stateId = centerData.r;
+                float realmId = centerData.r;
                 float provinceId = centerData.g;
                 float countyId = centerData.a;
 
@@ -847,10 +847,10 @@ Shader "EconSim/MapOverlay"
                     fixed3 grayTerrain = fixed3(landHeight, landHeight, landHeight);
 
                     // Get political color
-                    fixed3 politicalColor = LookupPaletteColor(_StatePaletteTex, stateId);
+                    fixed3 politicalColor = LookupPaletteColor(_RealmPaletteTex, realmId);
 
-                    // Calculate edge proximity for gradient (state boundaries, water, rivers)
-                    float edgeProximity = CalculatePoliticalEdgeProximity(uv, stateId, isWater, _GradientRadius, uvPerPixel);
+                    // Calculate edge proximity for gradient (realm boundaries, water, rivers)
+                    float edgeProximity = CalculatePoliticalEdgeProximity(uv, realmId, isWater, _GradientRadius, uvPerPixel);
 
                     // Multiply blend: terrain * political color (like Photoshop multiply layer)
                     fixed3 multiplied = grayTerrain * politicalColor;
@@ -864,16 +864,16 @@ Shader "EconSim/MapOverlay"
                     // Gradient from edge (multiplied/dark) to center (political/light)
                     baseColor = lerp(edgeColor, centerColor, edgeProximity);
 
-                    // State border band overlay
-                    float borderWidthUV = _StateBorderWidth * _CellDataTex_TexelSize.x;
-                    float stateBorderProximity = CalculateStateBorderProximity(uv, stateId, isWater, borderWidthUV);
-                    if (stateBorderProximity < 0.5)
+                    // Realm border band overlay
+                    float borderWidthUV = _RealmBorderWidth * _CellDataTex_TexelSize.x;
+                    float realmBorderProximity = CalculateRealmBorderProximity(uv, realmId, isWater, borderWidthUV);
+                    if (realmBorderProximity < 0.5)
                     {
                         float3 hsv = rgb2hsv(politicalColor);
                         hsv.z = max(hsv.z * 0.65, 0.35);
                         fixed3 borderTint = hsv2rgb(hsv);
                         fixed3 borderColor = grayTerrain * borderTint;
-                        baseColor = lerp(baseColor, borderColor, _StateBorderOpacity);
+                        baseColor = lerp(baseColor, borderColor, _RealmBorderOpacity);
                     }
                 }
                 else if (_MapMode == 4)
@@ -913,13 +913,13 @@ Shader "EconSim/MapOverlay"
                     baseColor = fixed3(0.5, 0.5, 0.5);
                 }
 
-                // Selection highlight (check state, province, market, cell in priority order)
+                // Selection highlight (check realm, province, market, cell in priority order)
                 float selectionBorderAA = 0;
                 bool isInSelection = false;
-                if (_SelectedStateId >= 0)
+                if (_SelectedRealmId >= 0)
                 {
-                    selectionBorderAA = CalculateSelectionBorderAA(uv, stateId, _SelectedStateId, isWater, 0, _SelectionBorderWidth, uvPerPixel);
-                    isInSelection = !isWater && IsInSelectedRegion(stateId, _SelectedStateId);
+                    selectionBorderAA = CalculateSelectionBorderAA(uv, realmId, _SelectedRealmId, isWater, 0, _SelectionBorderWidth, uvPerPixel);
+                    isInSelection = !isWater && IsInSelectedRegion(realmId, _SelectedRealmId);
                 }
                 else if (_SelectedProvinceId >= 0)
                 {
@@ -942,7 +942,7 @@ Shader "EconSim/MapOverlay"
 
                 // Hover effect - animated saturation boost
                 bool isHovered = (!isWater) && (
-                    (_HoveredStateId >= 0 && abs(stateId - _HoveredStateId) < 0.00001) ||
+                    (_HoveredRealmId >= 0 && abs(realmId - _HoveredRealmId) < 0.00001) ||
                     (_HoveredProvinceId >= 0 && abs(provinceId - _HoveredProvinceId) < 0.00001) ||
                     (_HoveredCountyId >= 0 && abs(countyId - _HoveredCountyId) < 0.00001) ||
                     (_HoveredMarketId >= 0 && abs(marketId - _HoveredMarketId) < 0.00001));
@@ -955,7 +955,7 @@ Shader "EconSim/MapOverlay"
                 }
 
                 // Selection dimming - darken and desaturate everything EXCEPT the selected zone
-                bool hasSelection = _SelectedStateId >= 0 || _SelectedProvinceId >= 0 || _SelectedMarketId >= 0 || _SelectedCountyId >= 0;
+                bool hasSelection = _SelectedRealmId >= 0 || _SelectedProvinceId >= 0 || _SelectedMarketId >= 0 || _SelectedCountyId >= 0;
                 if (hasSelection && !isInSelection && !isWater)
                 {
                     // Desaturate then darken non-selected land areas (both animated)

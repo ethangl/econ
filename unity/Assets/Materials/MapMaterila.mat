@@ -107,11 +107,11 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
-    - _StateColorTex:
+    - _RealmColorTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
-    - _StatePaletteTex:
+    - _RealmPaletteTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -137,7 +137,7 @@ Material:
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
-    - _HoveredStateId: -1
+    - _HoveredRealmId: -1
     - _MapMode: 5
     - _MarketBorderWidth: 1
     - _Metallic: 0
@@ -154,7 +154,7 @@ Material:
     - _SelectedCountyId: -1
     - _SelectedMarketId: -1
     - _SelectedProvinceId: -1
-    - _SelectedStateId: -1
+    - _SelectedRealmId: -1
     - _SelectionBorderWidth: 3
     - _SelectionDesaturation: 0
     - _SelectionDimming: 1
@@ -163,12 +163,12 @@ Material:
     - _ShowCountyBorders: 0
     - _ShowMarketBorders: 0
     - _ShowProvinceBorders: 0
-    - _ShowStateBorders: 0
+    - _ShowRealmBorders: 0
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1
-    - _StateBorderOpacity: 0.75
-    - _StateBorderWidth: 24
+    - _RealmBorderOpacity: 0.75
+    - _RealmBorderWidth: 24
     - _UVSec: 0
     - _UseHeightDisplacement: 0
     - _WaterGradientRadius: 11
@@ -182,7 +182,7 @@ Material:
     - _MarketBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
     - _ProvinceBorderColor: {r: 0, g: 0, b: 0, a: 0.87058824}
     - _SelectionBorderColor: {r: 1, g: 0.9, b: 0.1999999, a: 0}
-    - _StateBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
+    - _RealmBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
     - _WaterDeepColor: {r: 0.07999996, g: 0.14999998, b: 0.34999996, a: 1}
     - _WaterShallowColor: {r: 0.24999994, g: 0.45, b: 0.54999995, a: 0.09803922}
   m_BuildTextureStacks: []

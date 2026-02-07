@@ -137,62 +137,6 @@ Valid approaches for landmass/terrain:
 
 Don't over-invest in novel map generation - get something that looks right and move on to the simulation.
 
-### Reference Data (Azgaar Export)
-
-The `reference/` directory contains Azgaar Fantasy Map Generator exports (gitignored due to size).
-
-**Setup:** Export a map from [Azgaar's FMG](https://azgaar.github.io/Fantasy-Map-Generator/) as JSON and place in `reference/`.
-
-**Current map parameters:**
-
-| Parameter          | Value      |
-| ------------------ | ---------- |
-| Seed               | 1234       |
-| Heightmap template | low island |
-| Points             | 40,000     |
-| Resolution         | 1440x810   |
-
-**Files:**
-
-- `1234_low-island_40k_1440x810.json` - JSON export (preferred)
-- `1234_low-island_40k_1440x810.map` - Azgaar native format
-- `1234_low-island_40k_1440x810.svg` - SVG export (validation reference)
-
-**JSON structure:**
-
-```
-Top-level: info, settings, mapCoordinates, pack, grid, biomesData, notes, nameBases
-
-pack (main data):
-├── cells: 18,751 land cells
-│   └── {i, v (vertices), c (neighbors), p (position), h (height 0-100),
-│       area, biome, state, province, culture, religion, pop, burg, r (river)}
-├── vertices: 37,918 Voronoi vertices
-│   └── {i, p (position), v (adjacent vertices), c (adjacent cells)}
-├── features: 58 (islands, lakes, etc.)
-├── states: 9 nations
-│   └── {i, name, provinces[], cells, area, burgs, capital, culture, color}
-├── provinces: 327
-│   └── {i, name, state, center, burg, color}
-├── cultures: 11
-├── religions: 21
-├── rivers: 269
-│   └── {i, name, cells[], source, mouth, discharge, length, width}
-├── burgs: 944 settlements
-├── routes: 779 roads
-└── markers: 139 points of interest
-```
-
-**Hierarchy:**
-
-```
-State (9) → Province (327) → Cell (18,751)
-```
-
-Cell is our "county" equivalent.
-
-**Biomes:** Marine, Hot desert, Cold desert, Savanna, Grassland, Tropical seasonal forest, Temperate deciduous forest, Tropical rainforest, Temperate rainforest, Taiga, Tundra, Glacier, Wetland
-
 ### Design Goal: Organic Landmasses
 
 Pure noise-based approaches (Perlin/Simplex threshold) create blobby, unrealistic shapes. Organic landmasses need:
@@ -287,8 +231,7 @@ Phase 2: Pack (repack for landmass)
 7. Political Boundaries (hierarchical)
    └── Voronoi cells = counties (smallest unit)
    └── Agglomerate counties → provinces
-   └── Agglomerate provinces → regions
-   └── Agglomerate regions → countries
+   └── Agglomerate provinces → realms
    └── Respect natural boundaries (rivers, mountains)
 
 8. Sub-county Detail (WFC)
@@ -354,10 +297,9 @@ River:
 ### Hierarchy
 
 ```
-Country
-└── Region (10s per country)
-    └── Province (10s per region)
-        └── County (10s per province)
+Realm
+└── Province (10s per realm)
+    └── County (10s per province)
 ```
 
 ### Data Model
@@ -377,18 +319,13 @@ County:
 Province:
   - id: string
   - counties: id[]
-  - parent_region: id
+  - parent_realm: id
   - capital_county: id
 
-Region:
+Realm:
   - id: string
   - provinces: id[]
-  - parent_country: id
-
-Country:
-  - id: string
-  - regions: id[]
-  - capital_region: id
+  - capital_province: id
 ```
 
 ### Boundary Dynamics
@@ -567,7 +504,7 @@ Market placement uses suitability scoring:
 - Resource diversity (unique resources in cell + neighbors)
 - Centrality (land neighbor count)
 
-**Multiple markets:** Markets are placed in different states to ensure geographic spread. Each market's zone includes all cells within transport cost budget (100). Cells in overlapping zones are assigned to the nearest market by transport cost.
+**Multiple markets:** Markets are placed in different realms to ensure geographic spread. Each market's zone includes all cells within transport cost budget (100). Cells in overlapping zones are assigned to the nearest market by transport cost.
 
 **Zone visualization:** Each market has a distinct color from a predefined palette (8 colors). The hub province (not just the hub cell) is highlighted with a vivid version of the market color for visibility.
 
@@ -967,102 +904,6 @@ If Bevy becomes a priority, the path is:
 3. **Plain data classes** - simulation uses POCOs/structs, no Unity types
 4. **Single assembly boundary** - Unity references `EconSim.Core.dll`, clean separation
 
-### Interface
-
-```csharp
-// In EconSim.Core
-public interface ISimulation
-{
-    // Lifecycle
-    void LoadMap(string path);          // Sim owns map loading
-    void Tick(float deltaTime);         // Advance simulation
-
-    // State queries (renderer calls these)
-    MapData GetMapData();               // Static geography
-    SimulationState GetState();         // Dynamic sim state
-
-    // Commands (UI calls these)
-    float TimeScale { get; set; }
-    bool IsPaused { get; set; }
-}
-```
-
----
-
-## Simulation Loop
-
-```csharp
-public class SimulationRunner
-{
-    private float _tickDuration = 1.0f;  // in game-days
-    private float _speed = 5.0f;          // ticks per second
-    private bool _paused = false;
-    private int _currentDay = 0;
-    private float _accumulator = 0.0f;
-
-    private readonly ProductionSystem _productionSystem;
-    private readonly TransportSystem _transportSystem;
-    private readonly ConsumptionSystem _consumptionSystem;
-    private readonly MarketSystem _marketSystem;
-    private readonly PopulationSystem _populationSystem;
-
-    public void Update(float deltaTime)
-    {
-        if (_paused) return;
-
-        _accumulator += deltaTime * _speed;
-
-        while (_accumulator >= 1.0f)
-        {
-            DoTick();
-            _accumulator -= 1.0f;
-        }
-    }
-
-    private void DoTick()
-    {
-        _currentDay++;
-
-        // Always (every tick)
-        _productionSystem.Tick();
-        _transportSystem.Tick();
-        _consumptionSystem.Tick();
-
-        // Periodic
-        if (_currentDay % 7 == 0)
-            _marketSystem.Tick();
-
-        if (_currentDay % 30 == 0)
-            _populationSystem.Tick();
-    }
-}
-```
-
-### Tick Order
-
-```
-1. Harvest
-   - Extract raw resources where facilities exist
-   - Output to local stockpile
-
-2. Refine
-   - Consume raw inputs
-   - Produce refined materials
-
-3. Manufacture
-   - Consume refined inputs
-   - Produce finished goods
-
-4. Consume
-   - Population consumes goods
-   - Track unmet demand
-
-5. Trade (periodic)
-   - Surplus flows to markets
-   - Deficits purchase from markets
-   - Prices adjust
-```
-
 ---
 
 ## UI Requirements
@@ -1106,51 +947,6 @@ Future:
 - Simulation speed
 - Debug/visualization toggles
 - Future: scenario editing
-
----
-
-## First Milestone
-
-**Goal:** A running simulation with map/camera and basic UI inspection.
-
-- [x] Azgaar JSON file loaded and rendered in Unity
-- [x] 3D terrain mesh (flat world, not globe)
-- [x] Camera: pan/zoom with edge panning
-- [x] Basic simulation ticking
-- [x] 3 production chains running (wheat→flour→bread, iron→tools, timber→furniture)
-- [x] UI to inspect counties/markets
-
----
-
-## Initial Scope
-
-### Map
-
-- **Source:** Single island generated in Azgaar's Fantasy Map Generator
-- **Format:** JSON export (preferred), .map file also available
-- **Task:** Parse Azgaar JSON, render in Unity, validate against original SVG
-
-### Economy (v1)
-
-- **Production chains:** 3 to start
-  1. Wheat → Flour → Bread (food)
-  2. TBD (maybe: Iron Ore → Iron → Tools)
-  3. TBD (maybe: Timber → Lumber → Furniture)
-- **Markets:** 3 markets in different states, nearest-market assignment
-- **Demand:** Population everywhere consumes
-
-### Visual Style
-
-- 3D terrain mesh with height
-- Flat map (not globe)
-- Basic/placeholder style initially
-- Colored regions for political map mode
-
-### Camera
-
-- Pan (click-drag and edge panning)
-- Zoom (scroll wheel)
-- No tilt/rotation for v1
 
 ---
 

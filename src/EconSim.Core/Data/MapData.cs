@@ -15,7 +15,7 @@ namespace EconSim.Core.Data
         public List<Cell> Cells;
         public List<Vec2> Vertices;  // Voronoi vertex positions
         public List<Province> Provinces;
-        public List<State> States;
+        public List<Realm> Realms;
         public List<River> Rivers;
         public List<Biome> Biomes;
         public List<Burg> Burgs;
@@ -25,7 +25,7 @@ namespace EconSim.Core.Data
         // Lookup tables (built after loading)
         [NonSerialized] public Dictionary<int, Cell> CellById;
         [NonSerialized] public Dictionary<int, Province> ProvinceById;
-        [NonSerialized] public Dictionary<int, State> StateById;
+        [NonSerialized] public Dictionary<int, Realm> RealmById;
         [NonSerialized] public Dictionary<int, Feature> FeatureById;
         [NonSerialized] public Dictionary<int, County> CountyById;
 
@@ -43,10 +43,10 @@ namespace EconSim.Core.Data
                 ProvinceById[province.Id] = province;
             }
 
-            StateById = new Dictionary<int, State>();
-            foreach (var state in States)
+            RealmById = new Dictionary<int, Realm>();
+            foreach (var realm in Realms)
             {
-                StateById[state.Id] = state;
+                RealmById[realm.Id] = realm;
             }
 
             FeatureById = new Dictionary<int, Feature>();
@@ -101,7 +101,7 @@ namespace EconSim.Core.Data
         public int FeatureId;           // Index into Features (ocean, lake, island, etc.)
 
         // Political
-        public int StateId;             // 0 = none/neutral
+        public int RealmId;             // 0 = none/neutral
         public int ProvinceId;          // 0 = none
         public int BurgId;              // 0 = no settlement
         public int CountyId;            // County this cell belongs to (set by CountyGrouper)
@@ -131,7 +131,7 @@ namespace EconSim.Core.Data
         public int SeatCellId;          // County seat (burg cell or highest-pop cell)
         public List<int> CellIds;       // All cells in this county
         public int ProvinceId;          // Province this county belongs to
-        public int StateId;             // State this county belongs to
+        public int RealmId;             // Realm this county belongs to
         public float TotalPopulation;   // Sum of population from all cells
         public Vec2 Centroid;           // Center of mass (population-weighted or geometric)
 
@@ -155,7 +155,7 @@ namespace EconSim.Core.Data
         public int Id;
         public string Name;
         public string FullName;
-        public int StateId;
+        public int RealmId;
         public int CenterCellId;
         public int CapitalBurgId;
         public Color32 Color;
@@ -164,7 +164,7 @@ namespace EconSim.Core.Data
     }
 
     [Serializable]
-    public class State
+    public class Realm
     {
         public int Id;
         public string Name;
@@ -176,7 +176,7 @@ namespace EconSim.Core.Data
         public Color32 Color;
         public Vec2 LabelPosition;
         public List<int> ProvinceIds;
-        public List<int> NeighborStateIds;
+        public List<int> NeighborRealmIds;
         public float UrbanPopulation;
         public float RuralPopulation;
         public int TotalArea;
@@ -216,7 +216,7 @@ namespace EconSim.Core.Data
         public string Name;
         public Vec2 Position;
         public int CellId;
-        public int StateId;
+        public int RealmId;
         public int CultureId;
         public float Population;
         public bool IsCapital;

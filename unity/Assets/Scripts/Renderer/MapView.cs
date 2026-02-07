@@ -82,20 +82,20 @@ namespace EconSim.Renderer
         private float[] vertexHeights;
 
         // Drill-down selection state
-        public enum SelectionDepth { None, State, Province, County }
+        public enum SelectionDepth { None, Realm, Province, County }
         private SelectionDepth selectionDepth = SelectionDepth.None;
-        private int selectedStateId = -1;
+        private int selectedRealmId = -1;
         private int selectedProvinceId = -1;
         private int selectedCountyId = -1;
 
         public SelectionDepth CurrentSelectionDepth => selectionDepth;
-        public int SelectedStateId => selectedStateId;
+        public int SelectedRealmId => selectedRealmId;
         public int SelectedProvinceId => selectedProvinceId;
         public int SelectedCountyId => selectedCountyId;
 
         public enum MapMode
         {
-            Political,  // Colored by state/country (key: 1, cycles with Province/County)
+            Political,  // Colored by realm (key: 1, cycles with Province/County)
             Province,   // Colored by province (key: 1, cycles with Political/County)
             County,     // Colored by county/cell (key: 1, cycles with Political/Province)
             Terrain,    // Colored by biome with elevation tinting (key: 2)
@@ -248,7 +248,7 @@ namespace EconSim.Renderer
             switch (currentMode)
             {
                 case MapMode.Political:
-                    overlayManager.SetHoveredState(cell.StateId);
+                    overlayManager.SetHoveredRealm(cell.RealmId);
                     break;
                 case MapMode.Province:
                     overlayManager.SetHoveredProvince(cell.ProvinceId);
@@ -592,14 +592,14 @@ namespace EconSim.Renderer
                 return;
             }
 
-            // Get the cell to look up its state/province
+            // Get the cell to look up its realm/province
             if (!mapData.CellById.TryGetValue(cellId, out var cell))
             {
                 ClearDrillDownSelection();
                 return;
             }
 
-            // Water cells have no meaningful state/province/county - clear selection
+            // Water cells have no meaningful realm/province/county - clear selection
             if (!cell.IsLand)
             {
                 ClearDrillDownSelection();
@@ -634,23 +634,23 @@ namespace EconSim.Renderer
             switch (selectionDepth)
             {
                 case SelectionDepth.None:
-                    // No selection yet - select state
-                    SelectAtDepth(SelectionDepth.State, cell);
-                    selectionBounds = GetStateBounds(cell.StateId);
+                    // No selection yet - select realm
+                    SelectAtDepth(SelectionDepth.Realm, cell);
+                    selectionBounds = GetRealmBounds(cell.RealmId);
                     break;
 
-                case SelectionDepth.State:
-                    if (cell.StateId == selectedStateId)
+                case SelectionDepth.Realm:
+                    if (cell.RealmId == selectedRealmId)
                     {
-                        // Clicking same state - drill down to province
+                        // Clicking same realm - drill down to province
                         SelectAtDepth(SelectionDepth.Province, cell);
                         selectionBounds = GetProvinceBounds(cell.ProvinceId);
                     }
                     else
                     {
-                        // Clicking different state - select new state
-                        SelectAtDepth(SelectionDepth.State, cell);
-                        selectionBounds = GetStateBounds(cell.StateId);
+                        // Clicking different realm - select new realm
+                        SelectAtDepth(SelectionDepth.Realm, cell);
+                        selectionBounds = GetRealmBounds(cell.RealmId);
                     }
                     break;
 
@@ -661,17 +661,17 @@ namespace EconSim.Renderer
                         SelectAtDepth(SelectionDepth.County, cell);
                         selectionBounds = GetCountyBounds(cell.CountyId);
                     }
-                    else if (cell.StateId == selectedStateId)
+                    else if (cell.RealmId == selectedRealmId)
                     {
-                        // Clicking different province in same state - select new province
+                        // Clicking different province in same realm - select new province
                         SelectAtDepth(SelectionDepth.Province, cell);
                         selectionBounds = GetProvinceBounds(cell.ProvinceId);
                     }
                     else
                     {
-                        // Clicking different state - reset to state level
-                        SelectAtDepth(SelectionDepth.State, cell);
-                        selectionBounds = GetStateBounds(cell.StateId);
+                        // Clicking different realm - reset to realm level
+                        SelectAtDepth(SelectionDepth.Realm, cell);
+                        selectionBounds = GetRealmBounds(cell.RealmId);
                     }
                     break;
 
@@ -687,17 +687,17 @@ namespace EconSim.Renderer
                         SelectAtDepth(SelectionDepth.County, cell);
                         selectionBounds = GetCountyBounds(cell.CountyId);
                     }
-                    else if (cell.StateId == selectedStateId)
+                    else if (cell.RealmId == selectedRealmId)
                     {
-                        // Clicking different province in same state - go back to province level
+                        // Clicking different province in same realm - go back to province level
                         SelectAtDepth(SelectionDepth.Province, cell);
                         selectionBounds = GetProvinceBounds(cell.ProvinceId);
                     }
                     else
                     {
-                        // Clicking different state - reset to state level
-                        SelectAtDepth(SelectionDepth.State, cell);
-                        selectionBounds = GetStateBounds(cell.StateId);
+                        // Clicking different realm - reset to realm level
+                        SelectAtDepth(SelectionDepth.Realm, cell);
+                        selectionBounds = GetRealmBounds(cell.RealmId);
                     }
                     break;
             }
@@ -715,7 +715,7 @@ namespace EconSim.Renderer
         private void SelectAtDepth(SelectionDepth depth, Cell cell)
         {
             selectionDepth = depth;
-            selectedStateId = cell.StateId;
+            selectedRealmId = cell.RealmId;
             selectedProvinceId = cell.ProvinceId;
             selectedCountyId = cell.CountyId;
             SetSelectionActive(true);
@@ -724,8 +724,8 @@ namespace EconSim.Renderer
             overlayManager.ClearSelection();
             switch (depth)
             {
-                case SelectionDepth.State:
-                    overlayManager.SetSelectedState(cell.StateId);
+                case SelectionDepth.Realm:
+                    overlayManager.SetSelectedRealm(cell.RealmId);
                     break;
                 case SelectionDepth.Province:
                     overlayManager.SetSelectedProvince(cell.ProvinceId);
@@ -756,7 +756,7 @@ namespace EconSim.Renderer
         private void ClearDrillDownSelection()
         {
             selectionDepth = SelectionDepth.None;
-            selectedStateId = -1;
+            selectedRealmId = -1;
             selectedProvinceId = -1;
             selectedCountyId = -1;
             SetSelectionActive(false);
@@ -849,25 +849,25 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
-        /// Get world-space centroid of a state.
+        /// Get world-space centroid of a realm.
         /// </summary>
-        private Vector3? GetStateCentroid(int stateId)
+        private Vector3? GetRealmCentroid(int realmId)
         {
-            if (stateId <= 0) return null;
-            if (!mapData.StateById.TryGetValue(stateId, out var state)) return null;
+            if (realmId <= 0) return null;
+            if (!mapData.RealmById.TryGetValue(realmId, out var realm)) return null;
 
             // Use center cell if available
-            if (state.CenterCellId > 0 && mapData.CellById.TryGetValue(state.CenterCellId, out var centerCell))
+            if (realm.CenterCellId > 0 && mapData.CellById.TryGetValue(realm.CenterCellId, out var centerCell))
             {
                 return DataToWorld(centerCell.Center.X, centerCell.Center.Y);
             }
 
-            // Fall back to calculating from all cells with this state ID
+            // Fall back to calculating from all cells with this realm ID
             float sumX = 0, sumY = 0;
             int count = 0;
             foreach (var cell in mapData.Cells)
             {
-                if (cell.StateId == stateId && cell.IsLand)
+                if (cell.RealmId == realmId && cell.IsLand)
                 {
                     sumX += cell.Center.X;
                     sumY += cell.Center.Y;
@@ -926,17 +926,17 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
-        /// Get world-space bounds of a state.
+        /// Get world-space bounds of a realm.
         /// </summary>
-        private Bounds? GetStateBounds(int stateId)
+        private Bounds? GetRealmBounds(int realmId)
         {
-            if (stateId <= 0) return null;
+            if (realmId <= 0) return null;
 
-            // Collect all cells belonging to this state
+            // Collect all cells belonging to this realm
             var cellIds = new List<int>();
             foreach (var cell in mapData.Cells)
             {
-                if (cell.StateId == stateId && cell.IsLand)
+                if (cell.RealmId == realmId && cell.IsLand)
                 {
                     cellIds.Add(cell.Id);
                 }
@@ -1365,9 +1365,9 @@ namespace EconSim.Renderer
                 return GetWaterColor(cell);
             }
 
-            if (cell.StateId > 0 && mapData.StateById.TryGetValue(cell.StateId, out var state))
+            if (cell.RealmId > 0 && mapData.RealmById.TryGetValue(cell.RealmId, out var realm))
             {
-                return state.Color.ToUnity();
+                return realm.Color.ToUnity();
             }
             return new Color32(200, 200, 200, 255);  // Neutral/unclaimed
         }
@@ -1384,7 +1384,7 @@ namespace EconSim.Renderer
             {
                 return province.Color.ToUnity();
             }
-            return GetPoliticalColor(cell);  // Fall back to state color
+            return GetPoliticalColor(cell);  // Fall back to realm color
         }
 
         private Color32 GetCountyColor(Cell cell)
@@ -1395,15 +1395,15 @@ namespace EconSim.Renderer
                 return GetWaterColor(cell);
             }
 
-            // Get base color from province (or state if no province)
+            // Get base color from province (or realm if no province)
             Color baseColor;
             if (cell.ProvinceId > 0 && mapData.ProvinceById.TryGetValue(cell.ProvinceId, out var province))
             {
                 baseColor = province.Color.ToUnity();
             }
-            else if (cell.StateId > 0 && mapData.StateById.TryGetValue(cell.StateId, out var state))
+            else if (cell.RealmId > 0 && mapData.RealmById.TryGetValue(cell.RealmId, out var realm))
             {
-                baseColor = state.Color.ToUnity();
+                baseColor = realm.Color.ToUnity();
             }
             else
             {

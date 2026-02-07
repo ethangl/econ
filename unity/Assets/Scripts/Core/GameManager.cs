@@ -94,7 +94,7 @@ namespace EconSim.Core
             Debug.Log($"Map loaded: {MapData.Info.Name}");
             Debug.Log($"  Dimensions: {MapData.Info.Width}x{MapData.Info.Height}");
             Debug.Log($"  Cells: {MapData.Cells.Count}");
-            Debug.Log($"  States: {MapData.States.Count}");
+            Debug.Log($"  Realms: {MapData.Realms.Count}");
             Debug.Log($"  Provinces: {MapData.Provinces.Count}");
             Debug.Log($"  Rivers: {MapData.Rivers.Count}");
             Debug.Log($"  Counties: {MapData.Counties.Count}");

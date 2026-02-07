@@ -45,7 +45,7 @@ namespace EconSim.Core.Import
                     Height = (int)Math.Round(heights.Heights[i]),
                     BiomeId = (int)biomes.Biome[i],
                     IsLand = !heights.IsWater(i) && !biomes.IsLakeCell[i],
-                    StateId = political.RealmId[i],
+                    RealmId = political.RealmId[i],
                     ProvinceId = political.ProvinceId[i],
                     CountyId = political.CountyId[i],
                     Population = biomes.Population[i],
@@ -84,8 +84,8 @@ namespace EconSim.Core.Import
             // Burgs: county seats become burgs
             var burgs = BuildBurgs(cells, political);
 
-            // States
-            var states = BuildStates(cells, political);
+            // Realms
+            var realms = BuildRealms(cells, political);
 
             // Provinces
             var provinces = BuildProvinces(cells, political);
@@ -117,7 +117,7 @@ namespace EconSim.Core.Import
                 Info = info,
                 Cells = cells,
                 Vertices = vertices,
-                States = states,
+                Realms = realms,
                 Provinces = provinces,
                 Rivers = riverList,
                 Biomes = biomeDefs,
@@ -211,7 +211,7 @@ namespace EconSim.Core.Import
                     Name = $"Town {burgId}",
                     Position = cell.Center,
                     CellId = cellId,
-                    StateId = cell.StateId,
+                    RealmId = cell.RealmId,
                     CultureId = 0,
                     Population = cell.Population,
                     IsCapital = isCapital,
@@ -229,12 +229,12 @@ namespace EconSim.Core.Import
 
         #endregion
 
-        #region States
+        #region Realms
 
-        static List<State> BuildStates(List<Cell> cells, PoliticalData political)
+        static List<Realm> BuildRealms(List<Cell> cells, PoliticalData political)
         {
-            var states = new List<State>();
-            if (political.RealmCount == 0) return states;
+            var realms = new List<Realm>();
+            if (political.RealmCount == 0) return realms;
 
             // Gather cells per realm
             var realmCells = new Dictionary<int, List<int>>();
@@ -265,7 +265,7 @@ namespace EconSim.Core.Import
                 set.Add(pid);
             }
 
-            // Generate state colors using even hue distribution
+            // Generate realm colors using even hue distribution
             for (int si = 0; si < political.RealmCount; si++)
             {
                 int realmId = si + 1;
@@ -301,7 +301,7 @@ namespace EconSim.Core.Import
                     ? cells[capitalCell].Center
                     : ECVec2.Zero;
 
-                states.Add(new State
+                realms.Add(new Realm
                 {
                     Id = realmId,
                     Name = $"Kingdom {realmId}",
@@ -313,17 +313,17 @@ namespace EconSim.Core.Import
                     Color = HsvToColor32(h, s, v),
                     LabelPosition = centerPos,
                     ProvinceIds = provIds,
-                    NeighborStateIds = new List<int>(),
+                    NeighborRealmIds = new List<int>(),
                     UrbanPopulation = 0,
                     RuralPopulation = totalPop,
                     TotalArea = rCells.Count
                 });
             }
 
-            // Compute neighbor states
-            var stateById = new Dictionary<int, State>();
-            foreach (var st in states)
-                stateById[st.Id] = st;
+            // Compute neighbor realms
+            var realmById = new Dictionary<int, Realm>();
+            foreach (var r in realms)
+                realmById[r.Id] = r;
 
             for (int i = 0; i < cells.Count; i++)
             {
@@ -336,14 +336,14 @@ namespace EconSim.Core.Import
                         int nrid = political.RealmId[nb];
                         if (nrid > 0 && nrid != rid)
                         {
-                            if (stateById.TryGetValue(rid, out var st) && !st.NeighborStateIds.Contains(nrid))
-                                st.NeighborStateIds.Add(nrid);
+                            if (realmById.TryGetValue(rid, out var r) && !r.NeighborRealmIds.Contains(nrid))
+                                r.NeighborRealmIds.Add(nrid);
                         }
                     }
                 }
             }
 
-            return states;
+            return realms;
         }
 
         #endregion
@@ -375,7 +375,7 @@ namespace EconSim.Core.Import
             {
                 int pid = kvp.Key;
                 var pCells = kvp.Value;
-                int stateId = provRealm.TryGetValue(pid, out var sid) ? sid : 0;
+                int realmId = provRealm.TryGetValue(pid, out var sid) ? sid : 0;
 
                 // Find highest-pop cell as center
                 int centerCell = pCells[0];
@@ -389,7 +389,7 @@ namespace EconSim.Core.Import
                     }
                 }
 
-                // Province color derived from state color with small variance
+                // Province color derived from realm color with small variance
                 float h = HashToFloat(pid * 7919);
                 float s = 0.35f + HashToFloat(pid + 5000) * 0.15f;
                 float v = 0.65f + HashToFloat(pid + 6000) * 0.15f;
@@ -399,7 +399,7 @@ namespace EconSim.Core.Import
                     Id = pid,
                     Name = $"Province {pid}",
                     FullName = $"Province {pid}",
-                    StateId = stateId,
+                    RealmId = realmId,
                     CenterCellId = centerCell,
                     CapitalBurgId = cells[centerCell].BurgId,
                     Color = HsvToColor32(h, s, v),
@@ -446,7 +446,7 @@ namespace EconSim.Core.Import
                 float totalPop = 0;
                 float sumX = 0, sumY = 0, sumW = 0;
                 int provinceId = 0;
-                int stateId = 0;
+                int realmId = 0;
 
                 foreach (int ci in cCells)
                 {
@@ -457,7 +457,7 @@ namespace EconSim.Core.Import
                     sumY += cell.Center.Y * w;
                     sumW += w;
                     if (provinceId == 0) provinceId = cell.ProvinceId;
-                    if (stateId == 0) stateId = cell.StateId;
+                    if (realmId == 0) realmId = cell.RealmId;
                 }
 
                 var centroid = sumW > 0
@@ -476,7 +476,7 @@ namespace EconSim.Core.Import
                     SeatCellId = seatCell,
                     CellIds = new List<int>(cCells),
                     ProvinceId = provinceId,
-                    StateId = stateId,
+                    RealmId = realmId,
                     TotalPopulation = totalPop,
                     Centroid = centroid
                 });

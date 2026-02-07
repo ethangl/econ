@@ -45,7 +45,7 @@ Any world generator must produce a `MapData` that satisfies this contract:
 |               | StateId, ProvinceId                                  | Political display, borders         |
 |               | Population                                           | County grouping, economy           |
 | **Vertices**  | Vec2 positions                                       | Voronoi polygon rendering          |
-| **States**    | Id, Name, Color, ProvinceIds                         | Political mode, borders            |
+| **Realms**    | Id, Name, Color, ProvinceIds                         | Political mode, borders            |
 | **Provinces** | Id, Name, StateId, CellIds                           | Province mode, grouping            |
 | **Rivers**    | Id, CellPath, Width, Discharge                       | River rendering, transport         |
 | **Biomes**    | Id, Name, Color, Habitability, MovementCost          | Terrain colors, pathfinding        |

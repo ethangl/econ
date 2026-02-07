@@ -6,18 +6,18 @@ using EconSim.Core.Data;
 namespace EconSim.Core.Rendering
 {
     /// <summary>
-    /// Generates political map colors for states/countries.
-    /// Province and county colors are derived in the shader from state colors.
+    /// Generates political map colors for realms.
+    /// Province and county colors are derived in the shader from realm colors.
     /// </summary>
     public class PoliticalPalette
     {
-        // Base HSV values for countries (center of range)
+        // Base HSV values for realms (center of range)
         private const float BaseSaturation = 0.42f;
         private const float BaseValue = 0.70f;
 
-        // State variance ranges (±)
-        private const float StateSatVariance = 0.08f;
-        private const float StateValVariance = 0.08f;
+        // Realm variance ranges (±)
+        private const float RealmSatVariance = 0.08f;
+        private const float RealmValVariance = 0.08f;
 
         // Clamping bounds
         private const float MinSaturation = 0.28f;
@@ -28,54 +28,54 @@ namespace EconSim.Core.Rendering
         // Unowned color (neutral grey)
         private static readonly Color32 UnownedColor = new Color32(128, 128, 128, 255);
 
-        // Generated state colors (indexed by state ID)
-        private readonly Dictionary<int, Color32> stateColors = new Dictionary<int, Color32>();
+        // Generated realm colors (indexed by realm ID)
+        private readonly Dictionary<int, Color32> realmColors = new Dictionary<int, Color32>();
 
         public PoliticalPalette(MapData mapData)
         {
-            GenerateStateColors(mapData);
+            GenerateRealmColors(mapData);
         }
 
         /// <summary>
-        /// Get color for a state/country.
+        /// Get color for a realm.
         /// </summary>
-        public Color32 GetStateColor(int stateId)
+        public Color32 GetRealmColor(int realmId)
         {
-            if (stateId <= 0 || !stateColors.TryGetValue(stateId, out var color))
+            if (realmId <= 0 || !realmColors.TryGetValue(realmId, out var color))
                 return UnownedColor;
             return color;
         }
 
         /// <summary>
-        /// Generate state colors using even hue distribution with S/V variance.
+        /// Generate realm colors using even hue distribution with S/V variance.
         /// </summary>
-        private void GenerateStateColors(MapData mapData)
+        private void GenerateRealmColors(MapData mapData)
         {
-            // Count valid states for even distribution
-            int validStateCount = 0;
-            foreach (var state in mapData.States)
+            // Count valid realms for even distribution
+            int validRealmCount = 0;
+            foreach (var realm in mapData.Realms)
             {
-                if (state.Id > 0) validStateCount++;
+                if (realm.Id > 0) validRealmCount++;
             }
 
-            int stateIndex = 0;
-            foreach (var state in mapData.States)
+            int realmIndex = 0;
+            foreach (var realm in mapData.Realms)
             {
-                if (state.Id <= 0) continue; // Skip neutral
+                if (realm.Id <= 0) continue; // Skip neutral
 
                 // Even hue distribution across the spectrum
-                float h = (float)stateIndex / validStateCount;
+                float h = (float)realmIndex / validRealmCount;
 
                 // Hash-based variance for S and V
-                float s = BaseSaturation + (HashToFloat(state.Id + 3000) - 0.5f) * 2f * StateSatVariance;
-                float v = BaseValue + (HashToFloat(state.Id + 4000) - 0.5f) * 2f * StateValVariance;
+                float s = BaseSaturation + (HashToFloat(realm.Id + 3000) - 0.5f) * 2f * RealmSatVariance;
+                float v = BaseValue + (HashToFloat(realm.Id + 4000) - 0.5f) * 2f * RealmValVariance;
 
                 // Clamp to valid ranges
                 s = Math.Max(MinSaturation, Math.Min(MaxSaturation, s));
                 v = Math.Max(MinValue, Math.Min(MaxValue, v));
 
-                stateColors[state.Id] = HsvToColor32(h, s, v);
-                stateIndex++;
+                realmColors[realm.Id] = HsvToColor32(h, s, v);
+                realmIndex++;
             }
         }
 
