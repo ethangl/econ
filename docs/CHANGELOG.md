@@ -60,11 +60,6 @@ Replaced Azgaar JSON import with a fully custom, engine-agnostic map generation 
   - Deleted JSON loading infrastructure (~1,700 lines removed)
   - No external map files needed — startup screen "Generate New" button works end-to-end
 
-- **Prototype Unity project** (`unity-mapgen/`)
-  - Standalone test project for iterating on MapGen stages
-  - Editor inspectors for each pipeline stage (heightmap, climate, biomes, politics)
-  - Cell mesh visualizer with per-stage gizmo overlays
-
 - **Biome/resource documentation** (`docs/biomes/`)
   - Pipeline overview, soil classification, biome definitions
   - Vegetation, fauna, movement cost, and resource extraction specs
