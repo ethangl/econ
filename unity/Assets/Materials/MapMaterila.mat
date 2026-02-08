@@ -103,6 +103,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _RealmBorderDistTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _RealmColorTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -129,17 +133,17 @@ Material:
     - _Glossiness: 0.5
     - _GlossyReflections: 1
     - _GradientCenterOpacity: 0.5
-    - _GradientEdgeDarkening: 0.865
-    - _GradientRadius: 15.7
+    - _GradientEdgeDarkening: 0.7
+    - _GradientRadius: 14
     - _HeightScale: 3
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.000000064106736
+    - _HoverIntensity: 0.01590813
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
-    - _HoveredRealmId: -1
+    - _HoveredRealmId: 0.0001373312
     - _MapMode: 1
     - _MarketBorderWidth: 1
     - _Metallic: 0
@@ -151,8 +155,8 @@ Material:
     - _PoliticalEdgeOpacity: 0.8
     - _PoliticalGradientRadius: 64
     - _ProvinceBorderWidth: 0.8
-    - _RealmBorderDarkening: 0.5
-    - _RealmBorderWidth: 1
+    - _RealmBorderDarkening: 0.75
+    - _RealmBorderWidth: 0.25
     - _RiverDarken: 0.5
     - _RiverDepth: 0.2
     - _SeaLevel: 0.2
@@ -162,8 +166,8 @@ Material:
     - _SelectedProvinceId: -1
     - _SelectedRealmId: -1
     - _SelectionBorderWidth: 3
-    - _SelectionDesaturation: 0
-    - _SelectionDimming: 1
+    - _SelectionDesaturation: 1.3395557e-32
+    - _SelectionDimming: 0.99999976
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
     - _ShimmerIntensity: 0.08

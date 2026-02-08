@@ -2,6 +2,9 @@
     <Style src="project://database/Assets/UI/Styles/Main.uss" />
     <ui:VisualElement name="startup-overlay" class="startup-overlay">
         <ui:VisualElement name="startup-modal" class="startup-modal panel">
+            <ui:DropdownField name="template-dropdown" label="Template" class="startup-field" />
+            <ui:IntegerField name="cellcount-field" label="Cells" value="100000" class="startup-field" />
+            <ui:FloatField name="aspect-ratio-field" label="Aspect Ratio" value="1.5" class="startup-field" />
             <ui:VisualElement name="startup-buttons" class="startup-buttons">
                 <ui:Button name="generate-button" text="Generate New" class="startup-button" />
             </ui:VisualElement>
