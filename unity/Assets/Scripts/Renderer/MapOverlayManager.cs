@@ -27,6 +27,7 @@ namespace EconSim.Renderer
         private static readonly int RealmBorderDistTexId = Shader.PropertyToID("_RealmBorderDistTex");
         private static readonly int ProvinceBorderDistTexId = Shader.PropertyToID("_ProvinceBorderDistTex");
         private static readonly int CountyBorderDistTexId = Shader.PropertyToID("_CountyBorderDistTex");
+        private static readonly int MarketBorderDistTexId = Shader.PropertyToID("_MarketBorderDistTex");
         private static readonly int MapModeId = Shader.PropertyToID("_MapMode");
         private static readonly int UseHeightDisplacementId = Shader.PropertyToID("_UseHeightDisplacement");
         private static readonly int HeightScaleId = Shader.PropertyToID("_HeightScale");
@@ -35,8 +36,6 @@ namespace EconSim.Renderer
         private static readonly int SelectedProvinceIdId = Shader.PropertyToID("_SelectedProvinceId");
         private static readonly int SelectedCountyIdId = Shader.PropertyToID("_SelectedCountyId");
         private static readonly int SelectedMarketIdId = Shader.PropertyToID("_SelectedMarketId");
-        private static readonly int SelectionBorderColorId = Shader.PropertyToID("_SelectionBorderColor");
-        private static readonly int SelectionBorderWidthId = Shader.PropertyToID("_SelectionBorderWidth");
         private static readonly int HoveredRealmIdId = Shader.PropertyToID("_HoveredRealmId");
         private static readonly int HoveredProvinceIdId = Shader.PropertyToID("_HoveredProvinceId");
         private static readonly int HoveredCountyIdId = Shader.PropertyToID("_HoveredCountyId");
@@ -83,6 +82,7 @@ namespace EconSim.Renderer
         private Texture2D realmBorderDistTexture; // R8: distance to nearest realm boundary (texels)
         private Texture2D provinceBorderDistTexture; // R8: distance to nearest province boundary (texels)
         private Texture2D countyBorderDistTexture;   // R8: distance to nearest county boundary (texels)
+        private Texture2D marketBorderDistTexture;   // R8: distance to nearest market zone boundary (texels, dynamic)
 
         // Spatial lookup grid: maps data pixel coordinates to cell IDs
         private int[] spatialGrid;
@@ -1162,6 +1162,19 @@ namespace EconSim.Renderer
             terrainMaterial.SetTexture(ProvinceBorderDistTexId, provinceBorderDistTexture);
             terrainMaterial.SetTexture(CountyBorderDistTexId, countyBorderDistTexture);
 
+            // Create market border dist texture (initially all-white = no borders, regenerated when economy is set)
+            marketBorderDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+            marketBorderDistTexture.name = "MarketBorderDistTexture";
+            marketBorderDistTexture.filterMode = FilterMode.Bilinear;
+            marketBorderDistTexture.anisoLevel = 8;
+            marketBorderDistTexture.wrapMode = TextureWrapMode.Clamp;
+            var whitePixels = new Color[gridWidth * gridHeight];
+            for (int i = 0; i < whitePixels.Length; i++)
+                whitePixels[i] = Color.white;
+            marketBorderDistTexture.SetPixels(whitePixels);
+            marketBorderDistTexture.Apply();
+            terrainMaterial.SetTexture(MarketBorderDistTexId, marketBorderDistTexture);
+
             // Create cell-to-market texture (16384 cells max, updated when economy is set)
             cellToMarketTexture = new Texture2D(16384, 1, TextureFormat.RHalf, false);
             cellToMarketTexture.name = "CellToMarketTexture";
@@ -1214,6 +1227,9 @@ namespace EconSim.Renderer
             cellToMarketTexture.SetPixels(marketPixels);
             cellToMarketTexture.Apply();
 
+            // Regenerate market border distance texture now that zone assignments are known
+            RegenerateMarketBorderDistTexture(economy);
+
             Debug.Log($"MapOverlayManager: Updated county-to-market texture ({economy.CountyToMarket.Count} counties mapped)");
         }
 
@@ -1253,6 +1269,118 @@ namespace EconSim.Renderer
             marketPaletteTexture.Apply();
 
             Debug.Log($"MapOverlayManager: Regenerated market palette ({economy.Markets.Count} markets)");
+        }
+
+        /// <summary>
+        /// Regenerate market border distance texture from county-to-market mapping.
+        /// Boundary condition: land pixel adjacent to land pixel whose county maps to a different market.
+        /// </summary>
+        private void RegenerateMarketBorderDistTexture(EconomyState economy)
+        {
+            if (marketBorderDistTexture == null) return;
+
+            int size = gridWidth * gridHeight;
+
+            // Build market ID grid from spatial grid + county-to-market mapping
+            int[] marketGrid = new int[size];
+            bool[] isLand = new bool[size];
+
+            for (int i = 0; i < size; i++)
+            {
+                int cellId = spatialGrid[i];
+                if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell) && cell.IsLand)
+                {
+                    isLand[i] = true;
+                    if (economy.CountyToMarket.TryGetValue(cell.CountyId, out int mktId))
+                        marketGrid[i] = mktId;
+                    else
+                        marketGrid[i] = 0;
+                }
+                else
+                {
+                    marketGrid[i] = -1;
+                    isLand[i] = false;
+                }
+            }
+
+            // Distance field — initialize to max
+            float[] dist = new float[size];
+            for (int i = 0; i < size; i++)
+                dist[i] = 255f;
+
+            // Seed boundary pixels (land pixels adjacent to land pixel with different market)
+            for (int y = 0; y < gridHeight; y++)
+            {
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = y * gridWidth + x;
+                    if (!isLand[idx]) continue;
+
+                    int market = marketGrid[idx];
+                    bool isBoundary = false;
+
+                    for (int dy = -1; dy <= 1 && !isBoundary; dy++)
+                    {
+                        for (int dx = -1; dx <= 1 && !isBoundary; dx++)
+                        {
+                            if (dx == 0 && dy == 0) continue;
+                            int nx = x + dx, ny = y + dy;
+                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
+                            int nIdx = ny * gridWidth + nx;
+                            if (isLand[nIdx] && marketGrid[nIdx] != market)
+                                isBoundary = true;
+                        }
+                    }
+
+                    if (isBoundary)
+                        dist[idx] = 0f;
+                }
+            }
+
+            // Chamfer distance transform
+            float orthCost = 1f;
+            float diagCost = 1.414f;
+
+            for (int y = 1; y < gridHeight; y++)
+            {
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = y * gridWidth + x;
+                    if (!isLand[idx]) continue;
+
+                    if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[idx - 1] + orthCost);
+                    if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * gridWidth + x - 1] + diagCost);
+                    dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * gridWidth + x] + orthCost);
+                    if (x < gridWidth - 1) dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * gridWidth + x + 1] + diagCost);
+                }
+            }
+
+            for (int y = gridHeight - 2; y >= 0; y--)
+            {
+                for (int x = gridWidth - 1; x >= 0; x--)
+                {
+                    int idx = y * gridWidth + x;
+                    if (!isLand[idx]) continue;
+
+                    if (x < gridWidth - 1) dist[idx] = Mathf.Min(dist[idx], dist[idx + 1] + orthCost);
+                    if (x < gridWidth - 1) dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * gridWidth + x + 1] + diagCost);
+                    dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * gridWidth + x] + orthCost);
+                    if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * gridWidth + x - 1] + diagCost);
+                }
+            }
+
+            // Write to texture
+            var colorPixels = new Color[size];
+            for (int i = 0; i < size; i++)
+            {
+                float v = Mathf.Min(255, Mathf.RoundToInt(dist[i])) / 255f;
+                colorPixels[i] = new Color(v, v, v, 1f);
+            }
+            marketBorderDistTexture.SetPixels(colorPixels);
+            marketBorderDistTexture.Apply();
+
+            TextureDebugger.SaveTexture(marketBorderDistTexture, "market_border_dist");
+            Debug.Log($"MapOverlayManager: Generated market border distance texture {gridWidth}x{gridHeight}");
         }
 
         /// <summary>
@@ -1382,24 +1510,6 @@ namespace EconSim.Renderer
             terrainMaterial.SetFloat(SelectedCountyIdId, -1f);
             float normalizedId = marketId < 0 ? -1f : marketId / 65535f;
             terrainMaterial.SetFloat(SelectedMarketIdId, normalizedId);
-        }
-
-        /// <summary>
-        /// Set the selection border color.
-        /// </summary>
-        public void SetSelectionBorderColor(Color color)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetColor(SelectionBorderColorId, color);
-        }
-
-        /// <summary>
-        /// Set the selection border width in screen pixels.
-        /// </summary>
-        public void SetSelectionBorderWidth(float pixels)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SelectionBorderWidthId, Mathf.Clamp(pixels, 1f, 6f));
         }
 
         /// <summary>
@@ -1576,6 +1686,8 @@ namespace EconSim.Renderer
                 Object.Destroy(provinceBorderDistTexture);
             if (countyBorderDistTexture != null)
                 Object.Destroy(countyBorderDistTexture);
+            if (marketBorderDistTexture != null)
+                Object.Destroy(marketBorderDistTexture);
         }
     }
 }

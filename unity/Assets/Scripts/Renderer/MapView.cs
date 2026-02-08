@@ -35,8 +35,6 @@ namespace EconSim.Renderer
         private int gridDivisor = 1;  // 1 = full source resolution, 2 = half, etc.
         private float gridHeightScale = 3f;
 
-        [SerializeField] private Material borderMaterial;
-
         [Header("Selection")]
         [SerializeField] private UnityEngine.Camera selectionCamera;
         [SerializeField] private MapCamera mapCameraController;
@@ -64,9 +62,7 @@ namespace EconSim.Renderer
         private MeshFilter meshFilter;
         private MeshRenderer meshRenderer;
         private Mesh mesh;
-        private RiverRenderer riverRenderer;
         private RoadRenderer roadRenderer;
-        private SelectionHighlight selectionHighlight;
         private MapOverlayManager overlayManager;
 
         // Cell mesh data
@@ -390,15 +386,15 @@ namespace EconSim.Renderer
             InitializeOverlays();
             Profiler.End();
 
-            // InitializeRivers();  // Disabled - rivers now rendered via shader mask (Phase 8)
-
             Profiler.Begin("InitializeRoads");
             InitializeRoads();
             Profiler.End();
 
-            Profiler.Begin("InitializeSelectionHighlight");
-            InitializeSelectionHighlight();
-            Profiler.End();
+            // Subscribe to cell clicks for shader selection
+            if (useShaderOverlays && overlayManager != null)
+            {
+                OnCellClicked += HandleShaderSelection;
+            }
         }
 
         private void InitializeOverlays()
@@ -425,28 +421,6 @@ namespace EconSim.Renderer
             overlayManager.SetMapMode(currentMode);
         }
 
-        private void InitializeRivers()
-        {
-            if (mapData == null) return;
-
-            // Create or get RiverRenderer component
-            riverRenderer = GetComponent<RiverRenderer>();
-            if (riverRenderer == null)
-            {
-                riverRenderer = gameObject.AddComponent<RiverRenderer>();
-            }
-
-            // Set the river material (reuse border material)
-            if (borderMaterial != null)
-            {
-                var materialField = typeof(RiverRenderer).GetField("riverMaterial",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                materialField?.SetValue(riverRenderer, borderMaterial);
-            }
-
-            riverRenderer.Initialize(mapData, cellScale, heightScale);
-        }
-
         private void InitializeRoads()
         {
             if (mapData == null) return;
@@ -456,14 +430,6 @@ namespace EconSim.Renderer
             if (roadRenderer == null)
             {
                 roadRenderer = gameObject.AddComponent<RoadRenderer>();
-            }
-
-            // Set the road material (reuse border material)
-            if (borderMaterial != null)
-            {
-                var materialField = typeof(RoadRenderer).GetField("roadMaterial",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                materialField?.SetValue(roadRenderer, borderMaterial);
             }
 
             // Note: RoadRenderer.Initialize will be called from SetRoadState once economy is ready
@@ -486,48 +452,6 @@ namespace EconSim.Renderer
         public void RefreshRoads()
         {
             roadRenderer?.RefreshRoads();
-        }
-
-        private void InitializeSelectionHighlight()
-        {
-            if (mapData == null) return;
-
-            // Use shader-based selection when overlays are enabled
-            if (useShaderOverlays && overlayManager != null)
-            {
-                // Subscribe to cell clicks for shader selection
-                OnCellClicked += HandleShaderSelection;
-
-                // Destroy any existing SelectionHighlight component (legacy)
-                var oldHighlight = GetComponent<SelectionHighlight>();
-                if (oldHighlight != null)
-                {
-                    Destroy(oldHighlight);
-                }
-                return;
-            }
-
-            // Legacy: Create or get SelectionHighlight component for non-shader mode
-            selectionHighlight = GetComponent<SelectionHighlight>();
-            if (selectionHighlight == null)
-            {
-                selectionHighlight = gameObject.AddComponent<SelectionHighlight>();
-            }
-
-            // Set the mapView reference via reflection (or make it public/serialized)
-            var mapViewField = typeof(SelectionHighlight).GetField("mapView",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            mapViewField?.SetValue(selectionHighlight, this);
-
-            // Set the outline material (reuse border material if available)
-            if (borderMaterial != null)
-            {
-                var materialField = typeof(SelectionHighlight).GetField("outlineMaterial",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                materialField?.SetValue(selectionHighlight, borderMaterial);
-            }
-
-            selectionHighlight.Initialize(mapData, cellScale, heightScale);
         }
 
         private void HandleShaderSelection(int cellId)

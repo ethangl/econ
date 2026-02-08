@@ -30,8 +30,6 @@ Shader "EconSim/MapOverlay"
         _SelectedProvinceId ("Selected Province ID (normalized)", Float) = -1
         _SelectedCountyId ("Selected County ID (normalized)", Float) = -1
         _SelectedMarketId ("Selected Market ID (normalized)", Float) = -1
-        _SelectionBorderColor ("Selection Border Color", Color) = (1, 0.9, 0.2, 1)
-        _SelectionBorderWidth ("Selection Border Width (pixels)", Range(1, 6)) = 3.0
         _SelectionDimming ("Selection Dimming", Range(0, 1)) = 0.5
         _SelectionDesaturation ("Selection Desaturation", Range(0, 1)) = 0
 
@@ -64,6 +62,11 @@ Shader "EconSim/MapOverlay"
         _CountyBorderDistTex ("County Border Distance", 2D) = "white" {}
         _CountyBorderWidth ("County Border Width", Range(0, 4)) = 0.5
         _CountyBorderDarkening ("County Border Darkening", Range(0, 1)) = 0.25
+
+        // Market zone border (same style as realm borders)
+        _MarketBorderDistTex ("Market Border Distance", 2D) = "white" {}
+        _MarketBorderWidth ("Market Border Width", Range(0, 4)) = 1
+        _MarketBorderDarkening ("Market Border Darkening", Range(0, 1)) = 0.5
 
         // Water layer properties
         _WaterShallowColor ("Water Shallow Color", Color) = (0.25, 0.55, 0.65, 1)
@@ -131,6 +134,9 @@ Shader "EconSim/MapOverlay"
             sampler2D _CountyBorderDistTex;
             float _CountyBorderWidth;
             float _CountyBorderDarkening;
+            sampler2D _MarketBorderDistTex;
+            float _MarketBorderWidth;
+            float _MarketBorderDarkening;
 
             // Water layer uniforms
             fixed4 _WaterShallowColor;
@@ -148,8 +154,6 @@ Shader "EconSim/MapOverlay"
             float _SelectedProvinceId;
             float _SelectedCountyId;
             float _SelectedMarketId;
-            fixed4 _SelectionBorderColor;
-            float _SelectionBorderWidth;
             float _SelectionDimming;
             float _SelectionDesaturation;
 
@@ -158,14 +162,6 @@ Shader "EconSim/MapOverlay"
             float _HoveredCountyId;
             float _HoveredMarketId;
             float _HoverIntensity;
-
-            // 16 sample directions for smoother AA (8 cardinal + 8 at 22.5 offsets)
-            static const float2 sampleDirs[16] = {
-                float2(1, 0), float2(0.924, 0.383), float2(0.707, 0.707), float2(0.383, 0.924),
-                float2(0, 1), float2(-0.383, 0.924), float2(-0.707, 0.707), float2(-0.924, 0.383),
-                float2(-1, 0), float2(-0.924, -0.383), float2(-0.707, -0.707), float2(-0.383, -0.924),
-                float2(0, -1), float2(0.383, -0.924), float2(0.707, -0.707), float2(0.924, -0.383)
-            };
 
             v2f vert(appdata v)
             {
@@ -547,210 +543,6 @@ Shader "EconSim/MapOverlay"
             }
 
             // ========================================================================
-            // Selection / hover functions (unchanged)
-            // ========================================================================
-
-            float CalculateSelectionBorderAA(float2 uv, float centerValue, float selectedId, bool centerIsWater, int channel, float borderWidth, float uvPerPixel)
-            {
-                if (centerIsWater) return 0;
-                if (abs(centerValue - selectedId) > 0.00001) return 0;
-
-                float innerRadius = max(0.0, borderWidth - 1.0);
-                float outerRadius = borderWidth + 0.5;
-
-                float totalWeight = 0;
-                float borderWeight = 0;
-
-                float radii[3] = { innerRadius, borderWidth, outerRadius };
-                float weights[3] = { 0.5, 1.0, 0.25 };
-
-                for (int r = 0; r < 3; r++)
-                {
-                    float radius = radii[r];
-                    float weight = weights[r];
-
-                    if (radius < 0.1) continue;
-
-                    for (int i = 0; i < 16; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-
-                        if (sampleIsWater)
-                        {
-                            borderWeight += weight;
-                            totalWeight += weight;
-                            continue;
-                        }
-
-                        float sampleValue;
-                        if (channel == 0) sampleValue = sampleData.r;
-                        else if (channel == 1) sampleValue = sampleData.g;
-                        else sampleValue = sampleData.a;
-
-                        float isDifferent = abs(sampleValue - selectedId) > 0.00001 ? 1.0 : 0.0;
-
-                        borderWeight += isDifferent * weight;
-                        totalWeight += weight;
-                    }
-                }
-
-                float coverage = borderWeight / max(totalWeight, 0.001);
-                return smoothstep(0.0, 0.5, coverage);
-            }
-
-            bool IsInSelectedRegion(float centerValue, float selectedId)
-            {
-                return abs(centerValue - selectedId) < 0.00001;
-            }
-
-            float CalculateMarketSelectionBorderAA(float2 uv, float centerMarketId, float selectedMarketId, bool centerIsWater, float borderWidth, float uvPerPixel)
-            {
-                if (centerIsWater) return 0;
-                if (abs(centerMarketId - selectedMarketId) > 0.00001) return 0;
-
-                float innerRadius = max(0.0, borderWidth - 1.0);
-                float outerRadius = borderWidth + 0.5;
-
-                float totalWeight = 0;
-                float borderWeight = 0;
-
-                float radii[3] = { innerRadius, borderWidth, outerRadius };
-                float weights[3] = { 0.5, 1.0, 0.25 };
-
-                for (int r = 0; r < 3; r++)
-                {
-                    float radius = radii[r];
-                    float weight = weights[r];
-
-                    if (radius < 0.1) continue;
-
-                    for (int i = 0; i < 16; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-
-                        float isDifferent;
-                        if (sampleIsWater)
-                        {
-                            isDifferent = 1.0;
-                        }
-                        else
-                        {
-                            float sampleMarketId = GetMarketIdForCell(sampleData.a);
-                            isDifferent = abs(sampleMarketId - selectedMarketId) > 0.00001 ? 1.0 : 0.0;
-                        }
-
-                        borderWeight += isDifferent * weight;
-                        totalWeight += weight;
-                    }
-                }
-
-                float coverage = borderWeight / max(totalWeight, 0.001);
-                return smoothstep(0.0, 0.5, coverage);
-            }
-
-            float CalculateHoverOutlineAA(float2 uv, float centerValue, float hoveredId, bool centerIsWater, int channel, float offset, float width, float uvPerPixel)
-            {
-                if (hoveredId < 0) return 0;
-                if (!centerIsWater && abs(centerValue - hoveredId) < 0.00001) return 0;
-
-                float halfWidth = width * 0.5;
-                float innerEdge = offset - halfWidth;
-                float outerEdge = offset + halfWidth;
-
-                float radii[3] = { innerEdge, offset, outerEdge };
-                float weights[3] = { 0.25, 0.5, 0.25 };
-
-                float totalHits = 0;
-                float totalWeight = 0;
-
-                for (int r = 0; r < 3; r++)
-                {
-                    float radius = radii[r];
-                    if (radius < 0.5) continue;
-
-                    float weight = weights[r];
-
-                    for (int i = 0; i < 16; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        if (samplePackedBiome >= 32000.0) continue;
-
-                        float sampleValue;
-                        if (channel == 0) sampleValue = sampleData.r;
-                        else if (channel == 1) sampleValue = sampleData.g;
-                        else sampleValue = sampleData.a;
-
-                        bool isHovered = abs(sampleValue - hoveredId) < 0.00001;
-                        totalHits += isHovered ? weight : 0;
-                        totalWeight += weight;
-                    }
-                }
-
-                if (totalWeight < 0.001) return 0;
-
-                float hitRatio = totalHits / totalWeight;
-                float coverage = smoothstep(0.0, 0.3, hitRatio) * smoothstep(0.8, 0.4, hitRatio);
-
-                return coverage;
-            }
-
-            float CalculateMarketHoverOutlineAA(float2 uv, float centerMarketId, float hoveredMarketId, bool centerIsWater, float offset, float width, float uvPerPixel)
-            {
-                if (hoveredMarketId < 0) return 0;
-                if (!centerIsWater && abs(centerMarketId - hoveredMarketId) < 0.00001) return 0;
-
-                float halfWidth = width * 0.5;
-                float innerEdge = offset - halfWidth;
-                float outerEdge = offset + halfWidth;
-
-                float radii[3] = { innerEdge, offset, outerEdge };
-                float weights[3] = { 0.25, 0.5, 0.25 };
-
-                float totalHits = 0;
-                float totalWeight = 0;
-
-                for (int r = 0; r < 3; r++)
-                {
-                    float radius = radii[r];
-                    if (radius < 0.5) continue;
-
-                    float weight = weights[r];
-
-                    for (int i = 0; i < 16; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        if (samplePackedBiome >= 32000.0) continue;
-
-                        float sampleMarketId = GetMarketIdForCell(sampleData.a);
-                        bool isHovered = abs(sampleMarketId - hoveredMarketId) < 0.00001;
-                        totalHits += isHovered ? weight : 0;
-                        totalWeight += weight;
-                    }
-                }
-
-                if (totalWeight < 0.001) return 0;
-
-                float hitRatio = totalHits / totalWeight;
-                float coverage = smoothstep(0.0, 0.3, hitRatio) * smoothstep(0.8, 0.4, hitRatio);
-
-                return coverage;
-            }
-
-            // ========================================================================
             // Layer 1: Terrain (always rendered, seabed visible under water)
             // ========================================================================
 
@@ -910,6 +702,18 @@ Shader "EconSim/MapOverlay"
                     fixed3 edgeColor = lerp(marketColor, multiplied, _GradientEdgeDarkening);
                     fixed3 centerColor = lerp(grayTerrain, marketColor, _GradientCenterOpacity);
                     modeColor = lerp(edgeColor, centerColor, edgeProximity);
+
+                    // Market zone border band overlay (distance texture + smoothstep AA)
+                    float marketBorderDist = tex2D(_MarketBorderDistTex, uv).r * 255.0;
+                    float marketBorderAA = fwidth(marketBorderDist);
+                    float marketBorderFactor = 1.0 - smoothstep(_MarketBorderWidth - marketBorderAA, _MarketBorderWidth + marketBorderAA, marketBorderDist);
+                    if (marketBorderFactor > 0.001)
+                    {
+                        float3 mHsv = rgb2hsv(marketColor);
+                        mHsv.z *= (1.0 - _MarketBorderDarkening);
+                        fixed3 marketBorderColor = hsv2rgb(mHsv);
+                        modeColor = lerp(modeColor, marketBorderColor, marketBorderFactor);
+                    }
                 }
                 else
                 {
@@ -1030,29 +834,16 @@ Shader "EconSim/MapOverlay"
 
                 fixed3 finalColor = afterWater;
 
-                // Selection highlight
-                float selectionBorderAA = 0;
+                // Selection region test (for dimming non-selected areas)
                 bool isInSelection = false;
                 if (_SelectedRealmId >= 0)
-                {
-                    selectionBorderAA = CalculateSelectionBorderAA(uv, realmId, _SelectedRealmId, isWater, 0, _SelectionBorderWidth, uvPerPixel);
-                    isInSelection = !isWater && IsInSelectedRegion(realmId, _SelectedRealmId);
-                }
+                    isInSelection = !isWater && abs(realmId - _SelectedRealmId) < 0.00001;
                 else if (_SelectedProvinceId >= 0)
-                {
-                    selectionBorderAA = CalculateSelectionBorderAA(uv, provinceId, _SelectedProvinceId, isWater, 1, _SelectionBorderWidth, uvPerPixel);
-                    isInSelection = !isWater && IsInSelectedRegion(provinceId, _SelectedProvinceId);
-                }
+                    isInSelection = !isWater && abs(provinceId - _SelectedProvinceId) < 0.00001;
                 else if (_SelectedMarketId >= 0)
-                {
-                    selectionBorderAA = CalculateMarketSelectionBorderAA(uv, marketId, _SelectedMarketId, isWater, _SelectionBorderWidth, uvPerPixel);
-                    isInSelection = !isWater && IsInSelectedRegion(marketId, _SelectedMarketId);
-                }
+                    isInSelection = !isWater && abs(marketId - _SelectedMarketId) < 0.00001;
                 else if (_SelectedCountyId >= 0)
-                {
-                    selectionBorderAA = CalculateSelectionBorderAA(uv, countyId, _SelectedCountyId, isWater, 2, _SelectionBorderWidth, uvPerPixel);
-                    isInSelection = !isWater && IsInSelectedRegion(countyId, _SelectedCountyId);
-                }
+                    isInSelection = !isWater && abs(countyId - _SelectedCountyId) < 0.00001;
 
                 // Hover effect
                 bool isHovered = (!isWater) && (
@@ -1077,24 +868,27 @@ Shader "EconSim/MapOverlay"
                     finalColor *= _SelectionDimming;
                 }
 
-                // Selection border (topmost layer)
-                if (selectionBorderAA > 0)
-                {
-                    float alpha = selectionBorderAA * _SelectionBorderColor.a;
-                    finalColor = lerp(finalColor, _SelectionBorderColor.rgb, alpha);
-                }
-
                 return fixed4(finalColor, 1);
             }
-            // Stencil fragment: marks realm/province border band pixels
+            // Stencil fragment: marks border band pixels for political and market modes
             fixed4 frag_stencil(v2f IN) : SV_Target
             {
-                if (_MapMode < 1 || _MapMode > 3) discard;
-
-                float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
-                float provinceBorderDist = tex2D(_ProvinceBorderDistTex, IN.dataUV).r * 255.0;
-                float countyBorderDist = tex2D(_CountyBorderDistTex, IN.dataUV).r * 255.0;
-                if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth && countyBorderDist >= _CountyBorderWidth) discard;
+                if (_MapMode >= 1 && _MapMode <= 3)
+                {
+                    float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
+                    float provinceBorderDist = tex2D(_ProvinceBorderDistTex, IN.dataUV).r * 255.0;
+                    float countyBorderDist = tex2D(_CountyBorderDistTex, IN.dataUV).r * 255.0;
+                    if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth && countyBorderDist >= _CountyBorderWidth) discard;
+                }
+                else if (_MapMode == 4)
+                {
+                    float marketBorderDist = tex2D(_MarketBorderDistTex, IN.dataUV).r * 255.0;
+                    if (marketBorderDist >= _MarketBorderWidth) discard;
+                }
+                else
+                {
+                    discard;
+                }
 
                 return fixed4(0, 0, 0, 0);
             }

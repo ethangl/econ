@@ -21,9 +21,7 @@ namespace EconSim.Renderer
         [Header("Display Options")]
         [SerializeField] private bool showRoads = true;
 
-        [Header("References")]
-        [SerializeField] private Material roadMaterial;
-
+        private Material roadMaterial;
         private MapData mapData;
         private RoadState roadState;
         private float cellScale;
@@ -46,6 +44,7 @@ namespace EconSim.Renderer
 
         private void SetupMeshObject()
         {
+            roadMaterial = new Material(Shader.Find("Sprites/Default"));
             roadObject = new GameObject("Roads");
             roadObject.transform.SetParent(transform, false);
             meshFilter = roadObject.AddComponent<MeshFilter>();
