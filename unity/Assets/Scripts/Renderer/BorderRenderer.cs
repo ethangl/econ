@@ -113,8 +113,10 @@ namespace EconSim.Renderer
                             }
                         }
                     }
-                    // Check for county border (within same province)
-                    else if (cell.CountyId != neighbor.CountyId &&
+                    // Check for county border (within same province only)
+                    else if (cell.RealmId == neighbor.RealmId &&
+                             cell.ProvinceId == neighbor.ProvinceId &&
+                             cell.CountyId != neighbor.CountyId &&
                              cell.CountyId > 0 && neighbor.CountyId > 0)
                     {
                         var edgeKey = GetEdgeKey(cell.Id, neighbor.Id);
@@ -425,12 +427,12 @@ namespace EconSim.Renderer
                 }
                 else
                 {
-                    // We're prepending - points are already oriented toward our current start
-                    // Reverse them so they go from nextVertexIdx toward current start
+                    // pointsToAdd goes from endpointIdx toward nextVertexIdx
+                    // Reverse so it goes from nextVertexIdx toward endpointIdx
                     var reversed = new List<Vector3>(pointsToAdd);
                     reversed.Reverse();
-                    // Skip first point (now the duplicate of current start)
-                    polyline.InsertRange(0, reversed.Skip(1));
+                    // Skip last point (duplicate of current start at endpointIdx)
+                    polyline.InsertRange(0, reversed.GetRange(0, reversed.Count - 1));
                     vertexIndices.Insert(0, nextVertexIdx);
                 }
             }

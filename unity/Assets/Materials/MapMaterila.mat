@@ -151,8 +151,8 @@ Material:
     - _PoliticalEdgeOpacity: 0.8
     - _PoliticalGradientRadius: 64
     - _ProvinceBorderWidth: 0.8
-    - _RealmBorderOpacity: 0.75
-    - _RealmBorderWidth: 24
+    - _RealmBorderDarkening: 0.5
+    - _RealmBorderWidth: 1
     - _RiverDarken: 0.5
     - _RiverDepth: 0.2
     - _SeaLevel: 0.2

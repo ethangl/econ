@@ -51,8 +51,9 @@ Shader "EconSim/MapOverlay"
         _GradientCenterOpacity ("Gradient Center Opacity", Range(0, 1)) = 0.5
 
         // Realm border (world-space, in texels of data texture)
-        _RealmBorderWidth ("Realm Border Width (texels)", Range(10, 200)) = 80
-        _RealmBorderOpacity ("Realm Border Opacity", Range(0, 1)) = 1.0
+        _RealmBorderDistTex ("Realm Border Distance", 2D) = "white" {}
+        _RealmBorderWidth ("Realm Border Width", Range(0, 4)) = 1
+        _RealmBorderDarkening ("Realm Border Darkening", Range(0, 1)) = 0.5
 
         // Water layer properties
         _WaterShallowColor ("Water Shallow Color", Color) = (0.25, 0.55, 0.65, 1)
@@ -71,13 +72,7 @@ Shader "EconSim/MapOverlay"
         Tags { "RenderType"="Opaque" }
         LOD 100
 
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
-            #pragma target 3.5
-
+        CGINCLUDE
             #include "UnityCG.cginc"
 
             struct appdata
@@ -117,8 +112,9 @@ Shader "EconSim/MapOverlay"
             float _GradientRadius;
             float _GradientEdgeDarkening;
             float _GradientCenterOpacity;
+            sampler2D _RealmBorderDistTex;
             float _RealmBorderWidth;
-            float _RealmBorderOpacity;
+            float _RealmBorderDarkening;
 
             // Water layer uniforms
             fixed4 _WaterShallowColor;
@@ -852,16 +848,16 @@ Shader "EconSim/MapOverlay"
                     fixed3 centerColor = lerp(grayTerrain, politicalColor, _GradientCenterOpacity);
                     modeColor = lerp(edgeColor, centerColor, edgeProximity);
 
-                    // Realm border band overlay
-                    float borderWidthUV = _RealmBorderWidth * _CellDataTex_TexelSize.x;
-                    float realmBorderProximity = CalculateRealmBorderProximity(uv, realmId, isCellWater, borderWidthUV);
-                    if (realmBorderProximity < 0.5)
+                    // Realm border band overlay (distance texture + smoothstep AA)
+                    float realmBorderDist = tex2D(_RealmBorderDistTex, uv).r * 255.0;
+                    float borderAA = fwidth(realmBorderDist);
+                    float borderFactor = 1.0 - smoothstep(_RealmBorderWidth - borderAA, _RealmBorderWidth + borderAA, realmBorderDist);
+                    if (borderFactor > 0.001)
                     {
                         float3 hsv = rgb2hsv(politicalColor);
-                        hsv.z = max(hsv.z * 0.65, 0.35);
-                        fixed3 borderTint = hsv2rgb(hsv);
-                        fixed3 borderColor = grayTerrain * borderTint;
-                        modeColor = lerp(modeColor, borderColor, _RealmBorderOpacity);
+                        hsv.z *= (1.0 - _RealmBorderDarkening);
+                        fixed3 borderColor = hsv2rgb(hsv);
+                        modeColor = lerp(modeColor, borderColor, borderFactor);
                     }
                 }
                 else if (_MapMode == 4)
@@ -1050,8 +1046,48 @@ Shader "EconSim/MapOverlay"
 
                 return fixed4(finalColor, 1);
             }
+            // Stencil fragment: marks realm border band pixels
+            fixed4 frag_stencil(v2f IN) : SV_Target
+            {
+                if (_MapMode < 1 || _MapMode > 3) discard;
+
+                float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
+                if (realmBorderDist >= _RealmBorderWidth) discard;
+
+                return fixed4(0, 0, 0, 0);
+            }
+        ENDCG
+
+        // Pass 0: Main rendering
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma target 3.5
+            ENDCG
+        }
+
+        // Pass 1: Stencil mask for realm border band
+        Pass
+        {
+            ColorMask 0
+            ZWrite Off
+            ZTest LEqual
+            Stencil
+            {
+                Ref 1
+                Comp Always
+                Pass Replace
+            }
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag_stencil
+            #pragma target 3.5
             ENDCG
         }
     }
     FallBack "Diffuse"
+    CustomEditor "EconSim.Editor.MapOverlayShaderGUI"
 }
