@@ -146,7 +146,7 @@ namespace EconSim.Core.Import
                 if (mgRiver.Vertices.Length < 2) continue;
 
                 // MapGen vertices are mouth-first; reverse for source→mouth
-                var points = new List<ECVec2>(mgRiver.Vertices.Length);
+                var points = new List<ECVec2>(mgRiver.Vertices.Length + 1);
                 for (int vi = mgRiver.Vertices.Length - 1; vi >= 0; vi--)
                 {
                     int vertIdx = mgRiver.Vertices[vi];
@@ -155,6 +155,36 @@ namespace EconSim.Core.Import
                 }
 
                 if (points.Count < 2) continue;
+
+                // Extend source end into adjacent lake vertex
+                int sourceVert = mgRiver.SourceVertex;
+                int[] sourceNeighbors = mesh.VertexNeighbors[sourceVert];
+                if (sourceNeighbors != null)
+                {
+                    for (int i = 0; i < sourceNeighbors.Length; i++)
+                    {
+                        int nb = sourceNeighbors[i];
+                        if (nb >= 0 && nb < mesh.VertexCount && riverData.IsLake(nb))
+                        {
+                            points.Insert(0, ToECVec2(mesh.Vertices[nb]));
+                            break;
+                        }
+                    }
+                }
+
+                // Extend mouth end: add junction vertex for tributaries
+                int mouthVert = mgRiver.MouthVertex;
+                if (mouthVert != mgRiver.Vertices[0])
+                {
+                    points.Add(ToECVec2(mesh.Vertices[mouthVert]));
+                }
+
+                // Extend to ocean vertex so river visually reaches the coast
+                int flowTarget = riverData.FlowTarget[mouthVert];
+                if (flowTarget >= 0 && flowTarget < mesh.VertexCount && riverData.IsOcean(flowTarget))
+                {
+                    points.Add(ToECVec2(mesh.Vertices[flowTarget]));
+                }
 
                 int riverId = r + 1;
                 rivers.Add(new ECRiver

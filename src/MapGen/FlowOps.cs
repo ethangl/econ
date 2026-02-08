@@ -5,14 +5,14 @@ namespace MapGen.Core
     public static class FlowOps
     {
         public static void Compute(RiverData data, HeightGrid heights, ClimateData climate,
-            float threshold = 30f, int minVertices = 2)
+            float threshold = 30f, float traceThreshold = 10f, int minVertices = 2)
         {
             InterpolateVertexData(data, heights, climate);
             var vertexPairToEdge = BuildVertexPairToEdge(data.Mesh);
             DepressionFill(data);
             FlowAccumulate(data);
             AssignEdgeFlux(data, vertexPairToEdge);
-            ExtractRivers(data, vertexPairToEdge, threshold, minVertices);
+            ExtractRivers(data, vertexPairToEdge, threshold, traceThreshold, minVertices);
         }
 
         static long PairKey(int a, int b)
@@ -241,7 +241,7 @@ namespace MapGen.Core
         // --- Step 5: River Extraction ---
 
         static void ExtractRivers(RiverData data, Dictionary<long, int> vertexPairToEdge,
-            float threshold, int minVertices)
+            float threshold, float traceThreshold, int minVertices)
         {
             int n = data.VertexCount;
 
@@ -280,7 +280,7 @@ namespace MapGen.Core
                 if (vertexRiver[mouth] >= 0) continue;
 
                 var (verts, source) = TraceUpstream(
-                    mouth, nextId, data, inflow, vertexRiver, threshold);
+                    mouth, nextId, data, inflow, vertexRiver, traceThreshold);
 
                 rivers.Add(new River
                 {
@@ -314,10 +314,10 @@ namespace MapGen.Core
                 foreach (int up in inflow[vert])
                 {
                     if (vertexRiver[up] >= 0) continue;
-                    if (data.VertexFlux[up] < threshold) continue;
+                    if (data.VertexFlux[up] < traceThreshold) continue;
 
                     var (verts, source) = TraceUpstream(
-                        up, nextId, data, inflow, vertexRiver, threshold);
+                        up, nextId, data, inflow, vertexRiver, traceThreshold);
 
                     foreach (int v in verts)
                     {
