@@ -20,9 +20,9 @@ namespace EconSim.UI
         private Button _generateButton;
         private Label _statusLabel;
         private DropdownField _templateDropdown;
+        private IntegerField _seedField;
         private IntegerField _cellCountField;
         private FloatField _aspectRatioField;
-
         private bool _isLoading;
 
         private static readonly List<string> TemplateNames =
@@ -69,9 +69,9 @@ namespace EconSim.UI
             _generateButton = root.Q<Button>("generate-button");
             _statusLabel = root.Q<Label>("startup-status");
             _templateDropdown = root.Q<DropdownField>("template-dropdown");
+            _seedField = root.Q<IntegerField>("seed-field");
             _cellCountField = root.Q<IntegerField>("cellcount-field");
             _aspectRatioField = root.Q<FloatField>("aspect-ratio-field");
-
             // Setup template dropdown
             if (_templateDropdown != null)
             {
@@ -96,7 +96,7 @@ namespace EconSim.UI
             {
                 var config = new MapGenConfig
                 {
-                    Seed = UnityEngine.Random.Range(1, int.MaxValue),
+                    Seed = _seedField?.value ?? 12345,
                     CellCount = _cellCountField?.value ?? 100000,
                     AspectRatio = _aspectRatioField?.value ?? 1.5f,
                 };
