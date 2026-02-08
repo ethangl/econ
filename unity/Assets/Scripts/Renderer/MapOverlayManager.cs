@@ -464,11 +464,7 @@ namespace EconSim.Renderer
                     DrawThickLine(pixels, smoothedPoints[i], smoothedPoints[i + 1], width);
                 }
 
-                // Draw circular caps at river endpoints to fill gaps in gradient
-                float sourceCapRadius = maxWidth * 0.4f;
-                float mouthCapRadius = maxWidth * 0.5f;
-                DrawFilledCircle(pixels, smoothedPoints[0], sourceCapRadius);
-                DrawFilledCircle(pixels, smoothedPoints[smoothedPoints.Count - 1], mouthCapRadius);
+
             }
 
             return pixels;
@@ -519,38 +515,6 @@ namespace EconSim.Renderer
                 (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 +
                 (-p0 + 3f * p1 - 3f * p2 + p3) * t3
             );
-        }
-
-        /// <summary>
-        /// Draw a filled anti-aliased circle into the pixel buffer.
-        /// </summary>
-        private void DrawFilledCircle(byte[] pixels, Vector2 center, float radius)
-        {
-            int x0 = Mathf.Max(0, Mathf.FloorToInt(center.x - radius - 1));
-            int x1 = Mathf.Min(gridWidth - 1, Mathf.CeilToInt(center.x + radius + 1));
-            int y0 = Mathf.Max(0, Mathf.FloorToInt(center.y - radius - 1));
-            int y1 = Mathf.Min(gridHeight - 1, Mathf.CeilToInt(center.y + radius + 1));
-
-            for (int y = y0; y <= y1; y++)
-            {
-                for (int x = x0; x <= x1; x++)
-                {
-                    float dx = x + 0.5f - center.x;
-                    float dy = y + 0.5f - center.y;
-                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
-
-                    // Anti-aliased edge
-                    float coverage = 1f - Mathf.Clamp01((dist - radius + 0.5f) / 1f);
-
-                    if (coverage > 0)
-                    {
-                        int idx = y * gridWidth + x;
-                        int newVal = Mathf.RoundToInt(coverage * 255);
-                        if (newVal > pixels[idx])
-                            pixels[idx] = (byte)newVal;
-                    }
-                }
-            }
         }
 
         /// <summary>

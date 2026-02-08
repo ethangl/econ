@@ -135,6 +135,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _RoadMaskTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _BumpScale: 1
@@ -149,16 +153,16 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _GradientCenterOpacity: 0.5
-    - _GradientEdgeDarkening: 0.7
-    - _GradientRadius: 14
+    - _GradientCenterOpacity: 0.444
+    - _GradientEdgeDarkening: 0.444
+    - _GradientRadius: 12
     - _HeightScale: 3
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.99999994
+    - _HoverIntensity: 0.016915884
     - _HoveredCountyId: -1
-    - _HoveredMarketId: 0.000015259022
+    - _HoveredMarketId: 0.000030518044
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
     - _MapMode: 4
@@ -178,7 +182,7 @@ Material:
     - _RealmBorderWidth: 0.25
     - _RiverDarken: 0.5
     - _RiverDepth: 0.2
-    - _RoadDarkening: 0.664
+    - _RoadDarkening: 0.75
     - _RoadWidth: 0.045
     - _SeaLevel: 0.2
     - _SelectedCellId: -1

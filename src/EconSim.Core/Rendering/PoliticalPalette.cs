@@ -12,8 +12,8 @@ namespace EconSim.Core.Rendering
     public class PoliticalPalette
     {
         // Base HSV values for realms (center of range)
-        private const float BaseSaturation = 0.42f;
-        private const float BaseValue = 0.70f;
+        private const float BaseSaturation = 0.33f;
+        private const float BaseValue = 0.77f;
 
         // Realm variance ranges (±)
         private const float RealmSatVariance = 0.08f;

@@ -352,204 +352,6 @@ Shader "EconSim/MapOverlay"
             }
 
             // ========================================================================
-            // Edge proximity functions (unchanged)
-            // ========================================================================
-
-            // Calculate edge proximity for political gradient effect
-            // Returns 0 at edges (near different region, water, or river), 1 deep in interior
-            // channel: 0=realm (R), 1=province (G), 2=county (A)
-            float CalculateEdgeProximity(float2 uv, float centerValue, bool centerIsWater, int channel, float maxRadius, float uvPerPixel)
-            {
-                if (centerIsWater) return 1;
-
-                static const float2 sampleDirs8[8] = {
-                    float2(1, 0), float2(0.707, 0.707), float2(0, 1), float2(-0.707, 0.707),
-                    float2(-1, 0), float2(-0.707, -0.707), float2(0, -1), float2(0.707, -0.707)
-                };
-
-                float radii[8] = {
-                    maxRadius * 0.0625, maxRadius * 0.125, maxRadius * 0.1875, maxRadius * 0.25,
-                    maxRadius * 0.3125, maxRadius * 0.375, maxRadius * 0.4375, maxRadius * 0.5
-                };
-
-                float minEdgeDistance = maxRadius * 0.5;
-
-                for (int r = 0; r < 8; r++)
-                {
-                    float radius = radii[r];
-
-                    for (int i = 0; i < 8; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs8[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-
-                        float sampleRiver = tex2D(_RiverMaskTex, sampleUV).r;
-                        bool sampleIsRiver = sampleRiver > 0.5;
-
-                        if (sampleIsWater || sampleIsRiver)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                            continue;
-                        }
-
-                        float sampleValue;
-                        if (channel == 0) sampleValue = sampleData.r;
-                        else if (channel == 1) sampleValue = sampleData.g;
-                        else sampleValue = sampleData.a;
-
-                        if (abs(centerValue - sampleValue) > 0.00001)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                        }
-                    }
-                }
-
-                return saturate(minEdgeDistance / (maxRadius * 0.5));
-            }
-
-            // Calculate proximity to realm borders ONLY (ignores water/rivers)
-            float CalculateRealmBorderProximity(float2 uv, float centerRealmId, bool centerIsWater, float borderWidthUV)
-            {
-                if (centerIsWater) return 1;
-
-                static const float2 sampleDirs8[8] = {
-                    float2(1, 0), float2(0.707, 0.707), float2(0, 1), float2(-0.707, 0.707),
-                    float2(-1, 0), float2(-0.707, -0.707), float2(0, -1), float2(0.707, -0.707)
-                };
-
-                float radii[8] = {
-                    borderWidthUV * 0.125, borderWidthUV * 0.25, borderWidthUV * 0.375, borderWidthUV * 0.5,
-                    borderWidthUV * 0.625, borderWidthUV * 0.75, borderWidthUV * 0.875, borderWidthUV
-                };
-
-                float minEdgeDistance = borderWidthUV;
-
-                for (int r = 0; r < 8; r++)
-                {
-                    float radius = radii[r];
-
-                    for (int i = 0; i < 8; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs8[i] * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-                        if (sampleIsWater) continue;
-
-                        float sampleRealmId = sampleData.r;
-                        if (abs(centerRealmId - sampleRealmId) > 0.00001)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                        }
-                    }
-                }
-
-                return saturate(minEdgeDistance / borderWidthUV);
-            }
-
-            // Calculate edge proximity for political modes (realm boundaries, water, rivers)
-            float CalculatePoliticalEdgeProximity(float2 uv, float centerRealmId, bool centerIsWater, float maxRadius, float uvPerPixel)
-            {
-                if (centerIsWater) return 1;
-
-                static const float2 dirs8[8] = {
-                    float2(1, 0), float2(0.707, 0.707), float2(0, 1), float2(-0.707, 0.707),
-                    float2(-1, 0), float2(-0.707, -0.707), float2(0, -1), float2(0.707, -0.707)
-                };
-
-                float radii[8] = {
-                    maxRadius * 0.0625, maxRadius * 0.125, maxRadius * 0.1875, maxRadius * 0.25,
-                    maxRadius * 0.3125, maxRadius * 0.375, maxRadius * 0.4375, maxRadius * 0.5
-                };
-
-                float minEdgeDistance = maxRadius * 0.5;
-
-                for (int r = 0; r < 8; r++)
-                {
-                    float radius = radii[r];
-                    for (int i = 0; i < 8; i++)
-                    {
-                        float2 sampleUV = uv + dirs8[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-
-                        float sampleRiver = tex2D(_RiverMaskTex, sampleUV).r;
-                        bool sampleIsRiver = sampleRiver > 0.5;
-
-                        if (sampleIsWater || sampleIsRiver)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                            continue;
-                        }
-
-                        float sampleRealmId = sampleData.r;
-                        if (abs(centerRealmId - sampleRealmId) > 0.00001)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                        }
-                    }
-                }
-
-                return saturate(minEdgeDistance / (maxRadius * 0.5));
-            }
-
-            // Calculate edge proximity for market zones
-            float CalculateMarketEdgeProximity(float2 uv, float centerMarketId, bool centerIsWater, float maxRadius, float uvPerPixel)
-            {
-                if (centerIsWater) return 1;
-
-                static const float2 sampleDirs8[8] = {
-                    float2(1, 0), float2(0.707, 0.707), float2(0, 1), float2(-0.707, 0.707),
-                    float2(-1, 0), float2(-0.707, -0.707), float2(0, -1), float2(0.707, -0.707)
-                };
-
-                float radii[8] = {
-                    maxRadius * 0.0625, maxRadius * 0.125, maxRadius * 0.1875, maxRadius * 0.25,
-                    maxRadius * 0.3125, maxRadius * 0.375, maxRadius * 0.4375, maxRadius * 0.5
-                };
-
-                float minEdgeDistance = maxRadius * 0.5;
-
-                for (int r = 0; r < 8; r++)
-                {
-                    float radius = radii[r];
-
-                    for (int i = 0; i < 8; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs8[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-
-                        float sampleRiver = tex2D(_RiverMaskTex, sampleUV).r;
-                        bool sampleIsRiver = sampleRiver > 0.5;
-
-                        if (sampleIsWater || sampleIsRiver)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                            continue;
-                        }
-
-                        float sampleMarketId = GetMarketIdForCell(sampleData.a);
-
-                        if (abs(centerMarketId - sampleMarketId) > 0.00001)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                        }
-                    }
-                }
-
-                return saturate(minEdgeDistance / (maxRadius * 0.5));
-            }
-
-            // ========================================================================
             // Layer 1: Terrain (always rendered, seabed visible under water)
             // ========================================================================
 
@@ -638,7 +440,7 @@ Shader "EconSim/MapOverlay"
             // Layer 2: Map mode overlay (political/market paint, alpha=0 on water)
             // ========================================================================
 
-            fixed4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, float realmId, float provinceId, float countyId, float marketId, float uvPerPixel)
+            fixed4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, float realmId, float provinceId, float countyId, float marketId)
             {
                 // No map mode overlay on water, rivers, height mode (0), or terrain mode (5)
                 if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 5)
@@ -655,7 +457,8 @@ Shader "EconSim/MapOverlay"
                 {
                     // Political modes (1=realm, 2=province, 3=county)
                     fixed3 politicalColor = LookupPaletteColor(_RealmPaletteTex, realmId);
-                    edgeProximity = CalculatePoliticalEdgeProximity(uv, realmId, isCellWater, _GradientRadius, uvPerPixel);
+                    float realmDist = tex2D(_RealmBorderDistTex, uv).r * 255.0;
+                    edgeProximity = saturate(realmDist / _GradientRadius);
 
                     // Multiply blend and gradient
                     fixed3 multiplied = grayTerrain * politicalColor;
@@ -703,7 +506,8 @@ Shader "EconSim/MapOverlay"
                 {
                     // Market mode
                     fixed3 marketColor = LookupPaletteColor(_MarketPaletteTex, marketId);
-                    edgeProximity = CalculateMarketEdgeProximity(uv, marketId, isCellWater, _GradientRadius, uvPerPixel);
+                    float marketDist = tex2D(_MarketBorderDistTex, uv).r * 255.0;
+                    edgeProximity = saturate(marketDist / _GradientRadius);
 
                     fixed3 multiplied = grayTerrain * marketColor;
                     fixed3 edgeColor = lerp(marketColor, multiplied, _GradientEdgeDarkening);
@@ -805,10 +609,6 @@ Shader "EconSim/MapOverlay"
 
                 float height = tex2D(_HeightmapTex, IN.dataUV).r;
 
-                float2 dx = ddx(uv);
-                float2 dy = ddy(uv);
-                float uvPerPixel = length(float2(length(dx), length(dy)));
-
                 // ---- Layer 1: Terrain ----
 
                 fixed3 terrain;
@@ -824,7 +624,7 @@ Shader "EconSim/MapOverlay"
 
                 // ---- Layer 2: Map mode ----
 
-                fixed4 mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId, uvPerPixel);
+                fixed4 mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId);
                 fixed3 afterMapMode = lerp(terrain, mapMode.rgb, mapMode.a);
 
                 // ---- Layer 3: Water ----
