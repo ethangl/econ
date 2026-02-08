@@ -55,6 +55,16 @@ Shader "EconSim/MapOverlay"
         _RealmBorderWidth ("Realm Border Width", Range(0, 4)) = 1
         _RealmBorderDarkening ("Realm Border Darkening", Range(0, 1)) = 0.5
 
+        // Province border (thinner, lighter than realm)
+        _ProvinceBorderDistTex ("Province Border Distance", 2D) = "white" {}
+        _ProvinceBorderWidth ("Province Border Width", Range(0, 4)) = 0.7
+        _ProvinceBorderDarkening ("Province Border Darkening", Range(0, 1)) = 0.35
+
+        // County border (thinnest, lightest)
+        _CountyBorderDistTex ("County Border Distance", 2D) = "white" {}
+        _CountyBorderWidth ("County Border Width", Range(0, 4)) = 0.5
+        _CountyBorderDarkening ("County Border Darkening", Range(0, 1)) = 0.25
+
         // Water layer properties
         _WaterShallowColor ("Water Shallow Color", Color) = (0.25, 0.55, 0.65, 1)
         _WaterDeepColor ("Water Deep Color", Color) = (0.06, 0.12, 0.25, 1)
@@ -115,6 +125,12 @@ Shader "EconSim/MapOverlay"
             sampler2D _RealmBorderDistTex;
             float _RealmBorderWidth;
             float _RealmBorderDarkening;
+            sampler2D _ProvinceBorderDistTex;
+            float _ProvinceBorderWidth;
+            float _ProvinceBorderDarkening;
+            sampler2D _CountyBorderDistTex;
+            float _CountyBorderWidth;
+            float _CountyBorderDarkening;
 
             // Water layer uniforms
             fixed4 _WaterShallowColor;
@@ -848,7 +864,31 @@ Shader "EconSim/MapOverlay"
                     fixed3 centerColor = lerp(grayTerrain, politicalColor, _GradientCenterOpacity);
                     modeColor = lerp(edgeColor, centerColor, edgeProximity);
 
-                    // Realm border band overlay (distance texture + smoothstep AA)
+                    // County border band overlay (thinnest, lightest — drawn first)
+                    float countyBorderDist = tex2D(_CountyBorderDistTex, uv).r * 255.0;
+                    float countyBorderAA = fwidth(countyBorderDist);
+                    float countyBorderFactor = 1.0 - smoothstep(_CountyBorderWidth - countyBorderAA, _CountyBorderWidth + countyBorderAA, countyBorderDist);
+                    if (countyBorderFactor > 0.001)
+                    {
+                        float3 cHsv = rgb2hsv(politicalColor);
+                        cHsv.z *= (1.0 - _CountyBorderDarkening);
+                        fixed3 countyBorderColor = hsv2rgb(cHsv);
+                        modeColor = lerp(modeColor, countyBorderColor, countyBorderFactor);
+                    }
+
+                    // Province border band overlay (thinner, lighter — drawn on top of county borders)
+                    float provinceBorderDist = tex2D(_ProvinceBorderDistTex, uv).r * 255.0;
+                    float provinceBorderAA = fwidth(provinceBorderDist);
+                    float provinceBorderFactor = 1.0 - smoothstep(_ProvinceBorderWidth - provinceBorderAA, _ProvinceBorderWidth + provinceBorderAA, provinceBorderDist);
+                    if (provinceBorderFactor > 0.001)
+                    {
+                        float3 pHsv = rgb2hsv(politicalColor);
+                        pHsv.z *= (1.0 - _ProvinceBorderDarkening);
+                        fixed3 provinceBorderColor = hsv2rgb(pHsv);
+                        modeColor = lerp(modeColor, provinceBorderColor, provinceBorderFactor);
+                    }
+
+                    // Realm border band overlay (distance texture + smoothstep AA, on top of province borders)
                     float realmBorderDist = tex2D(_RealmBorderDistTex, uv).r * 255.0;
                     float borderAA = fwidth(realmBorderDist);
                     float borderFactor = 1.0 - smoothstep(_RealmBorderWidth - borderAA, _RealmBorderWidth + borderAA, realmBorderDist);
@@ -1046,13 +1086,15 @@ Shader "EconSim/MapOverlay"
 
                 return fixed4(finalColor, 1);
             }
-            // Stencil fragment: marks realm border band pixels
+            // Stencil fragment: marks realm/province border band pixels
             fixed4 frag_stencil(v2f IN) : SV_Target
             {
                 if (_MapMode < 1 || _MapMode > 3) discard;
 
                 float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
-                if (realmBorderDist >= _RealmBorderWidth) discard;
+                float provinceBorderDist = tex2D(_ProvinceBorderDistTex, IN.dataUV).r * 255.0;
+                float countyBorderDist = tex2D(_CountyBorderDistTex, IN.dataUV).r * 255.0;
+                if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth && countyBorderDist >= _CountyBorderWidth) discard;
 
                 return fixed4(0, 0, 0, 0);
             }

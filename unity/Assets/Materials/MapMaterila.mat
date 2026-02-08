@@ -51,6 +51,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _CountyBorderDistTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _DetailAlbedoMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -95,6 +99,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _ProvinceBorderDistTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _ProvinceColorTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -125,7 +133,8 @@ Material:
     - _CoastGradientIntensity: 0
     - _CoastGradientRadius: 15
     - _CoastlineBorderWidth: 2
-    - _CountyBorderWidth: 0.6
+    - _CountyBorderDarkening: 0.333
+    - _CountyBorderWidth: 0.05
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
@@ -139,11 +148,11 @@ Material:
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.01590813
+    - _HoverIntensity: 0.000033303473
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
-    - _HoveredRealmId: 0.0001373312
+    - _HoveredRealmId: -1
     - _MapMode: 1
     - _MarketBorderWidth: 1
     - _Metallic: 0
@@ -154,7 +163,8 @@ Material:
     - _PoliticalEdgeDarkening: 0.777
     - _PoliticalEdgeOpacity: 0.8
     - _PoliticalGradientRadius: 64
-    - _ProvinceBorderWidth: 0.8
+    - _ProvinceBorderDarkening: 0.5
+    - _ProvinceBorderWidth: 0.1
     - _RealmBorderDarkening: 0.75
     - _RealmBorderWidth: 0.25
     - _RiverDarken: 0.5
@@ -166,8 +176,8 @@ Material:
     - _SelectedProvinceId: -1
     - _SelectedRealmId: -1
     - _SelectionBorderWidth: 3
-    - _SelectionDesaturation: 1.3395557e-32
-    - _SelectionDimming: 0.99999976
+    - _SelectionDesaturation: 1e-45
+    - _SelectionDimming: 1
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
     - _ShimmerIntensity: 0.08

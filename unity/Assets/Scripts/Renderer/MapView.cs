@@ -35,8 +35,6 @@ namespace EconSim.Renderer
         private int gridDivisor = 1;  // 1 = full source resolution, 2 = half, etc.
         private float gridHeightScale = 3f;
 
-        [Header("Borders")]
-        private bool enableBorders = true;
         [SerializeField] private Material borderMaterial;
 
         [Header("Selection")]
@@ -66,7 +64,6 @@ namespace EconSim.Renderer
         private MeshFilter meshFilter;
         private MeshRenderer meshRenderer;
         private Mesh mesh;
-        private BorderRenderer borderRenderer;
         private RiverRenderer riverRenderer;
         private RoadRenderer roadRenderer;
         private SelectionHighlight selectionHighlight;
@@ -393,10 +390,6 @@ namespace EconSim.Renderer
             InitializeOverlays();
             Profiler.End();
 
-            Profiler.Begin("InitializeBorders");
-            InitializeBorders();
-            Profiler.End();
-
             // InitializeRivers();  // Disabled - rivers now rendered via shader mask (Phase 8)
 
             Profiler.Begin("InitializeRoads");
@@ -430,32 +423,6 @@ namespace EconSim.Renderer
 
             // Sync shader mode with current map mode
             overlayManager.SetMapMode(currentMode);
-            UpdateOverlayVisibility();
-        }
-
-        private void InitializeBorders()
-        {
-            if (!enableBorders || mapData == null) return;
-
-            // Create or get BorderRenderer component
-            borderRenderer = GetComponent<BorderRenderer>();
-            if (borderRenderer == null)
-            {
-                borderRenderer = gameObject.AddComponent<BorderRenderer>();
-            }
-
-            // Set border material if we have one
-            if (borderMaterial != null)
-            {
-                var borderMaterialField = typeof(BorderRenderer).GetField("borderMaterial",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                borderMaterialField?.SetValue(borderRenderer, borderMaterial);
-            }
-
-            borderRenderer.Initialize(mapData, cellScale, heightScale);
-
-            // Apply initial border visibility based on current map mode
-            UpdateBorderVisibility();
         }
 
         private void InitializeRivers()
@@ -717,19 +684,8 @@ namespace EconSim.Renderer
                     break;
             }
 
-            // Update border visibility to match selection depth
-            UpdateBordersForSelectionDepth();
-
             // Notify listeners
             OnSelectionChanged?.Invoke(depth);
-        }
-
-        /// <summary>
-        /// Update border visibility based on current selection depth.
-        /// </summary>
-        private void UpdateBordersForSelectionDepth()
-        {
-            // Shader-based borders disabled - using mesh-based BorderRenderer
         }
 
         /// <summary>
@@ -743,7 +699,6 @@ namespace EconSim.Renderer
             selectedCountyId = -1;
             SetSelectionActive(false);
             overlayManager?.ClearSelection();
-            UpdateOverlayVisibility();  // Restore borders based on map mode
 
             // Notify listeners
             OnSelectionChanged?.Invoke(SelectionDepth.None);
@@ -1000,28 +955,6 @@ namespace EconSim.Renderer
                     // Clear drill-down selection when changing modes
                     ClearDrillDownSelection();
                 }
-                else
-                {
-                    UpdateBorderVisibility();
-                }
-            }
-        }
-
-        private void UpdateOverlayVisibility()
-        {
-            // Shader-based borders disabled - using mesh-based BorderRenderer
-        }
-
-        private void UpdateBorderVisibility()
-        {
-            // Show all borders for now
-        }
-
-        public void SetProvinceBordersVisible(bool visible)
-        {
-            if (borderRenderer != null)
-            {
-                borderRenderer.SetProvinceBordersVisible(visible);
             }
         }
 
@@ -1685,21 +1618,6 @@ namespace EconSim.Renderer
 
         [ContextMenu("Set Mode: Market")]
         private void SetModeMarket() => SetMapMode(MapMode.Market);
-
-        [ContextMenu("Toggle Province Borders")]
-        private void ToggleProvinceBorders()
-        {
-            if (borderRenderer != null)
-            {
-                var field = typeof(BorderRenderer).GetField("showProvinceBorders",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (field != null)
-                {
-                    bool current = (bool)field.GetValue(borderRenderer);
-                    borderRenderer.SetProvinceBordersVisible(!current);
-                }
-            }
-        }
 
         [ContextMenu("Toggle Grid Mesh")]
         private void ToggleGridMesh()
