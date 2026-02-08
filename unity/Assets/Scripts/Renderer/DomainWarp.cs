@@ -21,11 +21,16 @@ namespace EconSim.Renderer
         /// </summary>
         public static (float wx, float wy) Warp(float x, float y)
         {
-            float nx = x * Frequency;
-            float ny = y * Frequency;
+            return Warp(x, y, Frequency, Amplitude);
+        }
 
-            float offsetX = (ValueNoise(nx, ny) - 0.5f) * 2f * Amplitude;
-            float offsetY = (ValueNoise(nx + SeedOffset, ny + SeedOffset) - 0.5f) * 2f * Amplitude;
+        public static (float wx, float wy) Warp(float x, float y, float frequency, float amplitude)
+        {
+            float nx = x * frequency;
+            float ny = y * frequency;
+
+            float offsetX = (ValueNoise(nx, ny) - 0.5f) * 2f * amplitude;
+            float offsetY = (ValueNoise(nx + SeedOffset, ny + SeedOffset) - 0.5f) * 2f * amplitude;
 
             return (x + offsetX, y + offsetY);
         }

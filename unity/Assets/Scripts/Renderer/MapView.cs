@@ -62,7 +62,6 @@ namespace EconSim.Renderer
         private MeshFilter meshFilter;
         private MeshRenderer meshRenderer;
         private Mesh mesh;
-        private RoadRenderer roadRenderer;
         private MapOverlayManager overlayManager;
 
         // Cell mesh data
@@ -386,10 +385,6 @@ namespace EconSim.Renderer
             InitializeOverlays();
             Profiler.End();
 
-            Profiler.Begin("InitializeRoads");
-            InitializeRoads();
-            Profiler.End();
-
             // Subscribe to cell clicks for shader selection
             if (useShaderOverlays && overlayManager != null)
             {
@@ -421,29 +416,12 @@ namespace EconSim.Renderer
             overlayManager.SetMapMode(currentMode);
         }
 
-        private void InitializeRoads()
-        {
-            if (mapData == null) return;
-
-            // Create or get RoadRenderer component
-            roadRenderer = GetComponent<RoadRenderer>();
-            if (roadRenderer == null)
-            {
-                roadRenderer = gameObject.AddComponent<RoadRenderer>();
-            }
-
-            // Note: RoadRenderer.Initialize will be called from SetRoadState once economy is ready
-        }
-
         /// <summary>
-        /// Set road state for road rendering. Call after economy initialization.
+        /// Set road state for shader-based road rendering. Call after economy initialization.
         /// </summary>
         public void SetRoadState(EconSim.Core.Economy.RoadState roads)
         {
-            if (roadRenderer != null && mapData != null)
-            {
-                roadRenderer.Initialize(mapData, roads, cellScale, heightScale);
-            }
+            overlayManager?.SetRoadState(roads);
         }
 
         /// <summary>
@@ -451,7 +429,7 @@ namespace EconSim.Renderer
         /// </summary>
         public void RefreshRoads()
         {
-            roadRenderer?.RefreshRoads();
+            overlayManager?.RegenerateRoadDistTexture();
         }
 
         private void HandleShaderSelection(int cellId)

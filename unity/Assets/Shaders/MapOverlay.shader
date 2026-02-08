@@ -68,6 +68,10 @@ Shader "EconSim/MapOverlay"
         _MarketBorderWidth ("Market Border Width", Range(0, 4)) = 1
         _MarketBorderDarkening ("Market Border Darkening", Range(0, 1)) = 0.5
 
+        // Road overlay (market mode only, direct mask: 0=no road, 1=road)
+        _RoadMaskTex ("Road Mask", 2D) = "black" {}
+        _RoadDarkening ("Road Darkening", Range(0, 1)) = 0.4
+
         // Water layer properties
         _WaterShallowColor ("Water Shallow Color", Color) = (0.25, 0.55, 0.65, 1)
         _WaterDeepColor ("Water Deep Color", Color) = (0.06, 0.12, 0.25, 1)
@@ -137,6 +141,9 @@ Shader "EconSim/MapOverlay"
             sampler2D _MarketBorderDistTex;
             float _MarketBorderWidth;
             float _MarketBorderDarkening;
+
+            sampler2D _RoadMaskTex;
+            float _RoadDarkening;
 
             // Water layer uniforms
             fixed4 _WaterShallowColor;
@@ -702,6 +709,14 @@ Shader "EconSim/MapOverlay"
                     fixed3 edgeColor = lerp(marketColor, multiplied, _GradientEdgeDarkening);
                     fixed3 centerColor = lerp(grayTerrain, marketColor, _GradientCenterOpacity);
                     modeColor = lerp(edgeColor, centerColor, edgeProximity);
+
+                    // Road overlay: multiply-darken terrain where roads exist
+                    // Road mask is direct coverage (0=no road, 1=road), bilinear-filtered for AA
+                    float roadMask = tex2D(_RoadMaskTex, uv).r;
+                    if (roadMask > 0.01)
+                    {
+                        modeColor *= lerp(1.0, 1.0 - _RoadDarkening, roadMask);
+                    }
 
                     // Market zone border band overlay (distance texture + smoothstep AA)
                     float marketBorderDist = tex2D(_MarketBorderDistTex, uv).r * 255.0;
