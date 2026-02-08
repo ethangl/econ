@@ -42,6 +42,18 @@ namespace EconSim.Renderer
         private static readonly int SelectionDimmingId = Shader.PropertyToID("_SelectionDimming");
         private static readonly int SelectionDesaturationId = Shader.PropertyToID("_SelectionDesaturation");
 
+        // Water layer property IDs
+        private static readonly int WaterShallowColorId = Shader.PropertyToID("_WaterShallowColor");
+        private static readonly int WaterDeepColorId = Shader.PropertyToID("_WaterDeepColor");
+        private static readonly int WaterDepthRangeId = Shader.PropertyToID("_WaterDepthRange");
+        private static readonly int WaterShallowAlphaId = Shader.PropertyToID("_WaterShallowAlpha");
+        private static readonly int WaterDeepAlphaId = Shader.PropertyToID("_WaterDeepAlpha");
+        private static readonly int RiverDepthId = Shader.PropertyToID("_RiverDepth");
+        private static readonly int RiverDarkenId = Shader.PropertyToID("_RiverDarken");
+        private static readonly int ShimmerScaleId = Shader.PropertyToID("_ShimmerScale");
+        private static readonly int ShimmerSpeedId = Shader.PropertyToID("_ShimmerSpeed");
+        private static readonly int ShimmerIntensityId = Shader.PropertyToID("_ShimmerIntensity");
+
         private MapData mapData;
         private EconomyState economyState;
         private Material terrainMaterial;
@@ -871,6 +883,9 @@ namespace EconSim.Renderer
             cellToMarketTexture.SetPixels(emptyMarkets);
             cellToMarketTexture.Apply();
             terrainMaterial.SetTexture(CellToMarketTexId, cellToMarketTexture);
+
+            // Water layer properties are set via shader defaults + material Inspector
+            // (not overwritten here so Inspector tweaks persist)
 
             // Default to political mode
             terrainMaterial.SetInt(MapModeId, 1);

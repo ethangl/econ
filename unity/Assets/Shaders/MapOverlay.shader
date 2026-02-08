@@ -22,7 +22,7 @@ Shader "EconSim/MapOverlay"
         _MarketPaletteTex ("Market Palette", 2D) = "white" {}
         _BiomePaletteTex ("Biome Palette", 2D) = "white" {}
 
-        // Biome-elevation matrix (64x64: biome × elevation)
+        // Biome-elevation matrix (64x64: biome x elevation)
         _BiomeMatrixTex ("Biome Elevation Matrix", 2D) = "white" {}
 
         // Selection highlight (only one should be >= 0 at a time)
@@ -53,6 +53,18 @@ Shader "EconSim/MapOverlay"
         // Realm border (world-space, in texels of data texture)
         _RealmBorderWidth ("Realm Border Width (texels)", Range(10, 200)) = 80
         _RealmBorderOpacity ("Realm Border Opacity", Range(0, 1)) = 1.0
+
+        // Water layer properties
+        _WaterShallowColor ("Water Shallow Color", Color) = (0.25, 0.55, 0.65, 1)
+        _WaterDeepColor ("Water Deep Color", Color) = (0.06, 0.12, 0.25, 1)
+        _WaterDepthRange ("Water Depth Range", Float) = 0.2
+        _WaterShallowAlpha ("Water Shallow Alpha", Range(0, 1)) = 0.5
+        _WaterDeepAlpha ("Water Deep Alpha", Range(0, 1)) = 0.95
+        _RiverDepth ("River Depth", Range(0, 0.5)) = 0.1
+        _RiverDarken ("River Darken", Range(0, 1)) = 0.3
+        _ShimmerScale ("Shimmer Scale", Float) = 0.02
+        _ShimmerSpeed ("Shimmer Speed", Float) = 0.03
+        _ShimmerIntensity ("Shimmer Intensity", Range(0, 0.2)) = 0.08
     }
     SubShader
     {
@@ -80,6 +92,7 @@ Shader "EconSim/MapOverlay"
                 float4 pos : SV_POSITION;
                 float4 vertexColor : COLOR;
                 float2 dataUV : TEXCOORD0;    // Unified UV for all textures (Y-up coordinates)
+                float2 worldUV : TEXCOORD1;   // World-space UV for consistent shimmer scale
             };
 
             sampler2D _HeightmapTex;
@@ -100,15 +113,24 @@ Shader "EconSim/MapOverlay"
             sampler2D _BiomePaletteTex;
             sampler2D _BiomeMatrixTex;
 
-            // Water color constant
-            static const fixed3 WATER_COLOR = fixed3(0.12, 0.2, 0.35);
-
             int _MapMode;
             float _GradientRadius;
             float _GradientEdgeDarkening;
             float _GradientCenterOpacity;
             float _RealmBorderWidth;
             float _RealmBorderOpacity;
+
+            // Water layer uniforms
+            fixed4 _WaterShallowColor;
+            fixed4 _WaterDeepColor;
+            float _WaterDepthRange;
+            float _WaterShallowAlpha;
+            float _WaterDeepAlpha;
+            float _RiverDepth;
+            float _RiverDarken;
+            float _ShimmerScale;
+            float _ShimmerSpeed;
+            float _ShimmerIntensity;
 
             float _SelectedRealmId;
             float _SelectedProvinceId;
@@ -125,7 +147,7 @@ Shader "EconSim/MapOverlay"
             float _HoveredMarketId;
             float _HoverIntensity;
 
-            // 16 sample directions for smoother AA (8 cardinal + 8 at 22.5° offsets)
+            // 16 sample directions for smoother AA (8 cardinal + 8 at 22.5 offsets)
             static const float2 sampleDirs[16] = {
                 float2(1, 0), float2(0.924, 0.383), float2(0.707, 0.707), float2(0.383, 0.924),
                 float2(0, 1), float2(-0.383, 0.924), float2(-0.707, 0.707), float2(-0.924, 0.383),
@@ -151,8 +173,16 @@ Shader "EconSim/MapOverlay"
                 // Single UV for all textures (Y-up coordinates, unified)
                 o.dataUV = v.texcoord.xy;
 
+                // World UV for shimmer (consistent scale regardless of mesh UVs)
+                float3 worldPos = mul(unity_ObjectToWorld, vertex).xyz;
+                o.worldUV = worldPos.xz * _ShimmerScale;
+
                 return o;
             }
+
+            // ========================================================================
+            // Utility functions
+            // ========================================================================
 
             // Sample cell data at a UV position with point filtering
             float4 SampleCellData(float2 uv)
@@ -184,9 +214,46 @@ Shader "EconSim/MapOverlay"
                 return float(h & 0x7FFFFFFFu) / float(0x7FFFFFFF);
             }
 
+            // 2D hash for noise functions (different from integer hash above)
+            float hash2d(float2 p)
+            {
+                float3 p3 = frac(float3(p.xyx) * 0.1031);
+                p3 += dot(p3, p3.yzx + 33.33);
+                return frac((p3.x + p3.y) * p3.z);
+            }
+
+            // Value noise for water shimmer
+            float valueNoise(float2 p)
+            {
+                float2 i = floor(p);
+                float2 f = frac(p);
+
+                // Cubic interpolation for smoother result
+                float2 u = f * f * (3.0 - 2.0 * f);
+
+                float a = hash2d(i);
+                float b = hash2d(i + float2(1.0, 0.0));
+                float c = hash2d(i + float2(0.0, 1.0));
+                float d = hash2d(i + float2(1.0, 1.0));
+
+                return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+            }
+
+            // 2-octave FBM for water shimmer
+            float fbm2(float2 p)
+            {
+                float value = 0.0;
+                float amplitude = 0.5;
+
+                value += valueNoise(p) * amplitude;
+                p *= 2.0;
+                amplitude *= 0.5;
+                value += valueNoise(p) * amplitude;
+
+                return value;
+            }
+
             // Photoshop Overlay blend mode (per channel)
-            // If base < 0.5: 2 * base * blend
-            // If base >= 0.5: 1 - 2 * (1 - base) * (1 - blend)
             float OverlayBlend(float base, float blend)
             {
                 return base < 0.5
@@ -234,15 +301,13 @@ Shader "EconSim/MapOverlay"
             {
                 float3 hsv = rgb2hsv(realmColor);
 
-                // Apply deterministic variance based on province ID (±relative to parent)
-                // Use large prime offsets to decorrelate H, S, V
-                float hVar = (hash(provinceId + 73856093.0) - 0.5) * 0.10;  // ±0.05 hue
-                float sVar = (hash(provinceId + 19349663.0) - 0.5) * 0.14;  // ±0.07 saturation
-                float vVar = (hash(provinceId + 83492791.0) - 0.5) * 0.14;  // ±0.07 value
+                float hVar = (hash(provinceId + 73856093.0) - 0.5) * 0.10;
+                float sVar = (hash(provinceId + 19349663.0) - 0.5) * 0.14;
+                float vVar = (hash(provinceId + 83492791.0) - 0.5) * 0.14;
 
-                hsv.x = frac(hsv.x + hVar);  // Wrap hue
-                hsv.y = clamp(hsv.y + sVar, 0.15, 0.95);  // Allow full range around parent
-                hsv.z = clamp(hsv.z + vVar, 0.25, 0.95);  // Allow full range around parent
+                hsv.x = frac(hsv.x + hVar);
+                hsv.y = clamp(hsv.y + sVar, 0.15, 0.95);
+                hsv.z = clamp(hsv.z + vVar, 0.25, 0.95);
 
                 return hsv2rgb(hsv);
             }
@@ -252,35 +317,41 @@ Shader "EconSim/MapOverlay"
             {
                 float3 hsv = rgb2hsv(provinceColor);
 
-                // County variance (±relative to parent)
-                // Uses large prime offsets to decorrelate H, S, V
-                float hVar = (hash(countyId + 15485863.0) - 0.5) * 0.10;  // ±0.05 hue
-                float sVar = (hash(countyId + 32452843.0) - 0.5) * 0.14;  // ±0.07 saturation
-                float vVar = (hash(countyId + 49979687.0) - 0.5) * 0.14;  // ±0.07 value
+                float hVar = (hash(countyId + 15485863.0) - 0.5) * 0.10;
+                float sVar = (hash(countyId + 32452843.0) - 0.5) * 0.14;
+                float vVar = (hash(countyId + 49979687.0) - 0.5) * 0.14;
 
                 hsv.x = frac(hsv.x + hVar);
-                hsv.y = clamp(hsv.y + sVar, 0.15, 0.95);  // Allow full range around parent
-                hsv.z = clamp(hsv.z + vVar, 0.25, 0.95);  // Allow full range around parent
+                hsv.y = clamp(hsv.y + sVar, 0.15, 0.95);
+                hsv.z = clamp(hsv.z + vVar, 0.25, 0.95);
 
                 return hsv2rgb(hsv);
             }
+
+            // Look up market ID for a cell
+            float GetMarketIdForCell(float cellIdNorm)
+            {
+                float cellIdRaw = cellIdNorm * 65535.0;
+                float marketU = (clamp(round(cellIdRaw), 0, 16383) + 0.5) / 16384.0;
+                return tex2D(_CellToMarketTex, float2(marketU, 0.5)).r;
+            }
+
+            // ========================================================================
+            // Edge proximity functions (unchanged)
+            // ========================================================================
 
             // Calculate edge proximity for political gradient effect
             // Returns 0 at edges (near different region, water, or river), 1 deep in interior
             // channel: 0=realm (R), 1=province (G), 2=county (A)
             float CalculateEdgeProximity(float2 uv, float centerValue, bool centerIsWater, int channel, float maxRadius, float uvPerPixel)
             {
-                // Water has no gradient
                 if (centerIsWater) return 1;
 
-                // Sample at increasing radii to find distance to edge
-                // Use fewer samples per ring for performance (8 directions instead of 16)
                 static const float2 sampleDirs8[8] = {
                     float2(1, 0), float2(0.707, 0.707), float2(0, 1), float2(-0.707, 0.707),
                     float2(-1, 0), float2(-0.707, -0.707), float2(0, -1), float2(0.707, -0.707)
                 };
 
-                // Sample at 8 radii: 6.25% to 50% of max radius (tighter gradient near edges)
                 float radii[8] = {
                     maxRadius * 0.0625, maxRadius * 0.125, maxRadius * 0.1875, maxRadius * 0.25,
                     maxRadius * 0.3125, maxRadius * 0.375, maxRadius * 0.4375, maxRadius * 0.5
@@ -297,27 +368,23 @@ Shader "EconSim/MapOverlay"
                         float2 sampleUV = uv + sampleDirs8[i] * uvPerPixel * radius;
                         float4 sampleData = SampleCellData(sampleUV);
 
-                        // Check if sample is water (cell water flag)
                         float samplePackedBiome = sampleData.b * 65535.0;
                         bool sampleIsWater = samplePackedBiome >= 32000.0;
 
-                        // Check if sample is river
                         float sampleRiver = tex2D(_RiverMaskTex, sampleUV).r;
                         bool sampleIsRiver = sampleRiver > 0.5;
 
                         if (sampleIsWater || sampleIsRiver)
                         {
-                            // Water/river counts as edge
                             minEdgeDistance = min(minEdgeDistance, radius);
                             continue;
                         }
 
                         float sampleValue;
-                        if (channel == 0) sampleValue = sampleData.r;       // Realm
-                        else if (channel == 1) sampleValue = sampleData.g;  // Province
-                        else sampleValue = sampleData.a;                    // County
+                        if (channel == 0) sampleValue = sampleData.r;
+                        else if (channel == 1) sampleValue = sampleData.g;
+                        else sampleValue = sampleData.a;
 
-                        // Check if different region
                         if (abs(centerValue - sampleValue) > 0.00001)
                         {
                             minEdgeDistance = min(minEdgeDistance, radius);
@@ -325,17 +392,12 @@ Shader "EconSim/MapOverlay"
                     }
                 }
 
-                // Convert distance to proximity factor (0 at edge, 1 in interior)
-                // Scale by 0.5 since we only sample up to half the max radius
                 return saturate(minEdgeDistance / (maxRadius * 0.5));
             }
 
             // Calculate proximity to realm borders ONLY (ignores water/rivers)
-            // Returns 0 at realm boundaries, 1 deep in interior
-            // Uses world-space (UV) sampling, not screen-space
             float CalculateRealmBorderProximity(float2 uv, float centerRealmId, bool centerIsWater, float borderWidthUV)
             {
-                // Water has no border
                 if (centerIsWater) return 1;
 
                 static const float2 sampleDirs8[8] = {
@@ -343,7 +405,6 @@ Shader "EconSim/MapOverlay"
                     float2(-1, 0), float2(-0.707, -0.707), float2(0, -1), float2(0.707, -0.707)
                 };
 
-                // Sample at 8 radii from 12.5% to 100% of border width (UV units)
                 float radii[8] = {
                     borderWidthUV * 0.125, borderWidthUV * 0.25, borderWidthUV * 0.375, borderWidthUV * 0.5,
                     borderWidthUV * 0.625, borderWidthUV * 0.75, borderWidthUV * 0.875, borderWidthUV
@@ -360,12 +421,10 @@ Shader "EconSim/MapOverlay"
                         float2 sampleUV = uv + sampleDirs8[i] * radius;
                         float4 sampleData = SampleCellData(sampleUV);
 
-                        // Check if sample is water - skip it (don't count as edge)
                         float samplePackedBiome = sampleData.b * 65535.0;
                         bool sampleIsWater = samplePackedBiome >= 32000.0;
                         if (sampleIsWater) continue;
 
-                        // Only check realm ID difference
                         float sampleRealmId = sampleData.r;
                         if (abs(centerRealmId - sampleRealmId) > 0.00001)
                         {
@@ -377,16 +436,7 @@ Shader "EconSim/MapOverlay"
                 return saturate(minEdgeDistance / borderWidthUV);
             }
 
-            // Look up market ID for a cell
-            float GetMarketIdForCell(float cellIdNorm)
-            {
-                float cellIdRaw = cellIdNorm * 65535.0;
-                float marketU = (clamp(round(cellIdRaw), 0, 16383) + 0.5) / 16384.0;
-                return tex2D(_CellToMarketTex, float2(marketU, 0.5)).r;
-            }
-
             // Calculate edge proximity for political modes (realm boundaries, water, rivers)
-            // Returns 0 at edges, 1 deep in interior
             float CalculatePoliticalEdgeProximity(float2 uv, float centerRealmId, bool centerIsWater, float maxRadius, float uvPerPixel)
             {
                 if (centerIsWater) return 1;
@@ -434,20 +484,16 @@ Shader "EconSim/MapOverlay"
                 return saturate(minEdgeDistance / (maxRadius * 0.5));
             }
 
-            // Calculate edge proximity for market zones (requires cell-to-market lookup)
-            // Returns 0 at edges (near different market, water, or river), 1 deep in interior
+            // Calculate edge proximity for market zones
             float CalculateMarketEdgeProximity(float2 uv, float centerMarketId, bool centerIsWater, float maxRadius, float uvPerPixel)
             {
-                // Water has no gradient
                 if (centerIsWater) return 1;
 
-                // Sample at increasing radii to find distance to edge
                 static const float2 sampleDirs8[8] = {
                     float2(1, 0), float2(0.707, 0.707), float2(0, 1), float2(-0.707, 0.707),
                     float2(-1, 0), float2(-0.707, -0.707), float2(0, -1), float2(0.707, -0.707)
                 };
 
-                // Sample at 8 radii: 6.25% to 50% of max radius (tighter gradient near edges)
                 float radii[8] = {
                     maxRadius * 0.0625, maxRadius * 0.125, maxRadius * 0.1875, maxRadius * 0.25,
                     maxRadius * 0.3125, maxRadius * 0.375, maxRadius * 0.4375, maxRadius * 0.5
@@ -464,25 +510,20 @@ Shader "EconSim/MapOverlay"
                         float2 sampleUV = uv + sampleDirs8[i] * uvPerPixel * radius;
                         float4 sampleData = SampleCellData(sampleUV);
 
-                        // Check if sample is water (cell water flag)
                         float samplePackedBiome = sampleData.b * 65535.0;
                         bool sampleIsWater = samplePackedBiome >= 32000.0;
 
-                        // Check if sample is river
                         float sampleRiver = tex2D(_RiverMaskTex, sampleUV).r;
                         bool sampleIsRiver = sampleRiver > 0.5;
 
                         if (sampleIsWater || sampleIsRiver)
                         {
-                            // Water/river counts as edge
                             minEdgeDistance = min(minEdgeDistance, radius);
                             continue;
                         }
 
-                        // Look up market ID for sampled cell
                         float sampleMarketId = GetMarketIdForCell(sampleData.a);
 
-                        // Check if different market
                         if (abs(centerMarketId - sampleMarketId) > 0.00001)
                         {
                             minEdgeDistance = min(minEdgeDistance, radius);
@@ -490,20 +531,16 @@ Shader "EconSim/MapOverlay"
                     }
                 }
 
-                // Convert distance to proximity factor (0 at edge, 1 in interior)
                 return saturate(minEdgeDistance / (maxRadius * 0.5));
             }
 
-            // Calculate anti-aliased selection border for realm/province/county
-            // channel: 0=realm (R), 1=province (G), 2=county (A)
-            // Returns border coverage (0-1) for the current pixel
-            // Only draws borders between land cells - skips water cells entirely
+            // ========================================================================
+            // Selection / hover functions (unchanged)
+            // ========================================================================
+
             float CalculateSelectionBorderAA(float2 uv, float centerValue, float selectedId, bool centerIsWater, int channel, float borderWidth, float uvPerPixel)
             {
-                // No selection borders on water
                 if (centerIsWater) return 0;
-
-                // Only calculate if this pixel is in the selected region
                 if (abs(centerValue - selectedId) > 0.00001) return 0;
 
                 float innerRadius = max(0.0, borderWidth - 1.0);
@@ -527,24 +564,21 @@ Shader "EconSim/MapOverlay"
                         float2 sampleUV = uv + sampleDirs[i] * uvPerPixel * radius;
                         float4 sampleData = SampleCellData(sampleUV);
 
-                        // Check if sampled cell is water - treat as border (edge of selection at coastline)
                         float samplePackedBiome = sampleData.b * 65535.0;
                         bool sampleIsWater = samplePackedBiome >= 32000.0;
 
                         if (sampleIsWater)
                         {
-                            // Water is "different" - creates selection border at coastline
                             borderWeight += weight;
                             totalWeight += weight;
                             continue;
                         }
 
                         float sampleValue;
-                        if (channel == 0) sampleValue = sampleData.r;       // Realm
-                        else if (channel == 1) sampleValue = sampleData.g;  // Province
-                        else sampleValue = sampleData.a;                    // County
+                        if (channel == 0) sampleValue = sampleData.r;
+                        else if (channel == 1) sampleValue = sampleData.g;
+                        else sampleValue = sampleData.a;
 
-                        // Border exists where neighbor differs from selected region
                         float isDifferent = abs(sampleValue - selectedId) > 0.00001 ? 1.0 : 0.0;
 
                         borderWeight += isDifferent * weight;
@@ -556,20 +590,14 @@ Shader "EconSim/MapOverlay"
                 return smoothstep(0.0, 0.5, coverage);
             }
 
-            // Check if current pixel is inside the selected region (for fill tint)
             bool IsInSelectedRegion(float centerValue, float selectedId)
             {
                 return abs(centerValue - selectedId) < 0.00001;
             }
 
-            // Calculate anti-aliased selection border for market zones (requires cell-to-market lookup)
-            // centerIsWater: true if the current pixel is water (no selection on water)
             float CalculateMarketSelectionBorderAA(float2 uv, float centerMarketId, float selectedMarketId, bool centerIsWater, float borderWidth, float uvPerPixel)
             {
-                // No market selection on water
                 if (centerIsWater) return 0;
-
-                // Only calculate if this pixel is in the selected market
                 if (abs(centerMarketId - selectedMarketId) > 0.00001) return 0;
 
                 float innerRadius = max(0.0, borderWidth - 1.0);
@@ -593,14 +621,12 @@ Shader "EconSim/MapOverlay"
                         float2 sampleUV = uv + sampleDirs[i] * uvPerPixel * radius;
                         float4 sampleData = SampleCellData(sampleUV);
 
-                        // Check if sampled cell is water - treat as border (edge of market zone)
                         float samplePackedBiome = sampleData.b * 65535.0;
                         bool sampleIsWater = samplePackedBiome >= 32000.0;
 
                         float isDifferent;
                         if (sampleIsWater)
                         {
-                            // Water is always "different" - creates border at coastline
                             isDifferent = 1.0;
                         }
                         else
@@ -618,22 +644,15 @@ Shader "EconSim/MapOverlay"
                 return smoothstep(0.0, 0.5, coverage);
             }
 
-            // Calculate hover outline coverage with proper anti-aliasing
-            // Samples at multiple radii and counts hits for smooth coverage
-            // channel: 0=realm (R), 1=province (G), 2=county (A)
-            // NOTE: Outline CAN be drawn on water pixels if they're near a hovered land region
             float CalculateHoverOutlineAA(float2 uv, float centerValue, float hoveredId, bool centerIsWater, int channel, float offset, float width, float uvPerPixel)
             {
                 if (hoveredId < 0) return 0;
-
-                // If we're INSIDE the hovered region (and on land), no outline here
                 if (!centerIsWater && abs(centerValue - hoveredId) < 0.00001) return 0;
 
                 float halfWidth = width * 0.5;
                 float innerEdge = offset - halfWidth;
                 float outerEdge = offset + halfWidth;
 
-                // Sample at 3 radii across the outline width
                 float radii[3] = { innerEdge, offset, outerEdge };
                 float weights[3] = { 0.25, 0.5, 0.25 };
 
@@ -647,13 +666,11 @@ Shader "EconSim/MapOverlay"
 
                     float weight = weights[r];
 
-                    // Sample in 16 directions at this radius
                     for (int i = 0; i < 16; i++)
                     {
                         float2 sampleUV = uv + sampleDirs[i] * uvPerPixel * radius;
                         float4 sampleData = SampleCellData(sampleUV);
 
-                        // Skip water samples - we're looking for land in the hovered region
                         float samplePackedBiome = sampleData.b * 65535.0;
                         if (samplePackedBiome >= 32000.0) continue;
 
@@ -670,27 +687,15 @@ Shader "EconSim/MapOverlay"
 
                 if (totalWeight < 0.001) return 0;
 
-                // Coverage based on ratio of hits - pixels at the boundary get ~50% hits
                 float hitRatio = totalHits / totalWeight;
-
-                // We want outline where we're NEAR but OUTSIDE the region
-                // hitRatio near 0.5 = right at the edge = maximum outline
-                // hitRatio near 0 = far outside = no outline
-                // hitRatio near 1 = mostly inside = no outline (shouldn't happen since we check above)
-
-                // Transform: peak at ~0.3-0.5 hit ratio, falloff to 0 at edges
                 float coverage = smoothstep(0.0, 0.3, hitRatio) * smoothstep(0.8, 0.4, hitRatio);
 
                 return coverage;
             }
 
-            // Calculate hover outline for market zones with proper anti-aliasing
-            // NOTE: Outline CAN be drawn on water pixels if they're near a hovered land market
             float CalculateMarketHoverOutlineAA(float2 uv, float centerMarketId, float hoveredMarketId, bool centerIsWater, float offset, float width, float uvPerPixel)
             {
                 if (hoveredMarketId < 0) return 0;
-
-                // If we're INSIDE the hovered market (and on land), no outline here
                 if (!centerIsWater && abs(centerMarketId - hoveredMarketId) < 0.00001) return 0;
 
                 float halfWidth = width * 0.5;
@@ -733,49 +738,50 @@ Shader "EconSim/MapOverlay"
                 return coverage;
             }
 
-            fixed4 frag(v2f IN) : SV_Target
+            // ========================================================================
+            // Layer 1: Terrain (always rendered, seabed visible under water)
+            // ========================================================================
+
+            fixed3 ComputeTerrain(float2 uv, bool isCellWater, float biomeId, float height, float riverMask)
             {
-                float2 uv = IN.dataUV;
+                fixed3 terrain;
 
-                // Sample center cell data
-                float4 centerData = SampleCellData(uv);
-                float realmId = centerData.r;
-                float provinceId = centerData.g;
-                float countyId = centerData.a;
-
-                // Look up market ID from cell-to-market texture (uses cell ID for lookup, but texture stores county mapping)
-                float countyIdRaw = countyId * 65535.0;
-                float marketU = (clamp(round(countyIdRaw), 0, 16383) + 0.5) / 16384.0;
-                float marketId = tex2D(_CellToMarketTex, float2(marketU, 0.5)).r;
-
-                // Unpack biome ID and water flag from B channel
-                // Format: biomeId + (isWater ? 32768 : 0), normalized by 65535
-                float packedBiome = centerData.b * 65535.0;
-                bool isCellWater = packedBiome >= 32000.0;  // Water flag is 32768, biomes are < 100
-                float biomeId = (packedBiome - (isCellWater ? 32768.0 : 0.0)) / 65535.0;
-
-                // Sample river mask (same UV as data texture)
-                float riverMask = tex2D(_RiverMaskTex, IN.dataUV).r;
-                bool isRiver = riverMask > 0.5;
-
-                // Combine water sources: ocean/lake cells OR rivers
-                bool isWater = isCellWater || isRiver;
-
-                // Sample height for height-based coloring
-                float height = tex2D(_HeightmapTex, IN.dataUV).r;
-
-                // Calculate UV change per pixel (needed for gradient calculation)
-                float2 dx = ddx(uv);
-                float2 dy = ddy(uv);
-                float uvPerPixel = length(float2(length(dx), length(dy)));
-
-                // Always calculate terrain color (used as base for political gradient blending)
-                fixed3 terrainColor;
-                if (isWater)
+                if (isCellWater)
                 {
-                    // Water gradient: deep to shallow
-                    float waterT = height / _SeaLevel;
-                    terrainColor = lerp(
+                    // Seabed: sand hue darkening with depth (50% to 5% value)
+                    float depthT = saturate((_SeaLevel - height) / max(_WaterDepthRange, 0.001));
+                    depthT = sqrt(depthT);  // Stretch — actual ocean depths cluster in low range
+                    fixed3 sandHue = fixed3(0.76, 0.70, 0.50);
+                    terrain = sandHue * lerp(0.25, 0.05, depthT);
+                }
+                else
+                {
+                    // Land: biome-elevation matrix
+                    float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
+                    float biomeRaw = clamp(biomeId * 65535.0, 0, 63);
+                    float biomeU = (biomeRaw + 0.5) / 64.0;
+                    terrain = tex2D(_BiomeMatrixTex, float2(biomeU, landHeight)).rgb;
+
+                    // River darkening: wet soil effect under rivers
+                    terrain *= lerp(1.0, 1.0 - _RiverDarken, riverMask);
+                }
+
+                return terrain;
+            }
+
+            // ========================================================================
+            // Layer 1 override: Height gradient (mode 0 debug viz)
+            // ========================================================================
+
+            fixed3 ComputeHeightGradient(bool isCellWater, float height, float riverMask)
+            {
+                fixed3 result;
+
+                if (isCellWater)
+                {
+                    // Water gradient for height mode: deep to shallow blue
+                    float waterT = height / max(_SeaLevel, 0.001);
+                    result = lerp(
                         fixed3(0.08, 0.2, 0.4),   // Deep water
                         fixed3(0.2, 0.4, 0.6),    // Shallow water
                         waterT
@@ -783,137 +789,212 @@ Shader "EconSim/MapOverlay"
                 }
                 else
                 {
-                    // Sample biome-elevation matrix for terrain
-                    float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
-                    float biomeRaw = clamp(biomeId * 65535.0, 0, 63);
-                    float biomeU = (biomeRaw + 0.5) / 64.0;
-                    terrainColor = tex2D(_BiomeMatrixTex, float2(biomeU, landHeight)).rgb;
-                }
-
-                // Base color depends on map mode
-                fixed3 baseColor;
-
-                if (_MapMode == 0)
-                {
-                    // Height mode - procedural gradient (handles both land AND water)
-                    if (isWater)
+                    // Land gradient: green -> brown -> white
+                    float landT = (height - _SeaLevel) / (1.0 - _SeaLevel);
+                    if (landT < 0.3)
                     {
-                        baseColor = terrainColor;
+                        float t = landT / 0.3;
+                        result = lerp(
+                            fixed3(0.31, 0.63, 0.31),  // Coastal green
+                            fixed3(0.47, 0.71, 0.31),  // Grassland
+                            t
+                        );
+                    }
+                    else if (landT < 0.6)
+                    {
+                        float t = (landT - 0.3) / 0.3;
+                        result = lerp(
+                            fixed3(0.47, 0.71, 0.31),  // Grassland
+                            fixed3(0.55, 0.47, 0.4),   // Brown hills
+                            t
+                        );
                     }
                     else
                     {
-                        // Land gradient: green -> brown -> white
-                        float landT = (height - _SeaLevel) / (1.0 - _SeaLevel);
-                        if (landT < 0.3)
-                        {
-                            float t = landT / 0.3;
-                            baseColor = lerp(
-                                fixed3(0.31, 0.63, 0.31),  // Coastal green
-                                fixed3(0.47, 0.71, 0.31),  // Grassland
-                                t
-                            );
-                        }
-                        else if (landT < 0.6)
-                        {
-                            float t = (landT - 0.3) / 0.3;
-                            baseColor = lerp(
-                                fixed3(0.47, 0.71, 0.31),  // Grassland
-                                fixed3(0.55, 0.47, 0.4),   // Brown hills
-                                t
-                            );
-                        }
-                        else
-                        {
-                            float t = (landT - 0.6) / 0.4;
-                            baseColor = lerp(
-                                fixed3(0.55, 0.47, 0.4),   // Brown hills
-                                fixed3(0.94, 0.94, 0.98),  // Snow caps
-                                t
-                            );
-                        }
+                        float t = (landT - 0.6) / 0.4;
+                        result = lerp(
+                            fixed3(0.55, 0.47, 0.4),   // Brown hills
+                            fixed3(0.94, 0.94, 0.98),  // Snow caps
+                            t
+                        );
                     }
                 }
-                else if (isWater)
-                {
-                    // All other modes - flat water color
-                    baseColor = WATER_COLOR;
-                }
-                else if (_MapMode == 1 || _MapMode == 2 || _MapMode == 3)
-                {
-                    // Political modes - gradient fill with darkening near water/rivers/borders
 
-                    // Use pure heightmap for grayscale terrain (normalized land height)
-                    float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
-                    fixed3 grayTerrain = fixed3(landHeight, landHeight, landHeight);
+                return result;
+            }
 
-                    // Get political color
+            // ========================================================================
+            // Layer 2: Map mode overlay (political/market paint, alpha=0 on water)
+            // ========================================================================
+
+            fixed4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, float realmId, float provinceId, float countyId, float marketId, float uvPerPixel)
+            {
+                // No map mode overlay on water, rivers, height mode (0), or terrain mode (5)
+                if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 5)
+                    return fixed4(0, 0, 0, 0);
+
+                // Grayscale terrain for multiply blending
+                float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
+                fixed3 grayTerrain = fixed3(landHeight, landHeight, landHeight);
+
+                fixed3 modeColor;
+                float edgeProximity;
+
+                if (_MapMode >= 1 && _MapMode <= 3)
+                {
+                    // Political modes (1=realm, 2=province, 3=county)
                     fixed3 politicalColor = LookupPaletteColor(_RealmPaletteTex, realmId);
+                    edgeProximity = CalculatePoliticalEdgeProximity(uv, realmId, isCellWater, _GradientRadius, uvPerPixel);
 
-                    // Calculate edge proximity for gradient (realm boundaries, water, rivers)
-                    float edgeProximity = CalculatePoliticalEdgeProximity(uv, realmId, isWater, _GradientRadius, uvPerPixel);
-
-                    // Multiply blend: terrain * political color (like Photoshop multiply layer)
+                    // Multiply blend and gradient
                     fixed3 multiplied = grayTerrain * politicalColor;
-
-                    // Edge color: blend from political to multiplied based on darkening setting
                     fixed3 edgeColor = lerp(politicalColor, multiplied, _GradientEdgeDarkening);
-
-                    // Center color: blend from terrain to political based on center opacity
                     fixed3 centerColor = lerp(grayTerrain, politicalColor, _GradientCenterOpacity);
-
-                    // Gradient from edge (multiplied/dark) to center (political/light)
-                    baseColor = lerp(edgeColor, centerColor, edgeProximity);
+                    modeColor = lerp(edgeColor, centerColor, edgeProximity);
 
                     // Realm border band overlay
                     float borderWidthUV = _RealmBorderWidth * _CellDataTex_TexelSize.x;
-                    float realmBorderProximity = CalculateRealmBorderProximity(uv, realmId, isWater, borderWidthUV);
+                    float realmBorderProximity = CalculateRealmBorderProximity(uv, realmId, isCellWater, borderWidthUV);
                     if (realmBorderProximity < 0.5)
                     {
                         float3 hsv = rgb2hsv(politicalColor);
                         hsv.z = max(hsv.z * 0.65, 0.35);
                         fixed3 borderTint = hsv2rgb(hsv);
                         fixed3 borderColor = grayTerrain * borderTint;
-                        baseColor = lerp(baseColor, borderColor, _RealmBorderOpacity);
+                        modeColor = lerp(modeColor, borderColor, _RealmBorderOpacity);
                     }
                 }
                 else if (_MapMode == 4)
                 {
-                    // Market mode - same gradient style as political modes
-
-                    // Use pure heightmap for grayscale terrain (normalized land height)
-                    float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
-                    fixed3 grayTerrain = fixed3(landHeight, landHeight, landHeight);
-
-                    // Get market color and calculate gradient
+                    // Market mode
                     fixed3 marketColor = LookupPaletteColor(_MarketPaletteTex, marketId);
+                    edgeProximity = CalculateMarketEdgeProximity(uv, marketId, isCellWater, _GradientRadius, uvPerPixel);
 
-                    // Calculate edge proximity for gradient (based on market boundaries and rivers)
-                    float edgeProximity = CalculateMarketEdgeProximity(uv, marketId, isWater, _GradientRadius, uvPerPixel);
-
-                    // Multiply blend: terrain * market color (like Photoshop multiply layer)
                     fixed3 multiplied = grayTerrain * marketColor;
-
-                    // Edge color: blend from market to multiplied based on darkening setting
                     fixed3 edgeColor = lerp(marketColor, multiplied, _GradientEdgeDarkening);
-
-                    // Center color: blend from terrain to market based on center opacity
                     fixed3 centerColor = lerp(grayTerrain, marketColor, _GradientCenterOpacity);
-
-                    // Gradient from edge (multiplied/dark) to center (market/light)
-                    baseColor = lerp(edgeColor, centerColor, edgeProximity);
-                }
-                else if (_MapMode == 5)
-                {
-                    // Terrain/biome mode - use pre-calculated terrain color
-                    baseColor = terrainColor;
+                    modeColor = lerp(edgeColor, centerColor, edgeProximity);
                 }
                 else
                 {
-                    // Fallback - shouldn't happen but defensive
-                    baseColor = fixed3(0.5, 0.5, 0.5);
+                    return fixed4(0, 0, 0, 0);
                 }
 
-                // Selection highlight (check realm, province, market, cell in priority order)
+                return fixed4(modeColor, 1.0);
+            }
+
+            // ========================================================================
+            // Layer 3: Water (transparent, depth-based opacity)
+            // ========================================================================
+
+            void ComputeWater(bool isCellWater, float height, float riverMask, float2 worldUV, out fixed3 waterColor, out float waterAlpha)
+            {
+                waterColor = fixed3(0, 0, 0);
+                waterAlpha = 0;
+
+                // No water layer if not ocean and not river
+                if (!isCellWater && riverMask < 0.01)
+                    return;
+
+                if (isCellWater)
+                {
+                    // Ocean/lake: single color, flat opacity
+                    waterColor = _WaterDeepColor.rgb;
+
+                    // Animated shimmer
+                    float time = _Time.y * _ShimmerSpeed;
+                    float2 uv1 = worldUV + float2(time, time * 0.7);
+                    float2 uv2 = worldUV * 1.3 + float2(-time * 0.8, time * 0.5);
+                    float shimmer = (fbm2(uv1) + fbm2(uv2)) * 0.5;
+                    float brightness = 1.0 + (shimmer - 0.5) * 2.0 * _ShimmerIntensity;
+                    waterColor *= brightness;
+
+                    waterAlpha = _WaterDeepAlpha;
+                }
+                else
+                {
+                    // River on land: shallow water color, alpha modulated by mask
+                    waterColor = _WaterShallowColor.rgb;
+                    waterAlpha = _WaterShallowAlpha * riverMask;
+                }
+            }
+
+            // ========================================================================
+            // Fragment shader: layered compositing
+            // ========================================================================
+
+            fixed4 frag(v2f IN) : SV_Target
+            {
+                float2 uv = IN.dataUV;
+
+                // ---- Data sampling preamble (unchanged) ----
+
+                float4 centerData = SampleCellData(uv);
+                float realmId = centerData.r;
+                float provinceId = centerData.g;
+                float countyId = centerData.a;
+
+                float countyIdRaw = countyId * 65535.0;
+                float marketU = (clamp(round(countyIdRaw), 0, 16383) + 0.5) / 16384.0;
+                float marketId = tex2D(_CellToMarketTex, float2(marketU, 0.5)).r;
+
+                float packedBiome = centerData.b * 65535.0;
+                bool isCellWater = packedBiome >= 32000.0;
+                float biomeId = (packedBiome - (isCellWater ? 32768.0 : 0.0)) / 65535.0;
+
+                float riverMask = tex2D(_RiverMaskTex, IN.dataUV).r;
+                bool isRiver = riverMask > 0.5;
+
+                // isWater combines both sources (used for selection/hover land checks)
+                bool isWater = isCellWater || isRiver;
+
+                float height = tex2D(_HeightmapTex, IN.dataUV).r;
+
+                float2 dx = ddx(uv);
+                float2 dy = ddy(uv);
+                float uvPerPixel = length(float2(length(dx), length(dy)));
+
+                // ---- Layer 1: Terrain ----
+
+                fixed3 terrain;
+                if (_MapMode == 0)
+                {
+                    // Height gradient mode: override terrain with debug viz
+                    terrain = ComputeHeightGradient(isCellWater, height, riverMask);
+                }
+                else
+                {
+                    terrain = ComputeTerrain(uv, isCellWater, biomeId, height, riverMask);
+                }
+
+                // ---- Layer 2: Map mode ----
+
+                fixed4 mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId, uvPerPixel);
+                fixed3 afterMapMode = lerp(terrain, mapMode.rgb, mapMode.a);
+
+                // ---- Layer 3: Water ----
+
+                fixed3 waterColor;
+                float waterAlpha;
+
+                if (_MapMode == 0)
+                {
+                    // Height mode: no water overlay (already has its own water colors)
+                    waterColor = fixed3(0, 0, 0);
+                    waterAlpha = 0;
+                }
+                else
+                {
+                    ComputeWater(isCellWater, height, riverMask, IN.worldUV, waterColor, waterAlpha);
+                }
+
+                fixed3 afterWater = lerp(afterMapMode, waterColor, waterAlpha);
+
+                // ---- Layer 4: Selection / hover (operates on composited color) ----
+
+                fixed3 finalColor = afterWater;
+
+                // Selection highlight
                 float selectionBorderAA = 0;
                 bool isInSelection = false;
                 if (_SelectedRealmId >= 0)
@@ -937,10 +1018,7 @@ Shader "EconSim/MapOverlay"
                     isInSelection = !isWater && IsInSelectedRegion(countyId, _SelectedCountyId);
                 }
 
-                // Composite remaining borders (for non-political modes)
-                fixed3 finalColor = baseColor;
-
-                // Hover effect - animated saturation boost
+                // Hover effect
                 bool isHovered = (!isWater) && (
                     (_HoveredRealmId >= 0 && abs(realmId - _HoveredRealmId) < 0.00001) ||
                     (_HoveredProvinceId >= 0 && abs(provinceId - _HoveredProvinceId) < 0.00001) ||
@@ -949,22 +1027,21 @@ Shader "EconSim/MapOverlay"
                 if (isHovered && _HoverIntensity > 0)
                 {
                     float3 hsv = rgb2hsv(finalColor);
-                    hsv.y = saturate(hsv.y * (1.0 + 0.15 * _HoverIntensity));  // up to +15% saturation
-                    hsv.z = saturate(hsv.z * (1.0 + 0.25 * _HoverIntensity));  // up to +25% brightness
+                    hsv.y = saturate(hsv.y * (1.0 + 0.15 * _HoverIntensity));
+                    hsv.z = saturate(hsv.z * (1.0 + 0.25 * _HoverIntensity));
                     finalColor = hsv2rgb(hsv);
                 }
 
-                // Selection dimming - darken and desaturate everything EXCEPT the selected zone
+                // Selection dimming
                 bool hasSelection = _SelectedRealmId >= 0 || _SelectedProvinceId >= 0 || _SelectedMarketId >= 0 || _SelectedCountyId >= 0;
                 if (hasSelection && !isInSelection && !isWater)
                 {
-                    // Desaturate then darken non-selected land areas (both animated)
                     fixed3 gray = ToGrayscale(finalColor);
                     finalColor = lerp(finalColor, gray, _SelectionDesaturation);
                     finalColor *= _SelectionDimming;
                 }
 
-                // Selection border (topmost layer - always visible)
+                // Selection border (topmost layer)
                 if (selectionBorderAA > 0)
                 {
                     float alpha = selectionBorderAA * _SelectionBorderColor.a;

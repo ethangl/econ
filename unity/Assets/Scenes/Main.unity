@@ -221,18 +221,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7cd7ba835769b440ebb904a3a0ae1cb3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EconSim::EconSim.Camera.MapCamera
-  minZoomFraction: 0.1
-  absoluteMinZoom: 0.5
-  zoomSpeed: 5
-  zoomSmoothTime: 0.1
-  panSpeed: 12
-  dragPanSpeed: 0.333333
-  focusSmoothTime: 0.3
-  pitchAtMaxZoom: 75
-  pitchAtMinZoom: 60
-  panModifierKey: 325
-  spacebarPanKey: 32
-  invertPan: 0
 --- !u!81 &1070810157
 AudioListener:
   m_ObjectHideFlags: 0
@@ -319,7 +307,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 47b88d506861e41898e275dcab0f18dc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EconSim::EconSim.Renderer.ScreenNoiseOverlay
-  intensity: 0.015
+  intensity: 0.005
 --- !u!1 &2010017522
 GameObject:
   m_ObjectHideFlags: 0
@@ -581,8 +569,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6736e9d10e17c4ab2853db4382c6ef10, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EconSim::EconSim.Core.GameManager
-  mapFileName: preston.json
-  loadFromResources: 0
   mapView: {fileID: 2039203591}
   mapCamera: {fileID: 1070810156}
 --- !u!4 &2084237326
