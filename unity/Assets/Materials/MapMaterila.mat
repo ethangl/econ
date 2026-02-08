@@ -103,7 +103,7 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
-    - _RiverMaskTex:
+    - _RealmBorderDistTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -115,9 +115,15 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _RiverMaskTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _BumpScale: 1
+    - _CoastGradientIntensity: 0
+    - _CoastGradientRadius: 15
     - _CoastlineBorderWidth: 2
     - _CountyBorderWidth: 0.6
     - _Cutoff: 0.5
@@ -126,19 +132,19 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _GradientCenterOpacity: 0.15
-    - _GradientEdgeDarkening: 0.865
-    - _GradientRadius: 15.7
+    - _GradientCenterOpacity: 0.5
+    - _GradientEdgeDarkening: 0.7
+    - _GradientRadius: 14
     - _HeightScale: 3
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.0000000021111508
+    - _HoverIntensity: 0.01590813
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
-    - _HoveredRealmId: -1
-    - _MapMode: 5
+    - _HoveredRealmId: 0.0001373312
+    - _MapMode: 1
     - _MarketBorderWidth: 1
     - _Metallic: 0
     - _Mode: 0
@@ -149,6 +155,10 @@ Material:
     - _PoliticalEdgeOpacity: 0.8
     - _PoliticalGradientRadius: 64
     - _ProvinceBorderWidth: 0.8
+    - _RealmBorderDarkening: 0.75
+    - _RealmBorderWidth: 0.25
+    - _RiverDarken: 0.5
+    - _RiverDepth: 0.2
     - _SeaLevel: 0.2
     - _SelectedCellId: -1
     - _SelectedCountyId: -1
@@ -156,10 +166,13 @@ Material:
     - _SelectedProvinceId: -1
     - _SelectedRealmId: -1
     - _SelectionBorderWidth: 3
-    - _SelectionDesaturation: 0
-    - _SelectionDimming: 1
+    - _SelectionDesaturation: 1.3395557e-32
+    - _SelectionDimming: 0.99999976
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
+    - _ShimmerIntensity: 0.08
+    - _ShimmerScale: 0.02
+    - _ShimmerSpeed: 0.03
     - _ShowCountyBorders: 0
     - _ShowMarketBorders: 0
     - _ShowProvinceBorders: 0
@@ -167,11 +180,12 @@ Material:
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1
-    - _RealmBorderOpacity: 0.75
-    - _RealmBorderWidth: 24
     - _UVSec: 0
     - _UseHeightDisplacement: 0
+    - _WaterDeepAlpha: 0.95
+    - _WaterDepthRange: 0.25
     - _WaterGradientRadius: 11
+    - _WaterShallowAlpha: 0.75
     - _ZWrite: 1
     m_Colors:
     - _CoastlineBorderColor: {r: 0.02, g: 0.049999982, b: 0.14999998, a: 1}
@@ -181,9 +195,9 @@ Material:
     - _HoverFillColor: {r: 1, g: 1, b: 1, a: 1}
     - _MarketBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
     - _ProvinceBorderColor: {r: 0, g: 0, b: 0, a: 0.87058824}
-    - _SelectionBorderColor: {r: 1, g: 0.9, b: 0.1999999, a: 0}
     - _RealmBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
-    - _WaterDeepColor: {r: 0.07999996, g: 0.14999998, b: 0.34999996, a: 1}
-    - _WaterShallowColor: {r: 0.24999994, g: 0.45, b: 0.54999995, a: 0.09803922}
+    - _SelectionBorderColor: {r: 1, g: 0.9, b: 0.1999999, a: 0}
+    - _WaterDeepColor: {r: 0, g: 0.0627451, b: 0.1882353, a: 1}
+    - _WaterShallowColor: {r: 0, g: 0.09411765, b: 0.15686275, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

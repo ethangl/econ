@@ -71,7 +71,6 @@ namespace EconSim.Renderer
         private RoadRenderer roadRenderer;
         private SelectionHighlight selectionHighlight;
         private MapOverlayManager overlayManager;
-        private RelaxedCellGeometry relaxedGeometry;
 
         // Cell mesh data
         private List<Vector3> vertices = new List<Vector3>();
@@ -390,10 +389,6 @@ namespace EconSim.Renderer
             GenerateMesh();
             Profiler.End();
 
-            Profiler.Begin("InitializeRelaxedGeometry");
-            InitializeRelaxedGeometry();
-            Profiler.End();
-
             Profiler.Begin("InitializeOverlays");
             InitializeOverlays();
             Profiler.End();
@@ -413,20 +408,6 @@ namespace EconSim.Renderer
             Profiler.End();
         }
 
-        private void InitializeRelaxedGeometry()
-        {
-            if (mapData == null) return;
-
-            // Build relaxed geometry for organic curved borders
-            relaxedGeometry = new RelaxedCellGeometry
-            {
-                Amplitude = 1.2f,      // Perpendicular wobble distance (map units)
-                Frequency = 0.36f,     // Control points per map unit
-                SamplesPerSegment = 5  // Catmull-Rom smoothness
-            };
-            relaxedGeometry.Build(mapData);
-        }
-
         private void InitializeOverlays()
         {
             if (!useShaderOverlays || mapData == null)
@@ -442,7 +423,7 @@ namespace EconSim.Renderer
             if (mat == null)
                 return;
 
-            overlayManager = new MapOverlayManager(mapData, relaxedGeometry, mat, overlayResolutionMultiplier);
+            overlayManager = new MapOverlayManager(mapData, mat, overlayResolutionMultiplier);
 
             // Height displacement is disabled (elevation is now shown via biome-elevation tinting)
             overlayManager.SetHeightDisplacementEnabled(false);
@@ -454,7 +435,7 @@ namespace EconSim.Renderer
 
         private void InitializeBorders()
         {
-            if (!enableBorders || mapData == null || relaxedGeometry == null) return;
+            if (!enableBorders || mapData == null) return;
 
             // Create or get BorderRenderer component
             borderRenderer = GetComponent<BorderRenderer>();
@@ -471,7 +452,7 @@ namespace EconSim.Renderer
                 borderMaterialField?.SetValue(borderRenderer, borderMaterial);
             }
 
-            borderRenderer.Initialize(mapData, relaxedGeometry, cellScale, heightScale);
+            borderRenderer.Initialize(mapData, cellScale, heightScale);
 
             // Apply initial border visibility based on current map mode
             UpdateBorderVisibility();

@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UIElements;
 using MapGen.Core;
@@ -6,7 +9,7 @@ namespace EconSim.UI
 {
     /// <summary>
     /// UI Toolkit controller for the startup screen.
-    /// Allows the user to generate a new map.
+    /// Allows the user to generate a new map with template and cell count options.
     /// </summary>
     public class StartupScreenPanel : MonoBehaviour
     {
@@ -16,8 +19,14 @@ namespace EconSim.UI
         private VisualElement _overlay;
         private Button _generateButton;
         private Label _statusLabel;
-
+        private DropdownField _templateDropdown;
+        private IntegerField _seedField;
+        private IntegerField _cellCountField;
+        private FloatField _aspectRatioField;
         private bool _isLoading;
+
+        private static readonly List<string> TemplateNames =
+            Enum.GetNames(typeof(HeightmapTemplateType)).ToList();
 
         private void Start()
         {
@@ -59,6 +68,16 @@ namespace EconSim.UI
             _overlay = root.Q<VisualElement>("startup-overlay");
             _generateButton = root.Q<Button>("generate-button");
             _statusLabel = root.Q<Label>("startup-status");
+            _templateDropdown = root.Q<DropdownField>("template-dropdown");
+            _seedField = root.Q<IntegerField>("seed-field");
+            _cellCountField = root.Q<IntegerField>("cellcount-field");
+            _aspectRatioField = root.Q<FloatField>("aspect-ratio-field");
+            // Setup template dropdown
+            if (_templateDropdown != null)
+            {
+                _templateDropdown.choices = TemplateNames;
+                _templateDropdown.index = TemplateNames.IndexOf(nameof(HeightmapTemplateType.Continents));
+            }
 
             // Wire up buttons
             _generateButton?.RegisterCallback<ClickEvent>(evt => OnGenerateClicked());
@@ -75,7 +94,19 @@ namespace EconSim.UI
             var gameManager = EconSim.Core.GameManager.Instance;
             if (gameManager != null)
             {
-                gameManager.GenerateMap();
+                var config = new MapGenConfig
+                {
+                    Seed = _seedField?.value ?? 12345,
+                    CellCount = _cellCountField?.value ?? 100000,
+                    AspectRatio = _aspectRatioField?.value ?? 1.5f,
+                };
+
+                if (_templateDropdown != null && _templateDropdown.index >= 0)
+                {
+                    config.Template = (HeightmapTemplateType)_templateDropdown.index;
+                }
+
+                gameManager.GenerateMap(config);
             }
             else
             {

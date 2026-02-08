@@ -5,6 +5,11 @@ Shader "EconSim/SimpleBorder"
         Tags { "RenderType"="Transparent" "Queue"="Transparent" }
         Blend SrcAlpha OneMinusSrcAlpha
         ZWrite Off
+        Stencil
+        {
+            Ref 1
+            Comp NotEqual
+        }
 
         Pass
         {
