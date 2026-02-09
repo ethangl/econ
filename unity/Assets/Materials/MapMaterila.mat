@@ -19,7 +19,7 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties: _ProvinceBorderColor
+  m_LockedProperties: _ProvinceBorderColor _ProvinceBorderWidth _SoilColor1
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -47,7 +47,15 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _CellPropertyTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _CellToMarketTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _CountyBorderDistTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -75,6 +83,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _MarketBorderDistTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _MarketColorTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -92,6 +104,10 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _ParallaxMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ProvinceBorderDistTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -119,33 +135,56 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _RoadDistTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _RoadMaskTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SoilDataTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SoilPaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _VegPaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _BumpScale: 1
     - _CoastGradientIntensity: 0
     - _CoastGradientRadius: 15
     - _CoastlineBorderWidth: 2
-    - _CountyBorderWidth: 0.6
+    - _CountyBorderDarkening: 0.491
+    - _CountyBorderWidth: 0.05
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _GradientCenterOpacity: 0.5
-    - _GradientEdgeDarkening: 0.7
-    - _GradientRadius: 14
+    - _GradientCenterOpacity: 0.444
+    - _GradientEdgeDarkening: 0.444
+    - _GradientRadius: 12
+    - _HalftoneScale: 0.15
     - _HeightScale: 3
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.01590813
+    - _HoverIntensity: 0
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
-    - _HoveredRealmId: 0.0001373312
-    - _MapMode: 1
-    - _MarketBorderWidth: 1
+    - _HoveredRealmId: -1
+    - _MapMode: 6
+    - _MarketBorderDarkening: 0.75
+    - _MarketBorderWidth: 0.25
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
@@ -154,11 +193,14 @@ Material:
     - _PoliticalEdgeDarkening: 0.777
     - _PoliticalEdgeOpacity: 0.8
     - _PoliticalGradientRadius: 64
-    - _ProvinceBorderWidth: 0.8
+    - _ProvinceBorderDarkening: 0.5
+    - _ProvinceBorderWidth: 0.1
     - _RealmBorderDarkening: 0.75
     - _RealmBorderWidth: 0.25
     - _RiverDarken: 0.5
     - _RiverDepth: 0.2
+    - _RoadDarkening: 0.75
+    - _RoadWidth: 0.045
     - _SeaLevel: 0.2
     - _SelectedCellId: -1
     - _SelectedCountyId: -1
@@ -166,8 +208,8 @@ Material:
     - _SelectedProvinceId: -1
     - _SelectedRealmId: -1
     - _SelectionBorderWidth: 3
-    - _SelectionDesaturation: 1.3395557e-32
-    - _SelectionDimming: 0.99999976
+    - _SelectionDesaturation: 0
+    - _SelectionDimming: 1
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
     - _ShimmerIntensity: 0.08
@@ -178,6 +220,7 @@ Material:
     - _ShowProvinceBorders: 0
     - _ShowRealmBorders: 0
     - _SmoothnessTextureChannel: 0
+    - _SoilHeightFloor: 0.04
     - _SpecularHighlights: 1
     - _SrcBlend: 1
     - _UVSec: 0
@@ -197,6 +240,14 @@ Material:
     - _ProvinceBorderColor: {r: 0, g: 0, b: 0, a: 0.87058824}
     - _RealmBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
     - _SelectionBorderColor: {r: 1, g: 0.9, b: 0.1999999, a: 0}
+    - _SoilColor0: {r: 0.9647059, g: 0.9470588, b: 0.92941177, a: 1}
+    - _SoilColor1: {r: 1, g: 0.90849674, b: 0.78039217, a: 1}
+    - _SoilColor2: {r: 0.7, g: 0.68, b: 0.65, a: 1}
+    - _SoilColor3: {r: 0.54999995, g: 0.41999996, b: 0.27999997, a: 1}
+    - _SoilColor4: {r: 0.88, g: 0.78, b: 0.58, a: 1}
+    - _SoilColor5: {r: 0.82, g: 0.41999996, b: 0.24999997, a: 1}
+    - _SoilColor6: {r: 0.62, g: 0.58, b: 0.47999996, a: 1}
+    - _SoilColor7: {r: 0.37999994, g: 0.32999998, b: 0.26999995, a: 1}
     - _WaterDeepColor: {r: 0, g: 0.0627451, b: 0.1882353, a: 1}
     - _WaterShallowColor: {r: 0, g: 0.09411765, b: 0.15686275, a: 1}
   m_BuildTextureStacks: []

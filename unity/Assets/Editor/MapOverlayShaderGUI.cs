@@ -29,6 +29,13 @@ namespace EconSim.Editor
         {
             ("_RealmBorderWidth", "Realm Border Width"),
             ("_RealmBorderDarkening", "Realm Border Darkening"),
+            ("_ProvinceBorderWidth", "Province Border Width"),
+            ("_ProvinceBorderDarkening", "Province Border Darkening"),
+            ("_CountyBorderWidth", "County Border Width"),
+            ("_CountyBorderDarkening", "County Border Darkening"),
+            ("_MarketBorderWidth", "Market Border Width"),
+            ("_MarketBorderDarkening", "Market Border Darkening"),
+            ("_RoadDarkening", "Road Darkening"),
             ("_GradientRadius", "Gradient Radius (pixels)"),
             ("_GradientEdgeDarkening", "Gradient Edge Darkening"),
             ("_GradientCenterOpacity", "Gradient Center Opacity"),
@@ -59,6 +66,10 @@ namespace EconSim.Editor
             ("_BiomePaletteTex", "Biome Palette"),
             ("_BiomeMatrixTex", "Biome Elevation Matrix"),
             ("_RealmBorderDistTex", "Realm Border Distance"),
+            ("_ProvinceBorderDistTex", "Province Border Distance"),
+            ("_CountyBorderDistTex", "County Border Distance"),
+            ("_MarketBorderDistTex", "Market Border Distance"),
+            ("_RoadMaskTex", "Road Mask"),
         };
 
         // Properties set programmatically — hidden from Inspector

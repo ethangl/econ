@@ -25,6 +25,10 @@ namespace EconSim.Renderer
         private static readonly int BiomeMatrixTexId = Shader.PropertyToID("_BiomeMatrixTex");
         private static readonly int CellToMarketTexId = Shader.PropertyToID("_CellToMarketTex");
         private static readonly int RealmBorderDistTexId = Shader.PropertyToID("_RealmBorderDistTex");
+        private static readonly int ProvinceBorderDistTexId = Shader.PropertyToID("_ProvinceBorderDistTex");
+        private static readonly int CountyBorderDistTexId = Shader.PropertyToID("_CountyBorderDistTex");
+        private static readonly int MarketBorderDistTexId = Shader.PropertyToID("_MarketBorderDistTex");
+        private static readonly int RoadMaskTexId = Shader.PropertyToID("_RoadMaskTex");
         private static readonly int MapModeId = Shader.PropertyToID("_MapMode");
         private static readonly int UseHeightDisplacementId = Shader.PropertyToID("_UseHeightDisplacement");
         private static readonly int HeightScaleId = Shader.PropertyToID("_HeightScale");
@@ -33,8 +37,6 @@ namespace EconSim.Renderer
         private static readonly int SelectedProvinceIdId = Shader.PropertyToID("_SelectedProvinceId");
         private static readonly int SelectedCountyIdId = Shader.PropertyToID("_SelectedCountyId");
         private static readonly int SelectedMarketIdId = Shader.PropertyToID("_SelectedMarketId");
-        private static readonly int SelectionBorderColorId = Shader.PropertyToID("_SelectionBorderColor");
-        private static readonly int SelectionBorderWidthId = Shader.PropertyToID("_SelectionBorderWidth");
         private static readonly int HoveredRealmIdId = Shader.PropertyToID("_HoveredRealmId");
         private static readonly int HoveredProvinceIdId = Shader.PropertyToID("_HoveredProvinceId");
         private static readonly int HoveredCountyIdId = Shader.PropertyToID("_HoveredCountyId");
@@ -79,6 +81,13 @@ namespace EconSim.Renderer
         private Texture2D biomePaletteTexture;  // 256x1: biome colors
         private Texture2D biomeElevationMatrix; // 64x64: biome × elevation colors
         private Texture2D realmBorderDistTexture; // R8: distance to nearest realm boundary (texels)
+        private Texture2D provinceBorderDistTexture; // R8: distance to nearest province boundary (texels)
+        private Texture2D countyBorderDistTexture;   // R8: distance to nearest county boundary (texels)
+        private Texture2D marketBorderDistTexture;   // R8: distance to nearest market zone boundary (texels, dynamic)
+        private Texture2D roadDistTexture;             // R8: distance to nearest road centerline (texels, dynamic)
+
+        // Road state (cached for regeneration)
+        private RoadState roadState;
 
         // Spatial lookup grid: maps data pixel coordinates to cell IDs
         private int[] spatialGrid;
@@ -154,6 +163,14 @@ namespace EconSim.Renderer
             GenerateRealmBorderDistTexture();
             Profiler.End();
 
+            Profiler.Begin("GenerateProvinceBorderDistTexture");
+            GenerateProvinceBorderDistTexture();
+            Profiler.End();
+
+            Profiler.Begin("GenerateCountyBorderDistTexture");
+            GenerateCountyBorderDistTexture();
+            Profiler.End();
+
             Profiler.Begin("GeneratePaletteTextures");
             GeneratePaletteTextures();
             Profiler.End();
@@ -161,6 +178,8 @@ namespace EconSim.Renderer
             Profiler.Begin("GenerateBiomeElevationMatrix");
             GenerateBiomeElevationMatrix();
             Profiler.End();
+
+
 
             Profiler.Begin("ApplyTexturesToMaterial");
             ApplyTexturesToMaterial();
@@ -222,10 +241,11 @@ namespace EconSim.Renderer
                     }
                 }
 
-                int x0 = Mathf.Max(0, Mathf.FloorToInt(minX));
-                int x1 = Mathf.Min(gridWidth - 1, Mathf.CeilToInt(maxX));
-                int y0 = Mathf.Max(0, Mathf.FloorToInt(minY));
-                int y1 = Mathf.Min(gridHeight - 1, Mathf.CeilToInt(maxY));
+                // Expand bounding box by warp amplitude to ensure coverage
+                int x0 = Mathf.Max(0, Mathf.FloorToInt(minX - DomainWarp.Amplitude));
+                int x1 = Mathf.Min(gridWidth - 1, Mathf.CeilToInt(maxX + DomainWarp.Amplitude));
+                int y0 = Mathf.Max(0, Mathf.FloorToInt(minY - DomainWarp.Amplitude));
+                int y1 = Mathf.Min(gridHeight - 1, Mathf.CeilToInt(maxY + DomainWarp.Amplitude));
 
                 float cx = cell.Center.X * scale;
                 float cy = cell.Center.Y * scale;
@@ -248,8 +268,9 @@ namespace EconSim.Renderer
                         for (int x = x0; x <= x1; x++)
                         {
                             int gridIdx = y * gridWidth + x;
-                            float dx = x - cx;
-                            float dy = y - cy;
+                            var (wx, wy) = DomainWarp.Warp(x, y);
+                            float dx = wx - cx;
+                            float dy = wy - cy;
                             float distSq = dx * dx + dy * dy;
 
                             if (distSq < distanceSqGrid[gridIdx])
@@ -294,8 +315,12 @@ namespace EconSim.Renderer
                         // Normalize IDs to 0-1 range (divide by 65535)
                         pixel.r = cell.RealmId / 65535f;
                         pixel.g = cell.ProvinceId / 65535f;
-                        // Pack biome ID and water flag: biomeId + (isWater ? 32768 : 0)
-                        int packedBiome = cell.BiomeId + (cell.IsLand ? 0 : 32768);
+                        // Pack biome ID, soil ID, and water flag:
+                        // Land: biomeId * 8 + soilId (max 63*8+7 = 511)
+                        // Water: 32768 + biomeId
+                        int packedBiome = cell.IsLand
+                            ? cell.BiomeId * 8 + cell.SoilId
+                            : 32768 + cell.BiomeId;
                         pixel.b = packedBiome / 65535f;
                         // County ID for county-level rendering (from grouped cells)
                         pixel.a = cell.CountyId / 65535f;
@@ -408,7 +433,8 @@ namespace EconSim.Renderer
                         // Y-up data coords match texture row order directly
                         float x = pt.X * scale;
                         float y = pt.Y * scale;
-                        pathPoints.Add(new Vector2(x, y));
+                        var (wx, wy) = DomainWarp.Warp(x, y);
+                        pathPoints.Add(new Vector2(wx, wy));
                     }
                 }
                 else if (river.CellPath != null && river.CellPath.Count >= 2)
@@ -419,7 +445,8 @@ namespace EconSim.Renderer
                         {
                             float x = cell.Center.X * scale;
                             float y = cell.Center.Y * scale;
-                            pathPoints.Add(new Vector2(x, y));
+                            var (wx, wy) = DomainWarp.Warp(x, y);
+                            pathPoints.Add(new Vector2(wx, wy));
                         }
                     }
                 }
@@ -443,11 +470,7 @@ namespace EconSim.Renderer
                     DrawThickLine(pixels, smoothedPoints[i], smoothedPoints[i + 1], width);
                 }
 
-                // Draw circular caps at river endpoints to fill gaps in gradient
-                float sourceCapRadius = maxWidth * 0.4f;
-                float mouthCapRadius = maxWidth * 0.5f;
-                DrawFilledCircle(pixels, smoothedPoints[0], sourceCapRadius);
-                DrawFilledCircle(pixels, smoothedPoints[smoothedPoints.Count - 1], mouthCapRadius);
+
             }
 
             return pixels;
@@ -498,38 +521,6 @@ namespace EconSim.Renderer
                 (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 +
                 (-p0 + 3f * p1 - 3f * p2 + p3) * t3
             );
-        }
-
-        /// <summary>
-        /// Draw a filled anti-aliased circle into the pixel buffer.
-        /// </summary>
-        private void DrawFilledCircle(byte[] pixels, Vector2 center, float radius)
-        {
-            int x0 = Mathf.Max(0, Mathf.FloorToInt(center.x - radius - 1));
-            int x1 = Mathf.Min(gridWidth - 1, Mathf.CeilToInt(center.x + radius + 1));
-            int y0 = Mathf.Max(0, Mathf.FloorToInt(center.y - radius - 1));
-            int y1 = Mathf.Min(gridHeight - 1, Mathf.CeilToInt(center.y + radius + 1));
-
-            for (int y = y0; y <= y1; y++)
-            {
-                for (int x = x0; x <= x1; x++)
-                {
-                    float dx = x + 0.5f - center.x;
-                    float dy = y + 0.5f - center.y;
-                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
-
-                    // Anti-aliased edge
-                    float coverage = 1f - Mathf.Clamp01((dist - radius + 0.5f) / 1f);
-
-                    if (coverage > 0)
-                    {
-                        int idx = y * gridWidth + x;
-                        int newVal = Mathf.RoundToInt(coverage * 255);
-                        if (newVal > pixels[idx])
-                            pixels[idx] = (byte)newVal;
-                    }
-                }
-            }
         }
 
         /// <summary>
@@ -588,6 +579,59 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
+        /// Two-pass chamfer distance transform (forward + backward).
+        /// Approximates Euclidean distance using 3-4 weights (orthCost=1, diagCost=1.414).
+        /// Operates in-place on dist[], which should be pre-seeded with 0 at boundary pixels
+        /// and 255 elsewhere. isLand[] masks which pixels participate.
+        /// </summary>
+        private void RunChamferTransform(float[] dist, bool[] isLand)
+        {
+            const float orthCost = 1f;
+            const float diagCost = 1.414f;
+
+            // Forward pass: top-to-bottom, left-to-right
+            for (int y = 1; y < gridHeight; y++)
+            {
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = y * gridWidth + x;
+                    if (!isLand[idx]) continue;
+
+                    if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[idx - 1] + orthCost);
+                    if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * gridWidth + x - 1] + diagCost);
+                    dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * gridWidth + x] + orthCost);
+                    if (x < gridWidth - 1) dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * gridWidth + x + 1] + diagCost);
+                }
+            }
+
+            // Backward pass: bottom-to-top, right-to-left
+            for (int y = gridHeight - 2; y >= 0; y--)
+            {
+                for (int x = gridWidth - 1; x >= 0; x--)
+                {
+                    int idx = y * gridWidth + x;
+                    if (!isLand[idx]) continue;
+
+                    if (x < gridWidth - 1) dist[idx] = Mathf.Min(dist[idx], dist[idx + 1] + orthCost);
+                    if (x < gridWidth - 1) dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * gridWidth + x + 1] + diagCost);
+                    dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * gridWidth + x] + orthCost);
+                    if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * gridWidth + x - 1] + diagCost);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Convert float distance field to byte array, capping at 255.
+        /// </summary>
+        private static byte[] DistToBytes(float[] dist)
+        {
+            byte[] pixels = new byte[dist.Length];
+            for (int i = 0; i < dist.Length; i++)
+                pixels[i] = (byte)Mathf.Min(255, Mathf.RoundToInt(dist[i]));
+            return pixels;
+        }
+
+        /// <summary>
         /// Generate realm border distance texture using a chamfer distance transform.
         /// Stores the Euclidean distance (in texels) from each land pixel to the nearest
         /// realm boundary, capped at 255. Bilinear filtering gives smooth borders at any zoom.
@@ -619,7 +663,6 @@ namespace EconSim.Renderer
         {
             int size = gridWidth * gridHeight;
 
-            // Build realm ID grid from spatial grid
             int[] realmGrid = new int[size];
             bool[] isLand = new bool[size];
 
@@ -638,12 +681,11 @@ namespace EconSim.Renderer
                 }
             }
 
-            // Distance field — initialize to max
             float[] dist = new float[size];
             for (int i = 0; i < size; i++)
                 dist[i] = 255f;
 
-            // Seed boundary pixels (land pixels adjacent to a different realm's land pixel)
+            // Seed: land pixels adjacent to a different realm's land pixel
             for (int y = 0; y < gridHeight; y++)
             {
                 for (int x = 0; x < gridWidth; x++)
@@ -654,7 +696,6 @@ namespace EconSim.Renderer
                     int realm = realmGrid[idx];
                     bool isBoundary = false;
 
-                    // Check 8-connected neighbors
                     for (int dy = -1; dy <= 1 && !isBoundary; dy++)
                     {
                         for (int dx = -1; dx <= 1 && !isBoundary; dx++)
@@ -673,47 +714,194 @@ namespace EconSim.Renderer
                 }
             }
 
-            // Chamfer distance transform (two-pass, 3-4 weights for approximate Euclidean)
-            float orthCost = 1f;
-            float diagCost = 1.414f;
+            RunChamferTransform(dist, isLand);
+            return DistToBytes(dist);
+        }
 
-            // Forward pass: top-to-bottom, left-to-right
-            for (int y = 1; y < gridHeight; y++)
+        /// <summary>
+        /// Generate province border distance texture using a chamfer distance transform.
+        /// Stores the Euclidean distance (in texels) from each land pixel to the nearest
+        /// province boundary (same realm, different province), capped at 255.
+        /// </summary>
+        private void GenerateProvinceBorderDistTexture()
+        {
+            provinceBorderDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+            provinceBorderDistTexture.name = "ProvinceBorderDistTexture";
+            provinceBorderDistTexture.filterMode = FilterMode.Bilinear;
+            provinceBorderDistTexture.anisoLevel = 8;
+            provinceBorderDistTexture.wrapMode = TextureWrapMode.Clamp;
+
+            var pixels = GenerateProvinceBorderDistPixels();
+
+            var colorPixels = new Color[pixels.Length];
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                float v = pixels[i] / 255f;
+                colorPixels[i] = new Color(v, v, v, 1f);
+            }
+            provinceBorderDistTexture.SetPixels(colorPixels);
+            provinceBorderDistTexture.Apply();
+
+            TextureDebugger.SaveTexture(provinceBorderDistTexture, "province_border_dist");
+            Debug.Log($"MapOverlayManager: Generated province border distance texture {gridWidth}x{gridHeight}");
+        }
+
+        private byte[] GenerateProvinceBorderDistPixels()
+        {
+            int size = gridWidth * gridHeight;
+
+            int[] realmGrid = new int[size];
+            int[] provinceGrid = new int[size];
+            bool[] isLand = new bool[size];
+
+            for (int i = 0; i < size; i++)
+            {
+                int cellId = spatialGrid[i];
+                if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell) && cell.IsLand)
+                {
+                    realmGrid[i] = cell.RealmId;
+                    provinceGrid[i] = cell.ProvinceId;
+                    isLand[i] = true;
+                }
+                else
+                {
+                    realmGrid[i] = -1;
+                    provinceGrid[i] = -1;
+                    isLand[i] = false;
+                }
+            }
+
+            float[] dist = new float[size];
+            for (int i = 0; i < size; i++)
+                dist[i] = 255f;
+
+            // Seed: land pixels adjacent to land pixel with same realm, different province
+            for (int y = 0; y < gridHeight; y++)
             {
                 for (int x = 0; x < gridWidth; x++)
                 {
                     int idx = y * gridWidth + x;
                     if (!isLand[idx]) continue;
 
-                    // Check neighbors already visited: above row and left
-                    if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[idx - 1] + orthCost);
-                    if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * gridWidth + x - 1] + diagCost);
-                    dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * gridWidth + x] + orthCost);
-                    if (x < gridWidth - 1) dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * gridWidth + x + 1] + diagCost);
+                    int realm = realmGrid[idx];
+                    int province = provinceGrid[idx];
+                    bool isBoundary = false;
+
+                    for (int dy = -1; dy <= 1 && !isBoundary; dy++)
+                    {
+                        for (int dx = -1; dx <= 1 && !isBoundary; dx++)
+                        {
+                            if (dx == 0 && dy == 0) continue;
+                            int nx = x + dx, ny = y + dy;
+                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
+                            int nIdx = ny * gridWidth + nx;
+                            if (isLand[nIdx] && realmGrid[nIdx] == realm && provinceGrid[nIdx] != province)
+                                isBoundary = true;
+                        }
+                    }
+
+                    if (isBoundary)
+                        dist[idx] = 0f;
                 }
             }
 
-            // Backward pass: bottom-to-top, right-to-left
-            for (int y = gridHeight - 2; y >= 0; y--)
+            RunChamferTransform(dist, isLand);
+            return DistToBytes(dist);
+        }
+
+        /// <summary>
+        /// Generate county border distance texture using a chamfer distance transform.
+        /// Stores the Euclidean distance (in texels) from each land pixel to the nearest
+        /// county boundary (same province, different county), capped at 255.
+        /// </summary>
+        private void GenerateCountyBorderDistTexture()
+        {
+            countyBorderDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+            countyBorderDistTexture.name = "CountyBorderDistTexture";
+            countyBorderDistTexture.filterMode = FilterMode.Bilinear;
+            countyBorderDistTexture.anisoLevel = 8;
+            countyBorderDistTexture.wrapMode = TextureWrapMode.Clamp;
+
+            var pixels = GenerateCountyBorderDistPixels();
+
+            var colorPixels = new Color[pixels.Length];
+            for (int i = 0; i < pixels.Length; i++)
             {
-                for (int x = gridWidth - 1; x >= 0; x--)
+                float v = pixels[i] / 255f;
+                colorPixels[i] = new Color(v, v, v, 1f);
+            }
+            countyBorderDistTexture.SetPixels(colorPixels);
+            countyBorderDistTexture.Apply();
+
+            TextureDebugger.SaveTexture(countyBorderDistTexture, "county_border_dist");
+            Debug.Log($"MapOverlayManager: Generated county border distance texture {gridWidth}x{gridHeight}");
+        }
+
+        private byte[] GenerateCountyBorderDistPixels()
+        {
+            int size = gridWidth * gridHeight;
+
+            int[] realmGrid = new int[size];
+            int[] provinceGrid = new int[size];
+            int[] countyGrid = new int[size];
+            bool[] isLand = new bool[size];
+
+            for (int i = 0; i < size; i++)
+            {
+                int cellId = spatialGrid[i];
+                if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell) && cell.IsLand)
+                {
+                    realmGrid[i] = cell.RealmId;
+                    provinceGrid[i] = cell.ProvinceId;
+                    countyGrid[i] = cell.CountyId;
+                    isLand[i] = true;
+                }
+                else
+                {
+                    realmGrid[i] = -1;
+                    provinceGrid[i] = -1;
+                    countyGrid[i] = -1;
+                    isLand[i] = false;
+                }
+            }
+
+            float[] dist = new float[size];
+            for (int i = 0; i < size; i++)
+                dist[i] = 255f;
+
+            // Seed: land pixels adjacent to land pixel with same province, different county
+            for (int y = 0; y < gridHeight; y++)
+            {
+                for (int x = 0; x < gridWidth; x++)
                 {
                     int idx = y * gridWidth + x;
                     if (!isLand[idx]) continue;
 
-                    if (x < gridWidth - 1) dist[idx] = Mathf.Min(dist[idx], dist[idx + 1] + orthCost);
-                    if (x < gridWidth - 1) dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * gridWidth + x + 1] + diagCost);
-                    dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * gridWidth + x] + orthCost);
-                    if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * gridWidth + x - 1] + diagCost);
+                    int realm = realmGrid[idx];
+                    int province = provinceGrid[idx];
+                    int county = countyGrid[idx];
+                    bool isBoundary = false;
+
+                    for (int dy = -1; dy <= 1 && !isBoundary; dy++)
+                    {
+                        for (int dx = -1; dx <= 1 && !isBoundary; dx++)
+                        {
+                            if (dx == 0 && dy == 0) continue;
+                            int nx = x + dx, ny = y + dy;
+                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
+                            int nIdx = ny * gridWidth + nx;
+                            if (isLand[nIdx] && realmGrid[nIdx] == realm && provinceGrid[nIdx] == province && countyGrid[nIdx] != county)
+                                isBoundary = true;
+                        }
+                    }
+
+                    if (isBoundary)
+                        dist[idx] = 0f;
                 }
             }
 
-            // Convert to bytes
-            byte[] pixels = new byte[size];
-            for (int i = 0; i < size; i++)
-                pixels[i] = (byte)Mathf.Min(255, Mathf.RoundToInt(dist[i]));
-
-            return pixels;
+            RunChamferTransform(dist, isLand);
+            return DistToBytes(dist);
         }
 
         /// <summary>
@@ -875,6 +1063,33 @@ namespace EconSim.Renderer
             terrainMaterial.SetTexture(BiomePaletteTexId, biomePaletteTexture);
             terrainMaterial.SetTexture(BiomeMatrixTexId, biomeElevationMatrix);
             terrainMaterial.SetTexture(RealmBorderDistTexId, realmBorderDistTexture);
+            terrainMaterial.SetTexture(ProvinceBorderDistTexId, provinceBorderDistTexture);
+            terrainMaterial.SetTexture(CountyBorderDistTexId, countyBorderDistTexture);
+
+            // Create market border dist texture (initially all-white = no borders, regenerated when economy is set)
+            marketBorderDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+            marketBorderDistTexture.name = "MarketBorderDistTexture";
+            marketBorderDistTexture.filterMode = FilterMode.Bilinear;
+            marketBorderDistTexture.anisoLevel = 8;
+            marketBorderDistTexture.wrapMode = TextureWrapMode.Clamp;
+            var whitePixels = new Color[gridWidth * gridHeight];
+            for (int i = 0; i < whitePixels.Length; i++)
+                whitePixels[i] = Color.white;
+            marketBorderDistTexture.SetPixels(whitePixels);
+            marketBorderDistTexture.Apply();
+            terrainMaterial.SetTexture(MarketBorderDistTexId, marketBorderDistTexture);
+
+            // Create road mask texture (initially all-black = no roads, regenerated when road state is set)
+            roadDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+            roadDistTexture.name = "RoadMaskTexture";
+            roadDistTexture.filterMode = FilterMode.Bilinear;
+            roadDistTexture.anisoLevel = 8;
+            roadDistTexture.wrapMode = TextureWrapMode.Clamp;
+            // R8 textures initialize to 0 (black = no roads), just apply
+            var roadEmptyPixels = new Color[gridWidth * gridHeight];
+            roadDistTexture.SetPixels(roadEmptyPixels);
+            roadDistTexture.Apply();
+            terrainMaterial.SetTexture(RoadMaskTexId, roadDistTexture);
 
             // Create cell-to-market texture (16384 cells max, updated when economy is set)
             cellToMarketTexture = new Texture2D(16384, 1, TextureFormat.RHalf, false);
@@ -928,6 +1143,9 @@ namespace EconSim.Renderer
             cellToMarketTexture.SetPixels(marketPixels);
             cellToMarketTexture.Apply();
 
+            // Regenerate market border distance texture now that zone assignments are known
+            RegenerateMarketBorderDistTexture(economy);
+
             Debug.Log($"MapOverlayManager: Updated county-to-market texture ({economy.CountyToMarket.Count} counties mapped)");
         }
 
@@ -970,6 +1188,161 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
+        /// Regenerate market border distance texture from county-to-market mapping.
+        /// Boundary condition: land pixel adjacent to land pixel whose county maps to a different market.
+        /// </summary>
+        private void RegenerateMarketBorderDistTexture(EconomyState economy)
+        {
+            if (marketBorderDistTexture == null) return;
+
+            int size = gridWidth * gridHeight;
+
+            // Build market ID grid from spatial grid + county-to-market mapping
+            int[] marketGrid = new int[size];
+            bool[] isLand = new bool[size];
+
+            for (int i = 0; i < size; i++)
+            {
+                int cellId = spatialGrid[i];
+                if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell) && cell.IsLand)
+                {
+                    isLand[i] = true;
+                    if (economy.CountyToMarket.TryGetValue(cell.CountyId, out int mktId))
+                        marketGrid[i] = mktId;
+                    else
+                        marketGrid[i] = 0;
+                }
+                else
+                {
+                    marketGrid[i] = -1;
+                    isLand[i] = false;
+                }
+            }
+
+            // Distance field — initialize to max
+            float[] dist = new float[size];
+            for (int i = 0; i < size; i++)
+                dist[i] = 255f;
+
+            // Seed: land pixels adjacent to land pixel with different market
+            for (int y = 0; y < gridHeight; y++)
+            {
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = y * gridWidth + x;
+                    if (!isLand[idx]) continue;
+
+                    int market = marketGrid[idx];
+                    bool isBoundary = false;
+
+                    for (int dy = -1; dy <= 1 && !isBoundary; dy++)
+                    {
+                        for (int dx = -1; dx <= 1 && !isBoundary; dx++)
+                        {
+                            if (dx == 0 && dy == 0) continue;
+                            int nx = x + dx, ny = y + dy;
+                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
+                            int nIdx = ny * gridWidth + nx;
+                            if (isLand[nIdx] && marketGrid[nIdx] != market)
+                                isBoundary = true;
+                        }
+                    }
+
+                    if (isBoundary)
+                        dist[idx] = 0f;
+                }
+            }
+
+            RunChamferTransform(dist, isLand);
+
+            // Write to texture
+            byte[] pixels = DistToBytes(dist);
+            var colorPixels = new Color[size];
+            for (int i = 0; i < size; i++)
+            {
+                float v = pixels[i] / 255f;
+                colorPixels[i] = new Color(v, v, v, 1f);
+            }
+            marketBorderDistTexture.SetPixels(colorPixels);
+            marketBorderDistTexture.Apply();
+
+            TextureDebugger.SaveTexture(marketBorderDistTexture, "market_border_dist");
+            Debug.Log($"MapOverlayManager: Generated market border distance texture {gridWidth}x{gridHeight}");
+        }
+
+        /// <summary>
+        /// Set road state for shader-based road rendering.
+        /// Stores reference and regenerates the road distance texture.
+        /// </summary>
+        public void SetRoadState(RoadState roads)
+        {
+            roadState = roads;
+            RegenerateRoadDistTexture();
+        }
+
+        /// <summary>
+        /// Regenerate the road mask texture from current road state.
+        /// Uses direct thick-line rasterization (same as river mask) — no chamfer transform.
+        /// Only touches pixels near roads (~O(road_pixels)) instead of the entire grid.
+        /// </summary>
+        public void RegenerateRoadDistTexture()
+        {
+            if (roadDistTexture == null || roadState == null || mapData == null) return;
+
+            var pixels = GenerateRoadMaskPixels();
+
+            roadDistTexture.LoadRawTextureData(pixels);
+            roadDistTexture.Apply();
+        }
+
+        private byte[] GenerateRoadMaskPixels()
+        {
+            var pixels = new byte[gridWidth * gridHeight];
+            float scale = resolutionMultiplier;
+
+            // Road width settings (in grid pixels)
+            float pathWidth = 0.8f * resolutionMultiplier;
+            float roadWidth = 1.6f * resolutionMultiplier;
+
+            var roads = roadState.GetAllRoads();
+
+            // Subdivide each road segment and warp every intermediate point
+            // so roads meander through the noise field like random walks
+            const int substeps = 20;
+            const float roadFreq = DomainWarp.Frequency;
+            const float roadAmp = DomainWarp.Amplitude;
+
+            foreach (var (cellA, cellB, tier) in roads)
+            {
+                if (!mapData.CellById.TryGetValue(cellA, out var dataA)) continue;
+                if (!mapData.CellById.TryGetValue(cellB, out var dataB)) continue;
+
+                float ax = dataA.Center.X * scale;
+                float ay = dataA.Center.Y * scale;
+                float bx = dataB.Center.X * scale;
+                float by = dataB.Center.Y * scale;
+
+                float width = tier == RoadTier.Road ? roadWidth : pathWidth;
+
+                // Warp each substep point independently — creates organic meandering
+                var (prevX, prevY) = DomainWarp.Warp(ax, ay, roadFreq, roadAmp);
+                for (int i = 1; i <= substeps; i++)
+                {
+                    float t = i / (float)substeps;
+                    float mx = ax + (bx - ax) * t;
+                    float my = ay + (by - ay) * t;
+                    var (wx, wy) = DomainWarp.Warp(mx, my, roadFreq, roadAmp);
+
+                    DrawThickLine(pixels, new Vector2(prevX, prevY), new Vector2(wx, wy), width);
+                    prevX = wx;
+                    prevY = wy;
+                }
+            }
+
+            return pixels;
+        }
+
+        /// <summary>
         /// Set the current map mode for the shader.
         /// Mode: 1=political, 2=province, 3=county, 4=market, 5=terrain/biome
         /// </summary>
@@ -991,6 +1364,9 @@ namespace EconSim.Renderer
                     break;
                 case MapView.MapMode.Market:
                     shaderMode = 4;
+                    break;
+                case MapView.MapMode.Soil:
+                    shaderMode = 6;
                     break;
                 case MapView.MapMode.Terrain:
                 default:
@@ -1096,24 +1472,6 @@ namespace EconSim.Renderer
             terrainMaterial.SetFloat(SelectedCountyIdId, -1f);
             float normalizedId = marketId < 0 ? -1f : marketId / 65535f;
             terrainMaterial.SetFloat(SelectedMarketIdId, normalizedId);
-        }
-
-        /// <summary>
-        /// Set the selection border color.
-        /// </summary>
-        public void SetSelectionBorderColor(Color color)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetColor(SelectionBorderColorId, color);
-        }
-
-        /// <summary>
-        /// Set the selection border width in screen pixels.
-        /// </summary>
-        public void SetSelectionBorderWidth(float pixels)
-        {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SelectionBorderWidthId, Mathf.Clamp(pixels, 1f, 6f));
         }
 
         /// <summary>
@@ -1225,7 +1583,7 @@ namespace EconSim.Renderer
             // Update spatial grid positions belonging to this cell
             int cx = Mathf.RoundToInt(cell.Center.X * scale);
             int cy = Mathf.RoundToInt(cell.Center.Y * scale);
-            int radius = 10 * resolutionMultiplier;
+            int radius = 10 * resolutionMultiplier + (int)DomainWarp.Amplitude;
 
             for (int dy = -radius; dy <= radius; dy++)
             {
@@ -1286,6 +1644,14 @@ namespace EconSim.Renderer
                 Object.Destroy(cellToMarketTexture);
             if (realmBorderDistTexture != null)
                 Object.Destroy(realmBorderDistTexture);
+            if (provinceBorderDistTexture != null)
+                Object.Destroy(provinceBorderDistTexture);
+            if (countyBorderDistTexture != null)
+                Object.Destroy(countyBorderDistTexture);
+            if (marketBorderDistTexture != null)
+                Object.Destroy(marketBorderDistTexture);
+            if (roadDistTexture != null)
+                Object.Destroy(roadDistTexture);
         }
     }
 }

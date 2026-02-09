@@ -30,8 +30,6 @@ Shader "EconSim/MapOverlay"
         _SelectedProvinceId ("Selected Province ID (normalized)", Float) = -1
         _SelectedCountyId ("Selected County ID (normalized)", Float) = -1
         _SelectedMarketId ("Selected Market ID (normalized)", Float) = -1
-        _SelectionBorderColor ("Selection Border Color", Color) = (1, 0.9, 0.2, 1)
-        _SelectionBorderWidth ("Selection Border Width (pixels)", Range(1, 6)) = 3.0
         _SelectionDimming ("Selection Dimming", Range(0, 1)) = 0.5
         _SelectionDesaturation ("Selection Desaturation", Range(0, 1)) = 0
 
@@ -42,7 +40,18 @@ Shader "EconSim/MapOverlay"
         _HoveredMarketId ("Hovered Market ID (normalized)", Float) = -1
         _HoverIntensity ("Hover Intensity", Range(0, 1)) = 0
 
-        // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome
+        // Soil overlay (mode 6)
+        _SoilHeightFloor ("Soil Height Floor", Range(0, 1)) = 0
+        _SoilColor0 ("Permafrost", Color) = (0.80, 0.85, 0.90, 1)
+        _SoilColor1 ("Saline", Color) = (0.92, 0.90, 0.82, 1)
+        _SoilColor2 ("Lithosol", Color) = (0.70, 0.68, 0.65, 1)
+        _SoilColor3 ("Alluvial", Color) = (0.55, 0.42, 0.28, 1)
+        _SoilColor4 ("Aridisol", Color) = (0.88, 0.78, 0.58, 1)
+        _SoilColor5 ("Laterite", Color) = (0.82, 0.42, 0.25, 1)
+        _SoilColor6 ("Podzol", Color) = (0.62, 0.58, 0.48, 1)
+        _SoilColor7 ("Chernozem", Color) = (0.38, 0.33, 0.27, 1)
+
+        // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome, 6=soil
         _MapMode ("Map Mode", Int) = 0
 
         // Gradient fill style (edge-to-center fade for political/market modes)
@@ -54,6 +63,25 @@ Shader "EconSim/MapOverlay"
         _RealmBorderDistTex ("Realm Border Distance", 2D) = "white" {}
         _RealmBorderWidth ("Realm Border Width", Range(0, 4)) = 1
         _RealmBorderDarkening ("Realm Border Darkening", Range(0, 1)) = 0.5
+
+        // Province border (thinner, lighter than realm)
+        _ProvinceBorderDistTex ("Province Border Distance", 2D) = "white" {}
+        _ProvinceBorderWidth ("Province Border Width", Range(0, 4)) = 0.7
+        _ProvinceBorderDarkening ("Province Border Darkening", Range(0, 1)) = 0.35
+
+        // County border (thinnest, lightest)
+        _CountyBorderDistTex ("County Border Distance", 2D) = "white" {}
+        _CountyBorderWidth ("County Border Width", Range(0, 4)) = 0.5
+        _CountyBorderDarkening ("County Border Darkening", Range(0, 1)) = 0.25
+
+        // Market zone border (same style as realm borders)
+        _MarketBorderDistTex ("Market Border Distance", 2D) = "white" {}
+        _MarketBorderWidth ("Market Border Width", Range(0, 4)) = 1
+        _MarketBorderDarkening ("Market Border Darkening", Range(0, 1)) = 0.5
+
+        // Road overlay (market mode only, direct mask: 0=no road, 1=road)
+        _RoadMaskTex ("Road Mask", 2D) = "black" {}
+        _RoadDarkening ("Road Darkening", Range(0, 1)) = 0.4
 
         // Water layer properties
         _WaterShallowColor ("Water Shallow Color", Color) = (0.25, 0.55, 0.65, 1)
@@ -107,6 +135,15 @@ Shader "EconSim/MapOverlay"
             sampler2D _MarketPaletteTex;
             sampler2D _BiomePaletteTex;
             sampler2D _BiomeMatrixTex;
+            float _SoilHeightFloor;
+            fixed4 _SoilColor0;
+            fixed4 _SoilColor1;
+            fixed4 _SoilColor2;
+            fixed4 _SoilColor3;
+            fixed4 _SoilColor4;
+            fixed4 _SoilColor5;
+            fixed4 _SoilColor6;
+            fixed4 _SoilColor7;
 
             int _MapMode;
             float _GradientRadius;
@@ -115,6 +152,18 @@ Shader "EconSim/MapOverlay"
             sampler2D _RealmBorderDistTex;
             float _RealmBorderWidth;
             float _RealmBorderDarkening;
+            sampler2D _ProvinceBorderDistTex;
+            float _ProvinceBorderWidth;
+            float _ProvinceBorderDarkening;
+            sampler2D _CountyBorderDistTex;
+            float _CountyBorderWidth;
+            float _CountyBorderDarkening;
+            sampler2D _MarketBorderDistTex;
+            float _MarketBorderWidth;
+            float _MarketBorderDarkening;
+
+            sampler2D _RoadMaskTex;
+            float _RoadDarkening;
 
             // Water layer uniforms
             fixed4 _WaterShallowColor;
@@ -132,8 +181,6 @@ Shader "EconSim/MapOverlay"
             float _SelectedProvinceId;
             float _SelectedCountyId;
             float _SelectedMarketId;
-            fixed4 _SelectionBorderColor;
-            float _SelectionBorderWidth;
             float _SelectionDimming;
             float _SelectionDesaturation;
 
@@ -142,14 +189,6 @@ Shader "EconSim/MapOverlay"
             float _HoveredCountyId;
             float _HoveredMarketId;
             float _HoverIntensity;
-
-            // 16 sample directions for smoother AA (8 cardinal + 8 at 22.5 offsets)
-            static const float2 sampleDirs[16] = {
-                float2(1, 0), float2(0.924, 0.383), float2(0.707, 0.707), float2(0.383, 0.924),
-                float2(0, 1), float2(-0.383, 0.924), float2(-0.707, 0.707), float2(-0.924, 0.383),
-                float2(-1, 0), float2(-0.924, -0.383), float2(-0.707, -0.707), float2(-0.383, -0.924),
-                float2(0, -1), float2(0.383, -0.924), float2(0.707, -0.707), float2(0.924, -0.383)
-            };
 
             v2f vert(appdata v)
             {
@@ -333,408 +372,6 @@ Shader "EconSim/MapOverlay"
             }
 
             // ========================================================================
-            // Edge proximity functions (unchanged)
-            // ========================================================================
-
-            // Calculate edge proximity for political gradient effect
-            // Returns 0 at edges (near different region, water, or river), 1 deep in interior
-            // channel: 0=realm (R), 1=province (G), 2=county (A)
-            float CalculateEdgeProximity(float2 uv, float centerValue, bool centerIsWater, int channel, float maxRadius, float uvPerPixel)
-            {
-                if (centerIsWater) return 1;
-
-                static const float2 sampleDirs8[8] = {
-                    float2(1, 0), float2(0.707, 0.707), float2(0, 1), float2(-0.707, 0.707),
-                    float2(-1, 0), float2(-0.707, -0.707), float2(0, -1), float2(0.707, -0.707)
-                };
-
-                float radii[8] = {
-                    maxRadius * 0.0625, maxRadius * 0.125, maxRadius * 0.1875, maxRadius * 0.25,
-                    maxRadius * 0.3125, maxRadius * 0.375, maxRadius * 0.4375, maxRadius * 0.5
-                };
-
-                float minEdgeDistance = maxRadius * 0.5;
-
-                for (int r = 0; r < 8; r++)
-                {
-                    float radius = radii[r];
-
-                    for (int i = 0; i < 8; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs8[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-
-                        float sampleRiver = tex2D(_RiverMaskTex, sampleUV).r;
-                        bool sampleIsRiver = sampleRiver > 0.5;
-
-                        if (sampleIsWater || sampleIsRiver)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                            continue;
-                        }
-
-                        float sampleValue;
-                        if (channel == 0) sampleValue = sampleData.r;
-                        else if (channel == 1) sampleValue = sampleData.g;
-                        else sampleValue = sampleData.a;
-
-                        if (abs(centerValue - sampleValue) > 0.00001)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                        }
-                    }
-                }
-
-                return saturate(minEdgeDistance / (maxRadius * 0.5));
-            }
-
-            // Calculate proximity to realm borders ONLY (ignores water/rivers)
-            float CalculateRealmBorderProximity(float2 uv, float centerRealmId, bool centerIsWater, float borderWidthUV)
-            {
-                if (centerIsWater) return 1;
-
-                static const float2 sampleDirs8[8] = {
-                    float2(1, 0), float2(0.707, 0.707), float2(0, 1), float2(-0.707, 0.707),
-                    float2(-1, 0), float2(-0.707, -0.707), float2(0, -1), float2(0.707, -0.707)
-                };
-
-                float radii[8] = {
-                    borderWidthUV * 0.125, borderWidthUV * 0.25, borderWidthUV * 0.375, borderWidthUV * 0.5,
-                    borderWidthUV * 0.625, borderWidthUV * 0.75, borderWidthUV * 0.875, borderWidthUV
-                };
-
-                float minEdgeDistance = borderWidthUV;
-
-                for (int r = 0; r < 8; r++)
-                {
-                    float radius = radii[r];
-
-                    for (int i = 0; i < 8; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs8[i] * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-                        if (sampleIsWater) continue;
-
-                        float sampleRealmId = sampleData.r;
-                        if (abs(centerRealmId - sampleRealmId) > 0.00001)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                        }
-                    }
-                }
-
-                return saturate(minEdgeDistance / borderWidthUV);
-            }
-
-            // Calculate edge proximity for political modes (realm boundaries, water, rivers)
-            float CalculatePoliticalEdgeProximity(float2 uv, float centerRealmId, bool centerIsWater, float maxRadius, float uvPerPixel)
-            {
-                if (centerIsWater) return 1;
-
-                static const float2 dirs8[8] = {
-                    float2(1, 0), float2(0.707, 0.707), float2(0, 1), float2(-0.707, 0.707),
-                    float2(-1, 0), float2(-0.707, -0.707), float2(0, -1), float2(0.707, -0.707)
-                };
-
-                float radii[8] = {
-                    maxRadius * 0.0625, maxRadius * 0.125, maxRadius * 0.1875, maxRadius * 0.25,
-                    maxRadius * 0.3125, maxRadius * 0.375, maxRadius * 0.4375, maxRadius * 0.5
-                };
-
-                float minEdgeDistance = maxRadius * 0.5;
-
-                for (int r = 0; r < 8; r++)
-                {
-                    float radius = radii[r];
-                    for (int i = 0; i < 8; i++)
-                    {
-                        float2 sampleUV = uv + dirs8[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-
-                        float sampleRiver = tex2D(_RiverMaskTex, sampleUV).r;
-                        bool sampleIsRiver = sampleRiver > 0.5;
-
-                        if (sampleIsWater || sampleIsRiver)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                            continue;
-                        }
-
-                        float sampleRealmId = sampleData.r;
-                        if (abs(centerRealmId - sampleRealmId) > 0.00001)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                        }
-                    }
-                }
-
-                return saturate(minEdgeDistance / (maxRadius * 0.5));
-            }
-
-            // Calculate edge proximity for market zones
-            float CalculateMarketEdgeProximity(float2 uv, float centerMarketId, bool centerIsWater, float maxRadius, float uvPerPixel)
-            {
-                if (centerIsWater) return 1;
-
-                static const float2 sampleDirs8[8] = {
-                    float2(1, 0), float2(0.707, 0.707), float2(0, 1), float2(-0.707, 0.707),
-                    float2(-1, 0), float2(-0.707, -0.707), float2(0, -1), float2(0.707, -0.707)
-                };
-
-                float radii[8] = {
-                    maxRadius * 0.0625, maxRadius * 0.125, maxRadius * 0.1875, maxRadius * 0.25,
-                    maxRadius * 0.3125, maxRadius * 0.375, maxRadius * 0.4375, maxRadius * 0.5
-                };
-
-                float minEdgeDistance = maxRadius * 0.5;
-
-                for (int r = 0; r < 8; r++)
-                {
-                    float radius = radii[r];
-
-                    for (int i = 0; i < 8; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs8[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-
-                        float sampleRiver = tex2D(_RiverMaskTex, sampleUV).r;
-                        bool sampleIsRiver = sampleRiver > 0.5;
-
-                        if (sampleIsWater || sampleIsRiver)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                            continue;
-                        }
-
-                        float sampleMarketId = GetMarketIdForCell(sampleData.a);
-
-                        if (abs(centerMarketId - sampleMarketId) > 0.00001)
-                        {
-                            minEdgeDistance = min(minEdgeDistance, radius);
-                        }
-                    }
-                }
-
-                return saturate(minEdgeDistance / (maxRadius * 0.5));
-            }
-
-            // ========================================================================
-            // Selection / hover functions (unchanged)
-            // ========================================================================
-
-            float CalculateSelectionBorderAA(float2 uv, float centerValue, float selectedId, bool centerIsWater, int channel, float borderWidth, float uvPerPixel)
-            {
-                if (centerIsWater) return 0;
-                if (abs(centerValue - selectedId) > 0.00001) return 0;
-
-                float innerRadius = max(0.0, borderWidth - 1.0);
-                float outerRadius = borderWidth + 0.5;
-
-                float totalWeight = 0;
-                float borderWeight = 0;
-
-                float radii[3] = { innerRadius, borderWidth, outerRadius };
-                float weights[3] = { 0.5, 1.0, 0.25 };
-
-                for (int r = 0; r < 3; r++)
-                {
-                    float radius = radii[r];
-                    float weight = weights[r];
-
-                    if (radius < 0.1) continue;
-
-                    for (int i = 0; i < 16; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-
-                        if (sampleIsWater)
-                        {
-                            borderWeight += weight;
-                            totalWeight += weight;
-                            continue;
-                        }
-
-                        float sampleValue;
-                        if (channel == 0) sampleValue = sampleData.r;
-                        else if (channel == 1) sampleValue = sampleData.g;
-                        else sampleValue = sampleData.a;
-
-                        float isDifferent = abs(sampleValue - selectedId) > 0.00001 ? 1.0 : 0.0;
-
-                        borderWeight += isDifferent * weight;
-                        totalWeight += weight;
-                    }
-                }
-
-                float coverage = borderWeight / max(totalWeight, 0.001);
-                return smoothstep(0.0, 0.5, coverage);
-            }
-
-            bool IsInSelectedRegion(float centerValue, float selectedId)
-            {
-                return abs(centerValue - selectedId) < 0.00001;
-            }
-
-            float CalculateMarketSelectionBorderAA(float2 uv, float centerMarketId, float selectedMarketId, bool centerIsWater, float borderWidth, float uvPerPixel)
-            {
-                if (centerIsWater) return 0;
-                if (abs(centerMarketId - selectedMarketId) > 0.00001) return 0;
-
-                float innerRadius = max(0.0, borderWidth - 1.0);
-                float outerRadius = borderWidth + 0.5;
-
-                float totalWeight = 0;
-                float borderWeight = 0;
-
-                float radii[3] = { innerRadius, borderWidth, outerRadius };
-                float weights[3] = { 0.5, 1.0, 0.25 };
-
-                for (int r = 0; r < 3; r++)
-                {
-                    float radius = radii[r];
-                    float weight = weights[r];
-
-                    if (radius < 0.1) continue;
-
-                    for (int i = 0; i < 16; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        bool sampleIsWater = samplePackedBiome >= 32000.0;
-
-                        float isDifferent;
-                        if (sampleIsWater)
-                        {
-                            isDifferent = 1.0;
-                        }
-                        else
-                        {
-                            float sampleMarketId = GetMarketIdForCell(sampleData.a);
-                            isDifferent = abs(sampleMarketId - selectedMarketId) > 0.00001 ? 1.0 : 0.0;
-                        }
-
-                        borderWeight += isDifferent * weight;
-                        totalWeight += weight;
-                    }
-                }
-
-                float coverage = borderWeight / max(totalWeight, 0.001);
-                return smoothstep(0.0, 0.5, coverage);
-            }
-
-            float CalculateHoverOutlineAA(float2 uv, float centerValue, float hoveredId, bool centerIsWater, int channel, float offset, float width, float uvPerPixel)
-            {
-                if (hoveredId < 0) return 0;
-                if (!centerIsWater && abs(centerValue - hoveredId) < 0.00001) return 0;
-
-                float halfWidth = width * 0.5;
-                float innerEdge = offset - halfWidth;
-                float outerEdge = offset + halfWidth;
-
-                float radii[3] = { innerEdge, offset, outerEdge };
-                float weights[3] = { 0.25, 0.5, 0.25 };
-
-                float totalHits = 0;
-                float totalWeight = 0;
-
-                for (int r = 0; r < 3; r++)
-                {
-                    float radius = radii[r];
-                    if (radius < 0.5) continue;
-
-                    float weight = weights[r];
-
-                    for (int i = 0; i < 16; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        if (samplePackedBiome >= 32000.0) continue;
-
-                        float sampleValue;
-                        if (channel == 0) sampleValue = sampleData.r;
-                        else if (channel == 1) sampleValue = sampleData.g;
-                        else sampleValue = sampleData.a;
-
-                        bool isHovered = abs(sampleValue - hoveredId) < 0.00001;
-                        totalHits += isHovered ? weight : 0;
-                        totalWeight += weight;
-                    }
-                }
-
-                if (totalWeight < 0.001) return 0;
-
-                float hitRatio = totalHits / totalWeight;
-                float coverage = smoothstep(0.0, 0.3, hitRatio) * smoothstep(0.8, 0.4, hitRatio);
-
-                return coverage;
-            }
-
-            float CalculateMarketHoverOutlineAA(float2 uv, float centerMarketId, float hoveredMarketId, bool centerIsWater, float offset, float width, float uvPerPixel)
-            {
-                if (hoveredMarketId < 0) return 0;
-                if (!centerIsWater && abs(centerMarketId - hoveredMarketId) < 0.00001) return 0;
-
-                float halfWidth = width * 0.5;
-                float innerEdge = offset - halfWidth;
-                float outerEdge = offset + halfWidth;
-
-                float radii[3] = { innerEdge, offset, outerEdge };
-                float weights[3] = { 0.25, 0.5, 0.25 };
-
-                float totalHits = 0;
-                float totalWeight = 0;
-
-                for (int r = 0; r < 3; r++)
-                {
-                    float radius = radii[r];
-                    if (radius < 0.5) continue;
-
-                    float weight = weights[r];
-
-                    for (int i = 0; i < 16; i++)
-                    {
-                        float2 sampleUV = uv + sampleDirs[i] * uvPerPixel * radius;
-                        float4 sampleData = SampleCellData(sampleUV);
-
-                        float samplePackedBiome = sampleData.b * 65535.0;
-                        if (samplePackedBiome >= 32000.0) continue;
-
-                        float sampleMarketId = GetMarketIdForCell(sampleData.a);
-                        bool isHovered = abs(sampleMarketId - hoveredMarketId) < 0.00001;
-                        totalHits += isHovered ? weight : 0;
-                        totalWeight += weight;
-                    }
-                }
-
-                if (totalWeight < 0.001) return 0;
-
-                float hitRatio = totalHits / totalWeight;
-                float coverage = smoothstep(0.0, 0.3, hitRatio) * smoothstep(0.8, 0.4, hitRatio);
-
-                return coverage;
-            }
-
-            // ========================================================================
             // Layer 1: Terrain (always rendered, seabed visible under water)
             // ========================================================================
 
@@ -823,10 +460,10 @@ Shader "EconSim/MapOverlay"
             // Layer 2: Map mode overlay (political/market paint, alpha=0 on water)
             // ========================================================================
 
-            fixed4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, float realmId, float provinceId, float countyId, float marketId, float uvPerPixel)
+            fixed4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, float realmId, float provinceId, float countyId, float marketId)
             {
-                // No map mode overlay on water, rivers, height mode (0), or terrain mode (5)
-                if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 5)
+                // No map mode overlay on water, rivers, height mode (0), terrain mode (5), or soil mode (6)
+                if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 5 || _MapMode == 6)
                     return fixed4(0, 0, 0, 0);
 
                 // Grayscale terrain for multiply blending
@@ -840,7 +477,8 @@ Shader "EconSim/MapOverlay"
                 {
                     // Political modes (1=realm, 2=province, 3=county)
                     fixed3 politicalColor = LookupPaletteColor(_RealmPaletteTex, realmId);
-                    edgeProximity = CalculatePoliticalEdgeProximity(uv, realmId, isCellWater, _GradientRadius, uvPerPixel);
+                    float realmDist = tex2D(_RealmBorderDistTex, uv).r * 255.0;
+                    edgeProximity = saturate(realmDist / _GradientRadius);
 
                     // Multiply blend and gradient
                     fixed3 multiplied = grayTerrain * politicalColor;
@@ -848,7 +486,31 @@ Shader "EconSim/MapOverlay"
                     fixed3 centerColor = lerp(grayTerrain, politicalColor, _GradientCenterOpacity);
                     modeColor = lerp(edgeColor, centerColor, edgeProximity);
 
-                    // Realm border band overlay (distance texture + smoothstep AA)
+                    // County border band overlay (thinnest, lightest — drawn first)
+                    float countyBorderDist = tex2D(_CountyBorderDistTex, uv).r * 255.0;
+                    float countyBorderAA = fwidth(countyBorderDist);
+                    float countyBorderFactor = 1.0 - smoothstep(_CountyBorderWidth - countyBorderAA, _CountyBorderWidth + countyBorderAA, countyBorderDist);
+                    if (countyBorderFactor > 0.001)
+                    {
+                        float3 cHsv = rgb2hsv(politicalColor);
+                        cHsv.z *= (1.0 - _CountyBorderDarkening);
+                        fixed3 countyBorderColor = hsv2rgb(cHsv);
+                        modeColor = lerp(modeColor, countyBorderColor, countyBorderFactor);
+                    }
+
+                    // Province border band overlay (thinner, lighter — drawn on top of county borders)
+                    float provinceBorderDist = tex2D(_ProvinceBorderDistTex, uv).r * 255.0;
+                    float provinceBorderAA = fwidth(provinceBorderDist);
+                    float provinceBorderFactor = 1.0 - smoothstep(_ProvinceBorderWidth - provinceBorderAA, _ProvinceBorderWidth + provinceBorderAA, provinceBorderDist);
+                    if (provinceBorderFactor > 0.001)
+                    {
+                        float3 pHsv = rgb2hsv(politicalColor);
+                        pHsv.z *= (1.0 - _ProvinceBorderDarkening);
+                        fixed3 provinceBorderColor = hsv2rgb(pHsv);
+                        modeColor = lerp(modeColor, provinceBorderColor, provinceBorderFactor);
+                    }
+
+                    // Realm border band overlay (distance texture + smoothstep AA, on top of province borders)
                     float realmBorderDist = tex2D(_RealmBorderDistTex, uv).r * 255.0;
                     float borderAA = fwidth(realmBorderDist);
                     float borderFactor = 1.0 - smoothstep(_RealmBorderWidth - borderAA, _RealmBorderWidth + borderAA, realmBorderDist);
@@ -864,12 +526,33 @@ Shader "EconSim/MapOverlay"
                 {
                     // Market mode
                     fixed3 marketColor = LookupPaletteColor(_MarketPaletteTex, marketId);
-                    edgeProximity = CalculateMarketEdgeProximity(uv, marketId, isCellWater, _GradientRadius, uvPerPixel);
+                    float marketDist = tex2D(_MarketBorderDistTex, uv).r * 255.0;
+                    edgeProximity = saturate(marketDist / _GradientRadius);
 
                     fixed3 multiplied = grayTerrain * marketColor;
                     fixed3 edgeColor = lerp(marketColor, multiplied, _GradientEdgeDarkening);
                     fixed3 centerColor = lerp(grayTerrain, marketColor, _GradientCenterOpacity);
                     modeColor = lerp(edgeColor, centerColor, edgeProximity);
+
+                    // Road overlay: multiply-darken terrain where roads exist
+                    // Road mask is direct coverage (0=no road, 1=road), bilinear-filtered for AA
+                    float roadMask = tex2D(_RoadMaskTex, uv).r;
+                    if (roadMask > 0.01)
+                    {
+                        modeColor *= lerp(1.0, 1.0 - _RoadDarkening, roadMask);
+                    }
+
+                    // Market zone border band overlay (distance texture + smoothstep AA)
+                    float marketBorderDist = tex2D(_MarketBorderDistTex, uv).r * 255.0;
+                    float marketBorderAA = fwidth(marketBorderDist);
+                    float marketBorderFactor = 1.0 - smoothstep(_MarketBorderWidth - marketBorderAA, _MarketBorderWidth + marketBorderAA, marketBorderDist);
+                    if (marketBorderFactor > 0.001)
+                    {
+                        float3 mHsv = rgb2hsv(marketColor);
+                        mHsv.z *= (1.0 - _MarketBorderDarkening);
+                        fixed3 marketBorderColor = hsv2rgb(mHsv);
+                        modeColor = lerp(modeColor, marketBorderColor, marketBorderFactor);
+                    }
                 }
                 else
                 {
@@ -936,7 +619,10 @@ Shader "EconSim/MapOverlay"
 
                 float packedBiome = centerData.b * 65535.0;
                 bool isCellWater = packedBiome >= 32000.0;
-                float biomeId = (packedBiome - (isCellWater ? 32768.0 : 0.0)) / 65535.0;
+                // Land: packed = biomeId*8 + soilId; Water: packed = 32768 + biomeId
+                float landPacked = packedBiome - (isCellWater ? 32768.0 : 0.0);
+                float biomeId = (isCellWater ? landPacked : floor(landPacked / 8.0)) / 65535.0;
+                int soilId = isCellWater ? 0 : ((int)landPacked) % 8;
 
                 float riverMask = tex2D(_RiverMaskTex, IN.dataUV).r;
                 bool isRiver = riverMask > 0.5;
@@ -946,10 +632,6 @@ Shader "EconSim/MapOverlay"
 
                 float height = tex2D(_HeightmapTex, IN.dataUV).r;
 
-                float2 dx = ddx(uv);
-                float2 dy = ddy(uv);
-                float uvPerPixel = length(float2(length(dx), length(dy)));
-
                 // ---- Layer 1: Terrain ----
 
                 fixed3 terrain;
@@ -958,6 +640,31 @@ Shader "EconSim/MapOverlay"
                     // Height gradient mode: override terrain with debug viz
                     terrain = ComputeHeightGradient(isCellWater, height, riverMask);
                 }
+                else if (_MapMode == 6)
+                {
+                    // Soil mode: grayscale heightmap × soil color
+                    if (isCellWater)
+                    {
+                        terrain = ComputeTerrain(uv, isCellWater, biomeId, height, riverMask);
+                    }
+                    else
+                    {
+                        float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
+
+                        fixed3 soilColor;
+                        if (soilId <= 0) soilColor = _SoilColor0.rgb;
+                        else if (soilId == 1) soilColor = _SoilColor1.rgb;
+                        else if (soilId == 2) soilColor = _SoilColor2.rgb;
+                        else if (soilId == 3) soilColor = _SoilColor3.rgb;
+                        else if (soilId == 4) soilColor = _SoilColor4.rgb;
+                        else if (soilId == 5) soilColor = _SoilColor5.rgb;
+                        else if (soilId == 6) soilColor = _SoilColor6.rgb;
+                        else soilColor = _SoilColor7.rgb;
+
+                        float brightness = lerp(_SoilHeightFloor, 1.0, landHeight);
+                        terrain = soilColor * brightness;
+                    }
+                }
                 else
                 {
                     terrain = ComputeTerrain(uv, isCellWater, biomeId, height, riverMask);
@@ -965,7 +672,7 @@ Shader "EconSim/MapOverlay"
 
                 // ---- Layer 2: Map mode ----
 
-                fixed4 mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId, uvPerPixel);
+                fixed4 mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId);
                 fixed3 afterMapMode = lerp(terrain, mapMode.rgb, mapMode.a);
 
                 // ---- Layer 3: Water ----
@@ -990,29 +697,16 @@ Shader "EconSim/MapOverlay"
 
                 fixed3 finalColor = afterWater;
 
-                // Selection highlight
-                float selectionBorderAA = 0;
+                // Selection region test (for dimming non-selected areas)
                 bool isInSelection = false;
                 if (_SelectedRealmId >= 0)
-                {
-                    selectionBorderAA = CalculateSelectionBorderAA(uv, realmId, _SelectedRealmId, isWater, 0, _SelectionBorderWidth, uvPerPixel);
-                    isInSelection = !isWater && IsInSelectedRegion(realmId, _SelectedRealmId);
-                }
+                    isInSelection = !isWater && abs(realmId - _SelectedRealmId) < 0.00001;
                 else if (_SelectedProvinceId >= 0)
-                {
-                    selectionBorderAA = CalculateSelectionBorderAA(uv, provinceId, _SelectedProvinceId, isWater, 1, _SelectionBorderWidth, uvPerPixel);
-                    isInSelection = !isWater && IsInSelectedRegion(provinceId, _SelectedProvinceId);
-                }
+                    isInSelection = !isWater && abs(provinceId - _SelectedProvinceId) < 0.00001;
                 else if (_SelectedMarketId >= 0)
-                {
-                    selectionBorderAA = CalculateMarketSelectionBorderAA(uv, marketId, _SelectedMarketId, isWater, _SelectionBorderWidth, uvPerPixel);
-                    isInSelection = !isWater && IsInSelectedRegion(marketId, _SelectedMarketId);
-                }
+                    isInSelection = !isWater && abs(marketId - _SelectedMarketId) < 0.00001;
                 else if (_SelectedCountyId >= 0)
-                {
-                    selectionBorderAA = CalculateSelectionBorderAA(uv, countyId, _SelectedCountyId, isWater, 2, _SelectionBorderWidth, uvPerPixel);
-                    isInSelection = !isWater && IsInSelectedRegion(countyId, _SelectedCountyId);
-                }
+                    isInSelection = !isWater && abs(countyId - _SelectedCountyId) < 0.00001;
 
                 // Hover effect
                 bool isHovered = (!isWater) && (
@@ -1037,22 +731,27 @@ Shader "EconSim/MapOverlay"
                     finalColor *= _SelectionDimming;
                 }
 
-                // Selection border (topmost layer)
-                if (selectionBorderAA > 0)
-                {
-                    float alpha = selectionBorderAA * _SelectionBorderColor.a;
-                    finalColor = lerp(finalColor, _SelectionBorderColor.rgb, alpha);
-                }
-
                 return fixed4(finalColor, 1);
             }
-            // Stencil fragment: marks realm border band pixels
+            // Stencil fragment: marks border band pixels for political and market modes
             fixed4 frag_stencil(v2f IN) : SV_Target
             {
-                if (_MapMode < 1 || _MapMode > 3) discard;
-
-                float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
-                if (realmBorderDist >= _RealmBorderWidth) discard;
+                if (_MapMode >= 1 && _MapMode <= 3)
+                {
+                    float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
+                    float provinceBorderDist = tex2D(_ProvinceBorderDistTex, IN.dataUV).r * 255.0;
+                    float countyBorderDist = tex2D(_CountyBorderDistTex, IN.dataUV).r * 255.0;
+                    if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth && countyBorderDist >= _CountyBorderWidth) discard;
+                }
+                else if (_MapMode == 4)
+                {
+                    float marketBorderDist = tex2D(_MarketBorderDistTex, IN.dataUV).r * 255.0;
+                    if (marketBorderDist >= _MarketBorderWidth) discard;
+                }
+                else
+                {
+                    discard;
+                }
 
                 return fixed4(0, 0, 0, 0);
             }

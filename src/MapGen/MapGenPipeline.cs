@@ -33,8 +33,9 @@ namespace MapGen.Core
         public float AspectRatio = 16f / 9f;
         public HeightmapTemplateType Template = HeightmapTemplateType.LowIsland;
         public float LatitudeSouth = 30f;
-        public float RiverThreshold = 120f;
-        public int MinRiverVertices = 6;
+        public float RiverThreshold = 240f;
+        public float RiverTraceThreshold = 12f;
+        public int MinRiverVertices = 12;
 
         // Sub-seed constants (golden ratio hashing for decorrelation)
         const uint HeightmapXor = 0x9E3779B9;
@@ -99,7 +100,7 @@ namespace MapGen.Core
 
             // 4. Rivers: FlowOps.Compute
             var rivers = new RiverData(mesh);
-            FlowOps.Compute(rivers, heights, climate, config.RiverThreshold, config.MinRiverVertices);
+            FlowOps.Compute(rivers, heights, climate, config.RiverThreshold, config.RiverTraceThreshold, config.MinRiverVertices);
 
             // 5. Biomes: full BiomeOps pipeline + Suitability + Population
             var biomes = new BiomeData(mesh);

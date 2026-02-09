@@ -12,6 +12,8 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 **Important: Do NOT use screenshots or automated visual testing for visual verification.** Ask the user to run the test scene and describe what they see.
 
+**Important: Do NOT tell the user to check Unity console logs.** Use the MCP `read_console` tool to check logs yourself. There are 100+ logs at startup; filter appropriately.
+
 ### Unity Gotchas
 
 **Namespace conflicts:** The `EconSim.Renderer` namespace conflicts with Unity types. Use fully qualified names:
@@ -98,7 +100,7 @@ The map uses a GPU-driven overlay system for borders and map modes:
 
 - R: RealmId / 65535
 - G: ProvinceId / 65535
-- B: (BiomeId + WaterFlag) / 65535 — water flag adds 32768 if cell is water
+- B: (BiomeId*8 + SoilId + WaterFlag) / 65535 — land packs biome (0-63) and soil (0-7); water flag adds 32768
 - A: CountyId / 65535 — enables per-county coloring in county mode (32-bit float for precision)
 
 **Palette textures:**

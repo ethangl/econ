@@ -96,6 +96,7 @@ namespace EconSim.Core.Data
         // Terrain
         public int Height;              // 0-100, sea level = 20
         public int BiomeId;
+        public int SoilId;             // MapGen.Core.SoilType ordinal (0-7)
         public bool IsLand;
         public int CoastDistance;       // + for land (dist to coast), - for water
         public int FeatureId;           // Index into Features (ocean, lake, island, etc.)

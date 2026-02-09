@@ -35,10 +35,6 @@ namespace EconSim.Renderer
         private int gridDivisor = 1;  // 1 = full source resolution, 2 = half, etc.
         private float gridHeightScale = 3f;
 
-        [Header("Borders")]
-        private bool enableBorders = true;
-        [SerializeField] private Material borderMaterial;
-
         [Header("Selection")]
         [SerializeField] private UnityEngine.Camera selectionCamera;
         [SerializeField] private MapCamera mapCameraController;
@@ -66,10 +62,6 @@ namespace EconSim.Renderer
         private MeshFilter meshFilter;
         private MeshRenderer meshRenderer;
         private Mesh mesh;
-        private BorderRenderer borderRenderer;
-        private RiverRenderer riverRenderer;
-        private RoadRenderer roadRenderer;
-        private SelectionHighlight selectionHighlight;
         private MapOverlayManager overlayManager;
 
         // Cell mesh data
@@ -99,13 +91,14 @@ namespace EconSim.Renderer
             Province,   // Colored by province (key: 1, cycles with Political/County)
             County,     // Colored by county/cell (key: 1, cycles with Political/Province)
             Terrain,    // Colored by biome with elevation tinting (key: 2)
-            Market      // Colored by market zone (key: 3)
+            Market,     // Colored by market zone (key: 3)
+            Soil        // Terrain multiplied by soil color (key: 4)
         }
 
         public MapMode CurrentMode => currentMode;
         public string CurrentModeName => ModeNames[(int)currentMode];
 
-        private static readonly string[] ModeNames = { "Political", "Province", "County", "Terrain", "Market" };
+        private static readonly string[] ModeNames = { "Political", "Province", "County", "Terrain", "Market", "Soil" };
 
         private void Awake()
         {
@@ -145,6 +138,11 @@ namespace EconSim.Renderer
             {
                 SetMapMode(MapMode.Market);
                 Debug.Log("Map mode: Market (3)");
+            }
+            else if (Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4))
+            {
+                SetMapMode(MapMode.Soil);
+                Debug.Log("Map mode: Soil (4)");
             }
 
             // Update hover state (but not when panning or over UI)
@@ -393,19 +391,11 @@ namespace EconSim.Renderer
             InitializeOverlays();
             Profiler.End();
 
-            Profiler.Begin("InitializeBorders");
-            InitializeBorders();
-            Profiler.End();
-
-            // InitializeRivers();  // Disabled - rivers now rendered via shader mask (Phase 8)
-
-            Profiler.Begin("InitializeRoads");
-            InitializeRoads();
-            Profiler.End();
-
-            Profiler.Begin("InitializeSelectionHighlight");
-            InitializeSelectionHighlight();
-            Profiler.End();
+            // Subscribe to cell clicks for shader selection
+            if (useShaderOverlays && overlayManager != null)
+            {
+                OnCellClicked += HandleShaderSelection;
+            }
         }
 
         private void InitializeOverlays()
@@ -430,87 +420,14 @@ namespace EconSim.Renderer
 
             // Sync shader mode with current map mode
             overlayManager.SetMapMode(currentMode);
-            UpdateOverlayVisibility();
-        }
-
-        private void InitializeBorders()
-        {
-            if (!enableBorders || mapData == null) return;
-
-            // Create or get BorderRenderer component
-            borderRenderer = GetComponent<BorderRenderer>();
-            if (borderRenderer == null)
-            {
-                borderRenderer = gameObject.AddComponent<BorderRenderer>();
-            }
-
-            // Set border material if we have one
-            if (borderMaterial != null)
-            {
-                var borderMaterialField = typeof(BorderRenderer).GetField("borderMaterial",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                borderMaterialField?.SetValue(borderRenderer, borderMaterial);
-            }
-
-            borderRenderer.Initialize(mapData, cellScale, heightScale);
-
-            // Apply initial border visibility based on current map mode
-            UpdateBorderVisibility();
-        }
-
-        private void InitializeRivers()
-        {
-            if (mapData == null) return;
-
-            // Create or get RiverRenderer component
-            riverRenderer = GetComponent<RiverRenderer>();
-            if (riverRenderer == null)
-            {
-                riverRenderer = gameObject.AddComponent<RiverRenderer>();
-            }
-
-            // Set the river material (reuse border material)
-            if (borderMaterial != null)
-            {
-                var materialField = typeof(RiverRenderer).GetField("riverMaterial",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                materialField?.SetValue(riverRenderer, borderMaterial);
-            }
-
-            riverRenderer.Initialize(mapData, cellScale, heightScale);
-        }
-
-        private void InitializeRoads()
-        {
-            if (mapData == null) return;
-
-            // Create or get RoadRenderer component
-            roadRenderer = GetComponent<RoadRenderer>();
-            if (roadRenderer == null)
-            {
-                roadRenderer = gameObject.AddComponent<RoadRenderer>();
-            }
-
-            // Set the road material (reuse border material)
-            if (borderMaterial != null)
-            {
-                var materialField = typeof(RoadRenderer).GetField("roadMaterial",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                materialField?.SetValue(roadRenderer, borderMaterial);
-            }
-
-            // Note: RoadRenderer.Initialize will be called from SetRoadState once economy is ready
         }
 
         /// <summary>
-        /// Set road state for road rendering. Call after economy initialization.
+        /// Set road state for shader-based road rendering. Call after economy initialization.
         /// </summary>
         public void SetRoadState(EconSim.Core.Economy.RoadState roads)
         {
-            if (roadRenderer != null && mapData != null)
-            {
-                roadRenderer.Initialize(mapData, roads, cellScale, heightScale);
-            }
+            overlayManager?.SetRoadState(roads);
         }
 
         /// <summary>
@@ -518,49 +435,7 @@ namespace EconSim.Renderer
         /// </summary>
         public void RefreshRoads()
         {
-            roadRenderer?.RefreshRoads();
-        }
-
-        private void InitializeSelectionHighlight()
-        {
-            if (mapData == null) return;
-
-            // Use shader-based selection when overlays are enabled
-            if (useShaderOverlays && overlayManager != null)
-            {
-                // Subscribe to cell clicks for shader selection
-                OnCellClicked += HandleShaderSelection;
-
-                // Destroy any existing SelectionHighlight component (legacy)
-                var oldHighlight = GetComponent<SelectionHighlight>();
-                if (oldHighlight != null)
-                {
-                    Destroy(oldHighlight);
-                }
-                return;
-            }
-
-            // Legacy: Create or get SelectionHighlight component for non-shader mode
-            selectionHighlight = GetComponent<SelectionHighlight>();
-            if (selectionHighlight == null)
-            {
-                selectionHighlight = gameObject.AddComponent<SelectionHighlight>();
-            }
-
-            // Set the mapView reference via reflection (or make it public/serialized)
-            var mapViewField = typeof(SelectionHighlight).GetField("mapView",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            mapViewField?.SetValue(selectionHighlight, this);
-
-            // Set the outline material (reuse border material if available)
-            if (borderMaterial != null)
-            {
-                var materialField = typeof(SelectionHighlight).GetField("outlineMaterial",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                materialField?.SetValue(selectionHighlight, borderMaterial);
-            }
-
-            selectionHighlight.Initialize(mapData, cellScale, heightScale);
+            overlayManager?.RegenerateRoadDistTexture();
         }
 
         private void HandleShaderSelection(int cellId)
@@ -595,8 +470,8 @@ namespace EconSim.Renderer
                 return;
             }
 
-            // Terrain mode - just select county, no drill-down
-            if (currentMode == MapMode.Terrain)
+            // Terrain/Soil mode - just select county, no drill-down
+            if (currentMode == MapMode.Terrain || currentMode == MapMode.Soil)
             {
                 SelectAtDepth(SelectionDepth.County, cell);
                 return;
@@ -717,19 +592,8 @@ namespace EconSim.Renderer
                     break;
             }
 
-            // Update border visibility to match selection depth
-            UpdateBordersForSelectionDepth();
-
             // Notify listeners
             OnSelectionChanged?.Invoke(depth);
-        }
-
-        /// <summary>
-        /// Update border visibility based on current selection depth.
-        /// </summary>
-        private void UpdateBordersForSelectionDepth()
-        {
-            // Shader-based borders disabled - using mesh-based BorderRenderer
         }
 
         /// <summary>
@@ -743,7 +607,6 @@ namespace EconSim.Renderer
             selectedCountyId = -1;
             SetSelectionActive(false);
             overlayManager?.ClearSelection();
-            UpdateOverlayVisibility();  // Restore borders based on map mode
 
             // Notify listeners
             OnSelectionChanged?.Invoke(SelectionDepth.None);
@@ -1000,28 +863,6 @@ namespace EconSim.Renderer
                     // Clear drill-down selection when changing modes
                     ClearDrillDownSelection();
                 }
-                else
-                {
-                    UpdateBorderVisibility();
-                }
-            }
-        }
-
-        private void UpdateOverlayVisibility()
-        {
-            // Shader-based borders disabled - using mesh-based BorderRenderer
-        }
-
-        private void UpdateBorderVisibility()
-        {
-            // Show all borders for now
-        }
-
-        public void SetProvinceBordersVisible(bool visible)
-        {
-            if (borderRenderer != null)
-            {
-                borderRenderer.SetProvinceBordersVisible(visible);
             }
         }
 
@@ -1334,6 +1175,8 @@ namespace EconSim.Renderer
                     return GetTerrainColor(cell);
                 case MapMode.Market:
                     return GetMarketColor(cell);
+                case MapMode.Soil:
+                    return GetTerrainColor(cell);  // Fallback; soil tint is shader-only
                 default:
                     return new Color32(128, 128, 128, 255);
             }
@@ -1686,20 +1529,7 @@ namespace EconSim.Renderer
         [ContextMenu("Set Mode: Market")]
         private void SetModeMarket() => SetMapMode(MapMode.Market);
 
-        [ContextMenu("Toggle Province Borders")]
-        private void ToggleProvinceBorders()
-        {
-            if (borderRenderer != null)
-            {
-                var field = typeof(BorderRenderer).GetField("showProvinceBorders",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (field != null)
-                {
-                    bool current = (bool)field.GetValue(borderRenderer);
-                    borderRenderer.SetProvinceBordersVisible(!current);
-                }
-            }
-        }
+        private void SetModeSoil() => SetMapMode(MapMode.Soil);
 
         [ContextMenu("Toggle Grid Mesh")]
         private void ToggleGridMesh()
