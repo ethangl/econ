@@ -19,7 +19,7 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties: _ProvinceBorderColor
+  m_LockedProperties: _ProvinceBorderColor _ProvinceBorderWidth _SoilColor1
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -44,6 +44,10 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _CellDataTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _CellPropertyTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -139,6 +143,18 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _SoilDataTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SoilPaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _VegPaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _BumpScale: 1
@@ -156,16 +172,17 @@ Material:
     - _GradientCenterOpacity: 0.444
     - _GradientEdgeDarkening: 0.444
     - _GradientRadius: 12
+    - _HalftoneScale: 0.15
     - _HeightScale: 3
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.016915884
+    - _HoverIntensity: 0
     - _HoveredCountyId: -1
-    - _HoveredMarketId: 0.000030518044
+    - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
-    - _MapMode: 4
+    - _MapMode: 6
     - _MarketBorderDarkening: 0.75
     - _MarketBorderWidth: 0.25
     - _Metallic: 0
@@ -203,6 +220,7 @@ Material:
     - _ShowProvinceBorders: 0
     - _ShowRealmBorders: 0
     - _SmoothnessTextureChannel: 0
+    - _SoilHeightFloor: 0.04
     - _SpecularHighlights: 1
     - _SrcBlend: 1
     - _UVSec: 0
@@ -222,6 +240,14 @@ Material:
     - _ProvinceBorderColor: {r: 0, g: 0, b: 0, a: 0.87058824}
     - _RealmBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
     - _SelectionBorderColor: {r: 1, g: 0.9, b: 0.1999999, a: 0}
+    - _SoilColor0: {r: 0.9647059, g: 0.9470588, b: 0.92941177, a: 1}
+    - _SoilColor1: {r: 1, g: 0.90849674, b: 0.78039217, a: 1}
+    - _SoilColor2: {r: 0.7, g: 0.68, b: 0.65, a: 1}
+    - _SoilColor3: {r: 0.54999995, g: 0.41999996, b: 0.27999997, a: 1}
+    - _SoilColor4: {r: 0.88, g: 0.78, b: 0.58, a: 1}
+    - _SoilColor5: {r: 0.82, g: 0.41999996, b: 0.24999997, a: 1}
+    - _SoilColor6: {r: 0.62, g: 0.58, b: 0.47999996, a: 1}
+    - _SoilColor7: {r: 0.37999994, g: 0.32999998, b: 0.26999995, a: 1}
     - _WaterDeepColor: {r: 0, g: 0.0627451, b: 0.1882353, a: 1}
     - _WaterShallowColor: {r: 0, g: 0.09411765, b: 0.15686275, a: 1}
   m_BuildTextureStacks: []

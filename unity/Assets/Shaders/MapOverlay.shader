@@ -40,7 +40,18 @@ Shader "EconSim/MapOverlay"
         _HoveredMarketId ("Hovered Market ID (normalized)", Float) = -1
         _HoverIntensity ("Hover Intensity", Range(0, 1)) = 0
 
-        // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome
+        // Soil overlay (mode 6)
+        _SoilHeightFloor ("Soil Height Floor", Range(0, 1)) = 0
+        _SoilColor0 ("Permafrost", Color) = (0.80, 0.85, 0.90, 1)
+        _SoilColor1 ("Saline", Color) = (0.92, 0.90, 0.82, 1)
+        _SoilColor2 ("Lithosol", Color) = (0.70, 0.68, 0.65, 1)
+        _SoilColor3 ("Alluvial", Color) = (0.55, 0.42, 0.28, 1)
+        _SoilColor4 ("Aridisol", Color) = (0.88, 0.78, 0.58, 1)
+        _SoilColor5 ("Laterite", Color) = (0.82, 0.42, 0.25, 1)
+        _SoilColor6 ("Podzol", Color) = (0.62, 0.58, 0.48, 1)
+        _SoilColor7 ("Chernozem", Color) = (0.38, 0.33, 0.27, 1)
+
+        // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome, 6=soil
         _MapMode ("Map Mode", Int) = 0
 
         // Gradient fill style (edge-to-center fade for political/market modes)
@@ -124,6 +135,15 @@ Shader "EconSim/MapOverlay"
             sampler2D _MarketPaletteTex;
             sampler2D _BiomePaletteTex;
             sampler2D _BiomeMatrixTex;
+            float _SoilHeightFloor;
+            fixed4 _SoilColor0;
+            fixed4 _SoilColor1;
+            fixed4 _SoilColor2;
+            fixed4 _SoilColor3;
+            fixed4 _SoilColor4;
+            fixed4 _SoilColor5;
+            fixed4 _SoilColor6;
+            fixed4 _SoilColor7;
 
             int _MapMode;
             float _GradientRadius;
@@ -442,8 +462,8 @@ Shader "EconSim/MapOverlay"
 
             fixed4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, float realmId, float provinceId, float countyId, float marketId)
             {
-                // No map mode overlay on water, rivers, height mode (0), or terrain mode (5)
-                if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 5)
+                // No map mode overlay on water, rivers, height mode (0), terrain mode (5), or soil mode (6)
+                if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 5 || _MapMode == 6)
                     return fixed4(0, 0, 0, 0);
 
                 // Grayscale terrain for multiply blending
@@ -599,7 +619,10 @@ Shader "EconSim/MapOverlay"
 
                 float packedBiome = centerData.b * 65535.0;
                 bool isCellWater = packedBiome >= 32000.0;
-                float biomeId = (packedBiome - (isCellWater ? 32768.0 : 0.0)) / 65535.0;
+                // Land: packed = biomeId*8 + soilId; Water: packed = 32768 + biomeId
+                float landPacked = packedBiome - (isCellWater ? 32768.0 : 0.0);
+                float biomeId = (isCellWater ? landPacked : floor(landPacked / 8.0)) / 65535.0;
+                int soilId = isCellWater ? 0 : ((int)landPacked) % 8;
 
                 float riverMask = tex2D(_RiverMaskTex, IN.dataUV).r;
                 bool isRiver = riverMask > 0.5;
@@ -616,6 +639,31 @@ Shader "EconSim/MapOverlay"
                 {
                     // Height gradient mode: override terrain with debug viz
                     terrain = ComputeHeightGradient(isCellWater, height, riverMask);
+                }
+                else if (_MapMode == 6)
+                {
+                    // Soil mode: grayscale heightmap × soil color
+                    if (isCellWater)
+                    {
+                        terrain = ComputeTerrain(uv, isCellWater, biomeId, height, riverMask);
+                    }
+                    else
+                    {
+                        float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
+
+                        fixed3 soilColor;
+                        if (soilId <= 0) soilColor = _SoilColor0.rgb;
+                        else if (soilId == 1) soilColor = _SoilColor1.rgb;
+                        else if (soilId == 2) soilColor = _SoilColor2.rgb;
+                        else if (soilId == 3) soilColor = _SoilColor3.rgb;
+                        else if (soilId == 4) soilColor = _SoilColor4.rgb;
+                        else if (soilId == 5) soilColor = _SoilColor5.rgb;
+                        else if (soilId == 6) soilColor = _SoilColor6.rgb;
+                        else soilColor = _SoilColor7.rgb;
+
+                        float brightness = lerp(_SoilHeightFloor, 1.0, landHeight);
+                        terrain = soilColor * brightness;
+                    }
                 }
                 else
                 {

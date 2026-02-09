@@ -44,6 +44,7 @@ namespace EconSim.Core.Import
                     NeighborIds = new List<int>(mesh.CellNeighbors[i]),
                     Height = (int)Math.Round(heights.Heights[i]),
                     BiomeId = (int)biomes.Biome[i],
+                    SoilId = (int)biomes.Soil[i],
                     IsLand = !heights.IsWater(i) && !biomes.IsLakeCell[i],
                     RealmId = political.RealmId[i],
                     ProvinceId = political.ProvinceId[i],

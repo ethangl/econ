@@ -91,13 +91,14 @@ namespace EconSim.Renderer
             Province,   // Colored by province (key: 1, cycles with Political/County)
             County,     // Colored by county/cell (key: 1, cycles with Political/Province)
             Terrain,    // Colored by biome with elevation tinting (key: 2)
-            Market      // Colored by market zone (key: 3)
+            Market,     // Colored by market zone (key: 3)
+            Soil        // Terrain multiplied by soil color (key: 4)
         }
 
         public MapMode CurrentMode => currentMode;
         public string CurrentModeName => ModeNames[(int)currentMode];
 
-        private static readonly string[] ModeNames = { "Political", "Province", "County", "Terrain", "Market" };
+        private static readonly string[] ModeNames = { "Political", "Province", "County", "Terrain", "Market", "Soil" };
 
         private void Awake()
         {
@@ -137,6 +138,11 @@ namespace EconSim.Renderer
             {
                 SetMapMode(MapMode.Market);
                 Debug.Log("Map mode: Market (3)");
+            }
+            else if (Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4))
+            {
+                SetMapMode(MapMode.Soil);
+                Debug.Log("Map mode: Soil (4)");
             }
 
             // Update hover state (but not when panning or over UI)
@@ -464,8 +470,8 @@ namespace EconSim.Renderer
                 return;
             }
 
-            // Terrain mode - just select county, no drill-down
-            if (currentMode == MapMode.Terrain)
+            // Terrain/Soil mode - just select county, no drill-down
+            if (currentMode == MapMode.Terrain || currentMode == MapMode.Soil)
             {
                 SelectAtDepth(SelectionDepth.County, cell);
                 return;
@@ -1169,6 +1175,8 @@ namespace EconSim.Renderer
                     return GetTerrainColor(cell);
                 case MapMode.Market:
                     return GetMarketColor(cell);
+                case MapMode.Soil:
+                    return GetTerrainColor(cell);  // Fallback; soil tint is shader-only
                 default:
                     return new Color32(128, 128, 128, 255);
             }
@@ -1520,6 +1528,8 @@ namespace EconSim.Renderer
 
         [ContextMenu("Set Mode: Market")]
         private void SetModeMarket() => SetMapMode(MapMode.Market);
+
+        private void SetModeSoil() => SetMapMode(MapMode.Soil);
 
         [ContextMenu("Toggle Grid Mesh")]
         private void ToggleGridMesh()

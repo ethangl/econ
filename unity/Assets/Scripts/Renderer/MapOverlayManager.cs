@@ -179,6 +179,8 @@ namespace EconSim.Renderer
             GenerateBiomeElevationMatrix();
             Profiler.End();
 
+
+
             Profiler.Begin("ApplyTexturesToMaterial");
             ApplyTexturesToMaterial();
             Profiler.End();
@@ -313,8 +315,12 @@ namespace EconSim.Renderer
                         // Normalize IDs to 0-1 range (divide by 65535)
                         pixel.r = cell.RealmId / 65535f;
                         pixel.g = cell.ProvinceId / 65535f;
-                        // Pack biome ID and water flag: biomeId + (isWater ? 32768 : 0)
-                        int packedBiome = cell.BiomeId + (cell.IsLand ? 0 : 32768);
+                        // Pack biome ID, soil ID, and water flag:
+                        // Land: biomeId * 8 + soilId (max 63*8+7 = 511)
+                        // Water: 32768 + biomeId
+                        int packedBiome = cell.IsLand
+                            ? cell.BiomeId * 8 + cell.SoilId
+                            : 32768 + cell.BiomeId;
                         pixel.b = packedBiome / 65535f;
                         // County ID for county-level rendering (from grouped cells)
                         pixel.a = cell.CountyId / 65535f;
@@ -1358,6 +1364,9 @@ namespace EconSim.Renderer
                     break;
                 case MapView.MapMode.Market:
                     shaderMode = 4;
+                    break;
+                case MapView.MapMode.Soil:
+                    shaderMode = 6;
                     break;
                 case MapView.MapMode.Terrain:
                 default:
