@@ -23,8 +23,23 @@ namespace EconSim.UI
         private Button _fasterButton;
         private VisualElement _panel;
 
-        private static readonly float[] SpeedPresets = { 0.5f, 1f, 5f };
-        private static readonly string[] SpeedNames = { "Slow", "Normal", "Fast" };
+        private static readonly float[] SpeedPresets =
+        {
+            SimulationConfig.Speed.Slow,
+            SimulationConfig.Speed.Normal,
+            SimulationConfig.Speed.Fast,
+            SimulationConfig.Speed.Ultra,
+            SimulationConfig.Speed.Hyper
+        };
+
+        private static readonly string[] SpeedNames =
+        {
+            "Slow",
+            "Normal",
+            "Fast",
+            "Ultra",
+            "Hyper"
+        };
 
         private void Start()
         {

@@ -78,14 +78,15 @@ namespace EconSim.Core.Economy
             }
 
             // 6. Resource diversity: access to multiple resource types nearby
-            var county = economy.Counties.TryGetValue(cell.Id, out var c) ? c : null;
+            var county = economy.GetCountyForCell(cell.Id);
             if (county != null)
             {
                 // Count distinct resources in this county and immediate neighbors
                 var resourceTypes = new HashSet<string>(county.Resources.Keys);
                 foreach (var neighborId in cell.NeighborIds)
                 {
-                    if (economy.Counties.TryGetValue(neighborId, out var neighborCounty))
+                    var neighborCounty = economy.GetCountyForCell(neighborId);
+                    if (neighborCounty != null)
                     {
                         foreach (var res in neighborCounty.Resources.Keys)
                         {

@@ -38,6 +38,7 @@ namespace EconSim.Core
 
         private ISimulation _simulation;
         private int _lastLoggedDay;
+        private int _lastRoadVisualRevision = -1;
 
         public static GameManager Instance { get; private set; }
 
@@ -136,6 +137,7 @@ namespace EconSim.Core
                 var economy = _simulation.GetState().Economy;
                 mapView.SetEconomyState(economy);
                 mapView.SetRoadState(economy.Roads);
+                _lastRoadVisualRevision = economy.Roads.Revision;
             }
 
             Debug.Log("Simulation initialized (paused). Press P to unpause, -/= to change speed.");
@@ -180,9 +182,10 @@ namespace EconSim.Core
             SimulationConfig.Speed.Slow,
             SimulationConfig.Speed.Normal,
             SimulationConfig.Speed.Fast,
-            SimulationConfig.Speed.Ultra
+            SimulationConfig.Speed.Ultra,
+            SimulationConfig.Speed.Hyper
         };
-        private static readonly string[] SpeedNames = { "Slow", "Normal", "Fast", "Ultra" };
+        private static readonly string[] SpeedNames = { "Slow", "Normal", "Fast", "Ultra", "Hyper" };
 
         private void DecreaseSpeed()
         {
@@ -251,10 +254,15 @@ namespace EconSim.Core
                 //     Debug.Log($"Day {state.CurrentDay}");
                 // }
 
-                // Refresh road rendering weekly (same frequency as trade)
-                if (state.CurrentDay % 7 == 0 && mapView != null)
+                // Refresh road visuals only when committed road tiers changed.
+                if (mapView != null)
                 {
-                    mapView.RefreshRoads();
+                    int currentRoadRevision = state.Economy.Roads.Revision;
+                    if (currentRoadRevision != _lastRoadVisualRevision)
+                    {
+                        mapView.RefreshRoads();
+                        _lastRoadVisualRevision = currentRoadRevision;
+                    }
                 }
 
                 _lastLoggedDay = state.CurrentDay;

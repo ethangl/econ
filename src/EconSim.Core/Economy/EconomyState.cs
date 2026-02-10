@@ -209,6 +209,20 @@ namespace EconSim.Core.Economy
             CellToMarket.Clear();
             CountyToMarket.Clear();
             var cellToCost = new Dictionary<int, float>();
+            var countyCells = new Dictionary<int, List<int>>();
+
+            // Build county -> cells index once (avoids O(counties * cells) scans below).
+            foreach (var kvp in CellToCounty)
+            {
+                int cellId = kvp.Key;
+                int countyId = kvp.Value;
+                if (!countyCells.TryGetValue(countyId, out var list))
+                {
+                    list = new List<int>();
+                    countyCells[countyId] = list;
+                }
+                list.Add(cellId);
+            }
 
             // First pass: assign cells to markets
             foreach (var market in Markets.Values)
@@ -233,13 +247,12 @@ namespace EconSim.Core.Economy
                 int bestMarketId = -1;
                 float bestCost = float.MaxValue;
 
-                // Check all cells in this county (need MapData reference to get cell list)
-                // For now, iterate through CellToCounty to find cells in this county
-                foreach (var kvp in CellToCounty)
-                {
-                    if (kvp.Value != countyEcon.CountyId) continue;
-                    int cellId = kvp.Key;
+                if (!countyCells.TryGetValue(countyEcon.CountyId, out var cellsInCounty))
+                    continue;
 
+                // Check all cells in this county and pick the lowest-cost market access.
+                foreach (int cellId in cellsInCounty)
+                {
                     if (CellToMarket.TryGetValue(cellId, out int marketId) &&
                         cellToCost.TryGetValue(cellId, out float cost))
                     {

@@ -10,13 +10,16 @@ namespace EconSim.Core.Economy
     /// </summary>
     public static class EconomyInitializer
     {
-        private static Random _random = new Random(42); // Deterministic for now
+        private static Random _random = new Random(42); // Re-seeded per initialization
 
         /// <summary>
         /// Fully initialize economy from map data.
         /// </summary>
         public static EconomyState Initialize(MapData mapData)
         {
+            // Use map seed when available for deterministic economy initialization.
+            _random = new Random(ResolveInitializationSeed(mapData));
+
             var economy = new EconomyState();
 
             // Register good and facility definitions
@@ -33,6 +36,15 @@ namespace EconSim.Core.Economy
             PlaceInitialFacilities(economy, mapData);
 
             return economy;
+        }
+
+        private static int ResolveInitializationSeed(MapData mapData)
+        {
+            if (mapData?.Info?.Seed != null && int.TryParse(mapData.Info.Seed, out int parsed))
+            {
+                return parsed;
+            }
+            return 42;
         }
 
         /// <summary>

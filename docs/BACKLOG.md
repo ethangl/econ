@@ -24,6 +24,15 @@ Fields per item:
 
 Goal: reduce debugging pain and create safety rails before deep migrations.
 
+Current status:
+
+- `M1-S2` is in place (EditMode fixed-seed regression harness + baseline file).
+- `M1-S4` is complete as a stabilization pass:
+  - done: MarketPlacer county lookup fix,
+  - done: economy initialization seeded from map seed,
+  - done: county-to-market lookup rebuild perf pass,
+  - done: runtime dynamic road evolution gated and disabled by default to remove path-tracing hitches during fast sim rates.
+
 ### M1-S1 Domain logging foundation
 
 - **Type:** feature/process
@@ -49,6 +58,7 @@ Goal: reduce debugging pain and create safety rails before deep migrations.
   - at least 3 fixed seeds x 2 templates are tested,
   - mapgen invariants checked (land ratio, river count sanity, non-null lookups),
   - CI/local runner can execute tests quickly.
+- **Status:** DONE (local harness implemented; CI integration still optional).
 
 ### M1-S3 Rendering debug tooling
 
@@ -74,7 +84,23 @@ Goal: reduce debugging pain and create safety rails before deep migrations.
 - **Done when:**
   - MarketPlacer county lookup bug fixed,
   - Economy initializer seeded from map seed,
-  - transport/path caches have explicit invalidation strategy when roads change.
+  - county-to-market rebuild avoids O(counties * cells) scans,
+  - runtime dynamic road/path evolution is behind a config flag and defaults to OFF for stable performance.
+- **Status:** DONE.
+
+### M1-S5 Infrastructure cadence overhaul (static runtime model)
+
+- **Type:** refactor/optimization
+- **Impact:** H
+- **Effort:** M
+- **Risk:** M
+- **Tags:** `pre-elevation`, `pre-texture-arch`
+- **Depends on:** M1-S4
+- **Done when:**
+  - runtime trade/transport pathing is infrastructure-read-only (no per-tick route tracing for road growth),
+  - road/path network is built at init (or sparse checkpoint cadence) from stable inputs,
+  - optional re-evolution path is explicit, offline-like, and measurable (no hidden weekly spikes),
+  - profiler evidence shows high-speed simulation without skip spikes attributable to infrastructure updates.
 
 ---
 
@@ -209,12 +235,12 @@ Goal: safely expand capabilities after architecture foundations are in place.
 
 ## Priority Queue (Next 6)
 
-1. M1-S2 Fixed-seed regression harness  
-2. M1-S1 Domain logging foundation  
-3. M1-S4 Quick correctness fixes  
-4. M1-S3 Rendering debug tooling  
-5. M2-S1 Domain abstraction and boundary  
-6. M2-S2 Render + adapter normalization
+1. M1-S1 Domain logging foundation  
+2. M1-S3 Rendering debug tooling  
+3. M1-S5 Infrastructure cadence overhaul (static runtime model)  
+4. M2-S1 Domain abstraction and boundary  
+5. M2-S2 Render + adapter normalization  
+6. M2-S3 Threshold retuning pass
 
 ---
 

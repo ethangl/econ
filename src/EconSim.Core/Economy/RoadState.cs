@@ -21,10 +21,21 @@ namespace EconSim.Core.Economy
     public class RoadState
     {
         /// <summary>
-        /// Accumulated traffic volume on each edge.
+        /// Committed traffic volume on each edge (used for road tier evaluation).
         /// Key is normalized (smaller cell ID first).
         /// </summary>
         public Dictionary<(int, int), float> EdgeTraffic;
+
+        /// <summary>
+        /// Pending traffic accumulated between road development ticks.
+        /// </summary>
+        public Dictionary<(int, int), float> PendingEdgeTraffic;
+
+        /// <summary>
+        /// Increments whenever one or more edges cross a road-tier boundary
+        /// during a development tick.
+        /// </summary>
+        public int Revision { get; private set; }
 
         /// <summary>
         /// Traffic threshold to become a path.
@@ -49,6 +60,8 @@ namespace EconSim.Core.Economy
         public RoadState()
         {
             EdgeTraffic = new Dictionary<(int, int), float>();
+            PendingEdgeTraffic = new Dictionary<(int, int), float>();
+            Revision = 0;
         }
 
         /// <summary>
@@ -67,10 +80,10 @@ namespace EconSim.Core.Economy
             if (volume <= 0) return;
 
             var key = NormalizeKey(fromCell, toCell);
-            if (!EdgeTraffic.TryGetValue(key, out var current))
+            if (!PendingEdgeTraffic.TryGetValue(key, out var current))
                 current = 0;
 
-            EdgeTraffic[key] = current + volume;
+            PendingEdgeTraffic[key] = current + volume;
         }
 
         /// <summary>
@@ -148,6 +161,52 @@ namespace EconSim.Core.Economy
                 roads.Add((kvp.Key.Item1, kvp.Key.Item2, tier));
             }
             return roads;
+        }
+
+        /// <summary>
+        /// Commit pending traffic into the road network.
+        /// Returns number of edges that changed tier in this commit.
+        /// </summary>
+        public int CommitPendingTraffic()
+        {
+            if (PendingEdgeTraffic.Count == 0)
+                return 0;
+
+            int changedEdges = 0;
+
+            foreach (var kvp in PendingEdgeTraffic)
+            {
+                var key = kvp.Key;
+                float pending = kvp.Value;
+
+                if (!EdgeTraffic.TryGetValue(key, out var committed))
+                    committed = 0f;
+
+                var oldTier = GetTierForTraffic(committed);
+                float updated = committed + pending;
+                var newTier = GetTierForTraffic(updated);
+
+                EdgeTraffic[key] = updated;
+
+                if (newTier != oldTier)
+                    changedEdges++;
+            }
+
+            PendingEdgeTraffic.Clear();
+
+            if (changedEdges > 0)
+                Revision++;
+
+            return changedEdges;
+        }
+
+        private RoadTier GetTierForTraffic(float traffic)
+        {
+            if (traffic >= RoadThreshold)
+                return RoadTier.Road;
+            if (traffic >= PathThreshold)
+                return RoadTier.Path;
+            return RoadTier.None;
         }
     }
 }

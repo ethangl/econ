@@ -58,6 +58,10 @@ namespace EconSim.Core.Simulation
             RegisterSystem(new ProductionSystem());
             RegisterSystem(new ConsumptionSystem());
             RegisterSystem(new TradeSystem());
+            if (SimulationConfig.Roads.DynamicEvolutionEnabled)
+            {
+                RegisterSystem(new RoadDevelopmentSystem());
+            }
             RegisterSystem(new TheftSystem());
         }
 
