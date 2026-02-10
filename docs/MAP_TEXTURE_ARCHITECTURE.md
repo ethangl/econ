@@ -330,6 +330,13 @@ Add permanent debug tooling:
 - checksum regression for render height + normal outputs.
 
 These tools are mandatory before adding large new data domains.
+These validation gates are tracked as required completion criteria for Milestone M3 (`M3-S4`) in the backlog.
+Execution checklist: `M3_TEXTURE_REGRESSION_CHECKLIST.md`.
+
+Status snapshot (February 10, 2026):
+
+- EditMode automated validation for `M3-S4` is in place and passing for fixed-seed texture determinism, mode/economy refresh behavior, and low-saturation hover/border color stability.
+- Remaining signoff items are manual Channel Inspector + ID Probe validation across baseline cases and direct `ModeColorResolve` invalidation assertions once the resolved texture path is enabled.
 
 ---
 
@@ -354,8 +361,11 @@ These tools are mandatory before adding large new data domains.
 1. Introduce `ModeColorResolve`.
 2. Move map-mode color derivation into resolve step.
 3. Simplify composite shader to layering only.
+4. Implement resolve invalidation rules: rerun resolve on mode switch and relevant domain-data changes.
 
 ### Phase 4: Domain Expansion
+
+Prerequisite: Phase 3 regression/validation gates are passing.
 
 1. Add climate/economy/demographic/military textures with explicit schemas.
 2. Bind only required domain textures in resolve per mode.
@@ -366,6 +376,13 @@ These tools are mandatory before adding large new data domains.
 1. Evaluate integer texture path for IDs.
 2. Evaluate texture arrays only if binding churn becomes measurable.
 3. Add disk caching for resolved textures alongside saved maps.
+
+### Milestone Mapping (Backlog Alignment)
+
+1. `M3-S1` covers Phase 1 and Phase 2 baseline migration goals.
+2. `M3-S2` supports Phase 3 by modularizing shader responsibilities while preserving behavior parity.
+3. `M3-S3` delivers Phase 3 resolve behavior, including invalidation triggers.
+4. `M3-S4` enforces regression + validation gates before any Phase 4 domain expansion.
 
 ---
 

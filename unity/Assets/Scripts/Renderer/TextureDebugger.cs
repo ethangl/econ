@@ -9,9 +9,11 @@ namespace EconSim.Renderer
     public static class TextureDebugger
     {
         private static readonly string DebugFolder = Path.Combine(Application.dataPath, "..", "debug");
+        public static bool Enabled = true;
 
         public static void SaveTexture(Texture2D tex, string name)
         {
+            if (!Enabled) return;
             if (tex == null) return;
 
             Directory.CreateDirectory(DebugFolder);
@@ -20,7 +22,13 @@ namespace EconSim.Renderer
             // Handle non-readable or float textures
             Texture2D readable = MakeReadable(tex);
             File.WriteAllBytes(path, readable.EncodeToPNG());
-            if (readable != tex) Object.Destroy(readable);
+            if (readable != tex)
+            {
+                if (Application.isPlaying)
+                    Object.Destroy(readable);
+                else
+                    Object.DestroyImmediate(readable);
+            }
 
             Debug.Log($"TextureDebugger: Saved {path}");
         }

@@ -166,9 +166,14 @@ Current status:
 
 Goal: implement preconditions for scalable map modes.
 
-Reference: `MAP_TEXTURE_ARCHITECTURE.md`
+Reference: `MAP_TEXTURE_ARCHITECTURE.md`, `M3_TEXTURE_REGRESSION_CHECKLIST.md`
 
-### M3-S1 Geography channel split
+Current status (February 10, 2026):
+
+- `M3-S4` automated regression coverage is implemented and passing in EditMode (`EconSim.EditModeTests`), including deterministic texture hashes, mode/economy refresh behavior, and low-saturation color stability checks.
+- Remaining M3 exit work is now concentrated on final `ModeColorResolve`-specific invalidation assertions (once the resolved texture path is active) plus manual Channel Inspector + ID Probe signoff.
+
+### M3-S1 Geography channel + core texture split
 
 - **Type:** refactor/correctness
 - **Impact:** H
@@ -178,7 +183,9 @@ Reference: `MAP_TEXTURE_ARCHITECTURE.md`
 - **Depends on:** M2 complete or stable
 - **Done when:**
   - packed B-channel removed from primary flow,
-  - explicit geography channels used (biome/soil/water semantics).
+  - explicit geography channels used (biome/soil/water semantics),
+  - monolithic cell data split into Political IDs + Geography Base textures,
+  - selection/hover reads political IDs only (mode-independent interaction path).
 
 ### M3-S2 Shader modularization
 
@@ -190,7 +197,8 @@ Reference: `MAP_TEXTURE_ARCHITECTURE.md`
 - **Depends on:** M3-S1 preferred
 - **Done when:**
   - `MapOverlay.shader` logic split into maintainable include units,
-  - no behavior regression in political/terrain/market modes.
+  - no behavior regression in political/terrain/market modes,
+  - no behavior regression in hover/selection/water/border layering behavior.
 
 ### M3-S3 Resolve pipeline prototype
 
@@ -202,7 +210,23 @@ Reference: `MAP_TEXTURE_ARCHITECTURE.md`
 - **Depends on:** M3-S1, M3-S2, M1-S3
 - **Done when:**
   - one mode resolves to display texture successfully,
-  - composite pass remains stable with hover/selection/water layering.
+  - composite pass remains stable with hover/selection/water layering,
+  - resolve invalidation is implemented for mode switch and relevant data changes (no stale mode color output).
+
+### M3-S4 Texture regression and validation gates
+
+- **Type:** process/test
+- **Impact:** H
+- **Effort:** M
+- **Risk:** M
+- **Tags:** `post-texture-arch`
+- **Depends on:** M3-S1, M3-S2, M3-S3, M1-S2, M1-S3
+- **Done when:**
+  - fixed-seed golden map regression exists for texture generation checksums/stat snapshots,
+  - resolve regression coverage verifies mode-switch and data-change refresh behavior,
+  - color stability tests verify hover/border operations preserve hue class for low-saturation colors,
+  - channel inspector + ID probe validate all new core texture schemas.
+- **Status:** IN PROGRESS (automated regression gates are in place and passing; final resolve-texture assertions and manual signoff are pending).
 
 ---
 
@@ -249,12 +273,12 @@ Goal: safely expand capabilities after architecture foundations are in place.
 
 ## Priority Queue (Next 6)
 
-1. M3-S1 Geography channel split  
+1. M3-S1 Geography channel + core texture split  
 2. M3-S2 Shader modularization  
 3. M3-S3 Resolve pipeline prototype  
-4. M4-S1 Vertex-blended biome visuals  
-5. M4-S2 Render detail height + normal map  
-6. M4-S3 Weather-driven visual modulation
+4. M3-S4 Texture regression and validation gates  
+5. M4-S1 Vertex-blended biome visuals  
+6. M4-S2 Render detail height + normal map
 
 ---
 
@@ -262,6 +286,7 @@ Goal: safely expand capabilities after architecture foundations are in place.
 
 - Max 2 in-progress slices at once.
 - Do not start `M3` until `M2-S1` and `M2-S2` are complete.
+- Treat `M3-S4` as a required M3 exit gate before starting `M4`.
 - Every completed slice must update relevant docs and include at least one guardrail (test, assertion, or debug tool).
 
 ---

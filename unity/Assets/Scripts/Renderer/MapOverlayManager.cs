@@ -1781,31 +1781,39 @@ public class MapOverlayManager
         public void Dispose()
         {
             if (cellDataTexture != null)
-                Object.Destroy(cellDataTexture);
+                DestroyTexture(cellDataTexture);
             if (heightmapTexture != null)
-                Object.Destroy(heightmapTexture);
+                DestroyTexture(heightmapTexture);
             if (riverMaskTexture != null)
-                Object.Destroy(riverMaskTexture);
+                DestroyTexture(riverMaskTexture);
             if (realmPaletteTexture != null)
-                Object.Destroy(realmPaletteTexture);
+                DestroyTexture(realmPaletteTexture);
             if (marketPaletteTexture != null)
-                Object.Destroy(marketPaletteTexture);
+                DestroyTexture(marketPaletteTexture);
             if (biomePaletteTexture != null)
-                Object.Destroy(biomePaletteTexture);
+                DestroyTexture(biomePaletteTexture);
             if (biomeElevationMatrix != null)
-                Object.Destroy(biomeElevationMatrix);
+                DestroyTexture(biomeElevationMatrix);
             if (cellToMarketTexture != null)
-                Object.Destroy(cellToMarketTexture);
+                DestroyTexture(cellToMarketTexture);
             if (realmBorderDistTexture != null)
-                Object.Destroy(realmBorderDistTexture);
+                DestroyTexture(realmBorderDistTexture);
             if (provinceBorderDistTexture != null)
-                Object.Destroy(provinceBorderDistTexture);
+                DestroyTexture(provinceBorderDistTexture);
             if (countyBorderDistTexture != null)
-                Object.Destroy(countyBorderDistTexture);
+                DestroyTexture(countyBorderDistTexture);
             if (marketBorderDistTexture != null)
-                Object.Destroy(marketBorderDistTexture);
+                DestroyTexture(marketBorderDistTexture);
             if (roadDistTexture != null)
-                Object.Destroy(roadDistTexture);
+                DestroyTexture(roadDistTexture);
+        }
+
+        private static void DestroyTexture(Texture2D texture)
+        {
+            if (Application.isPlaying)
+                Object.Destroy(texture);
+            else
+                Object.DestroyImmediate(texture);
         }
     }
 }

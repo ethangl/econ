@@ -8,6 +8,8 @@ using UnityEngine;
 
 namespace EconSim.Tests
 {
+    [TestFixture]
+    [Category("M3Regression")]
     public class MapGenRegressionTests
     {
         private readonly struct Snapshot

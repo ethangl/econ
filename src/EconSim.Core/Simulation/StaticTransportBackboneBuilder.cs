@@ -235,7 +235,8 @@ namespace EconSim.Core.Simulation
             if (ordered.Count == 0)
                 return (1f, 2f);
 
-            float pathThreshold = Percentile(ordered, SimulationConfig.Roads.PathTierPercentile);
+            // Any traversed edge should be at least path-tier; road-tier still uses percentile split.
+            float pathThreshold = ordered[0];
             float roadThreshold = Percentile(ordered, SimulationConfig.Roads.RoadTierPercentile);
 
             pathThreshold = Math.Max(0.01f, pathThreshold);
