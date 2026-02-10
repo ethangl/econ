@@ -51,8 +51,8 @@ namespace EconSim.Core
             }
             Instance = this;
 
-            // Route simulation logs to Unity's console
-            SimLog.LogAction = Debug.Log;
+            // Initialize runtime domain logging sinks/filter defaults.
+            DomainLoggingBootstrap.Initialize();
         }
 
         private void Start()

@@ -4,6 +4,13 @@ Development phases and completed work for the Economic Simulator project.
 
 ## Unreleased
 
+- **Domain logging foundation (M1-S1)** (`src/EconSim.Core/Diagnostics/*`, `unity/Assets/Scripts/Core/LoggingControlPanel.cs`, `unity/Assets/Editor/LoggingControlPanelEditor.cs`)
+  - Added structured domain logger with `LogDomain` + `LogLevel`, runtime filters, and pluggable sinks.
+  - Added ring-buffer sink for recent log inspection and Unity console sink for severity-aware output.
+  - Routed `SimLog` category logs through domain logging with category-to-domain mapping.
+  - Added runtime `LoggingControlPanel` + custom Inspector with per-domain toggles and quick presets (`MapGen only`, `Renderer only`, `Errors only`, `All on`).
+  - Added EditMode guardrail tests for domain/severity filter behavior and `SimLog` domain routing.
+
 - **Map overlay color stability fix** (`unity/Assets/Shaders/MapOverlay.shader`)
   - Removed HSV-based hover and border darkening paths that could shift low-saturation realms (notably kingdom 2 beige) toward pink.
   - Hover highlight now uses hue-preserving RGB brighten.

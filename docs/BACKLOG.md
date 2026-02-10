@@ -26,6 +26,7 @@ Goal: reduce debugging pain and create safety rails before deep migrations.
 
 Current status:
 
+- `M1-S1` is in place (domain logger + runtime filters + Unity Inspector control panel).
 - `M1-S2` is in place (EditMode fixed-seed regression harness + baseline file).
 - `M1-S4` is complete as a stabilization pass:
   - done: MarketPlacer county lookup fix,
@@ -42,9 +43,10 @@ Current status:
 - **Tags:** `pre-elevation`, `pre-texture-arch`
 - **Depends on:** none
 - **Done when:**
-  - `DOMAIN_LOGGING_ARCHITECTURE` Phase 1 implemented,
+  - domain logging Phase 1 implemented,
   - runtime domain + severity filter works,
   - Unity Inspector control panel can toggle domains.
+- **Status:** DONE.
 
 ### M1-S2 Fixed-seed regression harness
 
@@ -235,12 +237,12 @@ Goal: safely expand capabilities after architecture foundations are in place.
 
 ## Priority Queue (Next 6)
 
-1. M1-S1 Domain logging foundation  
-2. M1-S3 Rendering debug tooling  
-3. M1-S5 Infrastructure cadence overhaul (static runtime model)  
-4. M2-S1 Domain abstraction and boundary  
-5. M2-S2 Render + adapter normalization  
-6. M2-S3 Threshold retuning pass
+1. M1-S3 Rendering debug tooling  
+2. M1-S5 Infrastructure cadence overhaul (static runtime model)  
+3. M2-S1 Domain abstraction and boundary  
+4. M2-S2 Render + adapter normalization  
+5. M2-S3 Threshold retuning pass  
+6. M3-S1 Geography channel split
 
 ---
 
