@@ -13,8 +13,23 @@ namespace EconSim.Renderer
     /// Manages shader-based map overlays by generating data textures and controlling shader parameters.
     /// Provides infrastructure for borders, heat maps, and other visual overlays without mesh regeneration.
     /// </summary>
-    public class MapOverlayManager
-    {
+public class MapOverlayManager
+{
+        public enum ChannelDebugView
+        {
+            CellDataR = 0,
+            CellDataG = 1,
+            CellDataB = 2,
+            CellDataA = 3,
+            RealmBorderDist = 4,
+            ProvinceBorderDist = 5,
+            CountyBorderDist = 6,
+            MarketBorderDist = 7,
+            RiverMask = 8,
+            Heightmap = 9,
+            RoadMask = 10
+        }
+
         // Shader property IDs (cached for performance)
         private static readonly int CellDataTexId = Shader.PropertyToID("_CellDataTex");
         private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
@@ -30,6 +45,7 @@ namespace EconSim.Renderer
         private static readonly int MarketBorderDistTexId = Shader.PropertyToID("_MarketBorderDistTex");
         private static readonly int RoadMaskTexId = Shader.PropertyToID("_RoadMaskTex");
         private static readonly int MapModeId = Shader.PropertyToID("_MapMode");
+        private static readonly int DebugViewId = Shader.PropertyToID("_DebugView");
         private static readonly int UseHeightDisplacementId = Shader.PropertyToID("_UseHeightDisplacement");
         private static readonly int HeightScaleId = Shader.PropertyToID("_HeightScale");
         private static readonly int SeaLevelId = Shader.PropertyToID("_SeaLevel");
@@ -1107,6 +1123,7 @@ namespace EconSim.Renderer
 
             // Default to political mode
             terrainMaterial.SetInt(MapModeId, 1);
+            terrainMaterial.SetInt(DebugViewId, (int)ChannelDebugView.CellDataR);
 
             // Clear any persisted selection/hover from previous play session
             ClearSelection();
@@ -1344,7 +1361,7 @@ namespace EconSim.Renderer
 
         /// <summary>
         /// Set the current map mode for the shader.
-        /// Mode: 1=political, 2=province, 3=county, 4=market, 5=terrain/biome
+        /// Mode: 1=political, 2=province, 3=county, 4=market, 5=terrain/biome, 6=soil, 7=channel-inspector
         /// </summary>
         public void SetMapMode(MapView.MapMode mode)
         {
@@ -1368,6 +1385,9 @@ namespace EconSim.Renderer
                 case MapView.MapMode.Soil:
                     shaderMode = 6;
                     break;
+                case MapView.MapMode.ChannelInspector:
+                    shaderMode = 7;
+                    break;
                 case MapView.MapMode.Terrain:
                 default:
                     shaderMode = 5;  // Biome texture with elevation tinting
@@ -1375,6 +1395,12 @@ namespace EconSim.Renderer
             }
 
             terrainMaterial.SetInt(MapModeId, shaderMode);
+        }
+
+        public void SetChannelDebugView(ChannelDebugView debugView)
+        {
+            if (terrainMaterial == null) return;
+            terrainMaterial.SetInt(DebugViewId, (int)debugView);
         }
 
         /// <summary>

@@ -161,18 +161,26 @@ This prevents "fixing" the wrong stage.
 
 ---
 
-## Minimal Debug Toggles to Keep Handy
+## Runtime Controls (No Code Edits)
 
-Add/keep quick toggles in shader GUI or debug branch for:
+Use the built-in runtime tooling:
 
-- `ShowCellDataR/G/B/A`
-- `ShowBorderDistRealm/Province/County/Market`
-- `DisableBorders`
-- `DisableHoverSelection`
-- `DisableWaterLayer`
-- `ShowModeColorOnly`
+- Press `0` to enter **Channel Inspector** mode.
+- Press `O` to cycle channel views:
+  - `CellData R/G/B/A`
+  - `Realm/Province/County/Market border distance`
+  - `River mask`
+  - `Heightmap`
+  - `Road mask`
+- Press `P` to toggle the on-screen **ID Probe**.
+  - Probe shows decoded `realm/province/county/market` IDs under cursor.
+  - Probe shows normalized channel values matching `_CellDataTex` packing.
 
-Even temporary toggles pay off during regressions.
+In material Inspector (`MapOverlayShaderGUI`):
+
+- Use the **Debug** foldout to choose `Channel Inspector View` directly.
+
+This workflow should be sufficient for most overlay regressions without source edits.
 
 ---
 

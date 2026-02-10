@@ -24,6 +24,12 @@ namespace EconSim.Editor
             set => EditorPrefs.SetBool("MapOverlay_TextureMaps", value);
         }
 
+        private static bool debugFoldout
+        {
+            get => EditorPrefs.GetBool("MapOverlay_Debug", true);
+            set => EditorPrefs.SetBool("MapOverlay_Debug", value);
+        }
+
         // Grouped properties: (shader name, display label)
         private static readonly (string name, string label)[] RealmRenderingProps = new[]
         {
@@ -72,6 +78,11 @@ namespace EconSim.Editor
             ("_RoadMaskTex", "Road Mask"),
         };
 
+        private static readonly (string name, string label)[] DebugProps = new[]
+        {
+            ("_DebugView", "Channel Inspector View"),
+        };
+
         // Properties set programmatically — hidden from Inspector
         private static readonly string[] HiddenProps = new[]
         {
@@ -94,6 +105,8 @@ namespace EconSim.Editor
             foreach (var (name, _) in WaterRenderingProps)
                 if (name == propName) return true;
             foreach (var (name, _) in TextureMapsProps)
+                if (name == propName) return true;
+            foreach (var (name, _) in DebugProps)
                 if (name == propName) return true;
             return false;
         }
@@ -121,6 +134,24 @@ namespace EconSim.Editor
                     if (prop != null)
                         materialEditor.ShaderProperty(prop, label);
                 }
+                EditorGUI.indentLevel--;
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+
+            // Debug group
+            EditorGUILayout.Space();
+            debugFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(debugFoldout, "Debug");
+            if (debugFoldout)
+            {
+                EditorGUI.indentLevel++;
+                foreach (var (name, label) in DebugProps)
+                {
+                    var prop = FindProperty(name, properties, false);
+                    if (prop != null)
+                        materialEditor.ShaderProperty(prop, label);
+                }
+
+                EditorGUILayout.HelpBox("Runtime keys: 0=Channel Inspector mode, O=cycle channels, P=toggle ID probe.", MessageType.Info);
                 EditorGUI.indentLevel--;
             }
             EditorGUILayout.EndFoldoutHeaderGroup();

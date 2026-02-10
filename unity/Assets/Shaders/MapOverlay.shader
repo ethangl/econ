@@ -51,8 +51,9 @@ Shader "EconSim/MapOverlay"
         _SoilColor6 ("Podzol", Color) = (0.62, 0.58, 0.48, 1)
         _SoilColor7 ("Chernozem", Color) = (0.38, 0.33, 0.27, 1)
 
-        // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome, 6=soil
+        // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome, 6=soil, 7=channel inspector
         _MapMode ("Map Mode", Int) = 0
+        _DebugView ("Debug View", Int) = 0
 
         // Gradient fill style (edge-to-center fade for political/market modes)
         _GradientRadius ("Gradient Radius (pixels)", Range(5, 100)) = 40
@@ -146,6 +147,7 @@ Shader "EconSim/MapOverlay"
             fixed4 _SoilColor7;
 
             int _MapMode;
+            int _DebugView;
             float _GradientRadius;
             float _GradientEdgeDarkening;
             float _GradientCenterOpacity;
@@ -514,6 +516,25 @@ Shader "EconSim/MapOverlay"
                 }
             }
 
+            float3 ComputeChannelInspector(float2 uv, float4 cellData)
+            {
+                float sampleValue = 0.0;
+
+                if (_DebugView == 0) sampleValue = cellData.r;
+                else if (_DebugView == 1) sampleValue = cellData.g;
+                else if (_DebugView == 2) sampleValue = cellData.b;
+                else if (_DebugView == 3) sampleValue = cellData.a;
+                else if (_DebugView == 4) sampleValue = tex2D(_RealmBorderDistTex, uv).r;
+                else if (_DebugView == 5) sampleValue = tex2D(_ProvinceBorderDistTex, uv).r;
+                else if (_DebugView == 6) sampleValue = tex2D(_CountyBorderDistTex, uv).r;
+                else if (_DebugView == 7) sampleValue = tex2D(_MarketBorderDistTex, uv).r;
+                else if (_DebugView == 8) sampleValue = tex2D(_RiverMaskTex, uv).r;
+                else if (_DebugView == 9) sampleValue = tex2D(_HeightmapTex, uv).r;
+                else if (_DebugView == 10) sampleValue = tex2D(_RoadMaskTex, uv).r;
+
+                return float3(sampleValue, sampleValue, sampleValue);
+            }
+
             // ========================================================================
             // Fragment shader: layered compositing
             // ========================================================================
@@ -528,6 +549,11 @@ Shader "EconSim/MapOverlay"
                 float realmId = centerData.r;
                 float provinceId = centerData.g;
                 float countyId = centerData.a;
+
+                if (_MapMode == 7)
+                {
+                    return fixed4(ComputeChannelInspector(uv, centerData), 1);
+                }
 
                 float countyIdRaw = countyId * 65535.0;
                 float marketU = (clamp(round(countyIdRaw), 0, 16383) + 0.5) / 16384.0;

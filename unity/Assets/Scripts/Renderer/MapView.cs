@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UIElements;
 using EconSim.Core.Data;
@@ -92,13 +93,23 @@ namespace EconSim.Renderer
             County,     // Colored by county/cell (key: 1, cycles with Political/Province)
             Terrain,    // Colored by biome with elevation tinting (key: 2)
             Market,     // Colored by market zone (key: 3)
-            Soil        // Terrain multiplied by soil color (key: 4)
+            Soil,       // Terrain multiplied by soil color (key: 4)
+            ChannelInspector // Debug channel visualization (key: 0)
         }
 
         public MapMode CurrentMode => currentMode;
         public string CurrentModeName => ModeNames[(int)currentMode];
 
-        private static readonly string[] ModeNames = { "Political", "Province", "County", "Terrain", "Market", "Soil" };
+        private static readonly string[] ModeNames = { "Political", "Province", "County", "Terrain", "Market", "Soil", "Channel Inspector" };
+
+        [Header("Debug Tooling")]
+        private bool showIdProbe = false;
+        private KeyCode cycleDebugChannelKey = KeyCode.O;
+        private KeyCode toggleProbeKey = KeyCode.P;
+
+        private MapOverlayManager.ChannelDebugView channelDebugView = MapOverlayManager.ChannelDebugView.CellDataR;
+        private string probeText = "ID Probe: move cursor over land";
+        private readonly StringBuilder probeBuilder = new StringBuilder(512);
 
         private void Awake()
         {
@@ -144,6 +155,21 @@ namespace EconSim.Renderer
                 SetMapMode(MapMode.Soil);
                 Debug.Log("Map mode: Soil (4)");
             }
+            else if (Input.GetKeyDown(KeyCode.Alpha0) || Input.GetKeyDown(KeyCode.Keypad0))
+            {
+                SetMapMode(MapMode.ChannelInspector);
+                Debug.Log($"Map mode: Channel Inspector (0), view={channelDebugView}");
+            }
+
+            if (Input.GetKeyDown(cycleDebugChannelKey))
+            {
+                CycleChannelDebugView();
+            }
+            if (Input.GetKeyDown(toggleProbeKey))
+            {
+                showIdProbe = !showIdProbe;
+                Debug.Log($"ID probe: {(showIdProbe ? "enabled" : "disabled")}");
+            }
 
             // Update hover state (but not when panning or over UI)
             if (mapCameraController == null || !mapCameraController.IsPanningMode)
@@ -174,6 +200,7 @@ namespace EconSim.Renderer
 
             // Animate selection dimming
             UpdateDimmingAnimation();
+            UpdateProbe();
         }
 
         private void SetSelectionActive(bool active)
@@ -420,6 +447,7 @@ namespace EconSim.Renderer
 
             // Sync shader mode with current map mode
             overlayManager.SetMapMode(currentMode);
+            overlayManager.SetChannelDebugView(channelDebugView);
         }
 
         /// <summary>
@@ -859,6 +887,7 @@ namespace EconSim.Renderer
                 if (useShaderOverlays && overlayManager != null)
                 {
                     overlayManager.SetMapMode(mode);
+                    overlayManager.SetChannelDebugView(channelDebugView);
 
                     // Clear drill-down selection when changing modes
                     ClearDrillDownSelection();
@@ -1177,6 +1206,8 @@ namespace EconSim.Renderer
                     return GetMarketColor(cell);
                 case MapMode.Soil:
                     return GetTerrainColor(cell);  // Fallback; soil tint is shader-only
+                case MapMode.ChannelInspector:
+                    return GetTerrainColor(cell);  // Shader debug visualization overrides this.
                 default:
                     return new Color32(128, 128, 128, 255);
             }
@@ -1504,6 +1535,107 @@ namespace EconSim.Renderer
             return new Bounds(Vector3.zero, Vector3.zero);
         }
 
+        private void CycleChannelDebugView()
+        {
+            if (currentMode != MapMode.ChannelInspector)
+            {
+                SetMapMode(MapMode.ChannelInspector);
+            }
+
+            int count = Enum.GetValues(typeof(MapOverlayManager.ChannelDebugView)).Length;
+            int next = ((int)channelDebugView + 1) % count;
+            channelDebugView = (MapOverlayManager.ChannelDebugView)next;
+
+            overlayManager?.SetChannelDebugView(channelDebugView);
+            Debug.Log($"Channel Inspector view: {channelDebugView}");
+        }
+
+        private void UpdateProbe()
+        {
+            if (mapData == null || mapData.CellById == null || !showIdProbe)
+            {
+                return;
+            }
+
+            var cam = selectionCamera != null ? selectionCamera : UnityEngine.Camera.main;
+            if (cam == null)
+            {
+                probeText = "ID Probe: no camera";
+                return;
+            }
+
+            Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+            Plane groundPlane = new Plane(Vector3.up, Vector3.zero);
+            if (!groundPlane.Raycast(ray, out float distance))
+            {
+                probeText = "ID Probe: cursor off map";
+                return;
+            }
+
+            Vector3 hitPoint = ray.GetPoint(distance);
+            int cellId = FindCellAtPosition(hitPoint);
+            if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
+            {
+                probeText = "ID Probe: no cell";
+                return;
+            }
+
+            int marketId = 0;
+            if (economyState != null)
+            {
+                if (!economyState.CellToMarket.TryGetValue(cellId, out marketId))
+                {
+                    economyState.CountyToMarket.TryGetValue(cell.CountyId, out marketId);
+                }
+            }
+
+            int packedBiome = cell.IsLand
+                ? cell.BiomeId * 8 + cell.SoilId
+                : 32768 + cell.BiomeId;
+
+            probeBuilder.Clear();
+            probeBuilder.Append("ID Probe");
+            if (currentMode == MapMode.ChannelInspector)
+            {
+                probeBuilder.Append(" | Channel=").Append(channelDebugView);
+            }
+            probeBuilder.AppendLine();
+            probeBuilder.Append("Cell=").Append(cell.Id)
+                .Append(" Land=").Append(cell.IsLand ? "Y" : "N")
+                .Append(" Height=").Append(cell.Height.ToString("F1"))
+                .AppendLine();
+            probeBuilder.Append("Realm=").Append(cell.RealmId)
+                .Append(" Province=").Append(cell.ProvinceId)
+                .Append(" County=").Append(cell.CountyId)
+                .Append(" Market=").Append(marketId)
+                .AppendLine();
+            probeBuilder.Append("CellDataTex decode: R=").Append(FormatNorm(cell.RealmId))
+                .Append(" G=").Append(FormatNorm(cell.ProvinceId))
+                .Append(" B=").Append(FormatNorm(packedBiome))
+                .Append(" A=").Append(FormatNorm(cell.CountyId));
+            probeText = probeBuilder.ToString();
+        }
+
+        private static string FormatNorm(int value)
+        {
+            return (value / 65535f).ToString("F6");
+        }
+
+        private void OnGUI()
+        {
+            if (!showIdProbe || mapData == null)
+            {
+                return;
+            }
+
+            const int width = 480;
+            const int height = 110;
+            GUI.Box(new Rect(10, 10, width, height), GUIContent.none);
+            GUI.Label(
+                new Rect(18, 18, width - 16, height - 16),
+                probeText + "\nKeys: 0=Channel Inspector, O=Cycle Channel, P=Toggle Probe");
+        }
+
 #if UNITY_EDITOR
         [ContextMenu("Regenerate Mesh")]
         private void RegenerateMesh()
@@ -1529,7 +1661,11 @@ namespace EconSim.Renderer
         [ContextMenu("Set Mode: Market")]
         private void SetModeMarket() => SetMapMode(MapMode.Market);
 
+        [ContextMenu("Set Mode: Soil")]
         private void SetModeSoil() => SetMapMode(MapMode.Soil);
+
+        [ContextMenu("Set Mode: Channel Inspector")]
+        private void SetModeChannelInspector() => SetMapMode(MapMode.ChannelInspector);
 
         [ContextMenu("Toggle Grid Mesh")]
         private void ToggleGridMesh()

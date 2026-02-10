@@ -4,6 +4,13 @@ Development phases and completed work for the Economic Simulator project.
 
 ## Unreleased
 
+- **Rendering debug tooling (M1-S3)** (`unity/Assets/Scripts/Renderer/MapView.cs`, `unity/Assets/Scripts/Renderer/MapOverlayManager.cs`, `unity/Assets/Shaders/MapOverlay.shader`, `unity/Assets/Editor/MapOverlayShaderGUI.cs`)
+  - Added `Channel Inspector` map mode (runtime key `5`) for grayscale channel debugging.
+  - Added runtime channel cycling (`C`) across `_CellDataTex` channels, border distance maps, river mask, heightmap, and road mask.
+  - Added on-screen ID probe (`F6`) showing decoded IDs and normalized packed channel values under cursor.
+  - Added shader/material `Debug View` control in custom shader inspector.
+  - Updated `SHADER_OVERLAY_DEBUGGING` with no-code-edit runtime debugging workflow.
+
 - **Domain logging foundation (M1-S1)** (`src/EconSim.Core/Diagnostics/*`, `unity/Assets/Scripts/Core/LoggingControlPanel.cs`, `unity/Assets/Editor/LoggingControlPanelEditor.cs`)
   - Added structured domain logger with `LogDomain` + `LogLevel`, runtime filters, and pluggable sinks.
   - Added ring-buffer sink for recent log inspection and Unity console sink for severity-aware output.

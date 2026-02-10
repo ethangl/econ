@@ -140,7 +140,7 @@ namespace EconSim.Core
                 _lastRoadVisualRevision = economy.Roads.Revision;
             }
 
-            Debug.Log("Simulation initialized (paused). Press P to unpause, -/= to change speed.");
+            Debug.Log("Simulation initialized (paused). Press Backspace to unpause, -/= to change speed.");
 
             // Mark map as ready and notify subscribers
             IsMapReady = true;
@@ -159,8 +159,8 @@ namespace EconSim.Core
         {
             if (_simulation == null) return;
 
-            // P: Toggle pause
-            if (Input.GetKeyDown(KeyCode.P))
+            // Backspace: Toggle pause
+            if (Input.GetKeyDown(KeyCode.Backspace))
             {
                 _simulation.IsPaused = !_simulation.IsPaused;
                 Debug.Log(_simulation.IsPaused ? "Paused" : $"Running (speed: {_simulation.TimeScale}x)");
