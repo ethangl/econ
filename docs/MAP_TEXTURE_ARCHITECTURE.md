@@ -1,138 +1,387 @@
 # Map Texture Architecture
 
-## Current State
+## Goal
 
-Single `_CellDataTex` (RGBAFloat, gridWidth × gridHeight):
-- R: RealmId / 65535
-- G: ProvinceId / 65535
-- B: (BiomeId*8 + SoilId + WaterFlag) / 65535
-- A: CountyId / 65535
+Define a texture pipeline that is:
 
-Plus ~12 supporting textures (heightmap, river mask, palettes, border distance maps, road mask, cell-to-market).
+- easy to debug (no opaque channel packing tricks),
+- scalable to many map modes,
+- safe for runtime-generated maps,
+- and maintainable as simulation data grows (politics, economy, climate, war, demographics).
 
-Total sampler count: ~13 of 16 (shader target 3.5).
+This document is the target architecture and migration plan.
 
-### Problems
-- B channel packs biome + soil via `biomeId*8 + soilId`. Fragile, hard to debug (caused significant issues during soil map mode implementation).
-- No room for additional per-cell data without more sub-channel packing or new textures.
-- Monolithic shader (~700 lines) handles all map modes in one fragment function. Works fine for GPU perf but painful to iterate on.
+---
 
-## CK3-Scale Data Requirements
+## Design Principles
 
-### Per-Cell Data Textures Needed
+1. **One semantic per channel whenever possible.**
+   Avoid packed bitfields like `biome*8 + soil + waterFlag` unless there is no practical alternative.
 
-**Political (2 textures, 8 channels)**
-- Realm, kingdom, duchy, county, barony IDs
-- De jure vs de facto territory
-- Occupation/control during wars
-- Diplomatic state (truces, alliances, etc.)
+2. **Separate static from dynamic data.**
+   Static data resolves once after map generation; dynamic data updates incrementally per tick/day/event.
 
-**Geography/Geology (1-2 textures, 4-8 channels)**
-- Biome, soil type, rock type, terrain type
-- Vegetation density, fertility
-- (Elevation already has dedicated heightmap)
+3. **Keep selection/hover on always-available core IDs.**
+   Interaction must not depend on active map mode data bindings.
 
-**Climate (1 texture, 4 channels)**
-- Temperature, precipitation, moisture, seasonal modifier
+4. **Prefer deterministic preprocessing over heavy fragment logic.**
+   Compute expensive conversions once (or at low frequency), then sample cheap textures in the render pass.
 
-**Demographics (1-2 textures, 4-8 channels)**
-- Population, culture ID, religion ID, development level
-- Disease, unrest, migration pressure
+5. **Format choice is part of architecture.**
+   Precision and quantization are first-class design decisions, not implementation details.
 
-**Economic (1-2 textures, 4-8 channels)**
-- Market zone, trade route membership, wealth, supply level
-- Building/holding type, resource availability
+---
 
-**Military (1 texture, dynamic, 4 channels)**
-- Control level, siege progress, supply lines, fortification
+## Current Baseline (As Implemented)
 
-**Overlays (1-2 textures, dynamic)**
-- Fog of war, war score, selected realm highlight, alert regions
+Core data texture:
 
-**Total: ~8-12 data textures + palettes + border distance maps = 20-30 samplers**
+- `_CellDataTex` (`RGBAFloat`, gridWidth x gridHeight)
+  - R: realmId / 65535
+  - G: provinceId / 65535
+  - B: packed biome/soil/water
+  - A: countyId / 65535
 
-### Supporting Textures (Already Exist or Needed)
-- Heightmap (RFloat)
-- River mask (R8)
-- Border distance maps (realm, province, county, market — R8 each)
-- Road mask (R8, dynamic)
-- Palette textures (realm, market, culture, religion — 256x1 each)
-- Biome-elevation matrix (64x64)
+Supporting textures include:
 
-## Architecture Options
+- heightmap (`RFloat`)
+- river mask (`R8`)
+- border distance maps (realm/province/county/market, `R8`)
+- road mask (`R8`)
+- palettes (realm/market/biome)
+- biome-elevation matrix
+- county-to-market lookup
 
-### Option 1: Bump Shader Model (Simplest)
-- Target SM 4.5+ → 32+ samplers
-- Keep current approach: one texture per data domain, one sampler each
-- Modern GPUs all support this; no mobile concern for this project
-- **Pro:** Simple, each texture is clean RGBA with one ID per channel
-- **Con:** Still many texture fetches per pixel (cache pressure with 20+ textures)
+Known pain points:
 
-### Option 2: Texture Arrays
-- Pack related data into `Texture2DArray` slices (e.g., all political layers as one array)
-- Costs 1 sampler binding per array regardless of slice count
-- **Pro:** Fewer sampler slots used, good for related data
-- **Con:** All slices must share format and resolution; more complex API
+- packed B channel is fragile and hard to inspect,
+- adding data requires either more packing or sampler pressure,
+- shader complexity is high because domain decoding and rendering are coupled.
 
-### Option 3: Atlasing
-- Tile multiple data maps into one large texture (e.g., 4 maps in a 2×2 atlas)
-- UV math to select the right quadrant
-- **Pro:** Fewer bindings
-- **Con:** Wastes texture memory if maps have different ideal resolutions; UV math adds complexity
+---
 
-### Option 4: Compute Pre-Pass (CK3 Approach)
-- Each frame, a compute shader (or C# job) resolves the active map mode into a single "display color" texture
-- Fragment shader just samples that resolved texture + does water/selection/hover
-- Only the active mode's data textures need to be bound during the resolve pass
-- **Pro:** Fragment shader stays trivial; sampler count is always low; easy to add new modes
-- **Con:** Extra GPU pass per frame; mode transitions need re-resolve; loses ability to blend between modes
+## Target Architecture (Hybrid Resolve Model)
 
-### Option 5: Hybrid
-- Keep 2-3 "always needed" data textures (political IDs, water flags, heightmap)
-- Use compute pre-pass for the active map mode's specialized data
-- Fragment shader handles compositing (terrain + resolved mode color + water + selection)
-- **Pro:** Best of both worlds; core data always available for selection/hover, mode-specific data resolved efficiently
-- **Con:** More architectural complexity
+Use a **hybrid pipeline**:
 
-## Recommendation
+- **Always-bound core textures** for IDs and interaction.
+- **Domain textures** with clear channels for gameplay data.
+- **Resolved display texture** per active map mode (generated by resolve step).
+- **Thin compositing shader** for final layering (terrain + mode color + water + selection/hover).
 
-**Short term:** Option 1 (bump SM target to 4.5, add a second geology texture for soil/rock/vegetation/fertility). Unblock current work without refactoring.
+### Why this model
 
-**Medium term:** Option 5 (hybrid). Keep a small set of always-bound core textures (political, heightmap, water). Add a compute pre-pass that resolves the active map mode into a display texture. This scales to arbitrary map modes without sampler pressure.
+- Scales to many modes without fragment sampler explosion.
+- Keeps map interaction stable and mode-independent.
+- Lets us trade update frequency per domain (static, event-driven, per-day, per-frame).
+- Matches runtime-generation constraints better than offline-only baking.
 
-**The monolithic shader is fine.** GPU branching on `_MapMode` is effectively free since all pixels take the same branch (uniform control flow). Splitting into separate shaders would require multiple materials or passes, which is worse for performance. The shader is hard to read at 700 lines but that's a code organization problem, not a performance one — `#include` or `CGINCLUDE` blocks can help.
+---
 
-## EU5 Reference
+## Texture Classes
 
-EU5 (Clausewitz/Jomini engine) uses a **baked decal system**: 16 decals at 8192×4096, each with 16 grayscale mask textures controlling terrain material blending (climate × topography × vegetation). These are pre-composited offline into cached `.bin` files. Province data is a simple color-coded lookup image (`locations.png`, 16384×8192 RGB — one unique color per province).
+### A) Always-Bound Core (required every frame)
 
-Key difference: EU5's map is a fixed asset. They can spend arbitrary time baking optimized textures offline. We generate maps from a seed at runtime, so offline baking isn't available.
+1. **Political IDs**
 
-**Implication for us:** The hybrid approach (Option 5) fits our constraints best. After `MapGenAdapter.Convert` finishes, run a one-time "resolve" step that composites clean per-domain textures from cell data. This is still at runtime but only once per map generation, not per frame. The fragment shader then samples pre-resolved textures — similar to EU5's baked approach but triggered by generation instead of an editor tool.
+- Suggested format: `RGBA16` or `RGBAFloat` (keep float until integer texture path is added)
+- Channels:
+  - R: realmId
+  - G: provinceId
+  - B: countyId
+  - A: reserved (barony/cell group/flags)
 
-This also opens the door to caching resolved textures to disk alongside saved maps, getting closer to EU5's model for subsequent loads.
+2. **Geography Base**
 
-## Migration Path
+- Suggested format: `RGBA8` or `RGBA16`
+- Channels:
+  - R: biomeId
+  - G: soilId
+  - B: rockId / terrainClass
+  - A: waterFlag (or coast class)
 
-1. Extract soil from B channel packing back to a clean channel in a new geology texture
-2. Add rock type, vegetation density, fertility to remaining channels
-3. Bump shader target to 4.5
-4. When sampler count approaches 32, implement compute pre-pass for mode-specific rendering
-5. Keep political + geology + heightmap as always-bound core textures
+3. **Heightmap**
 
-## Future Textures
+- Existing `RFloat` is acceptable.
 
-### Relief Texture (cosmetic)
+4. **Hydrology Masks**
 
-Generate a procedural relief texture from the heightmap for visual terrain detail (hillshading, surface roughness) without affecting gameplay elevation data. Generated once after map gen.
+- river mask (`R8`)
+- optional lake/ocean classification (`R8`) if needed separately from water flag.
 
-- **Blur**: Gaussian blur on heightmap (radius ~3-5 texels) to soften cell boundaries
-- **Noise**: Layered Perlin/simplex at 2-3 octaves, amplitude ~5-10% of height range
-- **Combine**: `blurred_height + noise * scale`
-- **Shader use**: Normal-map-style hillshading, or direct multiply with terrain color for subtle relief
+5. **Core border distance maps**
 
-Reference: CK3/EU5 terrain detail uses baked normal maps derived from heightmap + artist-placed detail. Our version would be fully procedural.
+- realm/province/county (market optional depending on mode needs).
 
-### Elevation Range Refactor (econ-hzr)
+### B) Domain Data (bound in resolve step, not always in fragment)
 
-Current 0-100 range (from Azgaar) gives only 80 integer land levels. Bump to 0-255 for 204 land levels and natural byte mapping. Well-abstracted via `HeightGrid.SeaLevel`/`MaxHeight` constants — mostly a constants + threshold update.
+1. **Climate**
+
+- temp, precipitation, moisture, seasonal modifier
+
+2. **Economy**
+
+- market zone, wealth, supply pressure, resource tier
+
+3. **Demographics**
+
+- population density, cultureId, religionId, development
+
+4. **Military/Control**
+
+- control, siege, fort level, attrition/supply line strength
+
+5. **Diplomacy/State overlays**
+
+- occupation, de jure/de facto divergence, treaty state masks
+
+### C) Resolved Outputs
+
+1. **Mode Color Resolve**
+
+- `RGBA8`/`RGBA16` color texture generated for active map mode.
+
+2. **Optional Mode Aux**
+
+- mode-specific edge/heat/intensity map if a mode needs additional post effects.
+
+---
+
+## Data Format Guidance
+
+Use this policy until profiling forces a change:
+
+- **IDs**: store with enough precision for stable equality checks.
+  - Current normalized float IDs are acceptable with strict encode/decode discipline.
+  - Long term: prefer integer formats/samplers where backend support is reliable.
+
+- **Continuous values** (temp/moisture/wealth): `UNorm8` or `UNorm16` depending on visible banding risk.
+
+- **Masks and flags**: `R8` unless multiple masks are naturally co-located.
+
+- **Never repack unrelated semantics into one channel** for convenience.
+
+---
+
+## Render Pipeline
+
+### Stage 1: Map Build (once per generation/load)
+
+Generate:
+
+- core ID textures,
+- geography textures,
+- height/hydrology,
+- static border distance maps,
+- static domain textures.
+
+### Stage 2: Resolve (on mode switch and on relevant data changes)
+
+Resolve pass reads only required textures for that mode and writes:
+
+- `ModeColorResolve`.
+
+Mode switch cost is a one-time resolve, not sustained per-frame branching complexity.
+
+### Stage 3: Composite (every frame)
+
+Final shader samples:
+
+- terrain inputs (height/geography/water),
+- `ModeColorResolve`,
+- core IDs for selection/hover,
+- border/road masks as needed.
+
+This pass should be simple and stable.
+
+---
+
+## Shader Organization
+
+Keep one material/shader if desired, but modularize source:
+
+- `MapOverlay.Common.cginc` (sampling, ID decode, constants),
+- `MapOverlay.ResolveModes.cginc` (mode-specific resolve logic),
+- `MapOverlay.Composite.cginc` (final compositing, hover/selection/water).
+
+Avoid a single giant function for all concerns.
+
+---
+
+## Performance Strategy
+
+1. **First optimize architecture, then micro-optimize shader math.**
+2. **Resolve at the lowest valid frequency**:
+   - static modes: once,
+   - economy/diplomacy: event-driven or daily,
+   - highly dynamic overlays: per-frame only if required.
+3. **Profile texture fetch count in composite pass** and keep it bounded.
+4. **Do not rely on sampler-limit assumptions alone**; verify on target backend.
+
+---
+
+## Render Detail Height + Normal Pipeline
+
+Add a dedicated visual-relief path that is separate from gameplay elevation.
+
+### Intent
+
+- **Gameplay height** remains authoritative for simulation systems.
+- **Render height** exists only for visual detail and lighting.
+
+This prevents visual tuning from accidentally changing economics, routing, or terrain logic.
+
+### Outputs
+
+1. **Render Heightmap** (`R16` or `RFloat`)
+
+- Derived from gameplay height + deterministic detail synthesis.
+- Used for hillshading detail and optional visual displacement/parallax.
+
+2. **Render Normal Map** (`RGBA8`/normal-encoded)
+
+- Derived from Render Heightmap.
+- Used by terrain shading for high-frequency relief.
+
+### Generation Stage
+
+Generate both textures in **Stage 1 (Map Build)** after base height/hydrology are available.
+Default cadence is **once per map generation/load**, not per frame.
+
+### Synthesis Recipe (deterministic)
+
+Start from normalized gameplay height and apply:
+
+1. **Low-pass smoothing**
+
+- gentle Gaussian blur to remove hard cell transitions.
+
+2. **Macro variation**
+
+- low-frequency noise/ridge modulation to break up broad flats.
+
+3. **Micro variation**
+
+- 2-3 octaves of subtle detail noise for terrain texture.
+
+4. **Hydrology-aware masking**
+
+- reduce high-frequency detail near rivers/lakes to avoid noisy banks.
+
+5. **Slope-aware attenuation**
+
+- clamp detail on steep cliffs to prevent faceted glittering artifacts.
+
+Use deterministic seed derivation from map seed + explicit `renderReliefSeedOffset`.
+
+### Suggested Parameters
+
+- `reliefBlurRadius`: 2-5 texels
+- `macroAmplitude`: 0.02-0.08 of normalized height range
+- `microAmplitude`: 0.01-0.04
+- `microOctaves`: 2-3
+- `normalStrength`: 0.4-1.2
+
+All values should be exposed as generation config, not serialized runtime tweak state.
+
+### Guardrails
+
+1. Never feed Render Heightmap into gameplay systems.
+2. Never overwrite or reinterpret gameplay height values from visual textures.
+3. Keep visual detail bounded to preserve coastline and river readability.
+4. Verify deterministic output for fixed seed + parameters.
+
+### Caching
+
+Cache Render Heightmap + Render Normal Map with map save artifacts.
+On reload, skip regeneration when cache key matches:
+
+- map seed,
+- map dimensions,
+- relief parameter set,
+- generator version.
+
+---
+
+## Debug and Validation Requirements
+
+Add permanent debug tooling:
+
+1. **Channel Inspector Mode**
+
+- render any texture/channel directly to screen with numeric min/max in UI.
+
+2. **ID Probe**
+
+- click cell and display decoded values from all core/domain textures.
+
+3. **Golden Map Regression**
+
+- fixed seed maps with expected checksum/stat snapshots for texture generation.
+
+4. **Color Stability Tests**
+
+- verify hover/border operations preserve hue class for low-saturation colors.
+
+5. **Relief Validation**
+
+- side-by-side debug view for gameplay height vs render height.
+- normal map visualization mode.
+- checksum regression for render height + normal outputs.
+
+These tools are mandatory before adding large new data domains.
+
+---
+
+## Migration Plan
+
+### Phase 1: Cleanup and Safety (now)
+
+1. Remove packed biome/soil/water channel in favor of explicit geography channels.
+2. Keep current rendering behavior equivalent.
+3. Add channel inspector and ID probe.
+
+### Phase 2: Core Texture Split
+
+1. Split monolithic cell data into:
+   - Political IDs texture
+   - Geography base texture
+2. Update selection/hover to consume only political IDs.
+3. Keep existing map modes functional.
+
+### Phase 3: Resolve Pipeline
+
+1. Introduce `ModeColorResolve`.
+2. Move map-mode color derivation into resolve step.
+3. Simplify composite shader to layering only.
+
+### Phase 4: Domain Expansion
+
+1. Add climate/economy/demographic/military textures with explicit schemas.
+2. Bind only required domain textures in resolve per mode.
+3. Add mode-level update scheduling (event/day/frame).
+
+### Phase 5: Optional Advanced Path
+
+1. Evaluate integer texture path for IDs.
+2. Evaluate texture arrays only if binding churn becomes measurable.
+3. Add disk caching for resolved textures alongside saved maps.
+
+---
+
+## Non-Goals
+
+- Not targeting mobile constraints right now.
+- Not replacing runtime generation with offline editor bake workflows.
+- Not splitting into many materials per mode unless profiling proves required.
+
+---
+
+## Decision Summary
+
+- **Chosen direction:** Hybrid resolve architecture.
+- **Immediate action:** Eliminate packed channels and add debug tooling.
+- **Medium-term action:** Resolve-per-mode pipeline with thin composite shader.
+- **Long-term action:** Expand domains safely with explicit schemas and update cadence rules.
+
+This approach keeps interaction robust, avoids fragile encoding, and scales to CK3-class map data without turning the fragment shader into a permanent bottleneck.
