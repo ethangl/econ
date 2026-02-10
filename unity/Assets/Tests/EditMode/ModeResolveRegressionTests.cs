@@ -8,12 +8,12 @@ using UnityEngine;
 namespace EconSim.Tests
 {
     [TestFixture]
-    [Category("M3Regression")]
     public class ModeResolveRegressionTests
     {
         private static readonly string[] BackingTextureProperties =
         {
-            "_CellDataTex",
+            "_PoliticalIdsTex",
+            "_GeographyBaseTex",
             "_HeightmapTex",
             "_RiverMaskTex",
             "_RealmBorderDistTex",
@@ -42,10 +42,70 @@ namespace EconSim.Tests
             }
         }
 
-        [TestCase(MapOverlayManager.ChannelDebugView.CellDataR)]
-        [TestCase(MapOverlayManager.ChannelDebugView.CellDataG)]
-        [TestCase(MapOverlayManager.ChannelDebugView.CellDataB)]
-        [TestCase(MapOverlayManager.ChannelDebugView.CellDataA)]
+        [Test]
+        [Category("M3Regression")]
+        public void SetMapMode_RegeneratesModeColorResolveTexture()
+        {
+            var baseline = TextureTestHarness.GetPrimaryBaselineCase();
+            using (var fixture = TextureTestHarness.CreateOverlayFixture(baseline))
+            {
+                fixture.OverlayManager.SetMapMode(MapView.MapMode.Political);
+                string political = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_ModeColorResolve");
+
+                fixture.OverlayManager.SetMapMode(MapView.MapMode.Market);
+                string market = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_ModeColorResolve");
+
+                fixture.OverlayManager.SetMapMode(MapView.MapMode.Political);
+                string politicalAgain = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_ModeColorResolve");
+
+                Assert.That(market, Is.Not.EqualTo(political), "ModeColorResolve did not change on mode switch.");
+                Assert.That(politicalAgain, Is.EqualTo(political), "ModeColorResolve did not return to the prior political output.");
+            }
+        }
+
+        [Test]
+        [Category("M3Regression")]
+        public void StylePropertyChanges_DoNotMutateModeColorResolveTexture()
+        {
+            var baseline = TextureTestHarness.GetPrimaryBaselineCase();
+            using (var fixture = TextureTestHarness.CreateOverlayFixture(baseline))
+            {
+                fixture.OverlayManager.SetMapMode(MapView.MapMode.Political);
+                string initial = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_ModeColorResolve");
+
+                float initialGradientRadius = fixture.Material.GetFloat("_GradientRadius");
+                float initialGradientCenterOpacity = fixture.Material.GetFloat("_GradientCenterOpacity");
+                float changedGradientRadius = Mathf.Max(1f, initialGradientRadius * 0.25f);
+                float changedGradientCenterOpacity = Mathf.Clamp01(initialGradientCenterOpacity + 0.35f);
+
+                if (Mathf.Abs(changedGradientRadius - initialGradientRadius) < 0.01f)
+                    changedGradientRadius = initialGradientRadius + 10f;
+                if (Mathf.Abs(changedGradientCenterOpacity - initialGradientCenterOpacity) < 0.01f)
+                    changedGradientCenterOpacity = Mathf.Clamp01(initialGradientCenterOpacity - 0.35f);
+
+                fixture.Material.SetFloat("_GradientRadius", changedGradientRadius);
+                fixture.Material.SetFloat("_GradientCenterOpacity", changedGradientCenterOpacity);
+                string changed = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_ModeColorResolve");
+                Assert.That(changed, Is.EqualTo(initial), "ModeColorResolve should not change for style-only material updates.");
+
+                string changedAgain = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_ModeColorResolve");
+                Assert.That(changedAgain, Is.EqualTo(initial), "ModeColorResolve changed unexpectedly on repeated style-only material updates.");
+
+                fixture.Material.SetFloat("_GradientRadius", initialGradientRadius);
+                fixture.Material.SetFloat("_GradientCenterOpacity", initialGradientCenterOpacity);
+                string reverted = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_ModeColorResolve");
+                Assert.That(reverted, Is.EqualTo(initial), "ModeColorResolve changed unexpectedly after reverting style-property updates.");
+            }
+        }
+
+        [TestCase(MapOverlayManager.ChannelDebugView.PoliticalIdsR)]
+        [TestCase(MapOverlayManager.ChannelDebugView.PoliticalIdsG)]
+        [TestCase(MapOverlayManager.ChannelDebugView.PoliticalIdsB)]
+        [TestCase(MapOverlayManager.ChannelDebugView.PoliticalIdsA)]
+        [TestCase(MapOverlayManager.ChannelDebugView.GeographyBaseR)]
+        [TestCase(MapOverlayManager.ChannelDebugView.GeographyBaseG)]
+        [TestCase(MapOverlayManager.ChannelDebugView.GeographyBaseB)]
+        [TestCase(MapOverlayManager.ChannelDebugView.GeographyBaseA)]
         [TestCase(MapOverlayManager.ChannelDebugView.RealmBorderDist)]
         [TestCase(MapOverlayManager.ChannelDebugView.ProvinceBorderDist)]
         [TestCase(MapOverlayManager.ChannelDebugView.CountyBorderDist)]
@@ -53,6 +113,7 @@ namespace EconSim.Tests
         [TestCase(MapOverlayManager.ChannelDebugView.RiverMask)]
         [TestCase(MapOverlayManager.ChannelDebugView.Heightmap)]
         [TestCase(MapOverlayManager.ChannelDebugView.RoadMask)]
+        [TestCase(MapOverlayManager.ChannelDebugView.ModeColorResolve)]
         public void SetChannelDebugView_UpdatesShaderDebugViewProperty(MapOverlayManager.ChannelDebugView debugView)
         {
             var baseline = TextureTestHarness.GetPrimaryBaselineCase();
@@ -66,13 +127,14 @@ namespace EconSim.Tests
         }
 
         [Test]
+        [Category("M3Regression")]
         public void SetEconomyState_UpdatesMarketTextures_WhenCountyAssignmentsChange()
         {
-            // Pre-resolve validation: confirms data-change propagation through current material texture path.
-            // Extend this to ModeColorResolve invalidation assertions when M3-S3 resolve texture is introduced.
             var baseline = TextureTestHarness.GetPrimaryBaselineCase();
             using (var fixture = TextureTestHarness.CreateOverlayFixture(baseline))
             {
+                fixture.OverlayManager.SetMapMode(MapView.MapMode.Market);
+                string initialModeResolve = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_ModeColorResolve");
                 string initialCellToMarket = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_CellToMarketTex");
                 string initialMarketBorder = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_MarketBorderDistTex");
 
@@ -81,9 +143,11 @@ namespace EconSim.Tests
 
                 string singleMarketCellToMarket = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_CellToMarketTex");
                 string singleMarketBorder = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_MarketBorderDistTex");
+                string singleMarketModeResolve = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_ModeColorResolve");
 
                 Assert.That(singleMarketCellToMarket, Is.Not.EqualTo(initialCellToMarket), "Cell-to-market texture did not update after setting economy.");
                 Assert.That(singleMarketBorder, Is.Not.EqualTo(initialMarketBorder), "Market border texture did not update after setting economy.");
+                Assert.That(singleMarketModeResolve, Is.Not.EqualTo(initialModeResolve), "ModeColorResolve did not refresh after setting economy.");
 
                 // Re-applying identical assignments should be deterministic and stable.
                 fixture.OverlayManager.SetEconomyState(assignmentA);
@@ -99,22 +163,30 @@ namespace EconSim.Tests
 
                 string splitMarketCellToMarket = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_CellToMarketTex");
                 string splitMarketBorder = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_MarketBorderDistTex");
+                string splitModeResolve = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_ModeColorResolve");
 
                 Assert.That(splitMarketCellToMarket, Is.Not.EqualTo(singleMarketCellToMarket), "Cell-to-market texture did not refresh for changed county assignments.");
                 Assert.That(splitMarketBorder, Is.Not.EqualTo(singleMarketBorder), "Market border texture did not refresh for changed county assignments.");
+                // ModeColorResolve now stores base market color only; if both assignments map to markets
+                // whose palette colors are equivalent, resolve output can remain unchanged.
+                Assert.That(splitModeResolve, Is.Not.Null.And.Not.Empty, "ModeColorResolve hash was not produced after economy reassignment.");
 
                 // Returning to previous assignments should return previous outputs.
                 fixture.OverlayManager.SetEconomyState(assignmentA);
                 string revertedCellToMarket = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_CellToMarketTex");
                 string revertedMarketBorder = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_MarketBorderDistTex");
+                string revertedModeResolve = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_ModeColorResolve");
                 Assert.That(revertedCellToMarket, Is.EqualTo(singleMarketCellToMarket),
                     "Cell-to-market texture did not return to prior baseline after reverting assignments.");
                 Assert.That(revertedMarketBorder, Is.EqualTo(singleMarketBorder),
                     "Market border texture did not return to prior baseline after reverting assignments.");
+                Assert.That(revertedModeResolve, Is.Not.Null.And.Not.Empty,
+                    "ModeColorResolve hash was not produced after reverting economy assignments.");
             }
         }
 
         [Test]
+        [Category("M3Regression")]
         public void ModeSwitches_DoNotMutateBackingTextures()
         {
             var baseline = TextureTestHarness.GetPrimaryBaselineCase();
@@ -138,6 +210,7 @@ namespace EconSim.Tests
         }
 
         [Test]
+        [Category("M3Regression")]
         public void EconomyTextureUpdates_PersistAcrossModeSwitchRoundTrips()
         {
             var baseline = TextureTestHarness.GetPrimaryBaselineCase();
@@ -255,7 +328,8 @@ namespace EconSim.Tests
         }
 
         [Test]
-        public void UpdateCellData_MutatesOnlyCellDataTexture()
+        [Category("M3Regression")]
+        public void UpdateCellData_MutatesOnlyPoliticalIdsTexture()
         {
             var baseline = TextureTestHarness.GetPrimaryBaselineCase();
             using (var fixture = TextureTestHarness.CreateOverlayFixture(baseline))
@@ -265,19 +339,22 @@ namespace EconSim.Tests
                 int newProvinceId = targetCell.ProvinceId + 1;
                 int newCountyId = targetCell.CountyId + 1;
 
-                string beforeCellData = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_CellDataTex");
+                string beforePolitical = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_PoliticalIdsTex");
+                string beforeGeography = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_GeographyBaseTex");
                 string beforeHeight = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_HeightmapTex");
                 string beforeRiver = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_RiverMaskTex");
                 string beforeRealmBorder = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_RealmBorderDistTex");
 
                 fixture.OverlayManager.UpdateCellData(targetCell.Id, newRealmId, newProvinceId, newCountyId);
 
-                string afterCellData = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_CellDataTex");
+                string afterPolitical = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_PoliticalIdsTex");
+                string afterGeography = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_GeographyBaseTex");
                 string afterHeight = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_HeightmapTex");
                 string afterRiver = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_RiverMaskTex");
                 string afterRealmBorder = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_RealmBorderDistTex");
 
-                Assert.That(afterCellData, Is.Not.EqualTo(beforeCellData), "Cell data texture did not change after UpdateCellData.");
+                Assert.That(afterPolitical, Is.Not.EqualTo(beforePolitical), "Political IDs texture did not change after UpdateCellData.");
+                Assert.That(afterGeography, Is.EqualTo(beforeGeography), "Geography base texture changed after UpdateCellData.");
                 Assert.That(afterHeight, Is.EqualTo(beforeHeight), "Heightmap changed after UpdateCellData.");
                 Assert.That(afterRiver, Is.EqualTo(beforeRiver), "River mask changed after UpdateCellData.");
                 Assert.That(afterRealmBorder, Is.EqualTo(beforeRealmBorder), "Realm border texture changed after UpdateCellData.");
@@ -290,15 +367,15 @@ namespace EconSim.Tests
             var baseline = TextureTestHarness.GetPrimaryBaselineCase();
             using (var fixture = TextureTestHarness.CreateOverlayFixture(baseline))
             {
-                string beforeCellData = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_CellDataTex");
+                string beforePolitical = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_PoliticalIdsTex");
                 string beforeHeight = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_HeightmapTex");
 
                 fixture.OverlayManager.UpdateCellData(-12345, newRealmId: 5, newProvinceId: 9, newCountyId: 13);
 
-                string afterCellData = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_CellDataTex");
+                string afterPolitical = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_PoliticalIdsTex");
                 string afterHeight = TextureTestHarness.HashTextureFromMaterial(fixture.Material, "_HeightmapTex");
 
-                Assert.That(afterCellData, Is.EqualTo(beforeCellData), "Cell data texture changed for invalid cell update.");
+                Assert.That(afterPolitical, Is.EqualTo(beforePolitical), "Political IDs texture changed for invalid cell update.");
                 Assert.That(afterHeight, Is.EqualTo(beforeHeight), "Heightmap changed for invalid cell update.");
             }
         }

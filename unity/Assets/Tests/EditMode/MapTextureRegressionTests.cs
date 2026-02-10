@@ -7,10 +7,23 @@ namespace EconSim.Tests
     [Category("M3Regression")]
     public class MapTextureRegressionTests
     {
-        private static readonly string[] RequiredTextureProperties =
+        private static readonly string[] GoldenTextureProperties =
         {
-            // Current baseline path uses _CellDataTex. Replace with split core textures when M3-S1 lands.
-            "_CellDataTex",
+            "_HeightmapTex",
+            "_RiverMaskTex",
+            "_RealmBorderDistTex",
+            "_ProvinceBorderDistTex",
+            "_CountyBorderDistTex",
+            "_MarketBorderDistTex",
+            "_CellToMarketTex",
+            "_RoadMaskTex"
+        };
+
+        private static readonly string[] DeterministicTextureProperties =
+        {
+            "_PoliticalIdsTex",
+            "_GeographyBaseTex",
+            "_ModeColorResolve",
             "_HeightmapTex",
             "_RiverMaskTex",
             "_RealmBorderDistTex",
@@ -52,9 +65,9 @@ namespace EconSim.Tests
             foreach (var expectedKey in expectedHashes.Keys)
             {
                 bool knownKey = false;
-                for (int i = 0; i < RequiredTextureProperties.Length; i++)
+                for (int i = 0; i < GoldenTextureProperties.Length; i++)
                 {
-                    if (RequiredTextureProperties[i] == expectedKey)
+                    if (GoldenTextureProperties[i] == expectedKey)
                     {
                         knownKey = true;
                         break;
@@ -65,11 +78,15 @@ namespace EconSim.Tests
                     $"Unexpected texture key in hash baseline: {expectedKey} (seed={seed}, template={template})");
             }
 
-            foreach (string textureProperty in RequiredTextureProperties)
+            foreach (string textureProperty in DeterministicTextureProperties)
             {
                 Assert.That(runBHashes.ContainsKey(textureProperty), Is.True, $"Second run missing texture {textureProperty}");
                 Assert.That(runAHashes[textureProperty], Is.EqualTo(runBHashes[textureProperty]),
                     $"Texture hash mismatch for {textureProperty} (seed={seed}, template={template})");
+            }
+
+            foreach (string textureProperty in GoldenTextureProperties)
+            {
                 Assert.That(expectedHashes.ContainsKey(textureProperty), Is.True,
                     $"Missing expected baseline hash for {textureProperty} (seed={seed}, template={template})");
                 Assert.That(runAHashes[textureProperty], Is.EqualTo(expectedHashes[textureProperty]),
@@ -80,8 +97,8 @@ namespace EconSim.Tests
 
         private static Dictionary<string, string> CollectTextureHashes(UnityEngine.Material material)
         {
-            var hashes = new Dictionary<string, string>(RequiredTextureProperties.Length);
-            foreach (string textureProperty in RequiredTextureProperties)
+            var hashes = new Dictionary<string, string>(DeterministicTextureProperties.Length);
+            foreach (string textureProperty in DeterministicTextureProperties)
             {
                 hashes[textureProperty] = TextureTestHarness.HashTextureFromMaterial(material, textureProperty);
             }

@@ -18,21 +18,30 @@ public class MapOverlayManager
 {
         public enum ChannelDebugView
         {
-            CellDataR = 0,
-            CellDataG = 1,
-            CellDataB = 2,
-            CellDataA = 3,
-            RealmBorderDist = 4,
-            ProvinceBorderDist = 5,
-            CountyBorderDist = 6,
-            MarketBorderDist = 7,
-            RiverMask = 8,
-            Heightmap = 9,
-            RoadMask = 10
+            PoliticalIdsR = 0,
+            PoliticalIdsG = 1,
+            PoliticalIdsB = 2,
+            PoliticalIdsA = 3,
+            GeographyBaseR = 4,
+            GeographyBaseG = 5,
+            GeographyBaseB = 6,
+            GeographyBaseA = 7,
+            RealmBorderDist = 8,
+            ProvinceBorderDist = 9,
+            CountyBorderDist = 10,
+            MarketBorderDist = 11,
+            RiverMask = 12,
+            Heightmap = 13,
+            RoadMask = 14,
+            ModeColorResolve = 15
         }
 
         // Shader property IDs (cached for performance)
         private static readonly int CellDataTexId = Shader.PropertyToID("_CellDataTex");
+        private static readonly int PoliticalIdsTexId = Shader.PropertyToID("_PoliticalIdsTex");
+        private static readonly int GeographyBaseTexId = Shader.PropertyToID("_GeographyBaseTex");
+        private static readonly int ModeColorResolveTexId = Shader.PropertyToID("_ModeColorResolve");
+        private static readonly int UseModeColorResolveId = Shader.PropertyToID("_UseModeColorResolve");
         private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
         private static readonly int RiverMaskTexId = Shader.PropertyToID("_RiverMaskTex");
         private static readonly int RealmPaletteTexId = Shader.PropertyToID("_RealmPaletteTex");
@@ -48,6 +57,18 @@ public class MapOverlayManager
         private static readonly int PathDashLengthId = Shader.PropertyToID("_PathDashLength");
         private static readonly int PathGapLengthId = Shader.PropertyToID("_PathGapLength");
         private static readonly int PathWidthId = Shader.PropertyToID("_PathWidth");
+        private static readonly int PathOpacityId = Shader.PropertyToID("_PathOpacity");
+        private static readonly int GradientRadiusId = Shader.PropertyToID("_GradientRadius");
+        private static readonly int GradientEdgeDarkeningId = Shader.PropertyToID("_GradientEdgeDarkening");
+        private static readonly int GradientCenterOpacityId = Shader.PropertyToID("_GradientCenterOpacity");
+        private static readonly int RealmBorderWidthId = Shader.PropertyToID("_RealmBorderWidth");
+        private static readonly int RealmBorderDarkeningId = Shader.PropertyToID("_RealmBorderDarkening");
+        private static readonly int ProvinceBorderWidthId = Shader.PropertyToID("_ProvinceBorderWidth");
+        private static readonly int ProvinceBorderDarkeningId = Shader.PropertyToID("_ProvinceBorderDarkening");
+        private static readonly int CountyBorderWidthId = Shader.PropertyToID("_CountyBorderWidth");
+        private static readonly int CountyBorderDarkeningId = Shader.PropertyToID("_CountyBorderDarkening");
+        private static readonly int MarketBorderWidthId = Shader.PropertyToID("_MarketBorderWidth");
+        private static readonly int MarketBorderDarkeningId = Shader.PropertyToID("_MarketBorderDarkening");
         private static readonly int MapModeId = Shader.PropertyToID("_MapMode");
         private static readonly int DebugViewId = Shader.PropertyToID("_DebugView");
         private static readonly int UseHeightDisplacementId = Shader.PropertyToID("_UseHeightDisplacement");
@@ -88,12 +109,14 @@ public class MapOverlayManager
         private int baseHeight;
 
         // Data textures
-        private Texture2D cellDataTexture;      // RGBAFloat: RealmId, ProvinceId, BiomeId+WaterFlag, CountyId
+        private Texture2D cellDataTexture;      // Legacy compatibility alias bound to Political IDs.
+        private Texture2D politicalIdsTexture;  // RGBAFloat: RealmId, ProvinceId, CountyId, reserved
+        private Texture2D geographyBaseTexture; // RGBAFloat: BiomeId, SoilId, reserved, WaterFlag
 
         /// <summary>
-        /// Public accessor for the cell data texture (for border masking).
+        /// Public accessor kept for legacy call sites.
         /// </summary>
-        public Texture2D CellDataTexture => cellDataTexture;
+        public Texture2D CellDataTexture => politicalIdsTexture;
         private Texture2D cellToMarketTexture;  // R16: CellId -> MarketId mapping (dynamic)
         private Texture2D heightmapTexture;     // RFloat: smoothed height values
         private Texture2D riverMaskTexture;     // R8: river mask (1 = river, 0 = not river)
@@ -106,12 +129,16 @@ public class MapOverlayManager
         private Texture2D countyBorderDistTexture;   // R8: distance to nearest county boundary (texels)
         private Texture2D marketBorderDistTexture;   // R8: distance to nearest market zone boundary (texels, dynamic)
         private Texture2D roadDistTexture;             // R8: distance to nearest road centerline (texels, dynamic)
+        private Texture2D modeColorResolveTexture;     // RGBA32: resolved per-mode color overlay
 
         // Road state (cached for regeneration)
         private RoadState roadState;
         private float cachedPathDashLength = -1f;
         private float cachedPathGapLength = -1f;
         private float cachedPathWidth = -1f;
+        private readonly Dictionary<MapView.MapMode, Texture2D> modeColorResolveCacheByMode = new Dictionary<MapView.MapMode, Texture2D>();
+        private readonly Dictionary<MapView.MapMode, int> modeColorResolveCacheRevisionByMode = new Dictionary<MapView.MapMode, int>();
+        private readonly Dictionary<MapView.MapMode, int> modeColorResolveRevisionByKey = new Dictionary<MapView.MapMode, int>();
 
         // Spatial lookup grid: maps data pixel coordinates to cell IDs
         private int[] spatialGrid;
@@ -119,7 +146,9 @@ public class MapOverlayManager
         private int gridHeight;
 
         // Raw texture data for incremental updates
-        private Color[] cellDataPixels;
+        private Color[] politicalIdsPixels;
+        private Color[] geographyBasePixels;
+        private MapView.MapMode currentMapMode = MapView.MapMode.Political;
 
         // Political color generator
         private PoliticalPalette politicalPalette;
@@ -213,7 +242,8 @@ public class MapOverlayManager
 
             // Debug output
             TextureDebugger.SaveTexture(heightmapTexture, "heightmap");
-            TextureDebugger.SaveTexture(cellDataTexture, "cell_data");
+            TextureDebugger.SaveTexture(politicalIdsTexture, "political_ids");
+            TextureDebugger.SaveTexture(geographyBaseTexture, "geography_base");
         }
 
         /// <summary>
@@ -311,22 +341,27 @@ public class MapOverlayManager
         }
 
         /// <summary>
-        /// Generate the cell data texture from the spatial grid and cell data.
-        /// Format: RGBAFloat with RealmId, ProvinceId, BiomeId+WaterFlag, CountyId normalized to 0-1.
-        /// B channel encodes: BiomeId in low bits, water flag in high bit (add 32768 if water)
-        /// Uses 32-bit float for precise ID storage (half-precision caused banding artifacts).
-        /// Parallelized for performance.
+        /// Generate core data textures from spatial grid + cell data.
+        /// Primary flow uses split textures:
+        /// - Political IDs: realm/province/county/reserved
+        /// - Geography Base: biome/soil/reserved/water-flag
         /// </summary>
         private void GenerateDataTextures()
         {
-            cellDataTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RGBAFloat, false);
-            cellDataTexture.name = "CellDataTexture";
-            cellDataTexture.filterMode = FilterMode.Point;  // No interpolation
-            cellDataTexture.wrapMode = TextureWrapMode.Clamp;
+            politicalIdsTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RGBAFloat, false);
+            politicalIdsTexture.name = "PoliticalIdsTexture";
+            politicalIdsTexture.filterMode = FilterMode.Point;
+            politicalIdsTexture.wrapMode = TextureWrapMode.Clamp;
 
-            cellDataPixels = new Color[gridWidth * gridHeight];
+            geographyBaseTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RGBAFloat, false);
+            geographyBaseTexture.name = "GeographyBaseTexture";
+            geographyBaseTexture.filterMode = FilterMode.Point;
+            geographyBaseTexture.wrapMode = TextureWrapMode.Clamp;
 
-            // Fill texture from spatial grid (parallelized by row)
+            politicalIdsPixels = new Color[gridWidth * gridHeight];
+            geographyBasePixels = new Color[gridWidth * gridHeight];
+
+            // Fill textures from spatial grid (parallelized by row).
             Parallel.For(0, gridHeight, y =>
             {
                 for (int x = 0; x < gridWidth; x++)
@@ -334,40 +369,39 @@ public class MapOverlayManager
                     int gridIdx = y * gridWidth + x;
                     int cellId = spatialGrid[gridIdx];
 
-                    Color pixel;
+                    Color political;
+                    Color geography;
 
                     if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
                     {
-                        // Normalize IDs to 0-1 range (divide by 65535)
-                        pixel.r = cell.RealmId / 65535f;
-                        pixel.g = cell.ProvinceId / 65535f;
-                        // Pack biome ID, soil ID, and water flag:
-                        // Land: biomeId * 8 + soilId (max 63*8+7 = 511)
-                        // Water: 32768 + biomeId
-                        int packedBiome = cell.IsLand
-                            ? cell.BiomeId * 8 + cell.SoilId
-                            : 32768 + cell.BiomeId;
-                        pixel.b = packedBiome / 65535f;
-                        // County ID for county-level rendering (from grouped cells)
-                        pixel.a = cell.CountyId / 65535f;
+                        political.r = cell.RealmId / 65535f;
+                        political.g = cell.ProvinceId / 65535f;
+                        political.b = cell.CountyId / 65535f;
+                        political.a = 0f;
+
+                        geography.r = cell.BiomeId / 65535f;
+                        geography.g = cell.SoilId / 65535f;
+                        geography.b = 0f;
+                        geography.a = cell.IsLand ? 0f : 1f;
                     }
                     else
                     {
-                        // No cell data - treat as water (areas outside map bounds)
-                        pixel.r = 0;
-                        pixel.g = 0;
-                        pixel.b = 32768 / 65535f;  // Water flag set, biomeId = 0
-                        pixel.a = 0;
+                        political = new Color(0f, 0f, 0f, 0f);
+                        geography = new Color(0f, 0f, 0f, 1f);
                     }
 
-                    cellDataPixels[gridIdx] = pixel;
+                    politicalIdsPixels[gridIdx] = political;
+                    geographyBasePixels[gridIdx] = geography;
                 }
             });
 
-            cellDataTexture.SetPixels(cellDataPixels);
-            cellDataTexture.Apply();
+            politicalIdsTexture.SetPixels(politicalIdsPixels);
+            politicalIdsTexture.Apply();
 
-            Debug.Log($"MapOverlayManager: Generated cell data texture {gridWidth}x{gridHeight}");
+            geographyBaseTexture.SetPixels(geographyBasePixels);
+            geographyBaseTexture.Apply();
+
+            Debug.Log($"MapOverlayManager: Generated core textures {gridWidth}x{gridHeight}");
         }
 
         /// <summary>
@@ -1081,6 +1115,9 @@ public class MapOverlayManager
         {
             if (terrainMaterial == null) return;
 
+            terrainMaterial.SetTexture(PoliticalIdsTexId, politicalIdsTexture);
+            terrainMaterial.SetTexture(GeographyBaseTexId, geographyBaseTexture);
+            cellDataTexture = politicalIdsTexture;
             terrainMaterial.SetTexture(CellDataTexId, cellDataTexture);
             terrainMaterial.SetTexture(HeightmapTexId, heightmapTexture);
             terrainMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
@@ -1133,11 +1170,13 @@ public class MapOverlayManager
 
             // Default to political mode
             terrainMaterial.SetInt(MapModeId, 1);
-            terrainMaterial.SetInt(DebugViewId, (int)ChannelDebugView.CellDataR);
+            terrainMaterial.SetInt(DebugViewId, (int)ChannelDebugView.PoliticalIdsR);
 
             // Clear any persisted selection/hover from previous play session
             ClearSelection();
             ClearHover();
+
+            RegenerateModeColorResolveTexture();
         }
 
         /// <summary>
@@ -1147,9 +1186,14 @@ public class MapOverlayManager
         public void SetEconomyState(EconomyState economy)
         {
             economyState = economy;
+            InvalidateModeColorResolveCache(MapView.MapMode.Market);
 
             if (economy == null || economy.CountyToMarket == null)
+            {
+                if (currentMapMode == MapView.MapMode.Market)
+                    RegenerateModeColorResolveTexture();
                 return;
+            }
 
             // Regenerate market palette based on hub realm colors
             RegenerateMarketPalette(economy);
@@ -1172,6 +1216,10 @@ public class MapOverlayManager
 
             // Regenerate market border distance texture now that zone assignments are known
             RegenerateMarketBorderDistTexture(economy);
+            if (currentMapMode == MapView.MapMode.Market)
+                RegenerateModeColorResolveTexture();
+            if (currentMapMode != MapView.MapMode.Market)
+                PrewarmOverlayModeResolveCache(MapView.MapMode.Market);
 
             Debug.Log($"MapOverlayManager: Updated county-to-market texture ({economy.CountyToMarket.Count} counties mapped)");
         }
@@ -1297,6 +1345,197 @@ public class MapOverlayManager
             Debug.Log($"MapOverlayManager: Generated market border distance texture {gridWidth}x{gridHeight}");
         }
 
+        private static bool IsModeResolveOverlay(MapView.MapMode mode)
+        {
+            return mode == MapView.MapMode.Political ||
+                   mode == MapView.MapMode.Province ||
+                   mode == MapView.MapMode.County ||
+                   mode == MapView.MapMode.Market;
+        }
+
+        private static MapView.MapMode ResolveCacheKeyForMode(MapView.MapMode mode)
+        {
+            if (mode == MapView.MapMode.Market)
+                return MapView.MapMode.Market;
+
+            if (mode == MapView.MapMode.Political ||
+                mode == MapView.MapMode.Province ||
+                mode == MapView.MapMode.County)
+            {
+                return MapView.MapMode.Political;
+            }
+
+            return mode;
+        }
+
+        private int GetModeColorResolveRevision(MapView.MapMode cacheKey)
+        {
+            if (modeColorResolveRevisionByKey.TryGetValue(cacheKey, out int revision) && revision > 0)
+                return revision;
+
+            modeColorResolveRevisionByKey[cacheKey] = 1;
+            return 1;
+        }
+
+        private void InvalidateModeColorResolveCache(MapView.MapMode mode)
+        {
+            MapView.MapMode cacheKey = ResolveCacheKeyForMode(mode);
+            int currentRevision = GetModeColorResolveRevision(cacheKey);
+
+            unchecked
+            {
+                int nextRevision = currentRevision + 1;
+                if (nextRevision <= 0)
+                    nextRevision = 1;
+                modeColorResolveRevisionByKey[cacheKey] = nextRevision;
+            }
+        }
+
+        private Texture2D GetOrCreateModeColorResolveTexture(MapView.MapMode mode)
+        {
+            MapView.MapMode cacheKey = ResolveCacheKeyForMode(mode);
+            if (modeColorResolveCacheByMode.TryGetValue(cacheKey, out var cached) && cached != null)
+            {
+                if (cached.width == gridWidth && cached.height == gridHeight)
+                    return cached;
+
+                DestroyTexture(cached);
+                modeColorResolveCacheByMode.Remove(cacheKey);
+                modeColorResolveCacheRevisionByMode.Remove(cacheKey);
+            }
+
+            var texture = new Texture2D(gridWidth, gridHeight, TextureFormat.RGBA32, false);
+            texture.name = $"ModeColorResolveTexture_{cacheKey}";
+            texture.filterMode = FilterMode.Bilinear;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            modeColorResolveCacheByMode[cacheKey] = texture;
+            return texture;
+        }
+
+        private bool TryBindCachedModeColorResolveTexture(MapView.MapMode mode)
+        {
+            if (terrainMaterial == null)
+                return false;
+
+            MapView.MapMode cacheKey = ResolveCacheKeyForMode(mode);
+            if (!modeColorResolveCacheByMode.TryGetValue(cacheKey, out var cached) || cached == null)
+                return false;
+
+            if (cached.width != gridWidth || cached.height != gridHeight)
+                return false;
+
+            int currentRevision = GetModeColorResolveRevision(cacheKey);
+            if (!modeColorResolveCacheRevisionByMode.TryGetValue(cacheKey, out int cachedRevision) ||
+                cachedRevision != currentRevision)
+            {
+                return false;
+            }
+
+            modeColorResolveTexture = cached;
+            terrainMaterial.SetTexture(ModeColorResolveTexId, cached);
+            terrainMaterial.SetInt(UseModeColorResolveId, 1);
+            return true;
+        }
+
+        private void RegenerateModeColorResolveTexture()
+        {
+            if (terrainMaterial == null || mapData == null || spatialGrid == null)
+                return;
+
+            if (!IsModeResolveOverlay(currentMapMode))
+            {
+                terrainMaterial.SetInt(UseModeColorResolveId, 0);
+                return;
+            }
+
+            if (TryBindCachedModeColorResolveTexture(currentMapMode))
+                return;
+
+            modeColorResolveTexture = GetOrCreateModeColorResolveTexture(currentMapMode);
+            int size = gridWidth * gridHeight;
+            var resolved = new Color[size];
+
+            Color[] rivers = riverMaskTexture.GetPixels();
+            Color[] realmPalette = realmPaletteTexture.GetPixels();
+            Color[] marketPalette = marketPaletteTexture.GetPixels();
+
+            for (int i = 0; i < size; i++)
+            {
+                int cellId = spatialGrid[i];
+                if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
+                    continue;
+
+                bool isCellWater = !cell.IsLand;
+                bool isRiver = rivers[i].r > 0.5f;
+                if (isCellWater || isRiver)
+                    continue;
+
+                if (currentMapMode == MapView.MapMode.Market)
+                {
+                    int marketId = 0;
+                    if (economyState != null && economyState.CountyToMarket != null)
+                        economyState.CountyToMarket.TryGetValue(cell.CountyId, out marketId);
+
+                    Color marketColor = LookupPaletteColor(marketPalette, marketId);
+                    marketColor.a = 1f;
+                    resolved[i] = marketColor;
+                }
+                else
+                {
+                    Color politicalColor = LookupPaletteColor(realmPalette, cell.RealmId);
+                    politicalColor.a = 1f;
+                    resolved[i] = politicalColor;
+                }
+            }
+
+            modeColorResolveTexture.SetPixels(resolved);
+            modeColorResolveTexture.Apply();
+            terrainMaterial.SetTexture(ModeColorResolveTexId, modeColorResolveTexture);
+            terrainMaterial.SetInt(UseModeColorResolveId, 1);
+            MapView.MapMode cacheKey = ResolveCacheKeyForMode(currentMapMode);
+            modeColorResolveCacheRevisionByMode[cacheKey] = GetModeColorResolveRevision(cacheKey);
+            TextureDebugger.SaveTexture(modeColorResolveTexture, "mode_color_resolve");
+        }
+
+        private void PrewarmOverlayModeResolveCache(MapView.MapMode mode)
+        {
+            if (!IsModeResolveOverlay(mode) || terrainMaterial == null)
+                return;
+
+            MapView.MapMode cacheKey = ResolveCacheKeyForMode(mode);
+            if (modeColorResolveCacheRevisionByMode.TryGetValue(cacheKey, out int cachedRevision) &&
+                cachedRevision == GetModeColorResolveRevision(cacheKey))
+            {
+                return;
+            }
+
+            MapView.MapMode previousMode = currentMapMode;
+            currentMapMode = mode;
+            RegenerateModeColorResolveTexture();
+            currentMapMode = previousMode;
+
+            if (IsModeResolveOverlay(previousMode))
+            {
+                if (!TryBindCachedModeColorResolveTexture(previousMode))
+                    RegenerateModeColorResolveTexture();
+            }
+            else
+            {
+                terrainMaterial.SetInt(UseModeColorResolveId, 0);
+            }
+        }
+
+        private static Color LookupPaletteColor(Color[] palette, int id)
+        {
+            if (palette == null || palette.Length == 0)
+                return Color.white;
+
+            int idx = Mathf.Clamp(id, 0, palette.Length - 1);
+            Color c = palette[idx];
+            c.a = 1f;
+            return c;
+        }
+
         /// <summary>
         /// Set road state for shader-based road rendering.
         /// Stores reference and regenerates the road distance texture.
@@ -1305,6 +1544,9 @@ public class MapOverlayManager
         {
             roadState = roads;
             RegenerateRoadDistTexture();
+
+            if (currentMapMode != MapView.MapMode.Market)
+                PrewarmOverlayModeResolveCache(MapView.MapMode.Market);
         }
 
         /// <summary>
@@ -1483,8 +1725,11 @@ public class MapOverlayManager
             if (terrainMaterial == null)
                 return fallback;
 
+            if (!terrainMaterial.HasProperty(propertyId))
+                return fallback;
+
             float value = terrainMaterial.GetFloat(propertyId);
-            return value > 0f ? value : fallback;
+            return float.IsNaN(value) || float.IsInfinity(value) ? fallback : value;
         }
 
         /// <summary>
@@ -1494,6 +1739,8 @@ public class MapOverlayManager
         public void SetMapMode(MapView.MapMode mode)
         {
             if (terrainMaterial == null) return;
+            bool modeChanged = currentMapMode != mode;
+            currentMapMode = mode;
 
             int shaderMode;
             switch (mode)
@@ -1523,6 +1770,17 @@ public class MapOverlayManager
             }
 
             terrainMaterial.SetInt(MapModeId, shaderMode);
+
+            if (!IsModeResolveOverlay(mode))
+            {
+                terrainMaterial.SetInt(UseModeColorResolveId, 0);
+                return;
+            }
+
+            if (modeChanged && TryBindCachedModeColorResolveTexture(mode))
+                return;
+
+            RegenerateModeColorResolveTexture();
         }
 
         public void SetChannelDebugView(ChannelDebugView debugView)
@@ -1731,6 +1989,13 @@ public class MapOverlayManager
             if (!mapData.CellById.TryGetValue(cellId, out var cell))
                 return;
 
+            if (newRealmId.HasValue)
+                cell.RealmId = newRealmId.Value;
+            if (newProvinceId.HasValue)
+                cell.ProvinceId = newProvinceId.Value;
+            if (newCountyId.HasValue)
+                cell.CountyId = newCountyId.Value;
+
             bool needsUpdate = false;
             float scale = resolutionMultiplier;
 
@@ -1753,16 +2018,25 @@ public class MapOverlayManager
 
                     if (spatialGrid[gridIdx] == cellId)
                     {
-                        Color pixel = cellDataPixels[gridIdx];
+                        Color political = politicalIdsPixels[gridIdx];
 
                         if (newRealmId.HasValue)
-                            pixel.r = newRealmId.Value / 65535f;
+                        {
+                            float normalized = newRealmId.Value / 65535f;
+                            political.r = normalized;
+                        }
                         if (newProvinceId.HasValue)
-                            pixel.g = newProvinceId.Value / 65535f;
+                        {
+                            float normalized = newProvinceId.Value / 65535f;
+                            political.g = normalized;
+                        }
                         if (newCountyId.HasValue)
-                            pixel.a = newCountyId.Value / 65535f;
+                        {
+                            float normalized = newCountyId.Value / 65535f;
+                            political.b = normalized;
+                        }
 
-                        cellDataPixels[gridIdx] = pixel;
+                        politicalIdsPixels[gridIdx] = political;
                         needsUpdate = true;
                     }
                 }
@@ -1770,8 +2044,19 @@ public class MapOverlayManager
 
             if (needsUpdate)
             {
-                cellDataTexture.SetPixels(cellDataPixels);
-                cellDataTexture.Apply();
+                politicalIdsTexture.SetPixels(politicalIdsPixels);
+                politicalIdsTexture.Apply();
+                InvalidateModeColorResolveCache(MapView.MapMode.Political);
+                if (newCountyId.HasValue || newRealmId.HasValue)
+                    InvalidateModeColorResolveCache(MapView.MapMode.Market);
+
+                if (currentMapMode == MapView.MapMode.Political ||
+                    currentMapMode == MapView.MapMode.Province ||
+                    currentMapMode == MapView.MapMode.County ||
+                    currentMapMode == MapView.MapMode.Market)
+                {
+                    RegenerateModeColorResolveTexture();
+                }
             }
         }
 
@@ -1780,32 +2065,55 @@ public class MapOverlayManager
         /// </summary>
         public void Dispose()
         {
-            if (cellDataTexture != null)
-                DestroyTexture(cellDataTexture);
-            if (heightmapTexture != null)
-                DestroyTexture(heightmapTexture);
-            if (riverMaskTexture != null)
-                DestroyTexture(riverMaskTexture);
-            if (realmPaletteTexture != null)
-                DestroyTexture(realmPaletteTexture);
-            if (marketPaletteTexture != null)
-                DestroyTexture(marketPaletteTexture);
-            if (biomePaletteTexture != null)
-                DestroyTexture(biomePaletteTexture);
-            if (biomeElevationMatrix != null)
-                DestroyTexture(biomeElevationMatrix);
-            if (cellToMarketTexture != null)
-                DestroyTexture(cellToMarketTexture);
-            if (realmBorderDistTexture != null)
-                DestroyTexture(realmBorderDistTexture);
-            if (provinceBorderDistTexture != null)
-                DestroyTexture(provinceBorderDistTexture);
-            if (countyBorderDistTexture != null)
-                DestroyTexture(countyBorderDistTexture);
-            if (marketBorderDistTexture != null)
-                DestroyTexture(marketBorderDistTexture);
-            if (roadDistTexture != null)
-                DestroyTexture(roadDistTexture);
+            var texturesToDestroy = new HashSet<Texture2D>();
+            AddTextureForDestroy(texturesToDestroy, politicalIdsTexture);
+            AddTextureForDestroy(texturesToDestroy, geographyBaseTexture);
+            AddTextureForDestroy(texturesToDestroy, cellDataTexture);
+            AddTextureForDestroy(texturesToDestroy, heightmapTexture);
+            AddTextureForDestroy(texturesToDestroy, riverMaskTexture);
+            AddTextureForDestroy(texturesToDestroy, realmPaletteTexture);
+            AddTextureForDestroy(texturesToDestroy, marketPaletteTexture);
+            AddTextureForDestroy(texturesToDestroy, biomePaletteTexture);
+            AddTextureForDestroy(texturesToDestroy, biomeElevationMatrix);
+            AddTextureForDestroy(texturesToDestroy, cellToMarketTexture);
+            AddTextureForDestroy(texturesToDestroy, realmBorderDistTexture);
+            AddTextureForDestroy(texturesToDestroy, provinceBorderDistTexture);
+            AddTextureForDestroy(texturesToDestroy, countyBorderDistTexture);
+            AddTextureForDestroy(texturesToDestroy, marketBorderDistTexture);
+            AddTextureForDestroy(texturesToDestroy, roadDistTexture);
+            AddTextureForDestroy(texturesToDestroy, modeColorResolveTexture);
+            foreach (var cachedResolve in modeColorResolveCacheByMode.Values)
+                AddTextureForDestroy(texturesToDestroy, cachedResolve);
+
+            foreach (var texture in texturesToDestroy)
+                DestroyTexture(texture);
+
+            modeColorResolveCacheByMode.Clear();
+            modeColorResolveCacheRevisionByMode.Clear();
+            modeColorResolveRevisionByKey.Clear();
+
+            politicalIdsTexture = null;
+            geographyBaseTexture = null;
+            cellDataTexture = null;
+            heightmapTexture = null;
+            riverMaskTexture = null;
+            realmPaletteTexture = null;
+            marketPaletteTexture = null;
+            biomePaletteTexture = null;
+            biomeElevationMatrix = null;
+            cellToMarketTexture = null;
+            realmBorderDistTexture = null;
+            provinceBorderDistTexture = null;
+            countyBorderDistTexture = null;
+            marketBorderDistTexture = null;
+            roadDistTexture = null;
+            modeColorResolveTexture = null;
+        }
+
+        private static void AddTextureForDestroy(HashSet<Texture2D> set, Texture2D texture)
+        {
+            if (texture != null)
+                set.Add(texture);
         }
 
         private static void DestroyTexture(Texture2D texture)

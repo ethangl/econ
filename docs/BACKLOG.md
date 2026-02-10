@@ -168,10 +168,13 @@ Goal: implement preconditions for scalable map modes.
 
 Reference: `MAP_TEXTURE_ARCHITECTURE.md`, `M3_TEXTURE_REGRESSION_CHECKLIST.md`
 
-Current status (February 10, 2026):
+Current status (February 11, 2026):
 
-- `M3-S4` automated regression coverage is implemented and passing in EditMode (`EconSim.EditModeTests`), including deterministic texture hashes, mode/economy refresh behavior, and low-saturation color stability checks.
-- Remaining M3 exit work is now concentrated on final `ModeColorResolve`-specific invalidation assertions (once the resolved texture path is active) plus manual Channel Inspector + ID Probe signoff.
+- `M3-S1` is complete: core texture split is active in the primary render path (`_PoliticalIdsTex` + `_GeographyBaseTex`), with legacy `_CellDataTex` retained only for migration compatibility.
+- `M3-S2` is complete: `MapOverlay.shader` logic is split into include units (`MapOverlay.Composite.cginc`, `MapOverlay.ResolveModes.cginc`) and behavior parity is covered by regression tests.
+- `M3-S3` is complete: `ModeColorResolve` is generated and bound, resolve invalidation is implemented for mode switches and economy-driven data updates, and high-frequency style controls are applied in shader composite (no resolve rebuild required for opacity/gradient/border tuning).
+- `M3-S4` is complete: EditMode suite is green (`43/43`) and filtered M3 regression gate is green (`13/13`) with direct `ModeColorResolve` invalidation assertions.
+- `M3-H1` through `M3-H4` are complete: resolve invalidation is scoped by resolve family, legacy `_CellDataTex` runtime writes are removed, architecture docs match runtime behavior, and no-op resolve polling was deleted from `MapView`.
 
 ### M3-S1 Geography channel + core texture split
 
@@ -186,6 +189,7 @@ Current status (February 10, 2026):
   - explicit geography channels used (biome/soil/water semantics),
   - monolithic cell data split into Political IDs + Geography Base textures,
   - selection/hover reads political IDs only (mode-independent interaction path).
+- **Status:** DONE.
 
 ### M3-S2 Shader modularization
 
@@ -199,6 +203,7 @@ Current status (February 10, 2026):
   - `MapOverlay.shader` logic split into maintainable include units,
   - no behavior regression in political/terrain/market modes,
   - no behavior regression in hover/selection/water/border layering behavior.
+- **Status:** DONE.
 
 ### M3-S3 Resolve pipeline prototype
 
@@ -211,7 +216,8 @@ Current status (February 10, 2026):
 - **Done when:**
   - one mode resolves to display texture successfully,
   - composite pass remains stable with hover/selection/water layering,
-  - resolve invalidation is implemented for mode switch and relevant data changes (no stale mode color output).
+  - resolve invalidation is implemented for mode switch and relevant data changes, while style-only controls remain runtime shader uniforms (no stale mode color output and no resolve rebuild on slider drag).
+- **Status:** DONE.
 
 ### M3-S4 Texture regression and validation gates
 
@@ -226,7 +232,60 @@ Current status (February 10, 2026):
   - resolve regression coverage verifies mode-switch and data-change refresh behavior,
   - color stability tests verify hover/border operations preserve hue class for low-saturation colors,
   - channel inspector + ID probe validate all new core texture schemas.
-- **Status:** IN PROGRESS (automated regression gates are in place and passing; final resolve-texture assertions and manual signoff are pending).
+- **Status:** DONE.
+
+### M3-H1 Resolve cache invalidation granularity
+
+- **Type:** optimization/correctness
+- **Impact:** M-H
+- **Effort:** M
+- **Risk:** M
+- **Tags:** `post-texture-arch`, `hardening`
+- **Depends on:** M3-S3, M3-S4
+- **Done when:**
+  - resolve cache invalidation is scoped to affected resolve families (for example market-only vs political-family), not global invalidation for unrelated domain updates,
+  - mode-switch latency after economy ticks remains stable across extended runtime.
+- **Status:** DONE.
+
+### M3-H2 Remove legacy `_CellDataTex` write path
+
+- **Type:** refactor/optimization
+- **Impact:** M
+- **Effort:** S-M
+- **Risk:** M
+- **Tags:** `post-texture-arch`, `hardening`
+- **Depends on:** M3-S1, M3-S4
+- **Done when:**
+  - `_CellDataTex` is no longer generated/updated in runtime hot paths,
+  - all runtime consumers are migrated to split textures (`_PoliticalIdsTex`, `_GeographyBaseTex`),
+  - regression suite confirms no behavior loss.
+- **Status:** DONE.
+
+### M3-H3 Architecture doc baseline refresh
+
+- **Type:** doc
+- **Impact:** M
+- **Effort:** S
+- **Risk:** L
+- **Tags:** `post-texture-arch`, `hardening`
+- **Depends on:** M3-S1, M3-S3
+- **Done when:**
+  - `MAP_TEXTURE_ARCHITECTURE.md` "Current Baseline (As Implemented)" reflects split textures + resolve/composite responsibilities accurately,
+  - no stale statements describe packed `_CellDataTex` as primary runtime path.
+- **Status:** DONE.
+
+### M3-H4 Remove no-op resolve refresh polling
+
+- **Type:** cleanup/optimization
+- **Impact:** L-M
+- **Effort:** S
+- **Risk:** L
+- **Tags:** `post-texture-arch`, `hardening`
+- **Depends on:** M3-S3
+- **Done when:**
+  - `MapView.Update`/`OnValidate` no longer poll a no-op resolve-refresh path,
+  - comments/docs match the final style-control update model.
+- **Status:** DONE.
 
 ---
 
@@ -271,14 +330,11 @@ Goal: safely expand capabilities after architecture foundations are in place.
 
 ---
 
-## Priority Queue (Next 6)
+## Priority Queue (Next 3)
 
-1. M3-S1 Geography channel + core texture split  
-2. M3-S2 Shader modularization  
-3. M3-S3 Resolve pipeline prototype  
-4. M3-S4 Texture regression and validation gates  
-5. M4-S1 Vertex-blended biome visuals  
-6. M4-S2 Render detail height + normal map
+1. M4-S1 Vertex-blended biome visuals  
+2. M4-S2 Render detail height + normal map  
+3. M4-S3 Weather-driven visual modulation
 
 ---
 

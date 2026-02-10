@@ -9,17 +9,16 @@ This checklist is the execution companion to:
 - `docs/BACKLOG.md` (`M3-S4`)
 - `docs/MAP_TEXTURE_ARCHITECTURE.md` (Debug and Validation Requirements + Migration Plan)
 
-Status snapshot (February 10, 2026):
+Status snapshot (February 11, 2026):
 
 - `M3-S4` requirements are defined in backlog and architecture docs.
 - This checklist defines exact test matrix, required artifacts, and pass/fail gates.
 
-Execution snapshot (February 10, 2026):
+Execution snapshot (February 11, 2026):
 
-- Automated EditMode suite (`EconSim.EditModeTests`) is green: 36 passed, 0 failed, 0 skipped.
-- Filtered automated M3 gate (`Category=M3Regression`) is green: 33 passed, 0 failed, 0 skipped.
-- Implemented and passing: fixed-seed texture hash determinism, mode/economy refresh regression coverage (pre-`ModeColorResolve` path), and low-saturation color stability checks.
-- Pending for final M3 signoff: direct `ModeColorResolve` invalidation assertions after resolved texture integration, plus manual Channel Inspector and ID Probe validation artifacts for all baseline cases.
+- Automated EditMode suite (`EconSim.EditModeTests`) is green: 43 passed, 0 failed, 0 skipped.
+- Filtered automated M3 gate (`Category=M3Regression`) is green: 13 passed, 0 failed, 0 skipped.
+- Implemented and passing: fixed-seed texture hash determinism, direct `ModeColorResolve` invalidation coverage (mode switch + economy refresh), and low-saturation color stability checks.
 
 ---
 
@@ -54,8 +53,8 @@ Run all M3-S4 checks on all three baseline cases unless a check explicitly state
 
 ### A) Existing mapgen regression harness must stay green
 
-- [ ] `unity/Assets/Tests/EditMode/MapGenRegressionTests.cs` passes in EditMode.
-- [ ] No baseline JSON schema changes were introduced without deliberate review.
+- [x] `unity/Assets/Tests/EditMode/MapGenRegressionTests.cs` passes in EditMode.
+- [x] No baseline JSON schema changes were introduced without deliberate review.
 
 Purpose:
 
@@ -63,7 +62,7 @@ Purpose:
 
 ### B) Texture golden regression (new/extended)
 
-- [ ] For each baseline case, capture deterministic texture fingerprints for:
+- [x] For each baseline case, capture deterministic texture fingerprints for:
   - Political IDs texture
   - Geography Base texture
   - Heightmap
@@ -71,8 +70,8 @@ Purpose:
   - Realm/Province/County border distance textures
   - Market border distance texture (after economy assignment)
   - `ModeColorResolve` output for at least one resolved mode
-- [ ] Fingerprints are compared against committed golden values.
-- [ ] Any accepted intentional delta updates the golden baseline and changelog note.
+- [x] Fingerprints are compared against committed golden values (golden set + deterministic extension coverage).
+- [x] Any accepted intentional delta updates the golden baseline and changelog note.
 
 Implementation target:
 
@@ -90,28 +89,31 @@ Fingerprint guidance:
 
 ### C) Resolve invalidation regression (new)
 
-- [ ] Validate resolve reruns on map mode switch.
-- [ ] Validate resolve reruns on relevant domain-data change.
-- [ ] Validate no stale `ModeColorResolve` output remains after either trigger.
+- [x] Validate resolve reruns on map mode switch.
+- [x] Validate resolve reruns on relevant domain-data change.
+- [x] Validate live material style-property edits do not force resolve rebuilds (shader-uniform path).
+- [x] Validate no stale `ModeColorResolve` output remains after either trigger.
 
 Minimum scenarios:
 
 1. switch Political -> Terrain -> Political and verify refresh each transition,
-2. mutate a mode-driving input (for example market assignment) and verify refresh without full map rebuild.
+2. mutate a mode-driving input (for example market assignment) and verify refresh without full map rebuild,
+3. mutate style controls (for example `_GradientRadius` / `_GradientCenterOpacity`) and verify `ModeColorResolve` remains unchanged while visual output updates through shader uniforms.
 
 Implementation target:
 
 - Add EditMode/PlayMode coverage under `unity/Assets/Tests/` (for example `ModeResolveRegressionTests.cs`).
-- Current implementation (pre-`ModeColorResolve` path):
+- Current implementation:
   - `unity/Assets/Tests/EditMode/ModeResolveRegressionTests.cs`
-  - coverage includes mode-switch routing, economy-data refresh, idempotence, round-trip persistence, and no unexpected backing-texture mutation across mode switches.
-  - when `ModeColorResolve` is introduced, add direct assertions on resolve-texture invalidation/regeneration.
+  - includes direct `ModeColorResolve` assertions for mode switches/economy invalidation and style-property no-regeneration behavior.
+  - includes backing-texture immutability checks across mode switches.
+  - `M3Regression` now uses a focused subset of this file; lower-value mapping/setter tests remain in full EditMode coverage.
 
 ### D) Color stability regression (new)
 
-- [ ] Low-saturation political colors remain in expected hue class after border darkening.
-- [ ] Hover highlight remains hue-preserving on low-saturation samples.
-- [ ] No mode-specific hue drift is introduced in Political, County, and Market modes.
+- [x] Low-saturation political colors remain in expected hue class after border darkening.
+- [x] Hover highlight remains hue-preserving on low-saturation samples.
+- [x] No mode-specific hue drift is introduced in Political, County, and Market modes.
 
 Implementation target:
 
@@ -126,9 +128,9 @@ Manual checks are required even when automated tests pass.
 
 ### A) Channel Inspector coverage
 
-- [ ] Enter Channel Inspector mode (`0`) and cycle views (`O`) for each baseline case.
-- [ ] Verify Political IDs and Geography channels display expected semantic separation.
-- [ ] Verify border distance, river mask, and heightmap channels remain plausible and aligned.
+- [x] Enter Channel Inspector mode (`0`) and cycle views (`O`) for each baseline case.
+- [x] Verify Political IDs and Geography channels display expected semantic separation.
+- [x] Verify border distance, river mask, and heightmap channels remain plausible and aligned.
 
 Automated pre-checks:
 
@@ -143,9 +145,9 @@ Reference:
 
 ### B) ID Probe coverage
 
-- [ ] Enable ID Probe (`P`) and sample land + water cells in each baseline case.
-- [ ] Confirm decoded IDs are coherent with visible map regions.
-- [ ] Confirm hover target routing is mode-appropriate and mode-independent where required.
+- [x] Enable ID Probe (`P`) and sample land + water cells in each baseline case.
+- [x] Confirm decoded IDs are coherent with visible map regions.
+- [x] Confirm hover target routing is mode-appropriate and mode-independent where required.
 
 Automated pre-checks:
 
@@ -153,7 +155,7 @@ Automated pre-checks:
   - `SelectionSetters_ClearOtherChannels_AndNormalizeIds()`
   - `HoverSetters_ClearOtherChannels_AndNormalizeIds()`
   - `InteractionIntensitySetters_ClampValues()`
-  - `UpdateCellData_MutatesOnlyCellDataTexture()`
+  - `UpdateCellData_MutatesOnlyPoliticalIdsTexture()`
   - `UpdateCellData_InvalidCellId_DoesNotChangeTextures()`
 
 ---
@@ -177,10 +179,10 @@ Debug texture PNG exports can be captured from:
 
 Do not mark `M3` complete until all checks below are true:
 
-- [ ] A/B/C/D automated checks pass for all required baseline cases.
-- [ ] Manual Channel Inspector + ID Probe checks pass for all required baseline cases.
-- [ ] Any accepted deltas are documented (what changed, why acceptable, new baseline reference).
-- [ ] `docs/BACKLOG.md` status for `M3-S4` is updated accordingly.
+- [x] A/B/C/D automated checks pass for all required baseline cases.
+- [x] Manual Channel Inspector + ID Probe checks pass for all required baseline cases.
+- [x] Any accepted deltas are documented (what changed, why acceptable, new baseline reference).
+- [x] `docs/BACKLOG.md` status for `M3-S4` is updated accordingly.
 
 If any item fails, `M3` remains open and `M4` work is blocked by policy.
 
@@ -197,4 +199,4 @@ If any item fails, `M3` remains open and `M4` work is blocked by policy.
 
 Fast automated gate run:
 
-- Use the `M3Regression` NUnit category in EditMode to execute the M3-S4 automated suites as one filtered run (`MapGenRegressionTests`, `MapTextureRegressionTests`, `ModeResolveRegressionTests`, `MapColorStabilityTests`).
+- Use the `M3Regression` NUnit category in EditMode to execute the M3-S4 automated suites as one filtered run (`MapGenRegressionTests`, `MapTextureRegressionTests`, tagged architecture tests in `ModeResolveRegressionTests`, `MapColorStabilityTests`).

@@ -76,9 +76,12 @@ namespace EconSim.Editor
 
         private static readonly (string name, string label)[] TextureMapsProps = new[]
         {
+            ("_PoliticalIdsTex", "Political IDs"),
+            ("_GeographyBaseTex", "Geography Base"),
             ("_HeightmapTex", "Heightmap"),
             ("_RiverMaskTex", "River Mask"),
-            ("_CellDataTex", "Cell Data"),
+            ("_ModeColorResolve", "Mode Color Resolve"),
+            ("_CellDataTex", "Cell Data (Legacy)"),
             ("_CellToMarketTex", "Cell To Market"),
             ("_RealmPaletteTex", "Realm Palette"),
             ("_MarketPaletteTex", "Market Palette"),
@@ -109,6 +112,7 @@ namespace EconSim.Editor
             "_HoveredMarketId",
             "_HoverIntensity",
             "_MapMode",
+            "_UseModeColorResolve",
         };
 
         private bool IsGrouped(string propName)

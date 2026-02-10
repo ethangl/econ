@@ -109,7 +109,7 @@ namespace EconSim.Renderer
         private KeyCode cycleDebugChannelKey = KeyCode.O;
         private KeyCode toggleProbeKey = KeyCode.P;
 
-        private MapOverlayManager.ChannelDebugView channelDebugView = MapOverlayManager.ChannelDebugView.CellDataR;
+        private MapOverlayManager.ChannelDebugView channelDebugView = MapOverlayManager.ChannelDebugView.PoliticalIdsR;
         private string probeText = "ID Probe: move cursor over land";
         private readonly StringBuilder probeBuilder = new StringBuilder(512);
 
@@ -1590,10 +1590,6 @@ namespace EconSim.Renderer
                 }
             }
 
-            int packedBiome = cell.IsLand
-                ? cell.BiomeId * 8 + cell.SoilId
-                : 32768 + cell.BiomeId;
-
             probeBuilder.Clear();
             probeBuilder.Append("ID Probe");
             if (currentMode == MapMode.ChannelInspector)
@@ -1610,10 +1606,15 @@ namespace EconSim.Renderer
                 .Append(" County=").Append(cell.CountyId)
                 .Append(" Market=").Append(marketId)
                 .AppendLine();
-            probeBuilder.Append("CellDataTex decode: R=").Append(FormatNorm(cell.RealmId))
+            probeBuilder.Append("PoliticalIdsTex: R=").Append(FormatNorm(cell.RealmId))
                 .Append(" G=").Append(FormatNorm(cell.ProvinceId))
-                .Append(" B=").Append(FormatNorm(packedBiome))
-                .Append(" A=").Append(FormatNorm(cell.CountyId));
+                .Append(" B=").Append(FormatNorm(cell.CountyId))
+                .Append(" A=0.000000")
+                .AppendLine();
+            probeBuilder.Append("GeographyBaseTex: R=").Append(FormatNorm(cell.BiomeId))
+                .Append(" G=").Append(FormatNorm(cell.SoilId))
+                .Append(" B=0.000000")
+                .Append(" A=").Append(cell.IsLand ? "0.000000" : "1.000000");
             probeText = probeBuilder.ToString();
         }
 

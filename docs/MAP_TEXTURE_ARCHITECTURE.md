@@ -34,13 +34,22 @@ This document is the target architecture and migration plan.
 
 ## Current Baseline (As Implemented)
 
-Core data texture:
+Core textures:
 
-- `_CellDataTex` (`RGBAFloat`, gridWidth x gridHeight)
+- `_PoliticalIdsTex` (`RGBAFloat`, `gridWidth x gridHeight`)
   - R: realmId / 65535
   - G: provinceId / 65535
-  - B: packed biome/soil/water
-  - A: countyId / 65535
+  - B: countyId / 65535
+  - A: reserved
+- `_GeographyBaseTex` (`RGBAFloat`, `gridWidth x gridHeight`)
+  - R: biomeId / 65535
+  - G: soilId / 65535
+  - B: reserved
+  - A: water flag (`0 = land`, `1 = water`)
+- `_ModeColorResolve` (`RGBA32`, `gridWidth x gridHeight`)
+  - resolved base map color for active overlay family (political-family or market)
+  - style controls (gradient, borders, path opacity) are applied in shader composite, not baked into resolve output
+- `_CellDataTex` remains a compatibility alias bound to political IDs (no separate generation/update path).
 
 Supporting textures include:
 
@@ -52,11 +61,11 @@ Supporting textures include:
 - biome-elevation matrix
 - county-to-market lookup
 
-Known pain points:
+Resolve/composite split:
 
-- packed B channel is fragile and hard to inspect,
-- adding data requires either more packing or sampler pressure,
-- shader complexity is high because domain decoding and rendering are coupled.
+- resolve rebuilds on mode-family/domain data invalidation (for example political data changes, market economy updates),
+- style-only inspector changes do not regenerate resolve textures,
+- composite shader handles runtime styling + selection/hover/water layering every frame.
 
 ---
 
@@ -181,7 +190,7 @@ Resolve pass reads only required textures for that mode and writes:
 
 - `ModeColorResolve`.
 
-Mode switch cost is a one-time resolve, not sustained per-frame branching complexity.
+Mode switch cost should remain a one-time resolve, not sustained per-frame branching complexity. Keep style-only controls in composite shader uniforms where possible.
 
 ### Stage 3: Composite (every frame)
 
@@ -333,10 +342,13 @@ These tools are mandatory before adding large new data domains.
 These validation gates are tracked as required completion criteria for Milestone M3 (`M3-S4`) in the backlog.
 Execution checklist: `M3_TEXTURE_REGRESSION_CHECKLIST.md`.
 
-Status snapshot (February 10, 2026):
+Status snapshot (February 11, 2026):
 
-- EditMode automated validation for `M3-S4` is in place and passing for fixed-seed texture determinism, mode/economy refresh behavior, and low-saturation hover/border color stability.
-- Remaining signoff items are manual Channel Inspector + ID Probe validation across baseline cases and direct `ModeColorResolve` invalidation assertions once the resolved texture path is enabled.
+- `ModeColorResolve` is active and invalidates correctly on mode switches and economy-domain updates.
+- Split core textures (`_PoliticalIdsTex`, `_GeographyBaseTex`) are active in the primary render path.
+- EditMode automated validation gates for `M3-S4` are passing (`EconSim.EditModeTests` and `Category=M3Regression`).
+- Resolve invalidation is keyed by resolve family (`political-family` vs `market`) instead of global invalidation.
+- `MapView` no longer polls a no-op resolve-refresh method each frame/validate pass.
 
 ---
 

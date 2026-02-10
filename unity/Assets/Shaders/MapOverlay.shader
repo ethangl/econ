@@ -11,8 +11,15 @@ Shader "EconSim/MapOverlay"
         // River mask (Phase 8) - knocks out rivers from land, showing water underneath
         _RiverMaskTex ("River Mask", 2D) = "black" {}
 
-        // Data texture: R=RealmId, G=ProvinceId, B=BiomeId+WaterFlag, A=CountyId (normalized to 0-1)
-        _CellDataTex ("Cell Data", 2D) = "black" {}
+        // Split core textures (M3-S1)
+        _PoliticalIdsTex ("Political IDs", 2D) = "black" {}
+        _GeographyBaseTex ("Geography Base", 2D) = "black" {}
+        // Legacy packed texture kept for migration compatibility.
+        _CellDataTex ("Cell Data (Legacy)", 2D) = "black" {}
+
+        // Resolved mode color texture (M3-S3)
+        _ModeColorResolve ("Mode Color Resolve", 2D) = "black" {}
+        _UseModeColorResolve ("Use Mode Color Resolve", Int) = 1
 
         // Cell to market mapping (dynamic, updated when economy changes)
         _CellToMarketTex ("Cell To Market", 2D) = "black" {}
@@ -130,8 +137,11 @@ Shader "EconSim/MapOverlay"
 
             sampler2D _RiverMaskTex;  // River mask (1 = river, 0 = not river)
 
-            sampler2D _CellDataTex;
-            float4 _CellDataTex_TexelSize;  // (1/width, 1/height, width, height)
+            sampler2D _PoliticalIdsTex;
+            sampler2D _GeographyBaseTex;
+            sampler2D _CellDataTex; // Legacy compatibility path.
+            sampler2D _ModeColorResolve;
+            int _UseModeColorResolve;
 
             sampler2D _CellToMarketTex;  // 16384x1 texture mapping cellId -> marketId
 
@@ -220,323 +230,9 @@ Shader "EconSim/MapOverlay"
                 return o;
             }
 
-            // ========================================================================
-            // Utility functions
-            // ========================================================================
-
-            // Sample cell data at a UV position with point filtering
-            float4 SampleCellData(float2 uv)
-            {
-                // Clamp to valid range
-                uv = saturate(uv);
-                return tex2D(_CellDataTex, uv);
-            }
-
-            // Look up color from palette texture (256 entries)
-            // normalizedId is id / 65535
-            float3 LookupPaletteColor(sampler2D palette, float normalizedId)
-            {
-                float id = normalizedId * 65535.0;
-                float paletteU = (clamp(round(id), 0, 255) + 0.5) / 256.0;
-                return tex2D(palette, float2(paletteU, 0.5)).rgb;
-            }
-
-            // Integer hash function for deterministic variance (returns 0-1)
-            // Uses multiplicative hashing for better distribution with sequential inputs
-            float hash(float n)
-            {
-                uint h = uint(n);
-                h ^= h >> 16;
-                h *= 0x85ebca6bu;
-                h ^= h >> 13;
-                h *= 0xc2b2ae35u;
-                h ^= h >> 16;
-                return float(h & 0x7FFFFFFFu) / float(0x7FFFFFFF);
-            }
-
-            // 2D hash for noise functions (different from integer hash above)
-            float hash2d(float2 p)
-            {
-                float3 p3 = frac(float3(p.xyx) * 0.1031);
-                p3 += dot(p3, p3.yzx + 33.33);
-                return frac((p3.x + p3.y) * p3.z);
-            }
-
-            // Value noise for water shimmer
-            float valueNoise(float2 p)
-            {
-                float2 i = floor(p);
-                float2 f = frac(p);
-
-                // Cubic interpolation for smoother result
-                float2 u = f * f * (3.0 - 2.0 * f);
-
-                float a = hash2d(i);
-                float b = hash2d(i + float2(1.0, 0.0));
-                float c = hash2d(i + float2(0.0, 1.0));
-                float d = hash2d(i + float2(1.0, 1.0));
-
-                return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
-            }
-
-            // 2-octave FBM for water shimmer
-            float fbm2(float2 p)
-            {
-                float value = 0.0;
-                float amplitude = 0.5;
-
-                value += valueNoise(p) * amplitude;
-                p *= 2.0;
-                amplitude *= 0.5;
-                value += valueNoise(p) * amplitude;
-
-                return value;
-            }
-
-            // Convert color to grayscale using perceptual luminance weights
-            float3 ToGrayscale(float3 color)
-            {
-                float luma = dot(color, float3(0.299, 0.587, 0.114));
-                return float3(luma, luma, luma);
-            }
-
-            // ========================================================================
-            // Layer 1: Terrain (always rendered, seabed visible under water)
-            // ========================================================================
-
-            float3 ComputeTerrain(float2 uv, bool isCellWater, float biomeId, float height, float riverMask)
-            {
-                float3 terrain;
-
-                if (isCellWater)
-                {
-                    // Seabed: sand hue darkening with depth (50% to 5% value)
-                    float depthT = saturate((_SeaLevel - height) / max(_WaterDepthRange, 0.001));
-                    depthT = sqrt(depthT);  // Stretch — actual ocean depths cluster in low range
-                    float3 sandHue = float3(0.76, 0.70, 0.50);
-                    terrain = sandHue * lerp(0.25, 0.05, depthT);
-                }
-                else
-                {
-                    // Land: biome-elevation matrix
-                    float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
-                    float biomeRaw = clamp(biomeId * 65535.0, 0, 63);
-                    float biomeU = (biomeRaw + 0.5) / 64.0;
-                    terrain = tex2D(_BiomeMatrixTex, float2(biomeU, landHeight)).rgb;
-
-                    // River darkening: wet soil effect under rivers
-                    terrain *= lerp(1.0, 1.0 - _RiverDarken, riverMask);
-                }
-
-                return terrain;
-            }
-
-            // ========================================================================
-            // Layer 1 override: Height gradient (mode 0 debug viz)
-            // ========================================================================
-
-            float3 ComputeHeightGradient(bool isCellWater, float height, float riverMask)
-            {
-                float3 result;
-
-                if (isCellWater)
-                {
-                    // Water gradient for height mode: deep to shallow blue
-                    float waterT = height / max(_SeaLevel, 0.001);
-                    result = lerp(
-                        float3(0.08, 0.2, 0.4),   // Deep water
-                        float3(0.2, 0.4, 0.6),    // Shallow water
-                        waterT
-                    );
-                }
-                else
-                {
-                    // Land gradient: green -> brown -> white
-                    float landT = (height - _SeaLevel) / (1.0 - _SeaLevel);
-                    if (landT < 0.3)
-                    {
-                        float t = landT / 0.3;
-                        result = lerp(
-                            float3(0.31, 0.63, 0.31),  // Coastal green
-                            float3(0.47, 0.71, 0.31),  // Grassland
-                            t
-                        );
-                    }
-                    else if (landT < 0.6)
-                    {
-                        float t = (landT - 0.3) / 0.3;
-                        result = lerp(
-                            float3(0.47, 0.71, 0.31),  // Grassland
-                            float3(0.55, 0.47, 0.4),   // Brown hills
-                            t
-                        );
-                    }
-                    else
-                    {
-                        float t = (landT - 0.6) / 0.4;
-                        result = lerp(
-                            float3(0.55, 0.47, 0.4),   // Brown hills
-                            float3(0.94, 0.94, 0.98),  // Snow caps
-                            t
-                        );
-                    }
-                }
-
-                return result;
-            }
-
-            // ========================================================================
-            // Layer 2: Map mode overlay (political/market paint, alpha=0 on water)
-            // ========================================================================
-
-            float4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, float realmId, float provinceId, float countyId, float marketId)
-            {
-                // No map mode overlay on water, rivers, height mode (0), terrain mode (5), or soil mode (6)
-                if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 5 || _MapMode == 6)
-                    return float4(0, 0, 0, 0);
-
-                // Grayscale terrain for multiply blending
-                float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
-                float3 grayTerrain = float3(landHeight, landHeight, landHeight);
-
-                float3 modeColor;
-                float edgeProximity;
-
-                if (_MapMode >= 1 && _MapMode <= 3)
-                {
-                    // Political modes (1=realm, 2=province, 3=county)
-                    float3 politicalColor = LookupPaletteColor(_RealmPaletteTex, realmId);
-                    float realmDist = tex2D(_RealmBorderDistTex, uv).r * 255.0;
-                    edgeProximity = saturate(realmDist / _GradientRadius);
-
-                    // Multiply blend and gradient
-                    float3 multiplied = grayTerrain * politicalColor;
-                    float3 edgeColor = lerp(politicalColor, multiplied, _GradientEdgeDarkening);
-                    float3 centerColor = lerp(grayTerrain, politicalColor, _GradientCenterOpacity);
-                    modeColor = lerp(edgeColor, centerColor, edgeProximity);
-
-                    // County border band overlay (thinnest, lightest — drawn first)
-                    float countyBorderDist = tex2D(_CountyBorderDistTex, uv).r * 255.0;
-                    float countyBorderAA = fwidth(countyBorderDist);
-                    float countyBorderFactor = 1.0 - smoothstep(_CountyBorderWidth - countyBorderAA, _CountyBorderWidth + countyBorderAA, countyBorderDist);
-                    if (countyBorderFactor > 0.001)
-                    {
-                        float3 countyBorderColor = politicalColor * (1.0 - _CountyBorderDarkening);
-                        modeColor = lerp(modeColor, countyBorderColor, countyBorderFactor);
-                    }
-
-                    // Province border band overlay (thinner, lighter — drawn on top of county borders)
-                    float provinceBorderDist = tex2D(_ProvinceBorderDistTex, uv).r * 255.0;
-                    float provinceBorderAA = fwidth(provinceBorderDist);
-                    float provinceBorderFactor = 1.0 - smoothstep(_ProvinceBorderWidth - provinceBorderAA, _ProvinceBorderWidth + provinceBorderAA, provinceBorderDist);
-                    if (provinceBorderFactor > 0.001)
-                    {
-                        float3 provinceBorderColor = politicalColor * (1.0 - _ProvinceBorderDarkening);
-                        modeColor = lerp(modeColor, provinceBorderColor, provinceBorderFactor);
-                    }
-
-                    // Realm border band overlay (distance texture + smoothstep AA, on top of province borders)
-                    float realmBorderDist = tex2D(_RealmBorderDistTex, uv).r * 255.0;
-                    float borderAA = fwidth(realmBorderDist);
-                    float borderFactor = 1.0 - smoothstep(_RealmBorderWidth - borderAA, _RealmBorderWidth + borderAA, realmBorderDist);
-                    if (borderFactor > 0.001)
-                    {
-                        float3 borderColor = politicalColor * (1.0 - _RealmBorderDarkening);
-                        modeColor = lerp(modeColor, borderColor, borderFactor);
-                    }
-                }
-                else if (_MapMode == 4)
-                {
-                    // Market mode
-                    float3 marketColor = LookupPaletteColor(_MarketPaletteTex, marketId);
-                    float marketDist = tex2D(_MarketBorderDistTex, uv).r * 255.0;
-                    edgeProximity = saturate(marketDist / _GradientRadius);
-
-                    float3 multiplied = grayTerrain * marketColor;
-                    float3 edgeColor = lerp(marketColor, multiplied, _GradientEdgeDarkening);
-                    float3 centerColor = lerp(grayTerrain, marketColor, _GradientCenterOpacity);
-                    modeColor = lerp(edgeColor, centerColor, edgeProximity);
-
-                    // Path overlay: white dotted routes blended over market color.
-                    // Mask is direct coverage (0=no path, 1=path), bilinear-filtered for AA.
-                    float roadMask = tex2D(_RoadMaskTex, uv).r;
-                    if (roadMask > 0.01)
-                    {
-                        modeColor = lerp(modeColor, float3(1.0, 1.0, 1.0), roadMask * _PathOpacity);
-                    }
-
-                    // Market zone border band overlay (distance texture + smoothstep AA)
-                    float marketBorderDist = tex2D(_MarketBorderDistTex, uv).r * 255.0;
-                    float marketBorderAA = fwidth(marketBorderDist);
-                    float marketBorderFactor = 1.0 - smoothstep(_MarketBorderWidth - marketBorderAA, _MarketBorderWidth + marketBorderAA, marketBorderDist);
-                    if (marketBorderFactor > 0.001)
-                    {
-                        float3 marketBorderColor = marketColor * (1.0 - _MarketBorderDarkening);
-                        modeColor = lerp(modeColor, marketBorderColor, marketBorderFactor);
-                    }
-                }
-                else
-                {
-                    return float4(0, 0, 0, 0);
-                }
-
-                return float4(modeColor, 1.0);
-            }
-
-            // ========================================================================
-            // Layer 3: Water (transparent, depth-based opacity)
-            // ========================================================================
-
-            void ComputeWater(bool isCellWater, float height, float riverMask, float2 worldUV, out float3 waterColor, out float waterAlpha)
-            {
-                waterColor = float3(0, 0, 0);
-                waterAlpha = 0;
-
-                // No water layer if not ocean and not river
-                if (!isCellWater && riverMask < 0.01)
-                    return;
-
-                if (isCellWater)
-                {
-                    // Ocean/lake: single color, flat opacity
-                    waterColor = _WaterDeepColor.rgb;
-
-                    // Animated shimmer
-                    float time = _Time.y * _ShimmerSpeed;
-                    float2 uv1 = worldUV + float2(time, time * 0.7);
-                    float2 uv2 = worldUV * 1.3 + float2(-time * 0.8, time * 0.5);
-                    float shimmer = (fbm2(uv1) + fbm2(uv2)) * 0.5;
-                    float brightness = 1.0 + (shimmer - 0.5) * 2.0 * _ShimmerIntensity;
-                    waterColor *= brightness;
-
-                    waterAlpha = _WaterDeepAlpha;
-                }
-                else
-                {
-                    // River on land: shallow water color, alpha modulated by mask
-                    waterColor = _WaterShallowColor.rgb;
-                    waterAlpha = _WaterShallowAlpha * riverMask;
-                }
-            }
-
-            float3 ComputeChannelInspector(float2 uv, float4 cellData)
-            {
-                float sampleValue = 0.0;
-
-                if (_DebugView == 0) sampleValue = cellData.r;
-                else if (_DebugView == 1) sampleValue = cellData.g;
-                else if (_DebugView == 2) sampleValue = cellData.b;
-                else if (_DebugView == 3) sampleValue = cellData.a;
-                else if (_DebugView == 4) sampleValue = tex2D(_RealmBorderDistTex, uv).r;
-                else if (_DebugView == 5) sampleValue = tex2D(_ProvinceBorderDistTex, uv).r;
-                else if (_DebugView == 6) sampleValue = tex2D(_CountyBorderDistTex, uv).r;
-                else if (_DebugView == 7) sampleValue = tex2D(_MarketBorderDistTex, uv).r;
-                else if (_DebugView == 8) sampleValue = tex2D(_RiverMaskTex, uv).r;
-                else if (_DebugView == 9) sampleValue = tex2D(_HeightmapTex, uv).r;
-                else if (_DebugView == 10) sampleValue = tex2D(_RoadMaskTex, uv).r;
-
-                return float3(sampleValue, sampleValue, sampleValue);
-            }
+            #include "MapOverlay.Common.cginc"
+            #include "MapOverlay.Composite.cginc"
+            #include "MapOverlay.ResolveModes.cginc"
 
             // ========================================================================
             // Fragment shader: layered compositing
@@ -546,28 +242,24 @@ Shader "EconSim/MapOverlay"
             {
                 float2 uv = IN.dataUV;
 
-                // ---- Data sampling preamble (unchanged) ----
+                // ---- Data sampling preamble ----
 
-                float4 centerData = SampleCellData(uv);
-                float realmId = centerData.r;
-                float provinceId = centerData.g;
-                float countyId = centerData.a;
+                float4 politicalIds = SamplePoliticalIds(uv);
+                float4 geographyBase = SampleGeographyBase(uv);
+                float realmId = politicalIds.r;
+                float provinceId = politicalIds.g;
+                float countyId = politicalIds.b;
 
                 if (_MapMode == 7)
                 {
-                    return fixed4(ComputeChannelInspector(uv, centerData), 1);
+                    return fixed4(ComputeChannelInspector(uv, politicalIds, geographyBase), 1);
                 }
 
-                float countyIdRaw = countyId * 65535.0;
-                float marketU = (clamp(round(countyIdRaw), 0, 16383) + 0.5) / 16384.0;
-                float marketId = tex2D(_CellToMarketTex, float2(marketU, 0.5)).r;
+                float marketId = LookupMarketIdFromCounty(countyId);
 
-                float packedBiome = centerData.b * 65535.0;
-                bool isCellWater = packedBiome >= 32000.0;
-                // Land: packed = biomeId*8 + soilId; Water: packed = 32768 + biomeId
-                float landPacked = packedBiome - (isCellWater ? 32768.0 : 0.0);
-                float biomeId = (isCellWater ? landPacked : floor(landPacked / 8.0)) / 65535.0;
-                int soilId = isCellWater ? 0 : ((int)landPacked) % 8;
+                float biomeId = geographyBase.r;
+                int soilId = (int)clamp(round(geographyBase.g * 65535.0), 0.0, 7.0);
+                bool isCellWater = geographyBase.a >= 0.5;
 
                 float riverMask = tex2D(_RiverMaskTex, IN.dataUV).r;
                 bool isRiver = riverMask > 0.5;
@@ -594,7 +286,7 @@ Shader "EconSim/MapOverlay"
                     }
                     else
                     {
-                        float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
+                        float landHeight = NormalizeLandHeight(height);
 
                         float3 soilColor;
                         if (soilId <= 0) soilColor = _SoilColor0.rgb;
@@ -617,7 +309,16 @@ Shader "EconSim/MapOverlay"
 
                 // ---- Layer 2: Map mode ----
 
-                float4 mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId);
+                float4 mapMode;
+                if (_UseModeColorResolve > 0)
+                {
+                    float3 resolvedBase = tex2D(_ModeColorResolve, uv).rgb;
+                    mapMode = ComputeMapModeFromResolvedBase(uv, isCellWater, isRiver, height, resolvedBase);
+                }
+                else
+                {
+                    mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId);
+                }
                 float3 afterMapMode = lerp(terrain, mapMode.rgb, mapMode.a);
 
                 // ---- Layer 3: Water ----
@@ -645,20 +346,20 @@ Shader "EconSim/MapOverlay"
                 // Selection region test (for dimming non-selected areas)
                 bool isInSelection = false;
                 if (_SelectedRealmId >= 0)
-                    isInSelection = !isWater && abs(realmId - _SelectedRealmId) < 0.00001;
+                    isInSelection = !isWater && IdEquals(realmId, _SelectedRealmId);
                 else if (_SelectedProvinceId >= 0)
-                    isInSelection = !isWater && abs(provinceId - _SelectedProvinceId) < 0.00001;
+                    isInSelection = !isWater && IdEquals(provinceId, _SelectedProvinceId);
                 else if (_SelectedMarketId >= 0)
-                    isInSelection = !isWater && abs(marketId - _SelectedMarketId) < 0.00001;
+                    isInSelection = !isWater && IdEquals(marketId, _SelectedMarketId);
                 else if (_SelectedCountyId >= 0)
-                    isInSelection = !isWater && abs(countyId - _SelectedCountyId) < 0.00001;
+                    isInSelection = !isWater && IdEquals(countyId, _SelectedCountyId);
 
                 // Hover effect
                 bool isHovered = (!isWater) && (
-                    (_HoveredRealmId >= 0 && abs(realmId - _HoveredRealmId) < 0.00001) ||
-                    (_HoveredProvinceId >= 0 && abs(provinceId - _HoveredProvinceId) < 0.00001) ||
-                    (_HoveredCountyId >= 0 && abs(countyId - _HoveredCountyId) < 0.00001) ||
-                    (_HoveredMarketId >= 0 && abs(marketId - _HoveredMarketId) < 0.00001));
+                    (_HoveredRealmId >= 0 && IdEquals(realmId, _HoveredRealmId)) ||
+                    (_HoveredProvinceId >= 0 && IdEquals(provinceId, _HoveredProvinceId)) ||
+                    (_HoveredCountyId >= 0 && IdEquals(countyId, _HoveredCountyId)) ||
+                    (_HoveredMarketId >= 0 && IdEquals(marketId, _HoveredMarketId)));
                 if (isHovered && _HoverIntensity > 0)
                 {
                     // Hue-preserving hover highlight: brighten in RGB space only.

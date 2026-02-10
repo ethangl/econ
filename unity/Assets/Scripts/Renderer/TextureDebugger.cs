@@ -9,7 +9,7 @@ namespace EconSim.Renderer
     public static class TextureDebugger
     {
         private static readonly string DebugFolder = Path.Combine(Application.dataPath, "..", "debug");
-        public static bool Enabled = true;
+        public static bool Enabled = false;
 
         public static void SaveTexture(Texture2D tex, string name)
         {

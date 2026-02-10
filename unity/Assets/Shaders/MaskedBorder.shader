@@ -2,7 +2,7 @@ Shader "EconSim/MaskedBorder"
 {
     Properties
     {
-        _CellDataTex ("Cell Data", 2D) = "black" {}
+        _PoliticalIdsTex ("Political IDs", 2D) = "black" {}
     }
 
     SubShader
@@ -19,7 +19,7 @@ Shader "EconSim/MaskedBorder"
             #pragma vertex vert
             #pragma fragment frag
 
-            sampler2D _CellDataTex;
+            sampler2D _PoliticalIdsTex;
 
             struct appdata
             {
@@ -50,7 +50,7 @@ Shader "EconSim/MaskedBorder"
             fixed4 frag(v2f i) : SV_Target
             {
                 // Sample the cell data texture to get the realm ID at this pixel
-                float4 cellData = tex2D(_CellDataTex, i.dataUV);
+                float4 cellData = tex2D(_PoliticalIdsTex, i.dataUV);
                 float pixelRealmId = cellData.r;  // R channel = RealmId / 65535
 
                 // Compare with the border's realm ID
