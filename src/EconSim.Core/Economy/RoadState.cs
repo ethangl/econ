@@ -14,8 +14,8 @@ namespace EconSim.Core.Economy
     }
 
     /// <summary>
-    /// Tracks accumulated traffic on cell edges and determines road status.
-    /// Roads emerge from trade patterns - high traffic edges become paths, then roads.
+    /// Tracks static transport-path usage on cell edges and determines path tiers.
+    /// Built at initialization from major-county route overlap; not evolved during runtime ticks.
     /// </summary>
     [Serializable]
     public class RoadState
@@ -27,13 +27,7 @@ namespace EconSim.Core.Economy
         public Dictionary<(int, int), float> EdgeTraffic;
 
         /// <summary>
-        /// Pending traffic accumulated between road development ticks.
-        /// </summary>
-        public Dictionary<(int, int), float> PendingEdgeTraffic;
-
-        /// <summary>
-        /// Increments whenever one or more edges cross a road-tier boundary
-        /// during a development tick.
+        /// Increments when static network data is replaced.
         /// </summary>
         public int Revision { get; private set; }
 
@@ -60,7 +54,6 @@ namespace EconSim.Core.Economy
         public RoadState()
         {
             EdgeTraffic = new Dictionary<(int, int), float>();
-            PendingEdgeTraffic = new Dictionary<(int, int), float>();
             Revision = 0;
         }
 
@@ -70,34 +63,6 @@ namespace EconSim.Core.Economy
         public static (int, int) NormalizeKey(int cellA, int cellB)
         {
             return cellA < cellB ? (cellA, cellB) : (cellB, cellA);
-        }
-
-        /// <summary>
-        /// Record traffic on an edge.
-        /// </summary>
-        public void RecordTraffic(int fromCell, int toCell, float volume)
-        {
-            if (volume <= 0) return;
-
-            var key = NormalizeKey(fromCell, toCell);
-            if (!PendingEdgeTraffic.TryGetValue(key, out var current))
-                current = 0;
-
-            PendingEdgeTraffic[key] = current + volume;
-        }
-
-        /// <summary>
-        /// Record traffic along a path (list of cell IDs).
-        /// </summary>
-        public void RecordTrafficAlongPath(List<int> path, float volume)
-        {
-            if (path == null || path.Count < 2 || volume <= 0)
-                return;
-
-            for (int i = 0; i < path.Count - 1; i++)
-            {
-                RecordTraffic(path[i], path[i + 1], volume);
-            }
         }
 
         /// <summary>
@@ -164,49 +129,28 @@ namespace EconSim.Core.Economy
         }
 
         /// <summary>
-        /// Commit pending traffic into the road network.
-        /// Returns number of edges that changed tier in this commit.
+        /// Apply a fully built static network in one shot.
+        /// Replaces previous edge traffic and tier thresholds.
         /// </summary>
-        public int CommitPendingTraffic()
+        public void ApplyStaticTraffic(
+            Dictionary<(int, int), float> edgeTraffic,
+            float pathThreshold,
+            float roadThreshold)
         {
-            if (PendingEdgeTraffic.Count == 0)
-                return 0;
+            EdgeTraffic.Clear();
 
-            int changedEdges = 0;
-
-            foreach (var kvp in PendingEdgeTraffic)
+            if (edgeTraffic != null)
             {
-                var key = kvp.Key;
-                float pending = kvp.Value;
-
-                if (!EdgeTraffic.TryGetValue(key, out var committed))
-                    committed = 0f;
-
-                var oldTier = GetTierForTraffic(committed);
-                float updated = committed + pending;
-                var newTier = GetTierForTraffic(updated);
-
-                EdgeTraffic[key] = updated;
-
-                if (newTier != oldTier)
-                    changedEdges++;
+                foreach (var kvp in edgeTraffic)
+                {
+                    if (kvp.Value > 0f)
+                        EdgeTraffic[kvp.Key] = kvp.Value;
+                }
             }
 
-            PendingEdgeTraffic.Clear();
-
-            if (changedEdges > 0)
-                Revision++;
-
-            return changedEdges;
-        }
-
-        private RoadTier GetTierForTraffic(float traffic)
-        {
-            if (traffic >= RoadThreshold)
-                return RoadTier.Road;
-            if (traffic >= PathThreshold)
-                return RoadTier.Path;
-            return RoadTier.None;
+            PathThreshold = Math.Max(0.01f, pathThreshold);
+            RoadThreshold = Math.Max(PathThreshold + 0.01f, roadThreshold);
+            Revision++;
         }
     }
 }

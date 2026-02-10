@@ -4,7 +4,6 @@ using EconSim.Core.Data;
 using EconSim.Core.Common;
 using EconSim.Core.Import;
 using EconSim.Core.Simulation;
-using EconSim.Core.Simulation.Systems;
 using EconSim.Renderer;
 using EconSim.Camera;
 using MapGen.Core;
@@ -37,8 +36,6 @@ namespace EconSim.Core
         public static bool IsMapReady { get; private set; }
 
         private ISimulation _simulation;
-        private int _lastLoggedDay;
-        private int _lastRoadVisualRevision = -1;
 
         public static GameManager Instance { get; private set; }
 
@@ -137,7 +134,6 @@ namespace EconSim.Core
                 var economy = _simulation.GetState().Economy;
                 mapView.SetEconomyState(economy);
                 mapView.SetRoadState(economy.Roads);
-                _lastRoadVisualRevision = economy.Roads.Revision;
             }
 
             Debug.Log("Simulation initialized (paused). Press Backspace to unpause, -/= to change speed.");
@@ -152,7 +148,6 @@ namespace EconSim.Core
         {
             HandleInput();
             _simulation?.Tick(Time.deltaTime);
-            LogDayChange();
         }
 
         private void HandleInput()
@@ -175,6 +170,7 @@ namespace EconSim.Core
             {
                 IncreaseSpeed();
             }
+
         }
 
         private static readonly float[] SpeedPresets =
@@ -239,34 +235,6 @@ namespace EconSim.Core
             sun.shadows = LightShadows.Soft;
 
             Debug.Log("Created directional light for terrain relief");
-        }
-
-        private void LogDayChange()
-        {
-            if (_simulation == null) return;
-
-            var state = _simulation.GetState();
-            if (state.CurrentDay != _lastLoggedDay)
-            {
-                // Day counter logging disabled for cleaner console
-                // if (state.CurrentDay % 10 == 0)
-                // {
-                //     Debug.Log($"Day {state.CurrentDay}");
-                // }
-
-                // Refresh road visuals only when committed road tiers changed.
-                if (mapView != null)
-                {
-                    int currentRoadRevision = state.Economy.Roads.Revision;
-                    if (currentRoadRevision != _lastRoadVisualRevision)
-                    {
-                        mapView.RefreshRoads();
-                        _lastRoadVisualRevision = currentRoadRevision;
-                    }
-                }
-
-                _lastLoggedDay = state.CurrentDay;
-            }
         }
 
     }

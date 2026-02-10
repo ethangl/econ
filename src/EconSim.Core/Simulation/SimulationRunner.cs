@@ -54,14 +54,22 @@ namespace EconSim.Core.Simulation
             InitializeMarkets();
             Profiler.End();
 
+            if (SimulationConfig.Roads.BuildStaticNetworkAtInit)
+            {
+                Profiler.Begin("StaticTransportBackbone");
+                var stats = StaticTransportBackboneBuilder.Build(_state, _mapData);
+                RecomputeMarketZones();
+                Profiler.End();
+                SimLog.Log("Roads",
+                    $"Static backbone: majors={stats.MajorCountyCount}/{stats.CandidateCountyCount}, " +
+                    $"pairs={stats.RoutedPairCount}/{stats.RoutePairCount}, missing={stats.MissingPairCount}, " +
+                    $"edges={stats.EdgeCount}, thresholds(path={stats.PathThreshold:F2}, road={stats.RoadThreshold:F2})");
+            }
+
             // Register core systems (order matters!)
             RegisterSystem(new ProductionSystem());
             RegisterSystem(new ConsumptionSystem());
             RegisterSystem(new TradeSystem());
-            if (SimulationConfig.Roads.DynamicEvolutionEnabled)
-            {
-                RegisterSystem(new RoadDevelopmentSystem());
-            }
             RegisterSystem(new TheftSystem());
         }
 
@@ -184,6 +192,19 @@ namespace EconSim.Core.Simulation
             }
 
             SimLog.Log("Market", $"Initialized {_state.Economy.Markets.Count} markets, {_state.Economy.CountyToMarket.Count} counties have market access");
+        }
+
+        private void RecomputeMarketZones()
+        {
+            foreach (var market in _state.Economy.Markets.Values)
+            {
+                if (market.Type == MarketType.Black)
+                    continue;
+
+                MarketPlacer.ComputeMarketZone(market, _mapData, _state.Transport, maxTransportCost: 100f);
+            }
+
+            _state.Economy.RebuildCellToMarketLookup();
         }
 
         /// <summary>

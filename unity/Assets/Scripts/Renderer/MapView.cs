@@ -119,7 +119,8 @@ namespace EconSim.Renderer
 
         private void OnValidate()
         {
-            // selectionDimmingTarget changes take effect through the animation loop
+            // selectionDimmingTarget changes take effect through the animation loop.
+            overlayManager?.RefreshPathStyleFromMaterial();
         }
 
         private void OnDestroy()
@@ -133,6 +134,8 @@ namespace EconSim.Renderer
 
         private void Update()
         {
+            overlayManager?.RefreshPathStyleFromMaterial();
+
             // Map mode selection with number keys 1-3
             if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1))
             {
@@ -448,6 +451,7 @@ namespace EconSim.Renderer
             // Sync shader mode with current map mode
             overlayManager.SetMapMode(currentMode);
             overlayManager.SetChannelDebugView(channelDebugView);
+            overlayManager.RefreshPathStyleFromMaterial();
         }
 
         /// <summary>
@@ -456,14 +460,6 @@ namespace EconSim.Renderer
         public void SetRoadState(EconSim.Core.Economy.RoadState roads)
         {
             overlayManager?.SetRoadState(roads);
-        }
-
-        /// <summary>
-        /// Refresh road rendering. Call periodically to show new roads.
-        /// </summary>
-        public void RefreshRoads()
-        {
-            overlayManager?.RegenerateRoadDistTexture();
         }
 
         private void HandleShaderSelection(int cellId)

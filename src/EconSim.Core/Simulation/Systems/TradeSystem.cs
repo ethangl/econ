@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
-using EconSim.Core.Transport;
 
 namespace EconSim.Core.Simulation.Systems
 {
@@ -48,44 +47,13 @@ namespace EconSim.Core.Simulation.Systems
         // Cache transport costs from counties to markets (computed once per market)
         private Dictionary<int, Dictionary<int, float>> _transportCosts;
 
-        // Cache paths from counties to markets (lazily populated for road traffic tracking)
-        private Dictionary<int, Dictionary<int, List<int>>> _transportPaths;
-
-        // Reference to transport graph for lazy path lookup
-        private Transport.TransportGraph _transportGraph;
-
-        // Reference to road state for traffic recording
-        private RoadState _roadState;
-
-        // Limit path computations per tick to avoid performance spikes
-        private const int MaxPathComputationsPerTick = 50;
-        private int _pathComputationsThisTick;
-
-        // Reference to map data for land/sea checks
-        private MapData _mapData;
-
         // Reference to black market for theft tracking
         private Market _blackMarket;
-
-        // Road revision when transport caches were last built.
-        private int _roadRevisionAtCacheBuild = -1;
-
-        // Feature flag: record traffic and evolve roads over time.
-        private readonly bool _dynamicRoadEvolutionEnabled = SimulationConfig.Roads.DynamicEvolutionEnabled;
 
         public void Initialize(SimulationState state, MapData mapData)
         {
             // Cache reference to black market
             _blackMarket = state.Economy.BlackMarket;
-
-            // Cache reference to road state for traffic recording
-            _roadState = state.Economy.Roads;
-
-            // Cache map data for land/sea checks
-            _mapData = mapData;
-
-            // Store transport graph reference for lazy path lookup
-            _transportGraph = state.Transport;
             RebuildTransportCaches(state);
             SimLog.Log("Trade", $"Initialized with {state.Economy.Markets.Count} markets (including black market), transport costs cached");
         }
@@ -93,17 +61,6 @@ namespace EconSim.Core.Simulation.Systems
         public void Tick(SimulationState state, MapData mapData)
         {
             var economy = state.Economy;
-
-            // Rebuild market-reachability caches only when committed road tiers changed.
-            if (_dynamicRoadEvolutionEnabled &&
-                _roadState != null &&
-                _roadState.Revision != _roadRevisionAtCacheBuild)
-            {
-                RebuildTransportCaches(state);
-            }
-
-            // Reset path computation counter for this tick
-            _pathComputationsThisTick = 0;
 
             // Track total trade volume this tick for logging
             var totalSold = new Dictionary<string, float>();
@@ -169,8 +126,7 @@ namespace EconSim.Core.Simulation.Systems
         private void RebuildTransportCaches(SimulationState state)
         {
             _transportCosts = new Dictionary<int, Dictionary<int, float>>();
-            _transportPaths = new Dictionary<int, Dictionary<int, List<int>>>();
-            _transportGraph?.ClearCache();
+            state.Transport?.ClearCache();
 
             foreach (var market in state.Economy.Markets.Values)
             {
@@ -179,7 +135,6 @@ namespace EconSim.Core.Simulation.Systems
 
                 var costsToMarket = new Dictionary<int, float>();
                 _transportCosts[market.Id] = costsToMarket;
-                _transportPaths[market.Id] = new Dictionary<int, List<int>>();
 
                 var reachable = state.Transport.FindReachable(market.LocationCellId, 200f);
                 foreach (var kvp in reachable)
@@ -187,8 +142,6 @@ namespace EconSim.Core.Simulation.Systems
                     costsToMarket[kvp.Key] = kvp.Value;
                 }
             }
-
-            _roadRevisionAtCacheBuild = _roadState?.Revision ?? -1;
         }
 
         private void ProcessCountyTrade(
@@ -226,7 +179,7 @@ namespace EconSim.Core.Simulation.Systems
                     {
                         // SELL: Have more than we need
                         float excess = stockpiled - surplusStock;
-                        SellToMarket(county, market, good, excess, transportEfficiency, seatCellId, totalSold, totalStolen);
+                        SellToMarket(county, market, good, excess, transportEfficiency, totalSold, totalStolen);
                     }
                     else if (stockpiled < deficitStock && dailyConsumption > 0)
                     {
@@ -238,7 +191,7 @@ namespace EconSim.Core.Simulation.Systems
                         {
                             var marketGood = market.Goods[good.Id];
                             marketGood.Demand += toBuy;
-                            TryBuyFromMarkets(county, market, good, toBuy, transportEfficiency, seatCellId, totalBought);
+                            TryBuyFromMarkets(county, market, good, toBuy, transportEfficiency, totalBought);
                         }
                     }
                 }
@@ -250,7 +203,7 @@ namespace EconSim.Core.Simulation.Systems
                     if (stockpiled > NonConsumerSurplusThreshold)
                     {
                         float excess = stockpiled - NonConsumerSurplusThreshold;
-                        SellToMarket(county, market, good, excess, transportEfficiency, seatCellId, totalSold, totalStolen);
+                        SellToMarket(county, market, good, excess, transportEfficiency, totalSold, totalStolen);
                     }
 
                     // BUY: Check if processing facilities need this good
@@ -260,7 +213,7 @@ namespace EconSim.Core.Simulation.Systems
                         float toBuy = unmetDemand * BuyRatio;
                         var marketGood = market.Goods[good.Id];
                         marketGood.Demand += toBuy;
-                        TryBuyFromMarkets(county, market, good, toBuy, transportEfficiency, seatCellId, totalBought);
+                        TryBuyFromMarkets(county, market, good, toBuy, transportEfficiency, totalBought);
                     }
                 }
             }
@@ -279,69 +232,6 @@ namespace EconSim.Core.Simulation.Systems
         }
 
         /// <summary>
-        /// Record traffic along the path between a county and its market.
-        /// Paths are computed lazily on first use, limited per tick to avoid performance spikes.
-        /// </summary>
-        private void RecordTrafficToMarket(int cellId, Market market, float volume)
-        {
-            if (_roadState == null || volume <= 0 || _transportGraph == null)
-                return;
-
-            if (!_transportPaths.TryGetValue(market.Id, out var pathsToMarket))
-                return;
-
-            // Lazy path lookup - compute and cache on first access
-            if (!pathsToMarket.TryGetValue(cellId, out var path))
-            {
-                // Limit path computations per tick to avoid performance spikes
-                if (_pathComputationsThisTick >= MaxPathComputationsPerTick)
-                    return;  // Skip this trade, will try again next tick
-
-                _pathComputationsThisTick++;
-
-                var pathResult = _transportGraph.FindPath(cellId, market.LocationCellId);
-                if (pathResult.Found)
-                {
-                    path = pathResult.Path;
-                    pathsToMarket[cellId] = path;
-                }
-                else
-                {
-                    // No path found, cache empty list to avoid repeated lookups
-                    pathsToMarket[cellId] = new List<int>();
-                    return;
-                }
-            }
-
-            if (path != null && path.Count > 1)
-            {
-                // Only record traffic on land-to-land edges (skip sea routes)
-                RecordLandTrafficAlongPath(path, volume);
-            }
-        }
-
-        /// <summary>
-        /// Record traffic along a path, but only for land-to-land edges.
-        /// Sea routes don't build roads.
-        /// </summary>
-        private void RecordLandTrafficAlongPath(List<int> path, float volume)
-        {
-            for (int i = 0; i < path.Count - 1; i++)
-            {
-                int cellA = path[i];
-                int cellB = path[i + 1];
-
-                // Only record if both cells are land
-                if (_mapData.CellById.TryGetValue(cellA, out var dataA) &&
-                    _mapData.CellById.TryGetValue(cellB, out var dataB) &&
-                    dataA.IsLand && dataB.IsLand)
-                {
-                    _roadState.RecordTraffic(cellA, cellB, volume);
-                }
-            }
-        }
-
-        /// <summary>
         /// Sell goods to market with transport loss and theft.
         /// </summary>
         private void SellToMarket(
@@ -350,7 +240,6 @@ namespace EconSim.Core.Simulation.Systems
             GoodDef good,
             float excess,
             float transportEfficiency,
-            int seatCellId,
             Dictionary<string, float> totalSold,
             Dictionary<string, float> totalStolen)
         {
@@ -359,12 +248,6 @@ namespace EconSim.Core.Simulation.Systems
 
             // Remove from county stockpile
             county.Stockpile.Remove(good.Id, toSell);
-
-            if (_dynamicRoadEvolutionEnabled)
-            {
-                // Record traffic along the route for road building
-                RecordTrafficToMarket(seatCellId, market, toSell);
-            }
 
             // Amount that arrives at market (reduced by transport costs)
             float arriving = toSell * transportEfficiency;
@@ -402,7 +285,6 @@ namespace EconSim.Core.Simulation.Systems
             GoodDef good,
             float toBuy,
             float transportEfficiency,
-            int seatCellId,
             Dictionary<string, float> totalBought)
         {
             float remaining = toBuy;
@@ -435,12 +317,6 @@ namespace EconSim.Core.Simulation.Systems
                     // Buy from local market (with transport loss)
                     float actualBuy = Math.Min(remaining, localAvailable);
                     localGood.Supply -= actualBuy;
-
-                    if (_dynamicRoadEvolutionEnabled)
-                    {
-                        // Record traffic along the route for road building
-                        RecordTrafficToMarket(seatCellId, localMarket, actualBuy);
-                    }
 
                     // Amount that arrives at county (reduced by transport costs)
                     float arriving = actualBuy * transportEfficiency;

@@ -164,6 +164,7 @@ Material:
     - _CountyBorderDarkening: 0.519
     - _CountyBorderWidth: 0.075
     - _Cutoff: 0.5
+    - _DebugView: 0
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
     - _GlossMapScale: 1
@@ -177,7 +178,7 @@ Material:
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0
+    - _HoverIntensity: 0.001390259
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
@@ -189,6 +190,10 @@ Material:
     - _Mode: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.02
+    - _PathDashLength: 0.1
+    - _PathGapLength: 1.5
+    - _PathOpacity: 0.75
+    - _PathWidth: 0.5
     - _PoliticalCenterOpacity: 0.222
     - _PoliticalEdgeDarkening: 0.777
     - _PoliticalEdgeOpacity: 0.8
@@ -199,7 +204,6 @@ Material:
     - _RealmBorderWidth: 0.25
     - _RiverDarken: 0.5
     - _RiverDepth: 0.2
-    - _RoadDarkening: 0.75
     - _RoadWidth: 0.045
     - _SeaLevel: 0.2
     - _SelectedCellId: -1

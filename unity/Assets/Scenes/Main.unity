@@ -462,7 +462,10 @@ MonoBehaviour:
   terrainMaterial: {fileID: 0}
   renderLandOnly: 0
   overlayResolutionMultiplier: 6
-  borderMaterial: {fileID: 2100000, guid: 68122421a08414a3498952b5510cd8cb, type: 2}
+  pathOpacity: 0.75
+  pathDashLength: 1.8
+  pathGapLength: 2.4
+  pathWidth: 0.8
   selectionCamera: {fileID: 0}
   mapCameraController: {fileID: 1070810156}
   selectionDimmingTarget: 0.25
@@ -550,6 +553,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2084237326}
   - component: {fileID: 2084237325}
+  - component: {fileID: 2084237327}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -586,6 +590,22 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2084237327
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2084237324}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 67d7fd2557714367a2e2206d6d7ad8af, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: EconSim::EconSim.Core.LoggingControlPanel
+  ringBufferCapacity: 2000
+  minimumLevel: 1
+  enabledDomains: -1
+  recentEntryLimit: 25
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

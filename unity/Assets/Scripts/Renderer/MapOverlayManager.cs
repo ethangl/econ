@@ -44,6 +44,9 @@ public class MapOverlayManager
         private static readonly int CountyBorderDistTexId = Shader.PropertyToID("_CountyBorderDistTex");
         private static readonly int MarketBorderDistTexId = Shader.PropertyToID("_MarketBorderDistTex");
         private static readonly int RoadMaskTexId = Shader.PropertyToID("_RoadMaskTex");
+        private static readonly int PathDashLengthId = Shader.PropertyToID("_PathDashLength");
+        private static readonly int PathGapLengthId = Shader.PropertyToID("_PathGapLength");
+        private static readonly int PathWidthId = Shader.PropertyToID("_PathWidth");
         private static readonly int MapModeId = Shader.PropertyToID("_MapMode");
         private static readonly int DebugViewId = Shader.PropertyToID("_DebugView");
         private static readonly int UseHeightDisplacementId = Shader.PropertyToID("_UseHeightDisplacement");
@@ -104,6 +107,9 @@ public class MapOverlayManager
 
         // Road state (cached for regeneration)
         private RoadState roadState;
+        private float cachedPathDashLength = -1f;
+        private float cachedPathGapLength = -1f;
+        private float cachedPathWidth = -1f;
 
         // Spatial lookup grid: maps data pixel coordinates to cell IDs
         private int[] spatialGrid;
@@ -1312,14 +1318,68 @@ public class MapOverlayManager
             roadDistTexture.Apply();
         }
 
+        /// <summary>
+        /// Set runtime style values for path dash/gap/width and regenerate the path mask.
+        /// </summary>
+        public void SetPathStyle(float dashLength, float gapLength, float width)
+        {
+            if (terrainMaterial == null) return;
+            float clampedDash = Mathf.Max(0.1f, dashLength);
+            float clampedGap = Mathf.Max(0.1f, gapLength);
+            float clampedWidth = Mathf.Max(0.2f, width);
+
+            terrainMaterial.SetFloat(PathDashLengthId, clampedDash);
+            terrainMaterial.SetFloat(PathGapLengthId, clampedGap);
+            terrainMaterial.SetFloat(PathWidthId, clampedWidth);
+
+            bool styleChanged =
+                !Mathf.Approximately(cachedPathDashLength, clampedDash) ||
+                !Mathf.Approximately(cachedPathGapLength, clampedGap) ||
+                !Mathf.Approximately(cachedPathWidth, clampedWidth);
+
+            if (styleChanged)
+            {
+                cachedPathDashLength = clampedDash;
+                cachedPathGapLength = clampedGap;
+                cachedPathWidth = clampedWidth;
+            }
+
+            if (styleChanged && roadState != null)
+            {
+                RegenerateRoadDistTexture();
+            }
+        }
+
+        /// <summary>
+        /// Pull path style from material and regenerate mask if values changed.
+        /// Supports live tuning through the material inspector.
+        /// </summary>
+        public void RefreshPathStyleFromMaterial()
+        {
+            if (terrainMaterial == null)
+                return;
+
+            float dash = GetMaterialFloatOr(PathDashLengthId, 1.8f);
+            float gap = GetMaterialFloatOr(PathGapLengthId, 2.4f);
+            float width = GetMaterialFloatOr(PathWidthId, 0.8f);
+            SetPathStyle(dash, gap, width);
+        }
+
         private byte[] GenerateRoadMaskPixels()
         {
             var pixels = new byte[gridWidth * gridHeight];
             float scale = resolutionMultiplier;
 
             // Road width settings (in grid pixels)
-            float pathWidth = 0.8f * resolutionMultiplier;
-            float roadWidth = 1.6f * resolutionMultiplier;
+            float configuredPathWidth = GetMaterialFloatOr(PathWidthId, 0.8f);
+            float pathWidth = configuredPathWidth * resolutionMultiplier;
+            float roadWidth = pathWidth * 1.8f;
+
+            float configuredDashLength = GetMaterialFloatOr(PathDashLengthId, 1.8f);
+            float configuredGapLength = GetMaterialFloatOr(PathGapLengthId, 2.4f);
+            float dashLength = configuredDashLength * resolutionMultiplier;
+            float gapLength = configuredGapLength * resolutionMultiplier;
+            float patternLength = Mathf.Max(0.01f, dashLength + gapLength);
 
             var roads = roadState.GetAllRoads();
 
@@ -1343,6 +1403,7 @@ public class MapOverlayManager
 
                 // Warp each substep point independently — creates organic meandering
                 var (prevX, prevY) = DomainWarp.Warp(ax, ay, roadFreq, roadAmp);
+                float dashProgress = 0f;
                 for (int i = 1; i <= substeps; i++)
                 {
                     float t = i / (float)substeps;
@@ -1350,13 +1411,76 @@ public class MapOverlayManager
                     float my = ay + (by - ay) * t;
                     var (wx, wy) = DomainWarp.Warp(mx, my, roadFreq, roadAmp);
 
-                    DrawThickLine(pixels, new Vector2(prevX, prevY), new Vector2(wx, wy), width);
+                    var start = new Vector2(prevX, prevY);
+                    var end = new Vector2(wx, wy);
+                    float segmentLength = Vector2.Distance(start, end);
+                    if (segmentLength > 0.001f)
+                    {
+                        DrawDashedSegment(
+                            pixels,
+                            start,
+                            end,
+                            width,
+                            dashLength,
+                            patternLength,
+                            ref dashProgress);
+                    }
+
                     prevX = wx;
                     prevY = wy;
                 }
             }
 
             return pixels;
+        }
+
+        private void DrawDashedSegment(
+            byte[] pixels,
+            Vector2 start,
+            Vector2 end,
+            float width,
+            float dashLength,
+            float patternLength,
+            ref float dashProgress)
+        {
+            Vector2 delta = end - start;
+            float segmentLength = delta.magnitude;
+            if (segmentLength <= 0.001f)
+                return;
+
+            Vector2 dir = delta / segmentLength;
+            float cursor = 0f;
+
+            while (cursor < segmentLength)
+            {
+                float patternPos = Mathf.Repeat(dashProgress + cursor, patternLength);
+                float step = Mathf.Min(patternLength - patternPos, segmentLength - cursor);
+
+                if (patternPos < dashLength)
+                {
+                    float dashStart = cursor;
+                    float dashEnd = Mathf.Min(cursor + step, cursor + (dashLength - patternPos));
+                    if (dashEnd > dashStart + 0.001f)
+                    {
+                        Vector2 worldStart = start + dir * dashStart;
+                        Vector2 worldEnd = start + dir * dashEnd;
+                        DrawThickLine(pixels, worldStart, worldEnd, width);
+                    }
+                }
+
+                cursor += step;
+            }
+
+            dashProgress += segmentLength;
+        }
+
+        private float GetMaterialFloatOr(int propertyId, float fallback)
+        {
+            if (terrainMaterial == null)
+                return fallback;
+
+            float value = terrainMaterial.GetFloat(propertyId);
+            return value > 0f ? value : fallback;
         }
 
         /// <summary>

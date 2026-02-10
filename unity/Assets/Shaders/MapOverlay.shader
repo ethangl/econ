@@ -80,9 +80,12 @@ Shader "EconSim/MapOverlay"
         _MarketBorderWidth ("Market Border Width", Range(0, 4)) = 1
         _MarketBorderDarkening ("Market Border Darkening", Range(0, 1)) = 0.5
 
-        // Road overlay (market mode only, direct mask: 0=no road, 1=road)
+        // Path overlay (market mode only, direct mask: 0=no path, 1=path)
         _RoadMaskTex ("Road Mask", 2D) = "black" {}
-        _RoadDarkening ("Road Darkening", Range(0, 1)) = 0.4
+        _PathOpacity ("Path Opacity", Range(0, 1)) = 0.75
+        _PathDashLength ("Path Dash Length", Range(0.1, 20)) = 1.8
+        _PathGapLength ("Path Gap Length", Range(0.1, 20)) = 2.4
+        _PathWidth ("Path Width", Range(0.2, 4)) = 0.8
 
         // Water layer properties
         _WaterShallowColor ("Water Shallow Color", Color) = (0.25, 0.55, 0.65, 1)
@@ -165,7 +168,7 @@ Shader "EconSim/MapOverlay"
             float _MarketBorderDarkening;
 
             sampler2D _RoadMaskTex;
-            float _RoadDarkening;
+            float _PathOpacity;
 
             // Water layer uniforms
             fixed4 _WaterShallowColor;
@@ -454,12 +457,12 @@ Shader "EconSim/MapOverlay"
                     float3 centerColor = lerp(grayTerrain, marketColor, _GradientCenterOpacity);
                     modeColor = lerp(edgeColor, centerColor, edgeProximity);
 
-                    // Road overlay: multiply-darken terrain where roads exist
-                    // Road mask is direct coverage (0=no road, 1=road), bilinear-filtered for AA
+                    // Path overlay: white dotted routes blended over market color.
+                    // Mask is direct coverage (0=no path, 1=path), bilinear-filtered for AA.
                     float roadMask = tex2D(_RoadMaskTex, uv).r;
                     if (roadMask > 0.01)
                     {
-                        modeColor *= lerp(1.0, 1.0 - _RoadDarkening, roadMask);
+                        modeColor = lerp(modeColor, float3(1.0, 1.0, 1.0), roadMask * _PathOpacity);
                     }
 
                     // Market zone border band overlay (distance texture + smoothstep AA)

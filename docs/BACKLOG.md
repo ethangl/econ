@@ -102,9 +102,10 @@ Current status:
 - **Depends on:** M1-S4
 - **Done when:**
   - runtime trade/transport pathing is infrastructure-read-only (no per-tick route tracing for road growth),
-  - road/path network is built at init (or sparse checkpoint cadence) from stable inputs,
-  - optional re-evolution path is explicit, offline-like, and measurable (no hidden weekly spikes),
-  - profiler evidence shows high-speed simulation without skip spikes attributable to infrastructure updates.
+  - road/path network is built once at init from stable inputs (major-county backbone),
+  - runtime road generation/evolution is removed (no hidden weekly spikes, no manual rebuild pause),
+  - startup timing remains acceptable on large maps with backbone enabled.
+- **Status:** DONE.
 
 ---
 

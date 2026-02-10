@@ -4,6 +4,17 @@ Development phases and completed work for the Economic Simulator project.
 
 ## Unreleased
 
+- **Infrastructure cadence overhaul (M1-S5 complete)** (`src/EconSim.Core/Simulation/StaticTransportBackboneBuilder.cs`, `src/EconSim.Core/Simulation/SimulationRunner.cs`, `src/EconSim.Core/Economy/RoadState.cs`, `src/EconSim.Core/Simulation/SimulationConfig.cs`, `src/EconSim.Core/Simulation/Systems/TradeSystem.cs`, `unity/Assets/Scripts/Core/GameManager.cs`, `unity/Assets/Tests/EditMode/InfrastructureEvolutionTests.cs`)
+  - Replaced runtime road evolution with a static major-county backbone pass at simulation init.
+  - Backbone routes connect major counties via nearest-neighbor shortest paths and convert shared-edge usage into static path/road tiers.
+  - Trade no longer traces routes or records traffic during ticks; transport bonuses are infrastructure-read-only at runtime.
+  - Removed manual runtime rebuild path (`F8`) and deleted the old road development tick system.
+  - Added EditMode guardrail test for static backbone tier generation.
+
+- **Path rendering readability pass** (`unity/Assets/Shaders/MapOverlay.shader`, `unity/Assets/Scripts/Renderer/MapOverlayManager.cs`, `unity/Assets/Scripts/Renderer/MapView.cs`, `unity/Assets/Editor/MapOverlayShaderGUI.cs`)
+  - Changed market-mode path overlay from darkening lines to white dashed/dotted-style lines to reduce river conflicts.
+  - Added serialized `MapView` control for runtime path opacity (`pathOpacity`) wired to shader `_PathOpacity`.
+
 - **Rendering debug tooling (M1-S3)** (`unity/Assets/Scripts/Renderer/MapView.cs`, `unity/Assets/Scripts/Renderer/MapOverlayManager.cs`, `unity/Assets/Shaders/MapOverlay.shader`, `unity/Assets/Editor/MapOverlayShaderGUI.cs`)
   - Added `Channel Inspector` map mode (runtime key `5`) for grayscale channel debugging.
   - Added runtime channel cycling (`C`) across `_CellDataTex` channels, border distance maps, river mask, heightmap, and road mask.

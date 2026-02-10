@@ -18,6 +18,12 @@ namespace EconSim.Editor
             set => EditorPrefs.SetBool("MapOverlay_WaterRendering", value);
         }
 
+        private static bool marketRenderingFoldout
+        {
+            get => EditorPrefs.GetBool("MapOverlay_MarketRendering", true);
+            set => EditorPrefs.SetBool("MapOverlay_MarketRendering", value);
+        }
+
         private static bool textureMapsFoldout
         {
             get => EditorPrefs.GetBool("MapOverlay_TextureMaps", false);
@@ -39,12 +45,19 @@ namespace EconSim.Editor
             ("_ProvinceBorderDarkening", "Province Border Darkening"),
             ("_CountyBorderWidth", "County Border Width"),
             ("_CountyBorderDarkening", "County Border Darkening"),
-            ("_MarketBorderWidth", "Market Border Width"),
-            ("_MarketBorderDarkening", "Market Border Darkening"),
-            ("_RoadDarkening", "Road Darkening"),
             ("_GradientRadius", "Gradient Radius (pixels)"),
             ("_GradientEdgeDarkening", "Gradient Edge Darkening"),
             ("_GradientCenterOpacity", "Gradient Center Opacity"),
+        };
+
+        private static readonly (string name, string label)[] MarketRenderingProps = new[]
+        {
+            ("_MarketBorderWidth", "Market Border Width"),
+            ("_MarketBorderDarkening", "Market Border Darkening"),
+            ("_PathOpacity", "Path Opacity"),
+            ("_PathDashLength", "Path Dash Length"),
+            ("_PathGapLength", "Path Gap Length"),
+            ("_PathWidth", "Path Width"),
         };
 
         private static readonly (string name, string label)[] WaterRenderingProps = new[]
@@ -104,6 +117,8 @@ namespace EconSim.Editor
                 if (name == propName) return true;
             foreach (var (name, _) in WaterRenderingProps)
                 if (name == propName) return true;
+            foreach (var (name, _) in MarketRenderingProps)
+                if (name == propName) return true;
             foreach (var (name, _) in TextureMapsProps)
                 if (name == propName) return true;
             foreach (var (name, _) in DebugProps)
@@ -129,6 +144,22 @@ namespace EconSim.Editor
             {
                 EditorGUI.indentLevel++;
                 foreach (var (name, label) in RealmRenderingProps)
+                {
+                    var prop = FindProperty(name, properties, false);
+                    if (prop != null)
+                        materialEditor.ShaderProperty(prop, label);
+                }
+                EditorGUI.indentLevel--;
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+
+            // Market Rendering group
+            EditorGUILayout.Space();
+            marketRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(marketRenderingFoldout, "Market Rendering");
+            if (marketRenderingFoldout)
+            {
+                EditorGUI.indentLevel++;
+                foreach (var (name, label) in MarketRenderingProps)
                 {
                     var prop = FindProperty(name, properties, false);
                     if (prop != null)
