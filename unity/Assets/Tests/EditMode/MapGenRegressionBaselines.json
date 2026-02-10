@@ -1,0 +1,37 @@
+{
+  "cases": [
+    {
+      "seed": 12345,
+      "template": "LowIsland",
+      "cellCount": 5000,
+      "biomeDefCount": 19,
+      "landRatio": { "min": 0.20, "max": 0.65 },
+      "realmCount": { "min": 1, "max": 32 },
+      "provinceCount": { "min": 1, "max": 256 },
+      "countyCount": { "min": 1, "max": 1024 },
+      "riverCount": { "min": 0, "max": 1024 }
+    },
+    {
+      "seed": 424242,
+      "template": "Continents",
+      "cellCount": 5000,
+      "biomeDefCount": 19,
+      "landRatio": { "min": 0.25, "max": 0.75 },
+      "realmCount": { "min": 1, "max": 40 },
+      "provinceCount": { "min": 1, "max": 320 },
+      "countyCount": { "min": 1, "max": 1280 },
+      "riverCount": { "min": 0, "max": 1536 }
+    },
+    {
+      "seed": 8675309,
+      "template": "Pangea",
+      "cellCount": 5000,
+      "biomeDefCount": 19,
+      "landRatio": { "min": 0.35, "max": 0.90 },
+      "realmCount": { "min": 1, "max": 48 },
+      "provinceCount": { "min": 1, "max": 384 },
+      "countyCount": { "min": 1, "max": 1536 },
+      "riverCount": { "min": 0, "max": 2048 }
+    }
+  ]
+}

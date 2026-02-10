@@ -73,6 +73,12 @@ Do **not** put this rescale in `MapGenAdapter`; that is too late for mapgen algo
   - transport sample costs.
 - [ ] Save baseline screenshots for terrain/soil/political/market.
 
+Regression harness bootstrap:
+
+- EditMode regression tests live in `unity/Assets/Tests/EditMode/MapGenRegressionTests.cs`.
+- Baseline bands live in `unity/Assets/Tests/EditMode/MapGenRegressionBaselines.json`.
+- Run via Unity Test Runner (EditMode) before and after each migration phase.
+
 ---
 
 ## Phase 1 - Introduce Domain Types and Constants

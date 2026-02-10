@@ -1,0 +1,22 @@
+{
+    "name": "EconSim.EditModeTests",
+    "rootNamespace": "EconSim.Tests",
+    "references": [
+        "EconSim",
+        "MapGen"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}
