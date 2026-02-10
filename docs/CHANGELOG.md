@@ -2,6 +2,14 @@
 
 Development phases and completed work for the Economic Simulator project.
 
+## Unreleased
+
+- **Map overlay color stability fix** (`unity/Assets/Shaders/MapOverlay.shader`)
+  - Removed HSV-based hover and border darkening paths that could shift low-saturation realms (notably kingdom 2 beige) toward pink.
+  - Hover highlight now uses hue-preserving RGB brighten.
+  - Border bands (county/province/realm/market) now use RGB darkening (`baseColor * (1 - darkening)`).
+  - Cleaned up unused shader helpers after the change (legacy HSV/overlay helper functions).
+
 ## Phase 12: Procedural Map Generation Pipeline ✓
 
 Replaced Azgaar JSON import with a fully custom, engine-agnostic map generation library (`src/MapGen/`). Maps are now generated from scratch — no external data files required.

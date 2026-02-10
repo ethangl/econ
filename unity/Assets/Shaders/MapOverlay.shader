@@ -229,7 +229,7 @@ Shader "EconSim/MapOverlay"
 
             // Look up color from palette texture (256 entries)
             // normalizedId is id / 65535
-            fixed3 LookupPaletteColor(sampler2D palette, float normalizedId)
+            float3 LookupPaletteColor(sampler2D palette, float normalizedId)
             {
                 float id = normalizedId * 65535.0;
                 float paletteU = (clamp(round(id), 0, 255) + 0.5) / 256.0;
@@ -288,103 +288,27 @@ Shader "EconSim/MapOverlay"
                 return value;
             }
 
-            // Photoshop Overlay blend mode (per channel)
-            float OverlayBlend(float base, float blend)
-            {
-                return base < 0.5
-                    ? 2.0 * base * blend
-                    : 1.0 - 2.0 * (1.0 - base) * (1.0 - blend);
-            }
-
-            fixed3 OverlayBlend3(fixed3 base, fixed3 blend)
-            {
-                return fixed3(
-                    OverlayBlend(base.r, blend.r),
-                    OverlayBlend(base.g, blend.g),
-                    OverlayBlend(base.b, blend.b)
-                );
-            }
-
-            // RGB to HSV conversion
-            float3 rgb2hsv(float3 c)
-            {
-                float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-                float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
-                float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
-                float d = q.x - min(q.w, q.y);
-                float e = 1.0e-10;
-                return float3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
-            }
-
-            // HSV to RGB conversion
-            float3 hsv2rgb(float3 c)
-            {
-                float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-                float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-                return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-            }
-
             // Convert color to grayscale using perceptual luminance weights
-            fixed3 ToGrayscale(fixed3 color)
+            float3 ToGrayscale(float3 color)
             {
                 float luma = dot(color, float3(0.299, 0.587, 0.114));
-                return fixed3(luma, luma, luma);
-            }
-
-            // Derive province color from realm color with HSV variance
-            fixed3 DeriveProvinceColor(fixed3 realmColor, float provinceId)
-            {
-                float3 hsv = rgb2hsv(realmColor);
-
-                float hVar = (hash(provinceId + 73856093.0) - 0.5) * 0.10;
-                float sVar = (hash(provinceId + 19349663.0) - 0.5) * 0.14;
-                float vVar = (hash(provinceId + 83492791.0) - 0.5) * 0.14;
-
-                hsv.x = frac(hsv.x + hVar);
-                hsv.y = clamp(hsv.y + sVar, 0.15, 0.95);
-                hsv.z = clamp(hsv.z + vVar, 0.25, 0.95);
-
-                return hsv2rgb(hsv);
-            }
-
-            // Derive county color from province color with HSV variance
-            fixed3 DeriveCountyColor(fixed3 provinceColor, float countyId)
-            {
-                float3 hsv = rgb2hsv(provinceColor);
-
-                float hVar = (hash(countyId + 15485863.0) - 0.5) * 0.10;
-                float sVar = (hash(countyId + 32452843.0) - 0.5) * 0.14;
-                float vVar = (hash(countyId + 49979687.0) - 0.5) * 0.14;
-
-                hsv.x = frac(hsv.x + hVar);
-                hsv.y = clamp(hsv.y + sVar, 0.15, 0.95);
-                hsv.z = clamp(hsv.z + vVar, 0.25, 0.95);
-
-                return hsv2rgb(hsv);
-            }
-
-            // Look up market ID for a cell
-            float GetMarketIdForCell(float cellIdNorm)
-            {
-                float cellIdRaw = cellIdNorm * 65535.0;
-                float marketU = (clamp(round(cellIdRaw), 0, 16383) + 0.5) / 16384.0;
-                return tex2D(_CellToMarketTex, float2(marketU, 0.5)).r;
+                return float3(luma, luma, luma);
             }
 
             // ========================================================================
             // Layer 1: Terrain (always rendered, seabed visible under water)
             // ========================================================================
 
-            fixed3 ComputeTerrain(float2 uv, bool isCellWater, float biomeId, float height, float riverMask)
+            float3 ComputeTerrain(float2 uv, bool isCellWater, float biomeId, float height, float riverMask)
             {
-                fixed3 terrain;
+                float3 terrain;
 
                 if (isCellWater)
                 {
                     // Seabed: sand hue darkening with depth (50% to 5% value)
                     float depthT = saturate((_SeaLevel - height) / max(_WaterDepthRange, 0.001));
                     depthT = sqrt(depthT);  // Stretch — actual ocean depths cluster in low range
-                    fixed3 sandHue = fixed3(0.76, 0.70, 0.50);
+                    float3 sandHue = float3(0.76, 0.70, 0.50);
                     terrain = sandHue * lerp(0.25, 0.05, depthT);
                 }
                 else
@@ -406,17 +330,17 @@ Shader "EconSim/MapOverlay"
             // Layer 1 override: Height gradient (mode 0 debug viz)
             // ========================================================================
 
-            fixed3 ComputeHeightGradient(bool isCellWater, float height, float riverMask)
+            float3 ComputeHeightGradient(bool isCellWater, float height, float riverMask)
             {
-                fixed3 result;
+                float3 result;
 
                 if (isCellWater)
                 {
                     // Water gradient for height mode: deep to shallow blue
                     float waterT = height / max(_SeaLevel, 0.001);
                     result = lerp(
-                        fixed3(0.08, 0.2, 0.4),   // Deep water
-                        fixed3(0.2, 0.4, 0.6),    // Shallow water
+                        float3(0.08, 0.2, 0.4),   // Deep water
+                        float3(0.2, 0.4, 0.6),    // Shallow water
                         waterT
                     );
                 }
@@ -428,8 +352,8 @@ Shader "EconSim/MapOverlay"
                     {
                         float t = landT / 0.3;
                         result = lerp(
-                            fixed3(0.31, 0.63, 0.31),  // Coastal green
-                            fixed3(0.47, 0.71, 0.31),  // Grassland
+                            float3(0.31, 0.63, 0.31),  // Coastal green
+                            float3(0.47, 0.71, 0.31),  // Grassland
                             t
                         );
                     }
@@ -437,8 +361,8 @@ Shader "EconSim/MapOverlay"
                     {
                         float t = (landT - 0.3) / 0.3;
                         result = lerp(
-                            fixed3(0.47, 0.71, 0.31),  // Grassland
-                            fixed3(0.55, 0.47, 0.4),   // Brown hills
+                            float3(0.47, 0.71, 0.31),  // Grassland
+                            float3(0.55, 0.47, 0.4),   // Brown hills
                             t
                         );
                     }
@@ -446,8 +370,8 @@ Shader "EconSim/MapOverlay"
                     {
                         float t = (landT - 0.6) / 0.4;
                         result = lerp(
-                            fixed3(0.55, 0.47, 0.4),   // Brown hills
-                            fixed3(0.94, 0.94, 0.98),  // Snow caps
+                            float3(0.55, 0.47, 0.4),   // Brown hills
+                            float3(0.94, 0.94, 0.98),  // Snow caps
                             t
                         );
                     }
@@ -460,30 +384,30 @@ Shader "EconSim/MapOverlay"
             // Layer 2: Map mode overlay (political/market paint, alpha=0 on water)
             // ========================================================================
 
-            fixed4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, float realmId, float provinceId, float countyId, float marketId)
+            float4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, float realmId, float provinceId, float countyId, float marketId)
             {
                 // No map mode overlay on water, rivers, height mode (0), terrain mode (5), or soil mode (6)
                 if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 5 || _MapMode == 6)
-                    return fixed4(0, 0, 0, 0);
+                    return float4(0, 0, 0, 0);
 
                 // Grayscale terrain for multiply blending
                 float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
-                fixed3 grayTerrain = fixed3(landHeight, landHeight, landHeight);
+                float3 grayTerrain = float3(landHeight, landHeight, landHeight);
 
-                fixed3 modeColor;
+                float3 modeColor;
                 float edgeProximity;
 
                 if (_MapMode >= 1 && _MapMode <= 3)
                 {
                     // Political modes (1=realm, 2=province, 3=county)
-                    fixed3 politicalColor = LookupPaletteColor(_RealmPaletteTex, realmId);
+                    float3 politicalColor = LookupPaletteColor(_RealmPaletteTex, realmId);
                     float realmDist = tex2D(_RealmBorderDistTex, uv).r * 255.0;
                     edgeProximity = saturate(realmDist / _GradientRadius);
 
                     // Multiply blend and gradient
-                    fixed3 multiplied = grayTerrain * politicalColor;
-                    fixed3 edgeColor = lerp(politicalColor, multiplied, _GradientEdgeDarkening);
-                    fixed3 centerColor = lerp(grayTerrain, politicalColor, _GradientCenterOpacity);
+                    float3 multiplied = grayTerrain * politicalColor;
+                    float3 edgeColor = lerp(politicalColor, multiplied, _GradientEdgeDarkening);
+                    float3 centerColor = lerp(grayTerrain, politicalColor, _GradientCenterOpacity);
                     modeColor = lerp(edgeColor, centerColor, edgeProximity);
 
                     // County border band overlay (thinnest, lightest — drawn first)
@@ -492,9 +416,7 @@ Shader "EconSim/MapOverlay"
                     float countyBorderFactor = 1.0 - smoothstep(_CountyBorderWidth - countyBorderAA, _CountyBorderWidth + countyBorderAA, countyBorderDist);
                     if (countyBorderFactor > 0.001)
                     {
-                        float3 cHsv = rgb2hsv(politicalColor);
-                        cHsv.z *= (1.0 - _CountyBorderDarkening);
-                        fixed3 countyBorderColor = hsv2rgb(cHsv);
+                        float3 countyBorderColor = politicalColor * (1.0 - _CountyBorderDarkening);
                         modeColor = lerp(modeColor, countyBorderColor, countyBorderFactor);
                     }
 
@@ -504,9 +426,7 @@ Shader "EconSim/MapOverlay"
                     float provinceBorderFactor = 1.0 - smoothstep(_ProvinceBorderWidth - provinceBorderAA, _ProvinceBorderWidth + provinceBorderAA, provinceBorderDist);
                     if (provinceBorderFactor > 0.001)
                     {
-                        float3 pHsv = rgb2hsv(politicalColor);
-                        pHsv.z *= (1.0 - _ProvinceBorderDarkening);
-                        fixed3 provinceBorderColor = hsv2rgb(pHsv);
+                        float3 provinceBorderColor = politicalColor * (1.0 - _ProvinceBorderDarkening);
                         modeColor = lerp(modeColor, provinceBorderColor, provinceBorderFactor);
                     }
 
@@ -516,22 +436,20 @@ Shader "EconSim/MapOverlay"
                     float borderFactor = 1.0 - smoothstep(_RealmBorderWidth - borderAA, _RealmBorderWidth + borderAA, realmBorderDist);
                     if (borderFactor > 0.001)
                     {
-                        float3 hsv = rgb2hsv(politicalColor);
-                        hsv.z *= (1.0 - _RealmBorderDarkening);
-                        fixed3 borderColor = hsv2rgb(hsv);
+                        float3 borderColor = politicalColor * (1.0 - _RealmBorderDarkening);
                         modeColor = lerp(modeColor, borderColor, borderFactor);
                     }
                 }
                 else if (_MapMode == 4)
                 {
                     // Market mode
-                    fixed3 marketColor = LookupPaletteColor(_MarketPaletteTex, marketId);
+                    float3 marketColor = LookupPaletteColor(_MarketPaletteTex, marketId);
                     float marketDist = tex2D(_MarketBorderDistTex, uv).r * 255.0;
                     edgeProximity = saturate(marketDist / _GradientRadius);
 
-                    fixed3 multiplied = grayTerrain * marketColor;
-                    fixed3 edgeColor = lerp(marketColor, multiplied, _GradientEdgeDarkening);
-                    fixed3 centerColor = lerp(grayTerrain, marketColor, _GradientCenterOpacity);
+                    float3 multiplied = grayTerrain * marketColor;
+                    float3 edgeColor = lerp(marketColor, multiplied, _GradientEdgeDarkening);
+                    float3 centerColor = lerp(grayTerrain, marketColor, _GradientCenterOpacity);
                     modeColor = lerp(edgeColor, centerColor, edgeProximity);
 
                     // Road overlay: multiply-darken terrain where roads exist
@@ -548,27 +466,25 @@ Shader "EconSim/MapOverlay"
                     float marketBorderFactor = 1.0 - smoothstep(_MarketBorderWidth - marketBorderAA, _MarketBorderWidth + marketBorderAA, marketBorderDist);
                     if (marketBorderFactor > 0.001)
                     {
-                        float3 mHsv = rgb2hsv(marketColor);
-                        mHsv.z *= (1.0 - _MarketBorderDarkening);
-                        fixed3 marketBorderColor = hsv2rgb(mHsv);
+                        float3 marketBorderColor = marketColor * (1.0 - _MarketBorderDarkening);
                         modeColor = lerp(modeColor, marketBorderColor, marketBorderFactor);
                     }
                 }
                 else
                 {
-                    return fixed4(0, 0, 0, 0);
+                    return float4(0, 0, 0, 0);
                 }
 
-                return fixed4(modeColor, 1.0);
+                return float4(modeColor, 1.0);
             }
 
             // ========================================================================
             // Layer 3: Water (transparent, depth-based opacity)
             // ========================================================================
 
-            void ComputeWater(bool isCellWater, float height, float riverMask, float2 worldUV, out fixed3 waterColor, out float waterAlpha)
+            void ComputeWater(bool isCellWater, float height, float riverMask, float2 worldUV, out float3 waterColor, out float waterAlpha)
             {
-                waterColor = fixed3(0, 0, 0);
+                waterColor = float3(0, 0, 0);
                 waterAlpha = 0;
 
                 // No water layer if not ocean and not river
@@ -634,7 +550,7 @@ Shader "EconSim/MapOverlay"
 
                 // ---- Layer 1: Terrain ----
 
-                fixed3 terrain;
+                float3 terrain;
                 if (_MapMode == 0)
                 {
                     // Height gradient mode: override terrain with debug viz
@@ -651,7 +567,7 @@ Shader "EconSim/MapOverlay"
                     {
                         float landHeight = saturate((height - _SeaLevel) / (1.0 - _SeaLevel));
 
-                        fixed3 soilColor;
+                        float3 soilColor;
                         if (soilId <= 0) soilColor = _SoilColor0.rgb;
                         else if (soilId == 1) soilColor = _SoilColor1.rgb;
                         else if (soilId == 2) soilColor = _SoilColor2.rgb;
@@ -672,18 +588,18 @@ Shader "EconSim/MapOverlay"
 
                 // ---- Layer 2: Map mode ----
 
-                fixed4 mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId);
-                fixed3 afterMapMode = lerp(terrain, mapMode.rgb, mapMode.a);
+                float4 mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId);
+                float3 afterMapMode = lerp(terrain, mapMode.rgb, mapMode.a);
 
                 // ---- Layer 3: Water ----
 
-                fixed3 waterColor;
+                float3 waterColor;
                 float waterAlpha;
 
                 if (_MapMode == 0)
                 {
                     // Height mode: no water overlay (already has its own water colors)
-                    waterColor = fixed3(0, 0, 0);
+                    waterColor = float3(0, 0, 0);
                     waterAlpha = 0;
                 }
                 else
@@ -691,11 +607,11 @@ Shader "EconSim/MapOverlay"
                     ComputeWater(isCellWater, height, riverMask, IN.worldUV, waterColor, waterAlpha);
                 }
 
-                fixed3 afterWater = lerp(afterMapMode, waterColor, waterAlpha);
+                float3 afterWater = lerp(afterMapMode, waterColor, waterAlpha);
 
                 // ---- Layer 4: Selection / hover (operates on composited color) ----
 
-                fixed3 finalColor = afterWater;
+                float3 finalColor = afterWater;
 
                 // Selection region test (for dimming non-selected areas)
                 bool isInSelection = false;
@@ -716,17 +632,17 @@ Shader "EconSim/MapOverlay"
                     (_HoveredMarketId >= 0 && abs(marketId - _HoveredMarketId) < 0.00001));
                 if (isHovered && _HoverIntensity > 0)
                 {
-                    float3 hsv = rgb2hsv(finalColor);
-                    hsv.y = saturate(hsv.y * (1.0 + 0.15 * _HoverIntensity));
-                    hsv.z = saturate(hsv.z * (1.0 + 0.25 * _HoverIntensity));
-                    finalColor = hsv2rgb(hsv);
+                    // Hue-preserving hover highlight: brighten in RGB space only.
+                    // Avoid HSV round-trip to prevent hue drift on low-saturation colors.
+                    float boost = 1.0 + 0.25 * _HoverIntensity;
+                    finalColor = saturate(finalColor * boost);
                 }
 
                 // Selection dimming
                 bool hasSelection = _SelectedRealmId >= 0 || _SelectedProvinceId >= 0 || _SelectedMarketId >= 0 || _SelectedCountyId >= 0;
                 if (hasSelection && !isInSelection && !isWater)
                 {
-                    fixed3 gray = ToGrayscale(finalColor);
+                    float3 gray = ToGrayscale(finalColor);
                     finalColor = lerp(finalColor, gray, _SelectionDesaturation);
                     finalColor *= _SelectionDimming;
                 }
