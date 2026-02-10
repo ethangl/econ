@@ -39,7 +39,7 @@ Simulation:
 ## Debugging
 
 - Shader/overlay workflow:
-  - `docs/SHADER_OVERLAY_DEBUGGING.md`
+  - `docs/debug/SHADER_OVERLAY_DEBUGGING.md`
 - General project context:
   - `docs/overview.md`
 - Active backlog:

@@ -14,8 +14,6 @@ namespace EconSim.Core.Import
     /// </summary>
     public static class MapGenAdapter
     {
-        private const int SeaLevel = 20;
-
         /// <summary>
         /// Convert a MapGenResult into a fully populated MapData ready for simulation.
         /// </summary>
@@ -110,7 +108,7 @@ namespace EconSim.Core.Import
                 Seed = "",
                 TotalCells = cellCount,
                 LandCells = landCells,
-                SeaLevel = SeaLevel
+                SeaLevel = heights.DomainSeaLevel
             };
 
             var mapData = new MapData

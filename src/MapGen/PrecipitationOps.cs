@@ -160,9 +160,10 @@ namespace MapGen.Core
                     }
                     if (maxUphill > 0f)
                     {
-                        float slope = Math.Min(maxUphill, 20f) / 20f; // cap slope contribution
-                        float altFactor = (heights.Heights[i] - HeightGrid.SeaLevel) /
-                                          (HeightGrid.MaxHeight - HeightGrid.SeaLevel);
+                        float legacySlopeCap = ElevationDomains.Rescale(20f, ElevationDomains.Dsl, heights.Domain);
+                        float slopeCap = legacySlopeCap > 1e-6f ? legacySlopeCap : 1f;
+                        float slope = Math.Min(maxUphill, slopeCap) / slopeCap; // cap slope contribution
+                        float altFactor = ElevationDomains.NormalizeLandHeight(heights.Heights[i], heights.Domain);
                         if (altFactor < 0f) altFactor = 0f;
                         deposit += humidity[i] * OrographicScale * slope * (0.5f + altFactor);
                     }

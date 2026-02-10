@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
+using MapGen.Core;
 
 namespace EconSim.Core.Economy
 {
@@ -11,6 +12,11 @@ namespace EconSim.Core.Economy
     public static class EconomyInitializer
     {
         private static Random _random = new Random(42); // Re-seeded per initialization
+
+        // Legacy DSL gates expressed in normalized land-space.
+        private static readonly float MidElevationLandThreshold = ElevationDomains.NormalizeLandHeight(40f, ElevationDomains.Dsl);
+        private static readonly float GoldElevationLandThreshold = ElevationDomains.NormalizeLandHeight(45f, ElevationDomains.Dsl);
+        private static readonly float IronElevationLandThreshold = ElevationDomains.NormalizeLandHeight(50f, ElevationDomains.Dsl);
 
         /// <summary>
         /// Fully initialize economy from map data.
@@ -53,6 +59,8 @@ namespace EconSim.Core.Economy
         /// </summary>
         private static void AssignResources(EconomyState economy, MapData mapData)
         {
+            ElevationDomain elevationDomain = ResolveElevationDomain(mapData);
+
             // Build biome name lookup
             var biomeNames = new Dictionary<int, string>();
             foreach (var biome in mapData.Biomes)
@@ -68,10 +76,11 @@ namespace EconSim.Core.Economy
             foreach (var cell in mapData.Cells)
             {
                 if (!cell.IsLand) continue;
+                float landHeight = ElevationDomains.NormalizeLandHeight(cell.Height, elevationDomain);
                 if (cell.Height > maxHeight) maxHeight = cell.Height;
-                if (cell.Height > 40) cellsAbove40++;
-                if (cell.Height > 45) cellsAbove45++;
-                if (cell.Height > 50) cellsAbove50++;
+                if (landHeight > MidElevationLandThreshold) cellsAbove40++;
+                if (landHeight > GoldElevationLandThreshold) cellsAbove45++;
+                if (landHeight > IronElevationLandThreshold) cellsAbove50++;
             }
             SimLog.Log("Economy", $"Height distribution: max={maxHeight:F1}, >40={cellsAbove40}, >45={cellsAbove45}, >50={cellsAbove50}");
 
@@ -82,6 +91,7 @@ namespace EconSim.Core.Economy
             foreach (var cell in mapData.Cells)
             {
                 if (!cell.IsLand) continue;
+                float landHeight = ElevationDomains.NormalizeLandHeight(cell.Height, elevationDomain);
                 if (!biomeNames.TryGetValue(cell.BiomeId, out var biomeName))
                     continue;
 
@@ -97,12 +107,12 @@ namespace EconSim.Core.Economy
                     // Special case: iron_ore uses height (mountains) not biome
                     if (good.Id == "iron_ore")
                     {
-                        matches = cell.Height > 50;
+                        matches = landHeight > IronElevationLandThreshold;
                     }
                     // Special case: gold_ore uses high terrain with rare probability
                     else if (good.Id == "gold_ore")
                     {
-                        matches = cell.Height > 45 && _random.NextDouble() < 0.25;
+                        matches = landHeight > GoldElevationLandThreshold && _random.NextDouble() < 0.25;
                     }
                     else
                     {
@@ -312,6 +322,7 @@ namespace EconSim.Core.Economy
         private static Dictionary<int, HashSet<string>> BuildCellResourceLookup(EconomyState economy, MapData mapData)
         {
             var result = new Dictionary<int, HashSet<string>>();
+            ElevationDomain elevationDomain = ResolveElevationDomain(mapData);
             var biomeNames = new Dictionary<int, string>();
             foreach (var biome in mapData.Biomes)
             {
@@ -321,6 +332,7 @@ namespace EconSim.Core.Economy
             foreach (var cell in mapData.Cells)
             {
                 if (!cell.IsLand) continue;
+                float landHeight = ElevationDomains.NormalizeLandHeight(cell.Height, elevationDomain);
                 if (!biomeNames.TryGetValue(cell.BiomeId, out var biomeName)) continue;
 
                 var resources = new HashSet<string>();
@@ -332,11 +344,11 @@ namespace EconSim.Core.Economy
                     bool matches = false;
                     if (good.Id == "iron_ore")
                     {
-                        matches = cell.Height > 50;
+                        matches = landHeight > IronElevationLandThreshold;
                     }
                     else if (good.Id == "gold_ore")
                     {
-                        matches = cell.Height > 45;
+                        matches = landHeight > GoldElevationLandThreshold;
                     }
                     else
                     {
@@ -392,6 +404,12 @@ namespace EconSim.Core.Economy
                 return county.SeatCellId;
             }
             return -1;
+        }
+
+        private static ElevationDomain ResolveElevationDomain(MapData mapData)
+        {
+            float sea = mapData?.Info?.SeaLevel ?? ElevationDomains.Simulation.SeaLevel;
+            return ElevationDomains.InferFromSeaLevel(sea);
         }
     }
 }

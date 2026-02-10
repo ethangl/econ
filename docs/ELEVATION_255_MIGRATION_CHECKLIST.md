@@ -12,6 +12,12 @@ Key decision:
 
 This preserves existing blob behavior while unlocking a natural byte-range domain for the rest of the engine.
 
+Status snapshot (February 10, 2026):
+
+- Phases 1-6 code migration is implemented.
+- Visual smoke-checks show no sea/land inversion artifacts.
+- Regression/signoff metrics are still pending (Phase 7).
+
 ---
 
 ## Canonical Domains
@@ -85,10 +91,10 @@ Regression harness bootstrap:
 
 Goal: remove ambiguity.
 
-- [ ] Add an elevation domain abstraction (struct/class) with min/max/sea helpers.
-- [ ] Define `DslDomain` and `SimDomain` in one canonical place.
-- [ ] Ensure DSL code paths consume `DslDomain` only.
-- [ ] Ensure downstream systems are prepared to consume `SimDomain`.
+- [x] Add an elevation domain abstraction (struct/class) with min/max/sea helpers.
+- [x] Define `DslDomain` and `SimDomain` in one canonical place.
+- [x] Ensure DSL code paths consume `DslDomain` only.
+- [x] Ensure downstream systems are prepared to consume `SimDomain`.
 
 Suggested symbols:
 
@@ -98,8 +104,8 @@ Suggested symbols:
 
 Validation:
 
-- [ ] Build passes.
-- [ ] No behavior change yet.
+- [x] Build passes.
+- [ ] No behavior change yet. (later phases intentionally changed behavior)
 
 ---
 
@@ -107,13 +113,13 @@ Validation:
 
 Goal: transition boundary between domains.
 
-- [ ] In `src/MapGen/MapGenPipeline.cs`, after `HeightmapDSL.Execute(...)`, rescale `heights` to simulation domain.
-- [ ] Ensure subsequent calls (Climate/Rivers/Biome/etc.) run on rescaled heights.
+- [x] In `src/MapGen/MapGenPipeline.cs`, after `HeightmapDSL.Execute(...)`, rescale `heights` to simulation domain.
+- [x] Ensure subsequent calls (Climate/Rivers/Biome/etc.) run on rescaled heights.
 
 Validation:
 
-- [ ] Land/water split remains plausible.
-- [ ] No obvious mapgen breakage.
+- [x] Land/water split remains plausible.
+- [x] No obvious mapgen breakage.
 
 ---
 
@@ -121,20 +127,20 @@ Validation:
 
 Goal: all rendering/bridge logic reads simulation-domain values correctly.
 
-- [ ] `unity/Assets/Scripts/Renderer/MapOverlayManager.cs`
+- [x] `unity/Assets/Scripts/Renderer/MapOverlayManager.cs`
   - replace `/100f` style normalization with `/SimMax`.
   - set `_SeaLevel = SimSea / SimMax`.
-- [ ] `unity/Assets/Scripts/Renderer/MapView.cs`
+- [x] `unity/Assets/Scripts/Renderer/MapView.cs`
   - replace `80f`/`20f` assumptions with dynamic `(Sea, LandRange)`.
-- [ ] `unity/Assets/Shaders/MapOverlay.shader`
+- [x] `unity/Assets/Shaders/MapOverlay.shader`
   - keep formulas normalized; `_SeaLevel` should come from code.
-- [ ] `src/EconSim.Core/Import/MapGenAdapter.cs`
+- [x] `src/EconSim.Core/Import/MapGenAdapter.cs`
   - remove hard-coded sea constants; use simulation-domain sea value.
 
 Validation:
 
-- [ ] Visual parity in normalized terms.
-- [ ] No ocean/land inversion artifacts.
+- [x] Visual parity in normalized terms.
+- [x] No ocean/land inversion artifacts.
 
 ---
 
@@ -144,24 +150,24 @@ Goal: convert hard-coded absolute thresholds into normalized-land semantics.
 
 ### 4A Biomes/soils
 
-- [ ] `src/MapGen/BiomeOps.cs`
+- [x] `src/MapGen/BiomeOps.cs`
   - replace raw height literals (`80`, `85`, etc.) with normalized-land thresholds.
 
 ### 4B Transport
 
-- [ ] `src/EconSim.Core/Economy/TransportGraph.cs`
+- [x] `src/EconSim.Core/Transport/TransportGraph.cs`
   - replace fixed bands (`70`, `30`) with domain-derived bands.
 
 ### 4C Resource placement
 
-- [ ] `src/EconSim.Core/Economy/EconomyInitializer.cs`
+- [x] `src/EconSim.Core/Economy/EconomyInitializer.cs`
   - convert ore/deposit cutoffs (`40/45/50`) to normalized/domain-derived values.
 
 Validation:
 
-- [ ] Biome distribution near baseline intent.
-- [ ] Ore distribution still reasonable.
-- [ ] Mountain travel penalty behavior preserved.
+- [x] Biome distribution near baseline intent. *(owner-accepted; no dedicated validation harness available)*
+- [x] Ore distribution still reasonable. *(owner-accepted; no dedicated validation harness available)*
+- [x] Mountain travel penalty behavior preserved.
 
 ---
 
@@ -169,12 +175,12 @@ Validation:
 
 Goal: explicitly keep BFS blob logic in legacy space for morphology stability.
 
-- [ ] `src/MapGen/HeightmapOps.cs`
+- [x] `src/MapGen/HeightmapOps.cs`
   - mark DSL-domain assumptions clearly (`0-100`, `sea=20`).
   - avoid accidental switch to simulation constants.
-- [ ] `src/MapGen/HeightmapDSL.cs`
+- [x] `src/MapGen/HeightmapDSL.cs`
   - keep parsing/template semantics in DSL domain.
-- [ ] `src/MapGen/HeightmapTemplates.cs`
+- [x] `src/MapGen/HeightmapTemplates.cs`
   - keep current values as DSL-domain values.
 
 Validation:
@@ -185,12 +191,12 @@ Validation:
 
 ## Phase 6 - Secondary Consumer Cleanup
 
-- [ ] Audit remaining elevation literals in:
+- [x] Audit remaining elevation literals in:
   - `src/MapGen/WorldConfig.cs`
   - `src/MapGen/PrecipitationOps.cs`
   - `src/MapGen/SuitabilityOps.cs`
   - any additional matches from search.
-- [ ] Replace hard assumptions with domain helpers.
+- [x] Replace hard assumptions with domain helpers.
 
 Validation:
 
@@ -211,8 +217,8 @@ Validation:
 
 Done criteria:
 
-- [ ] Dual-domain boundary is explicit and stable.
-- [ ] Simulation/render systems fully use `0-255`.
+- [x] Dual-domain boundary is explicit and stable.
+- [x] Simulation/render systems fully use `0-255`.
 - [ ] DSL blob morphology preserved from legacy behavior.
 
 ---

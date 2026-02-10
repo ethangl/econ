@@ -9,6 +9,21 @@ namespace MapGen.Core
     /// </summary>
     public static class BiomeOps
     {
+        static readonly float SaltElevationCutoffLandNorm =
+            ElevationDomains.NormalizeLandHeight(40f, ElevationDomains.Dsl); // legacy +20 above sea
+
+        static readonly float LithosolElevationLandThreshold =
+            ElevationDomains.NormalizeLandHeight(80f, ElevationDomains.Dsl);
+
+        static readonly float AlpineElevationLandThreshold =
+            ElevationDomains.NormalizeLandHeight(85f, ElevationDomains.Dsl);
+
+        static readonly float AltitudeCostLandThreshold =
+            ElevationDomains.NormalizeLandHeight(50f, ElevationDomains.Dsl);
+
+        static readonly float OreHeightGateLandThreshold =
+            ElevationDomains.NormalizeLandHeight(50f, ElevationDomains.Dsl);
+
         /// <summary>
         /// Identify lake cells: a cell is a lake if majority (&gt; 50%) of its vertices are lake vertices.
         /// Must run before all other pipeline steps so IsLakeCell is available for skip checks.
@@ -137,7 +152,8 @@ namespace MapGen.Core
         public static void ComputeSaltProximity(BiomeData biome, HeightGrid heights)
         {
             const int maxSaltReach = 5;
-            const float saltElevCutoff = 20f;
+            float saltElevCutoff = SaltElevationCutoffLandNorm * heights.DomainLandRange;
+            if (saltElevCutoff <= 1e-6f) saltElevCutoff = 1f;
 
             var mesh = biome.Mesh;
             int n = mesh.CellCount;
@@ -184,7 +200,7 @@ namespace MapGen.Core
                 }
 
                 float distFactor = Math.Max(0f, 1f - (float)dist[i] / maxSaltReach);
-                float elevAboveSea = heights.Heights[i] - HeightGrid.SeaLevel;
+                float elevAboveSea = heights.Heights[i] - heights.DomainSeaLevel;
                 float elevFactor = Math.Max(0f, 1f - elevAboveSea / saltElevCutoff);
                 biome.SaltEffect[i] = distFactor * elevFactor;
             }
@@ -396,7 +412,9 @@ namespace MapGen.Core
                 }
                 if (maxUphill > 0f)
                 {
-                    float slopeFactor = Math.Min(maxUphill, 20f) / 20f;
+                    float legacySlopeCap = ElevationDomains.Rescale(20f, ElevationDomains.Dsl, heights.Domain);
+                    float slopeCap = legacySlopeCap > 1e-6f ? legacySlopeCap : 1f;
+                    float slopeFactor = Math.Min(maxUphill, slopeCap) / slopeCap;
                     float captured = carry[i] * LoessOrographicCapture * slopeFactor;
                     deposit[i] += captured;
                     carry[i] -= captured;
@@ -433,6 +451,7 @@ namespace MapGen.Core
                 float temp = climate.Temperature[i];
                 float precip = climate.Precipitation[i];
                 float elev = heights.Heights[i];
+                float landHeight = ElevationDomains.NormalizeLandHeight(elev, heights.Domain);
                 float slope = biome.Slope[i];
                 float salt = biome.SaltEffect[i];
                 float flux = biome.CellFlux[i];
@@ -442,7 +461,7 @@ namespace MapGen.Core
                     biome.Soil[i] = SoilType.Permafrost;
                 else if (salt > 0.3f)
                     biome.Soil[i] = SoilType.Saline;
-                else if (slope > 0.6f || elev > 80f)
+                else if (slope > 0.6f || landHeight > LithosolElevationLandThreshold)
                     biome.Soil[i] = SoilType.Lithosol;
                 else if (flux > 200f && slope < 0.15f)
                     biome.Soil[i] = SoilType.Alluvial;
@@ -538,6 +557,7 @@ namespace MapGen.Core
                 float temp = climate.Temperature[i];
                 float precip = climate.Precipitation[i];
                 float elev = heights.Heights[i];
+                float landHeight = ElevationDomains.NormalizeLandHeight(elev, heights.Domain);
                 float slope = biome.Slope[i];
                 float flux = biome.CellFlux[i];
 
@@ -550,7 +570,7 @@ namespace MapGen.Core
                         biome.Biome[i] = precip < 15f ? BiomeId.SaltFlat : BiomeId.CoastalMarsh;
                         break;
                     case SoilType.Lithosol:
-                        biome.Biome[i] = (temp < -3f || elev > 85f)
+                        biome.Biome[i] = (temp < -3f || landHeight > AlpineElevationLandThreshold)
                             ? BiomeId.AlpineBarren : BiomeId.MountainShrub;
                         break;
                     case SoilType.Alluvial:
@@ -927,7 +947,6 @@ namespace MapGen.Core
         // ── Movement Cost ───────────────────────────────────────────────────
 
         const float SlopeWeight = 4f;
-        const float AltitudeThreshold = 50f;
         const float AltitudeWeight = 2f;
 
         // Ground cost per soil type (index = SoilType)
@@ -954,8 +973,9 @@ namespace MapGen.Core
 
                 float slopeCost = 1f + slope * SlopeWeight;
 
-                float altNorm = (height - AltitudeThreshold) /
-                                (HeightGrid.MaxHeight - AltitudeThreshold);
+                float landHeight = ElevationDomains.NormalizeLandHeight(height, heights.Domain);
+                float altNorm = (landHeight - AltitudeCostLandThreshold) /
+                                (1f - AltitudeCostLandThreshold);
                 float altitudeCost = altNorm > 0f ? altNorm * AltitudeWeight : 0f;
 
                 float groundCost = SoilGroundCost[(int)biome.Soil[i]];
@@ -973,7 +993,6 @@ namespace MapGen.Core
         // ── Geological Resources ────────────────────────────────────────────
 
         const float OreNoiseFrequency = 0.004f;
-        const float OreHeightGate = 50f;
         const float IronThreshold = 0.6f;
         const float GoldThreshold = 0.7f;
         const float LeadThreshold = 0.65f;
@@ -995,8 +1014,9 @@ namespace MapGen.Core
 
                 Vec2 c = mesh.CellCenters[i];
                 float height = heights.Heights[i];
+                float landHeight = ElevationDomains.NormalizeLandHeight(height, heights.Domain);
 
-                if (height <= OreHeightGate) continue;
+                if (landHeight <= OreHeightGateLandThreshold) continue;
 
                 float cx = c.X * OreNoiseFrequency;
                 float cy = c.Y * OreNoiseFrequency;

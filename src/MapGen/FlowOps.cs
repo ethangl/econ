@@ -7,6 +7,11 @@ namespace MapGen.Core
         public static void Compute(RiverData data, HeightGrid heights, ClimateData climate,
             float threshold = 30f, float traceThreshold = 10f, int minVertices = 2)
         {
+            data.SeaLevel = heights.DomainSeaLevel;
+            data.MinLakeDepth = ElevationDomains.Rescale(
+                RiverData.LegacyMinLakeDepth,
+                ElevationDomains.Dsl,
+                heights.Domain);
             InterpolateVertexData(data, heights, climate);
             var vertexPairToEdge = BuildVertexPairToEdge(data.Mesh);
             DepressionFill(data);

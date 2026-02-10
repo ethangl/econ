@@ -145,8 +145,7 @@ namespace MapGen.Core
                 bool isConfluence = confluenceEdgeCount >= 2;
 
                 // Defensibility: Gaussian bell on land-normalized height
-                float landHeight = (heights.Heights[i] - HeightGrid.SeaLevel)
-                                 / (HeightGrid.MaxHeight - HeightGrid.SeaLevel);
+                float landHeight = ElevationDomains.NormalizeLandHeight(heights.Heights[i], heights.Domain);
                 if (landHeight < 0f) landHeight = 0f;
                 float dh = landHeight - DefensibilityCenter;
                 float defensibility = (float)Math.Exp(-0.5 * (dh * dh) / (DefensibilitySigma * DefensibilitySigma));

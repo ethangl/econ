@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
+using ElevationDomain = MapGen.Core.ElevationDomain;
+using ElevationDomains = MapGen.Core.ElevationDomains;
 
 namespace EconSim.Core.Transport
 {
@@ -43,6 +45,7 @@ namespace EconSim.Core.Transport
     {
         private readonly MapData _mapData;
         private readonly Dictionary<int, Biome> _biomeById;
+        private readonly ElevationDomain _elevationDomain;
 
         // Cache for computed paths (from -> to -> result)
         private readonly Dictionary<(int, int), PathResult> _pathCache;
@@ -69,6 +72,7 @@ namespace EconSim.Core.Transport
             _mapData = mapData;
             _maxCacheSize = maxCacheSize;
             _pathCache = new Dictionary<(int, int), PathResult>();
+            _elevationDomain = ElevationDomains.InferFromSeaLevel(mapData?.Info?.SeaLevel ?? ElevationDomains.Simulation.SeaLevel);
 
             // Build biome lookup
             _biomeById = new Dictionary<int, Biome>();
@@ -110,12 +114,13 @@ namespace EconSim.Core.Transport
                 baseCost = Math.Max(1f, Math.Min(baseCost, 20f));
             }
 
-            // Height modifier: higher = harder (mountains)
-            // Height 20 = sea level, 100 = peak
-            // Cells above 70 get increasingly difficult
-            if (cell.Height > 70)
+            // Height modifier: higher = harder (mountains).
+            // Keep this in legacy DSL semantics to preserve pre-migration
+            // transport behavior and stabilize market-zone partitioning.
+            float legacyHeight = ElevationDomains.Rescale(cell.Height, _elevationDomain, ElevationDomains.Dsl);
+            if (legacyHeight > 70f)
             {
-                float heightPenalty = (cell.Height - 70) / 30f; // 0-1 range
+                float heightPenalty = (legacyHeight - 70f) / 30f; // 0-1 range in DSL space
                 baseCost *= 1f + heightPenalty * 2f; // Up to 3x cost at peak
             }
 

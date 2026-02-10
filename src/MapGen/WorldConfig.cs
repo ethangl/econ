@@ -63,13 +63,15 @@ namespace MapGen.Core
         };
 
         /// <summary>
-        /// Convert Azgaar height (0-100, sea=20) to meters above sea level.
+        /// Convert height in a specific elevation domain to meters above sea level.
         /// Returns 0 for water cells.
         /// </summary>
-        public float HeightToMeters(float height)
+        public float HeightToMeters(float height, ElevationDomain domain)
         {
-            if (height <= HeightGrid.SeaLevel) return 0f;
-            return ((height - HeightGrid.SeaLevel) / (HeightGrid.MaxHeight - HeightGrid.SeaLevel)) * MaxElevationMeters;
+            if (height <= domain.SeaLevel) return 0f;
+            float landRange = domain.LandRange;
+            if (landRange <= 1e-6f) return 0f;
+            return ((height - domain.SeaLevel) / landRange) * MaxElevationMeters;
         }
 
         /// <summary>
