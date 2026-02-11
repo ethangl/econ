@@ -162,6 +162,23 @@ namespace EconSim.Tests
             Assert.That(highCounty.Resources.ContainsKey("iron_ore"), Is.True, "High-elevation county should receive iron ore.");
         }
 
+        [Test]
+        public void TransportGraph_DistanceNormalization_ScalesWithWorldCellSize()
+        {
+            var legacyMap = BuildTwoCellTransportMap(distanceKm: 30f, cellSizeKm: null);
+            var worldScaleMap = BuildTwoCellTransportMap(distanceKm: 60f, cellSizeKm: 5f);
+
+            var legacyGraph = new TransportGraph(legacyMap);
+            var worldScaleGraph = new TransportGraph(worldScaleMap);
+
+            float legacyCost = legacyGraph.GetEdgeCost(legacyMap.CellById[1], legacyMap.CellById[2]);
+            float worldScaleCost = worldScaleGraph.GetEdgeCost(worldScaleMap.CellById[1], worldScaleMap.CellById[2]);
+
+            Assert.That(legacyCost, Is.EqualTo(1f).Within(0.0001f), "Legacy normalization should keep 30km edge near 1x distance factor.");
+            Assert.That(worldScaleCost, Is.EqualTo(legacyCost).Within(0.0001f),
+                "Distance normalization should preserve equivalent edge cost when world scale doubles.");
+        }
+
         private static MapData BuildLinearMap()
         {
             var mapData = new MapData
@@ -182,6 +199,49 @@ namespace EconSim.Tests
                     new County { Id = 20, SeatCellId = 2, CellIds = new List<int> { 2 }, TotalPopulation = 18000, Centroid = new Vec2(1, 0) },
                     new County { Id = 30, SeatCellId = 3, CellIds = new List<int> { 3 }, TotalPopulation = 16000, Centroid = new Vec2(2, 0) }
                 },
+                Provinces = new List<Province>(),
+                Realms = new List<Realm>(),
+                Rivers = new List<River>(),
+                Burgs = new List<Burg>(),
+                Features = new List<Feature>(),
+                Vertices = new List<Vec2>()
+            };
+
+            mapData.BuildLookups();
+            return mapData;
+        }
+
+        private static MapData BuildTwoCellTransportMap(float distanceKm, float? cellSizeKm)
+        {
+            var info = new MapInfo
+            {
+                SeaLevel = 20f
+            };
+
+            if (cellSizeKm.HasValue)
+            {
+                info.World = new WorldInfo
+                {
+                    CellSizeKm = cellSizeKm.Value,
+                    SeaLevelHeight = 20f,
+                    MaxElevationMeters = 5000f,
+                    MaxSeaDepthMeters = 1250f
+                };
+            }
+
+            var mapData = new MapData
+            {
+                Info = info,
+                Cells = new List<Cell>
+                {
+                    new Cell { Id = 1, IsLand = true, BiomeId = 1, Height = 35, NeighborIds = new List<int> { 2 }, Center = new Vec2(0, 0) },
+                    new Cell { Id = 2, IsLand = true, BiomeId = 1, Height = 35, NeighborIds = new List<int> { 1 }, Center = new Vec2(distanceKm, 0) }
+                },
+                Biomes = new List<Biome>
+                {
+                    new Biome { Id = 1, Name = "Plains", MovementCost = 50 }
+                },
+                Counties = new List<County>(),
                 Provinces = new List<Province>(),
                 Realms = new List<Realm>(),
                 Rivers = new List<River>(),

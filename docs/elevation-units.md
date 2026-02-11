@@ -28,6 +28,9 @@ Always use `EconSim.Core.Data.Elevation` helpers:
 - `SeaRelativeToSignedMeters(float, MapInfo)`
 - `SignedMetersToSeaRelative(float, MapInfo)`
 
+Notes:
+- `ResolveSeaLevel(MapInfo)` prefers `MapInfo.World.SeaLevelHeight` when present and valid, then falls back to legacy `MapInfo.SeaLevel`, then default `20`.
+
 ## Practical Guidance
 
 - When writing map cells from mapgen output, set:

@@ -60,6 +60,9 @@ namespace EconSim.Core.Transport
         // Sea transport costs
         private const float SeaMovementCost = 0.15f;   // ~7x cheaper than base land
         private const float PortTransitionCost = 3.0f; // Cost to load/unload at port
+        private const float LegacyDistanceNormalizationKm = 30f;
+        private const float LegacyCellSizeKm = 2.5f;
+        private const float DistanceNormalizationPerCellSize = LegacyDistanceNormalizationKm / LegacyCellSizeKm;
 
         // Impassable threshold (cells with cost >= this are blocked)
         private const float ImpassableThreshold = 100f;
@@ -68,6 +71,7 @@ namespace EconSim.Core.Transport
 
         private readonly float _mountainStartMetersAsl;
         private readonly float _mountainRangeMeters;
+        private readonly float _distanceNormalizationKm;
 
         public TransportGraph(MapData mapData, int maxCacheSize = 10000)
         {
@@ -78,6 +82,7 @@ namespace EconSim.Core.Transport
             _mountainRangeMeters = Math.Max(
                 MinMountainRangeMeters,
                 Elevation.ResolveMaxElevationMeters(mapData.Info) - _mountainStartMetersAsl);
+            _distanceNormalizationKm = ResolveDistanceNormalizationKm(mapData.Info);
 
             // Build biome lookup
             _biomeById = new Dictionary<int, Biome>();
@@ -148,8 +153,8 @@ namespace EconSim.Core.Transport
             // Distance factor (Euclidean distance between cell centers)
             float distance = Vec2.Distance(from.Center, to.Center);
 
-            // Scale by some factor to normalize (cells are roughly 10-50 units apart)
-            float distanceFactor = distance / 30f; // Normalize around typical cell spacing
+            // Normalize edge distance by world cell size to keep transport costs scale-consistent.
+            float distanceFactor = distance / _distanceNormalizationKm;
 
             float totalCost = baseCost * distanceFactor;
 
@@ -184,6 +189,18 @@ namespace EconSim.Core.Transport
             }
 
             return totalCost;
+        }
+
+        private static float ResolveDistanceNormalizationKm(MapInfo info)
+        {
+            if (info?.World != null && info.World.CellSizeKm > 0f)
+            {
+                float scale = info.World.CellSizeKm * DistanceNormalizationPerCellSize;
+                return Math.Max(1f, scale);
+            }
+
+            // Legacy fallback preserves historical behavior when world metadata is absent.
+            return LegacyDistanceNormalizationKm;
         }
 
         /// <summary>

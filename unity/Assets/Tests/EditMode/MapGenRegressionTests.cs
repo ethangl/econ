@@ -698,6 +698,21 @@ namespace EconSim.Tests
         }
 
         [Test]
+        public void ResolveSeaLevel_PrefersWorldMetadata_WhenLegacySeaLevelIsUnset()
+        {
+            var info = new MapInfo
+            {
+                SeaLevel = 0f, // legacy unset/invalid
+                World = new WorldInfo
+                {
+                    SeaLevelHeight = 25f
+                }
+            };
+
+            Assert.That(Elevation.ResolveSeaLevel(info), Is.EqualTo(25f).Within(0.0001f));
+        }
+
+        [Test]
         public void MapGenAdapter_ProducesCanonicalElevationForEveryCell()
         {
             var config = new MapGenConfig

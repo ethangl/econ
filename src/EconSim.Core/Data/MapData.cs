@@ -122,8 +122,12 @@ namespace EconSim.Core.Data
                 throw new InvalidOperationException("World height anchors must satisfy MinHeight < SeaLevelHeight < MaxHeight.");
             if (world.MinHeight < Elevation.LegacyMinHeight || world.MaxHeight > Elevation.LegacyMaxHeight)
                 throw new InvalidOperationException("World height anchors must remain within legacy absolute range [0, 100].");
-            if (Math.Abs(world.SeaLevelHeight - Elevation.ResolveSeaLevel(Info)) > 0.0001f)
-                throw new InvalidOperationException("World.SeaLevelHeight must match MapInfo.SeaLevel.");
+            float infoSeaLevel = Info.SeaLevel;
+            if (infoSeaLevel > Elevation.LegacyMinHeight && infoSeaLevel < Elevation.LegacyMaxHeight &&
+                Math.Abs(world.SeaLevelHeight - infoSeaLevel) > 0.0001f)
+            {
+                throw new InvalidOperationException("World.SeaLevelHeight must match MapInfo.SeaLevel when MapInfo.SeaLevel is set.");
+            }
         }
     }
 
@@ -337,7 +341,15 @@ namespace EconSim.Core.Data
             if (info == null)
                 return DefaultSeaLevel;
 
-            // Treat unset/invalid metadata as default to keep downstream thresholds stable.
+            // Prefer explicit world metadata when available.
+            if (info.World != null)
+            {
+                float worldSeaLevel = info.World.SeaLevelHeight;
+                if (worldSeaLevel > LegacyMinHeight && worldSeaLevel < LegacyMaxHeight)
+                    return worldSeaLevel;
+            }
+
+            // Fallback to legacy field. Treat unset/invalid metadata as default.
             float seaLevel = info.SeaLevel;
             if (seaLevel <= LegacyMinHeight || seaLevel >= LegacyMaxHeight)
                 return DefaultSeaLevel;

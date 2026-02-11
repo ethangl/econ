@@ -643,7 +643,8 @@ Edge cost formula:
 
 ```
 baseCost = (fromCellCost + toCellCost) / 2
-distanceFactor = euclideanDistance / 30
+distanceNormalizationKm = (worldCellSizeKm > 0 ? worldCellSizeKm * 12 : 30)
+distanceFactor = euclideanDistance / distanceNormalizationKm
 totalCost = baseCost * distanceFactor * riverBonus
 ```
 
