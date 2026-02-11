@@ -10,71 +10,110 @@ namespace MapGen.Core
     /// </summary>
     public static class HeightmapDslV2
     {
-        public static void Execute(ElevationFieldV2 field, string script, int seed)
+        public static void Execute(ElevationFieldV2 field, string script, int seed, HeightmapDslV2Diagnostics diagnostics = null)
         {
             if (field == null) throw new ArgumentNullException(nameof(field));
             if (script == null) throw new ArgumentNullException(nameof(script));
 
             var rng = new Random(seed);
             var lines = script.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-
+            int logicalLine = 0;
             foreach (string raw in lines)
             {
+                logicalLine++;
                 string line = raw.Trim();
                 if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal))
                     continue;
 
-                ExecuteLine(field, line, rng);
+                float[] before = null;
+                float beforeLand = 0f;
+                float beforeEdgeLand = 0f;
+                if (diagnostics != null)
+                {
+                    before = (float[])field.ElevationMetersSigned.Clone();
+                    beforeLand = field.LandRatio();
+                    beforeEdgeLand = ComputeEdgeLandRatio(field);
+                }
+
+                OpTrace trace = ExecuteLine(field, line, rng);
                 TruncateToLegacyIntegerSteps(field);
                 field.ClampAll();
+
+                if (diagnostics != null)
+                {
+                    ComputeDeltaStats(before, field, out float changedRatio, out float meanAbsDelta, out float maxRaise, out float maxLower);
+                    diagnostics.Add(new HeightmapDslV2OpMetrics
+                    {
+                        LineNumber = logicalLine,
+                        Operation = trace.Operation,
+                        RawLine = line,
+                        BeforeLandRatio = beforeLand,
+                        AfterLandRatio = field.LandRatio(),
+                        BeforeEdgeLandRatio = beforeEdgeLand,
+                        AfterEdgeLandRatio = ComputeEdgeLandRatio(field),
+                        ChangedCellRatio = changedRatio,
+                        MeanAbsDeltaMeters = meanAbsDelta,
+                        MaxRaiseMeters = maxRaise,
+                        MaxLowerMeters = maxLower,
+                        PlacementCount = trace.PlacementCount,
+                        RequestedXMinPercent = trace.RequestedXMinPercent,
+                        RequestedXMaxPercent = trace.RequestedXMaxPercent,
+                        RequestedYMinPercent = trace.RequestedYMinPercent,
+                        RequestedYMaxPercent = trace.RequestedYMaxPercent,
+                        SeedXMinPercent = trace.SeedXMinPercent,
+                        SeedXMaxPercent = trace.SeedXMaxPercent,
+                        SeedYMinPercent = trace.SeedYMinPercent,
+                        SeedYMaxPercent = trace.SeedYMaxPercent,
+                        EndXMinPercent = trace.EndXMinPercent,
+                        EndXMaxPercent = trace.EndXMaxPercent,
+                        EndYMinPercent = trace.EndYMinPercent,
+                        EndYMaxPercent = trace.EndYMaxPercent
+                    });
+                }
             }
         }
 
-        static void ExecuteLine(ElevationFieldV2 field, string line, Random rng)
+        static OpTrace ExecuteLine(ElevationFieldV2 field, string line, Random rng)
         {
             string[] parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 0)
-                return;
+                return new OpTrace("noop");
 
             string op = parts[0].ToLowerInvariant();
             switch (op)
             {
                 case "hill":
-                    ExecuteBlob(field, parts, positive: true, rng);
-                    break;
+                    return ExecuteBlob(field, parts, positive: true, rng, op);
                 case "pit":
-                    ExecuteBlob(field, parts, positive: false, rng);
-                    break;
+                    return ExecuteBlob(field, parts, positive: false, rng, op);
                 case "range":
-                    ExecuteLinear(field, parts, positive: true, rng);
-                    break;
+                    return ExecuteLinear(field, parts, positive: true, rng, op);
                 case "trough":
-                    ExecuteLinear(field, parts, positive: false, rng);
-                    break;
+                    return ExecuteLinear(field, parts, positive: false, rng, op);
                 case "mask":
                     ExecuteMask(field, parts);
-                    break;
+                    return new OpTrace(op);
                 case "strait":
                     ExecuteStrait(field, parts, rng);
-                    break;
+                    return new OpTrace(op);
                 case "add":
                     ExecuteAdd(field, parts);
-                    break;
+                    return new OpTrace(op);
                 case "multiply":
                     ExecuteMultiply(field, parts);
-                    break;
+                    return new OpTrace(op);
                 case "smooth":
                     ExecuteSmooth(field, parts);
-                    break;
+                    return new OpTrace(op);
                 case "invert":
                     ExecuteInvert(field, parts, rng);
-                    break;
+                    return new OpTrace(op);
                 default:
                     throw new ArgumentException($"Unknown V2 heightmap operation: {op}");
             }
         }
 
-        static void ExecuteBlob(ElevationFieldV2 field, string[] parts, bool positive, Random rng)
+        static OpTrace ExecuteBlob(ElevationFieldV2 field, string[] parts, bool positive, Random rng, string operation)
         {
             if (parts.Length < 5)
                 throw new ArgumentException("Blob operation requires: count height_m x% y%.");
@@ -83,20 +122,71 @@ namespace MapGen.Core
             float heightMeters = ParseMeterRange(parts[2], rng);
             var xRange = ParsePercentRange(parts[3]);
             var yRange = ParsePercentRange(parts[4]);
+            NormalizeRange(xRange.min, xRange.max, out float xMinPercent, out float xMaxPercent);
+            NormalizeRange(yRange.min, yRange.max, out float yMinPercent, out float yMaxPercent);
+            float xMin = xMinPercent / 100f;
+            float xMax = xMaxPercent / 100f;
+            float yMin = yMinPercent / 100f;
+            float yMax = yMaxPercent / 100f;
+            // DSL x/y bounds are hard placement bounds for blob seeds. Terrain spread may extend beyond them.
+            var trace = new OpTrace(operation)
+            {
+                RequestedXMinPercent = xMinPercent,
+                RequestedXMaxPercent = xMaxPercent,
+                RequestedYMinPercent = yMinPercent,
+                RequestedYMaxPercent = yMaxPercent
+            };
 
             for (int i = 0; i < count; i++)
             {
-                float x = RandInRange(xRange.min, xRange.max, rng) / 100f;
-                float y = RandInRange(yRange.min, yRange.max, rng) / 100f;
+                float x = RandInRange(xMin, xMax, rng);
+                float y = RandInRange(yMin, yMax, rng);
+                bool placed;
+                float acceptedX;
+                float acceptedY;
 
                 if (positive)
-                    HeightmapOpsV2.Hill(field, x, y, heightMeters, rng);
+                {
+                    placed = HeightmapOpsV2.Hill(
+                        field,
+                        x,
+                        y,
+                        heightMeters,
+                        rng,
+                        xMin,
+                        xMax,
+                        yMin,
+                        yMax,
+                        out acceptedX,
+                        out acceptedY);
+                }
                 else
-                    HeightmapOpsV2.Pit(field, x, y, heightMeters, rng);
+                {
+                    placed = HeightmapOpsV2.Pit(
+                        field,
+                        x,
+                        y,
+                        heightMeters,
+                        rng,
+                        xMin,
+                        xMax,
+                        yMin,
+                        yMax,
+                        out acceptedX,
+                        out acceptedY);
+                }
+
+                if (placed)
+                {
+                    trace.PlacementCount++;
+                    trace.AddSeed(acceptedX * 100f, acceptedY * 100f);
+                }
             }
+
+            return trace;
         }
 
-        static void ExecuteLinear(ElevationFieldV2 field, string[] parts, bool positive, Random rng)
+        static OpTrace ExecuteLinear(ElevationFieldV2 field, string[] parts, bool positive, Random rng, string operation)
         {
             if (parts.Length < 5)
                 throw new ArgumentException("Linear operation requires: count height_m x% y%.");
@@ -105,44 +195,57 @@ namespace MapGen.Core
             float heightMeters = ParseMeterRange(parts[2], rng);
             var xRange = ParsePercentRange(parts[3]);
             var yRange = ParsePercentRange(parts[4]);
+            NormalizeRange(xRange.min, xRange.max, out float xMinPercent, out float xMaxPercent);
+            NormalizeRange(yRange.min, yRange.max, out float yMinPercent, out float yMaxPercent);
+            float xMin = xMinPercent / 100f;
+            float xMax = xMaxPercent / 100f;
+            float yMin = yMinPercent / 100f;
+            float yMax = yMaxPercent / 100f;
 
             float maxDistFraction = positive ? 3f : 2f;
+            float mapW = field.Mesh.Width;
+            float mapH = field.Mesh.Height;
+            float minDist = mapW / 8f;
+            float maxDist = mapW / maxDistFraction;
+            // DSL x/y bounds are hard placement bounds for line start/end points. Terrain spread may extend beyond them.
+            var trace = new OpTrace(operation)
+            {
+                RequestedXMinPercent = xMinPercent,
+                RequestedXMaxPercent = xMaxPercent,
+                RequestedYMinPercent = yMinPercent,
+                RequestedYMaxPercent = yMaxPercent
+            };
 
             for (int i = 0; i < count; i++)
             {
-                float x1 = RandInRange(xRange.min, xRange.max, rng) / 100f;
-                float y1 = RandInRange(yRange.min, yRange.max, rng) / 100f;
+                float x1 = RandInRange(xMin, xMax, rng);
+                float y1 = RandInRange(yMin, yMax, rng);
 
                 if (!positive)
                 {
                     int limit = 0;
                     while (limit < 50)
                     {
-                        int startCell = HeightmapOpsV2.FindNearestCell(field.Mesh, x1 * field.Mesh.Width, y1 * field.Mesh.Height);
+                        int startCell = HeightmapOpsV2.FindNearestCell(field.Mesh, x1 * mapW, y1 * mapH);
                         if (startCell >= 0 && field.IsLand(startCell)) break;
-                        x1 = RandInRange(xRange.min, xRange.max, rng) / 100f;
-                        y1 = RandInRange(yRange.min, yRange.max, rng) / 100f;
+                        x1 = RandInRange(xMin, xMax, rng);
+                        y1 = RandInRange(yMin, yMax, rng);
                         limit++;
                     }
                 }
 
-                float x2, y2;
-                float mapW = field.Mesh.Width;
-                int endLimit = 0;
-                do
-                {
-                    x2 = (10f + (float)rng.NextDouble() * 80f) / 100f;
-                    y2 = (15f + (float)rng.NextDouble() * 70f) / 100f;
-                    float dist = Math.Abs(y2 - y1) * field.Mesh.Height + Math.Abs(x2 - x1) * mapW;
-                    endLimit++;
-                    if (dist >= mapW / 8f && dist <= mapW / maxDistFraction) break;
-                } while (endLimit < 50);
+                ChooseEndpointWithinBounds(x1, y1, xMin, xMax, yMin, yMax, minDist, maxDist, mapW, mapH, rng, out float x2, out float y2);
+                trace.PlacementCount++;
+                trace.AddSeed(x1 * 100f, y1 * 100f);
+                trace.AddEnd(x2 * 100f, y2 * 100f);
 
                 if (positive)
                     HeightmapOpsV2.Range(field, x1, y1, x2, y2, heightMeters, rng);
                 else
                     HeightmapOpsV2.Trough(field, x1, y1, x2, y2, heightMeters, rng);
             }
+
+            return trace;
         }
 
         static void ExecuteMask(ElevationFieldV2 field, string[] parts)
@@ -361,6 +464,144 @@ namespace MapGen.Core
             return min + (float)rng.NextDouble() * (max - min);
         }
 
+        static float ComputeEdgeLandRatio(ElevationFieldV2 field)
+        {
+            float edgeMarginX = field.Mesh.Width * 0.12f;
+            float edgeMarginY = field.Mesh.Height * 0.12f;
+            int edgeCells = 0;
+            int edgeLand = 0;
+
+            for (int i = 0; i < field.CellCount; i++)
+            {
+                Vec2 center = field.Mesh.CellCenters[i];
+                bool isEdge = center.X <= edgeMarginX || center.X >= field.Mesh.Width - edgeMarginX
+                    || center.Y <= edgeMarginY || center.Y >= field.Mesh.Height - edgeMarginY;
+                if (!isEdge)
+                    continue;
+
+                edgeCells++;
+                if (field.IsLand(i))
+                    edgeLand++;
+            }
+
+            if (edgeCells == 0)
+                return 0f;
+
+            return edgeLand / (float)edgeCells;
+        }
+
+        static void ComputeDeltaStats(
+            float[] before,
+            ElevationFieldV2 field,
+            out float changedRatio,
+            out float meanAbsDelta,
+            out float maxRaise,
+            out float maxLower)
+        {
+            changedRatio = 0f;
+            meanAbsDelta = 0f;
+            maxRaise = 0f;
+            maxLower = 0f;
+            if (before == null || before.Length != field.CellCount || field.CellCount == 0)
+                return;
+
+            int changed = 0;
+            float sumAbs = 0f;
+            for (int i = 0; i < field.CellCount; i++)
+            {
+                float delta = field[i] - before[i];
+                float abs = Math.Abs(delta);
+                if (abs > 1e-6f)
+                    changed++;
+
+                sumAbs += abs;
+                if (delta > maxRaise)
+                    maxRaise = delta;
+                if (delta < 0f && -delta > maxLower)
+                    maxLower = -delta;
+            }
+
+            changedRatio = changed / (float)field.CellCount;
+            meanAbsDelta = sumAbs / field.CellCount;
+        }
+
+        static void ChooseEndpointWithinBounds(
+            float x1,
+            float y1,
+            float xMin,
+            float xMax,
+            float yMin,
+            float yMax,
+            float minDist,
+            float maxDist,
+            float mapW,
+            float mapH,
+            Random rng,
+            out float x2,
+            out float y2)
+        {
+            x2 = x1;
+            y2 = y1;
+            float bestPenalty = float.MaxValue;
+
+            for (int attempt = 0; attempt < 50; attempt++)
+            {
+                float candidateX = RandInRange(xMin, xMax, rng);
+                float candidateY = RandInRange(yMin, yMax, rng);
+                float dist = Distance(candidateX, candidateY, x1, y1, mapW, mapH);
+                float penalty = DistanceBandPenalty(dist, minDist, maxDist);
+                if (Math.Abs(candidateX - x1) < 0.0001f && Math.Abs(candidateY - y1) < 0.0001f)
+                    penalty += minDist;
+
+                if (penalty <= 0f)
+                {
+                    x2 = candidateX;
+                    y2 = candidateY;
+                    return;
+                }
+
+                if (penalty < bestPenalty)
+                {
+                    bestPenalty = penalty;
+                    x2 = candidateX;
+                    y2 = candidateY;
+                }
+            }
+
+            if (Math.Abs(x2 - x1) < 0.0001f && Math.Abs(y2 - y1) < 0.0001f)
+            {
+                x2 = Math.Abs(xMax - x1) >= Math.Abs(xMin - x1) ? xMax : xMin;
+                y2 = Math.Abs(yMax - y1) >= Math.Abs(yMin - y1) ? yMax : yMin;
+            }
+        }
+
+        static float DistanceBandPenalty(float distance, float minDist, float maxDist)
+        {
+            if (distance < minDist)
+                return minDist - distance;
+
+            if (distance > maxDist)
+                return distance - maxDist;
+
+            return 0f;
+        }
+
+        static float Distance(float x2, float y2, float x1, float y1, float mapW, float mapH) =>
+            Math.Abs(y2 - y1) * mapH + Math.Abs(x2 - x1) * mapW;
+
+        static void NormalizeRange(float a, float b, out float min, out float max)
+        {
+            if (b < a)
+            {
+                min = b;
+                max = a;
+                return;
+            }
+
+            min = a;
+            max = b;
+        }
+
         static void TruncateToLegacyIntegerSteps(ElevationFieldV2 field)
         {
             float maxElevation = Math.Max(1e-6f, field.MaxElevationMeters);
@@ -395,6 +636,49 @@ namespace MapGen.Core
                 }
 
                 field[i] = quantized;
+            }
+        }
+
+        sealed class OpTrace
+        {
+            public readonly string Operation;
+            public int PlacementCount;
+            public float? RequestedXMinPercent;
+            public float? RequestedXMaxPercent;
+            public float? RequestedYMinPercent;
+            public float? RequestedYMaxPercent;
+            public float? SeedXMinPercent;
+            public float? SeedXMaxPercent;
+            public float? SeedYMinPercent;
+            public float? SeedYMaxPercent;
+            public float? EndXMinPercent;
+            public float? EndXMaxPercent;
+            public float? EndYMinPercent;
+            public float? EndYMaxPercent;
+
+            public OpTrace(string operation)
+            {
+                Operation = operation;
+            }
+
+            public void AddSeed(float xPercent, float yPercent)
+            {
+                ExpandRange(ref SeedXMinPercent, ref SeedXMaxPercent, xPercent);
+                ExpandRange(ref SeedYMinPercent, ref SeedYMaxPercent, yPercent);
+            }
+
+            public void AddEnd(float xPercent, float yPercent)
+            {
+                ExpandRange(ref EndXMinPercent, ref EndXMaxPercent, xPercent);
+                ExpandRange(ref EndYMinPercent, ref EndYMaxPercent, yPercent);
+            }
+
+            static void ExpandRange(ref float? min, ref float? max, float value)
+            {
+                if (!min.HasValue || value < min.Value)
+                    min = value;
+                if (!max.HasValue || value > max.Value)
+                    max = value;
             }
         }
     }

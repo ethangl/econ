@@ -54,31 +54,51 @@ namespace MapGen.Core
 
         static float FromShapeUnits(ElevationFieldV2 field, float units) => units * ShapeUnitMeters(field);
 
-        public static void Hill(ElevationFieldV2 field, float seedX, float seedY, float heightMeters, Random rng)
+        public static bool Hill(
+            ElevationFieldV2 field,
+            float seedX,
+            float seedY,
+            float heightMeters,
+            Random rng,
+            float minX,
+            float maxX,
+            float minY,
+            float maxY,
+            out float acceptedSeedX,
+            out float acceptedSeedY)
         {
             int cellCount = field.CellCount;
+            acceptedSeedX = seedX;
+            acceptedSeedY = seedY;
             if (cellCount == 0)
-                return;
+                return false;
 
             float blobPower = GetBlobPower(cellCount);
             int hUnits = (int)Math.Min(Math.Max(ToShapeUnits(field, heightMeters), 0f), 100f);
+
+            ClampBounds(ref minX, ref maxX, ref minY, ref maxY);
+            seedX = Clamp(seedX, minX, maxX);
+            seedY = Clamp(seedY, minY, maxY);
 
             int seedCell = -1;
             for (int attempt = 0; attempt < 50; attempt++)
             {
                 seedCell = FindNearestCell(field.Mesh, seedX * field.Mesh.Width, seedY * field.Mesh.Height);
                 if (seedCell < 0)
-                    return;
+                    return false;
 
                 if (field[seedCell] + FromShapeUnits(field, hUnits) <= field.MaxElevationMeters * 0.90f)
                     break;
 
-                seedX = Clamp(seedX + ((float)rng.NextDouble() - 0.5f) * 0.1f, 0f, 1f);
-                seedY = Clamp(seedY + ((float)rng.NextDouble() - 0.5f) * 0.1f, 0f, 1f);
+                seedX = Clamp(seedX + ((float)rng.NextDouble() - 0.5f) * 0.1f, minX, maxX);
+                seedY = Clamp(seedY + ((float)rng.NextDouble() - 0.5f) * 0.1f, minY, maxY);
             }
 
             if (seedCell < 0)
-                return;
+                return false;
+
+            acceptedSeedX = seedX;
+            acceptedSeedY = seedY;
 
             var changeUnits = new int[cellCount];
             changeUnits[seedCell] = hUnits;
@@ -102,30 +122,50 @@ namespace MapGen.Core
 
             for (int i = 0; i < cellCount; i++)
                 field[i] = field[i] + FromShapeUnits(field, changeUnits[i]);
+            return true;
         }
 
-        public static void Pit(ElevationFieldV2 field, float seedX, float seedY, float depthMeters, Random rng)
+        public static bool Pit(
+            ElevationFieldV2 field,
+            float seedX,
+            float seedY,
+            float depthMeters,
+            Random rng,
+            float minX,
+            float maxX,
+            float minY,
+            float maxY,
+            out float acceptedSeedX,
+            out float acceptedSeedY)
         {
             int cellCount = field.CellCount;
+            acceptedSeedX = seedX;
+            acceptedSeedY = seedY;
             if (cellCount == 0)
-                return;
+                return false;
 
             float blobPower = GetBlobPower(cellCount);
+            ClampBounds(ref minX, ref maxX, ref minY, ref maxY);
+            seedX = Clamp(seedX, minX, maxX);
+            seedY = Clamp(seedY, minY, maxY);
             int seedCell = -1;
             for (int attempt = 0; attempt < 50; attempt++)
             {
                 seedCell = FindNearestCell(field.Mesh, seedX * field.Mesh.Width, seedY * field.Mesh.Height);
                 if (seedCell < 0)
-                    return;
+                    return false;
                 if (field.IsLand(seedCell))
                     break;
 
-                seedX = Clamp(seedX + ((float)rng.NextDouble() - 0.5f) * 0.1f, 0f, 1f);
-                seedY = Clamp(seedY + ((float)rng.NextDouble() - 0.5f) * 0.1f, 0f, 1f);
+                seedX = Clamp(seedX + ((float)rng.NextDouble() - 0.5f) * 0.1f, minX, maxX);
+                seedY = Clamp(seedY + ((float)rng.NextDouble() - 0.5f) * 0.1f, minY, maxY);
             }
 
             if (seedCell < 0)
-                return;
+                return false;
+
+            acceptedSeedX = seedX;
+            acceptedSeedY = seedY;
 
             float hUnits = Math.Min(Math.Max(ToShapeUnits(field, depthMeters), 0f), 100f);
             var used = new bool[cellCount];
@@ -150,6 +190,7 @@ namespace MapGen.Core
                     queue.Enqueue(c);
                 }
             }
+            return true;
         }
 
         public static void Range(ElevationFieldV2 field, float x1, float y1, float x2, float y2, float heightMeters, Random rng)
@@ -628,5 +669,27 @@ namespace MapGen.Core
 
         static float Clamp(float value, float min, float max) =>
             value < min ? min : (value > max ? max : value);
+
+        static void ClampBounds(ref float minX, ref float maxX, ref float minY, ref float maxY)
+        {
+            if (maxX < minX)
+            {
+                float t = minX;
+                minX = maxX;
+                maxX = t;
+            }
+
+            if (maxY < minY)
+            {
+                float t = minY;
+                minY = maxY;
+                maxY = t;
+            }
+
+            minX = Clamp(minX, 0f, 1f);
+            maxX = Clamp(maxX, 0f, 1f);
+            minY = Clamp(minY, 0f, 1f);
+            maxY = Clamp(maxY, 0f, 1f);
+        }
     }
 }
