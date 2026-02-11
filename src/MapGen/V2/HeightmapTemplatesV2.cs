@@ -25,7 +25,14 @@ namespace MapGen.Core
                     RiverMinVerticesScale = 1f,
                     RealmTargetScale = 1f,
                     ProvinceTargetScale = 1f,
-                    CountyTargetScale = 3.0f
+                    CountyTargetScale = 3.0f,
+                    BiomeCoastSaltScale = 1f,
+                    BiomeSalineThresholdScale = 1f,
+                    BiomeSlopeScale = 0.85f,
+                    BiomeAlluvialFluxThresholdScale = 0.80f,
+                    BiomeAlluvialMaxSlopeScale = 1.25f,
+                    BiomeWetlandFluxThresholdScale = 1.40f,
+                    BiomeWetlandMaxSlopeScale = 0.80f
                 },
                 [HeightmapTemplateType.LowIsland] = new HeightmapTemplateTuningProfile
                 {
@@ -38,7 +45,14 @@ namespace MapGen.Core
                     RiverMinVerticesScale = 1f,
                     RealmTargetScale = 0.50f,
                     ProvinceTargetScale = 0.67f,
-                    CountyTargetScale = 3.2f
+                    CountyTargetScale = 3.2f,
+                    BiomeCoastSaltScale = 0.65f,
+                    BiomeSalineThresholdScale = 1.20f,
+                    BiomeSlopeScale = 1f,
+                    BiomeAlluvialFluxThresholdScale = 1f,
+                    BiomeAlluvialMaxSlopeScale = 1f,
+                    BiomeWetlandFluxThresholdScale = 1f,
+                    BiomeWetlandMaxSlopeScale = 1f
                 },
                 [HeightmapTemplateType.HighIsland] = new HeightmapTemplateTuningProfile
                 {
@@ -51,7 +65,14 @@ namespace MapGen.Core
                     RiverMinVerticesScale = 1.10f,
                     RealmTargetScale = 3.0f,
                     ProvinceTargetScale = 2.0f,
-                    CountyTargetScale = 2.3f
+                    CountyTargetScale = 2.3f,
+                    BiomeCoastSaltScale = 1f,
+                    BiomeSalineThresholdScale = 1f,
+                    BiomeSlopeScale = 0.45f,
+                    BiomeAlluvialFluxThresholdScale = 0.55f,
+                    BiomeAlluvialMaxSlopeScale = 2.20f,
+                    BiomeWetlandFluxThresholdScale = 1.00f,
+                    BiomeWetlandMaxSlopeScale = 1.60f
                 },
                 [HeightmapTemplateType.Archipelago] = new HeightmapTemplateTuningProfile
                 {
@@ -64,7 +85,14 @@ namespace MapGen.Core
                     RiverMinVerticesScale = 0.75f,
                     RealmTargetScale = 4.0f,
                     ProvinceTargetScale = 4.0f,
-                    CountyTargetScale = 3.7f
+                    CountyTargetScale = 3.7f,
+                    BiomeCoastSaltScale = 1.10f,
+                    BiomeSalineThresholdScale = 1f,
+                    BiomeSlopeScale = 0.35f,
+                    BiomeAlluvialFluxThresholdScale = 0.45f,
+                    BiomeAlluvialMaxSlopeScale = 2.20f,
+                    BiomeWetlandFluxThresholdScale = 1f,
+                    BiomeWetlandMaxSlopeScale = 1f
                 },
             };
 

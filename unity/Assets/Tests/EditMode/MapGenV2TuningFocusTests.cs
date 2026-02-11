@@ -57,6 +57,13 @@ namespace EconSim.Tests
                 int deltaRealmCount = Math.Abs(c.V2.RealmCount - c.V1.RealmCount);
                 int deltaProvinceCount = Math.Abs(c.V2.ProvinceCount - c.V1.ProvinceCount);
                 int deltaCountyCount = Math.Abs(c.V2.CountyCount - c.V1.CountyCount);
+                float biomeOverlap = ComputeBiomeOverlap(c.V1.BiomeCounts, c.V2.BiomeCounts);
+                int maxAbsBiomeDrift = ComputeMaxAbsBiomeDrift(c.V1.BiomeCounts, c.V2.BiomeCounts);
+                int floodplainDrift = Math.Abs(BiomeDelta(c.V1.BiomeCounts, c.V2.BiomeCounts, BiomeId.Floodplain));
+                int wetlandDrift = Math.Abs(BiomeDelta(c.V1.BiomeCounts, c.V2.BiomeCounts, BiomeId.Wetland));
+                int temperateForestDrift = Math.Abs(BiomeDelta(c.V1.BiomeCounts, c.V2.BiomeCounts, BiomeId.TemperateForest));
+                int mountainShrubDrift = Math.Abs(BiomeDelta(c.V1.BiomeCounts, c.V2.BiomeCounts, BiomeId.MountainShrub));
+                int coastalMarshDrift = Math.Abs(BiomeDelta(c.V1.BiomeCounts, c.V2.BiomeCounts, BiomeId.CoastalMarsh));
 
                 // Focus guardrails (post-tuning): keep V2 tightly aligned with V1 for visual tuning templates.
                 if (deltaLand > 0.10f)
@@ -71,6 +78,44 @@ namespace EconSim.Tests
                     failures.Add($"{c.Template} seed={c.Seed}: |province count drift|={deltaProvinceCount} > 2");
                 if (deltaCountyCount > 8)
                     failures.Add($"{c.Template} seed={c.Seed}: |county count drift|={deltaCountyCount} > 8");
+
+                // Hard biome guardrails by template.
+                switch (c.Template)
+                {
+                    case HeightmapTemplateType.Continents:
+                        if (biomeOverlap < 0.58f)
+                            failures.Add($"{c.Template} seed={c.Seed}: biome overlap={biomeOverlap:0.000} < 0.580");
+                        if (floodplainDrift > 240)
+                            failures.Add($"{c.Template} seed={c.Seed}: |Floodplain drift|={floodplainDrift} > 240");
+                        if (mountainShrubDrift > 180)
+                            failures.Add($"{c.Template} seed={c.Seed}: |MountainShrub drift|={mountainShrubDrift} > 180");
+                        break;
+                    case HeightmapTemplateType.LowIsland:
+                        if (biomeOverlap < 0.54f)
+                            failures.Add($"{c.Template} seed={c.Seed}: biome overlap={biomeOverlap:0.000} < 0.540");
+                        if (coastalMarshDrift > 260)
+                            failures.Add($"{c.Template} seed={c.Seed}: |CoastalMarsh drift|={coastalMarshDrift} > 260");
+                        break;
+                    case HeightmapTemplateType.HighIsland:
+                        if (biomeOverlap < 0.46f)
+                            failures.Add($"{c.Template} seed={c.Seed}: biome overlap={biomeOverlap:0.000} < 0.460");
+                        if (floodplainDrift > 220)
+                            failures.Add($"{c.Template} seed={c.Seed}: |Floodplain drift|={floodplainDrift} > 220");
+                        if (wetlandDrift > 340)
+                            failures.Add($"{c.Template} seed={c.Seed}: |Wetland drift|={wetlandDrift} > 340");
+                        if (temperateForestDrift > 180)
+                            failures.Add($"{c.Template} seed={c.Seed}: |TemperateForest drift|={temperateForestDrift} > 180");
+                        break;
+                    case HeightmapTemplateType.Archipelago:
+                        if (biomeOverlap < 0.55f)
+                            failures.Add($"{c.Template} seed={c.Seed}: biome overlap={biomeOverlap:0.000} < 0.550");
+                        if (coastalMarshDrift > 220)
+                            failures.Add($"{c.Template} seed={c.Seed}: |CoastalMarsh drift|={coastalMarshDrift} > 220");
+                        break;
+                }
+
+                if (maxAbsBiomeDrift > 520)
+                    failures.Add($"{c.Template} seed={c.Seed}: |max biome drift|={maxAbsBiomeDrift} > 520");
             }
 
             if (failures.Count > 0)
@@ -97,6 +142,52 @@ namespace EconSim.Tests
                 Template = template;
                 CellCount = cellCount;
             }
+        }
+
+        static float ComputeBiomeOverlap(int[] v1, int[] v2)
+        {
+            if (v1 == null || v2 == null || v1.Length == 0 || v2.Length == 0)
+                return 0f;
+
+            int len = Math.Min(v1.Length, v2.Length);
+            float numer = 0f;
+            float denom = 0f;
+            for (int i = 0; i < len; i++)
+            {
+                numer += Mathf.Min(v1[i], v2[i]);
+                denom += Mathf.Max(v1[i], v2[i]);
+            }
+
+            if (denom <= 1e-6f)
+                return 0f;
+            return numer / denom;
+        }
+
+        static int ComputeMaxAbsBiomeDrift(int[] v1, int[] v2)
+        {
+            if (v1 == null || v2 == null || v1.Length == 0 || v2.Length == 0)
+                return 0;
+
+            int len = Math.Min(v1.Length, v2.Length);
+            int maxAbs = 0;
+            for (int i = 0; i < len; i++)
+            {
+                int abs = Math.Abs(v2[i] - v1[i]);
+                if (abs > maxAbs)
+                    maxAbs = abs;
+            }
+
+            return maxAbs;
+        }
+
+        static int BiomeDelta(int[] v1, int[] v2, BiomeId biome)
+        {
+            if (v1 == null || v2 == null)
+                return 0;
+            int idx = (int)biome;
+            if (idx < 0 || idx >= v1.Length || idx >= v2.Length)
+                return 0;
+            return v2[idx] - v1[idx];
         }
     }
 }

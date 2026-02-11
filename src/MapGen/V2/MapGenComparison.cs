@@ -97,7 +97,7 @@ namespace MapGen.Core
             var sb = new StringBuilder();
             sb.AppendLine("# MapGen V1 vs V2 Comparison");
             sb.AppendLine();
-            sb.AppendLine("Columns: land/water ratio, elevation percentiles (signed meters), river metrics, biome coverage, political counts.");
+            sb.AppendLine("Columns: land/water ratio, elevation percentiles (signed meters), river metrics, biome coverage (land+lake cells), political counts.");
             sb.AppendLine();
 
             for (int i = 0; i < cases.Count; i++)
@@ -110,6 +110,8 @@ namespace MapGen.Core
                 sb.AppendLine($"  V1 rivers={c.V1.RiverCount}, coverage={Fmt(c.V1.RiverCoverage)} realms/provinces/counties={c.V1.RealmCount}/{c.V1.ProvinceCount}/{c.V1.CountyCount}");
                 sb.AppendLine($"  V2 rivers={c.V2.RiverCount}, coverage={Fmt(c.V2.RiverCoverage)} realms/provinces/counties={c.V2.RealmCount}/{c.V2.ProvinceCount}/{c.V2.CountyCount}");
                 sb.AppendLine($"  Biome overlap={Fmt(BiomeOverlap(c.V1.BiomeCounts, c.V2.BiomeCounts))}");
+                sb.AppendLine($"  Biome drift(top)={BuildBiomeDriftSummary(c.V1.BiomeCounts, c.V2.BiomeCounts, 4)}");
+                sb.AppendLine($"  Biome mix(top)={BuildBiomeMixSummary(c.V1.BiomeCounts, c.V2.BiomeCounts, 6)}");
                 sb.AppendLine();
             }
 
@@ -144,9 +146,13 @@ namespace MapGen.Core
 
                 signed[i] = LegacyAbsoluteToSignedMeters(result.Heights.Heights[i], result.World);
 
-                int biome = (int)result.Biomes.Biome[i];
-                if (biome >= 0 && biome < biomeCounts.Length)
-                    biomeCounts[biome]++;
+                bool includeBiome = !result.Heights.IsWater(i) || result.Biomes.IsLakeCell[i];
+                if (includeBiome)
+                {
+                    int biome = (int)result.Biomes.Biome[i];
+                    if (biome >= 0 && biome < biomeCounts.Length)
+                        biomeCounts[biome]++;
+                }
             }
 
             int riverVertices = 0;
@@ -203,9 +209,13 @@ namespace MapGen.Core
 
                 signed[i] = result.Elevation.ElevationMetersSigned[i];
 
-                int biome = (int)result.Biomes.Biome[i];
-                if (biome >= 0 && biome < biomeCounts.Length)
-                    biomeCounts[biome]++;
+                bool includeBiome = result.Elevation.IsLand(i) || result.Biomes.IsLakeCell[i];
+                if (includeBiome)
+                {
+                    int biome = (int)result.Biomes.Biome[i];
+                    if (biome >= 0 && biome < biomeCounts.Length)
+                        biomeCounts[biome]++;
+                }
             }
 
             int riverVertices = 0;
@@ -310,11 +320,128 @@ namespace MapGen.Core
             return numer / denom;
         }
 
+        static string BuildBiomeDriftSummary(int[] v1, int[] v2, int topCount)
+        {
+            if (v1 == null || v2 == null || topCount <= 0)
+                return "none";
+
+            int len = Math.Min(v1.Length, v2.Length);
+            if (len == 0)
+                return "none";
+
+            int[] idx = new int[len];
+            for (int i = 0; i < len; i++)
+                idx[i] = i;
+
+            Array.Sort(idx, (a, b) =>
+            {
+                int da = Math.Abs(v2[a] - v1[a]);
+                int db = Math.Abs(v2[b] - v1[b]);
+                return db.CompareTo(da);
+            });
+
+            int take = Math.Min(topCount, len);
+            var sb = new StringBuilder();
+            bool wrote = false;
+            for (int i = 0; i < take; i++)
+            {
+                int biomeIdx = idx[i];
+                int delta = v2[biomeIdx] - v1[biomeIdx];
+                if (delta == 0)
+                    continue;
+
+                if (wrote)
+                    sb.Append(", ");
+
+                string name = (biomeIdx >= 0 && biomeIdx <= byte.MaxValue)
+                    ? ((BiomeId)(byte)biomeIdx).ToString()
+                    : biomeIdx.ToString();
+                sb.Append(name);
+                sb.Append('=');
+                if (delta > 0)
+                    sb.Append('+');
+                sb.Append(delta);
+                wrote = true;
+            }
+
+            return wrote ? sb.ToString() : "none";
+        }
+
+        static string BuildBiomeMixSummary(int[] v1, int[] v2, int topCount)
+        {
+            if (v1 == null || v2 == null || topCount <= 0)
+                return "none";
+
+            int len = Math.Min(v1.Length, v2.Length);
+            if (len == 0)
+                return "none";
+
+            int totalV1 = 0;
+            int totalV2 = 0;
+            for (int i = 0; i < len; i++)
+            {
+                totalV1 += Math.Max(0, v1[i]);
+                totalV2 += Math.Max(0, v2[i]);
+            }
+
+            int[] idx = new int[len];
+            for (int i = 0; i < len; i++)
+                idx[i] = i;
+
+            Array.Sort(idx, (a, b) =>
+            {
+                int ma = Math.Max(v1[a], v2[a]);
+                int mb = Math.Max(v1[b], v2[b]);
+                return mb.CompareTo(ma);
+            });
+
+            int take = Math.Min(topCount, len);
+            var sb = new StringBuilder();
+            bool wrote = false;
+            for (int i = 0; i < take; i++)
+            {
+                int biomeIdx = idx[i];
+                int c1 = v1[biomeIdx];
+                int c2 = v2[biomeIdx];
+                if (c1 == 0 && c2 == 0)
+                    continue;
+
+                if (wrote)
+                    sb.Append("; ");
+
+                string name = (biomeIdx >= 0 && biomeIdx <= byte.MaxValue)
+                    ? ((BiomeId)(byte)biomeIdx).ToString()
+                    : biomeIdx.ToString();
+                float p1 = totalV1 > 0 ? c1 / (float)totalV1 : 0f;
+                float p2 = totalV2 > 0 ? c2 / (float)totalV2 : 0f;
+                sb.Append(name);
+                sb.Append(' ');
+                sb.Append(c1);
+                sb.Append('(');
+                sb.Append(FmtPct(p1));
+                sb.Append(")->");
+                sb.Append(c2);
+                sb.Append('(');
+                sb.Append(FmtPct(p2));
+                sb.Append(')');
+                wrote = true;
+            }
+
+            return wrote ? sb.ToString() : "none";
+        }
+
         static string Fmt(float value)
         {
             if (float.IsNaN(value) || float.IsInfinity(value))
                 return "nan";
             return value.ToString("0.000");
+        }
+
+        static string FmtPct(float value)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value))
+                return "nan";
+            return (value * 100f).ToString("0.0") + "%";
         }
     }
 }

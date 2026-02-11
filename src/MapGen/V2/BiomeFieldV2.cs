@@ -20,6 +20,13 @@ namespace MapGen.Core
         public float[] Suitability;
         public float[] Population;
 
+        // Debug tuning overlays (per-cell, land cells only).
+        public float[] DebugCellFlux;
+        public bool[] DebugSalineCandidate;
+        public bool[] DebugAlluvialCandidate;
+        public bool[] DebugLithosolCandidate;
+        public bool[] DebugWetlandCandidate;
+
         public BiomeFieldV2(CellMesh mesh)
         {
             Mesh = mesh;
@@ -36,6 +43,12 @@ namespace MapGen.Core
             MovementCost = new float[n];
             Suitability = new float[n];
             Population = new float[n];
+
+            DebugCellFlux = new float[n];
+            DebugSalineCandidate = new bool[n];
+            DebugAlluvialCandidate = new bool[n];
+            DebugLithosolCandidate = new bool[n];
+            DebugWetlandCandidate = new bool[n];
         }
     }
 }

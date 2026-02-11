@@ -242,6 +242,22 @@ namespace MapGen.Core
             MapGenV2Config config)
         {
             bool[] cellHasRiver = ComputeCellHasRiver(biome.Mesh, rivers, config.EffectiveRiverTraceThreshold);
+            float[] cellFlux = ComputeCellFluxFromVertices(biome.Mesh, rivers);
+            HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(config.Template, config);
+            float coastSaltScale = profile != null ? profile.BiomeCoastSaltScale : 1f;
+            float salineThresholdScale = profile != null ? profile.BiomeSalineThresholdScale : 1f;
+            float slopeScale = profile != null ? profile.BiomeSlopeScale : 1f;
+            float alluvialFluxThresholdScale = profile != null ? profile.BiomeAlluvialFluxThresholdScale : 1f;
+            float alluvialMaxSlopeScale = profile != null ? profile.BiomeAlluvialMaxSlopeScale : 1f;
+            float wetlandFluxThresholdScale = profile != null ? profile.BiomeWetlandFluxThresholdScale : 1f;
+            float wetlandMaxSlopeScale = profile != null ? profile.BiomeWetlandMaxSlopeScale : 1f;
+            if (coastSaltScale <= 0f) coastSaltScale = 1f;
+            if (salineThresholdScale <= 0f) salineThresholdScale = 1f;
+            if (slopeScale <= 0f) slopeScale = 1f;
+            if (alluvialFluxThresholdScale <= 0f) alluvialFluxThresholdScale = 1f;
+            if (alluvialMaxSlopeScale <= 0f) alluvialMaxSlopeScale = 1f;
+            if (wetlandFluxThresholdScale <= 0f) wetlandFluxThresholdScale = 1f;
+            if (wetlandMaxSlopeScale <= 0f) wetlandMaxSlopeScale = 1f;
             int n = biome.CellCount;
 
             for (int i = 0; i < n; i++)
@@ -249,6 +265,11 @@ namespace MapGen.Core
                 bool isLand = elevation.IsLand(i) && !biome.IsLakeCell[i];
                 if (!isLand)
                 {
+                    biome.DebugCellFlux[i] = 0f;
+                    biome.DebugSalineCandidate[i] = false;
+                    biome.DebugAlluvialCandidate[i] = false;
+                    biome.DebugLithosolCandidate[i] = false;
+                    biome.DebugWetlandCandidate[i] = false;
                     biome.Biome[i] = biome.IsLakeCell[i] ? BiomeId.Lake : BiomeId.CoastalMarsh;
                     biome.Habitability[i] = 0f;
                     biome.MovementCost[i] = 100f;
@@ -259,22 +280,64 @@ namespace MapGen.Core
                 float temp = climate.TemperatureC[i];
                 float precip = climate.PrecipitationMmYear[i];
                 float alt = elevation[i];
+                float precipPct = config.MaxAnnualPrecipitationMm > 1e-6f
+                    ? (precip / config.MaxAnnualPrecipitationMm) * 100f
+                    : 0f;
+                float altPct = config.MaxElevationMeters > 1e-6f
+                    ? (alt / config.MaxElevationMeters) * 100f
+                    : 0f;
+                float coastSaltProxy = biome.CoastDistance[i] <= 0 ? 1f
+                    : (biome.CoastDistance[i] <= 1 ? 0.45f
+                    : (biome.CoastDistance[i] <= 2 ? 0.25f : 0f));
+                float slope = biome.Slope[i];
+                float slopeForSoil = Clamp01(slope * slopeScale);
+                float flux = cellFlux[i];
+                float alluvialFluxThreshold = config.EffectiveRiverThreshold * alluvialFluxThresholdScale;
+                float alluvialMaxSlope = 0.15f * alluvialMaxSlopeScale;
+                float wetlandFluxThreshold = 200f * wetlandFluxThresholdScale;
+                float wetlandMaxSlope = 0.10f * wetlandMaxSlopeScale;
+                float saltSignal = coastSaltProxy * coastSaltScale;
+                float salineThreshold = 0.3f * salineThresholdScale;
+                bool isPermafrost = temp < -5f;
+                bool salineCandidate = !isPermafrost && saltSignal > salineThreshold;
+                bool alluvialCandidate = !isPermafrost
+                    && !salineCandidate
+                    && flux > alluvialFluxThreshold
+                    && slopeForSoil < alluvialMaxSlope;
+                bool lithosolCandidate = !isPermafrost
+                    && !salineCandidate
+                    && !alluvialCandidate
+                    && (slopeForSoil > 0.6f || altPct > 80f);
+                SoilType soil = ClassifyPseudoSoil(
+                    temp,
+                    precipPct,
+                    altPct,
+                    slopeForSoil,
+                    coastSaltProxy,
+                    flux,
+                    alluvialFluxThreshold,
+                    alluvialMaxSlope,
+                    coastSaltScale,
+                    salineThresholdScale);
 
-                BiomeId id;
-                if (alt > 4300f || temp < -12f)
-                    id = BiomeId.Glacier;
-                else if (temp < -2f)
-                    id = BiomeId.Tundra;
-                else if (precip < 180f)
-                    id = temp > 12f ? BiomeId.HotDesert : BiomeId.ColdDesert;
-                else if (precip < 350f)
-                    id = BiomeId.Scrubland;
-                else if (precip < 700f)
-                    id = temp > 20f ? BiomeId.Savanna : (temp > 8f ? BiomeId.Grassland : BiomeId.BorealForest);
-                else if (precip < 1400f)
-                    id = temp > 24f ? BiomeId.TropicalDryForest : (temp > 12f ? BiomeId.TemperateForest : BiomeId.BorealForest);
-                else
-                    id = temp > 22f ? BiomeId.TropicalRainforest : (temp > 8f ? BiomeId.TemperateForest : BiomeId.BorealForest);
+                BiomeId id = BiomeFromPseudoSoil(
+                    soil,
+                    temp,
+                    precipPct,
+                    altPct,
+                    slopeForSoil,
+                    flux,
+                    wetlandFluxThreshold,
+                    wetlandMaxSlope);
+                bool wetlandCandidate = soil == SoilType.Alluvial
+                    && flux > wetlandFluxThreshold
+                    && slopeForSoil < wetlandMaxSlope;
+
+                biome.DebugCellFlux[i] = flux;
+                biome.DebugSalineCandidate[i] = salineCandidate;
+                biome.DebugAlluvialCandidate[i] = alluvialCandidate;
+                biome.DebugLithosolCandidate[i] = lithosolCandidate;
+                biome.DebugWetlandCandidate[i] = wetlandCandidate;
 
                 biome.Biome[i] = id;
                 float habitability = BaseHabitability(id);
@@ -285,12 +348,12 @@ namespace MapGen.Core
                 if (biome.CoastDistance[i] == 0)
                     habitability += 8f;
 
-                float slopePenalty = biome.Slope[i] * 22f;
+                float slopePenalty = slope * 22f;
                 float altitudePenalty = alt > 2600f ? (alt - 2600f) / 180f : 0f;
                 float suitability = habitability - slopePenalty - altitudePenalty;
 
                 biome.Habitability[i] = Clamp(habitability, 0f, 100f);
-                biome.MovementCost[i] = movement + biome.Slope[i] * 15f;
+                biome.MovementCost[i] = movement + slope * 15f;
                 biome.Suitability[i] = Clamp(suitability, 0f, 100f);
             }
         }
@@ -332,21 +395,119 @@ namespace MapGen.Core
             return hasRiver;
         }
 
+        static float[] ComputeCellFluxFromVertices(CellMesh mesh, RiverFieldV2 rivers)
+        {
+            var cellFlux = new float[mesh.CellCount];
+            for (int i = 0; i < mesh.CellCount; i++)
+            {
+                int[] verts = mesh.CellVertices[i];
+                if (verts == null || verts.Length == 0)
+                    continue;
+
+                float sum = 0f;
+                for (int v = 0; v < verts.Length; v++)
+                {
+                    int vi = verts[v];
+                    if (vi < 0 || vi >= mesh.VertexCount)
+                        continue;
+                    sum += rivers.VertexFlux[vi];
+                }
+
+                cellFlux[i] = sum / verts.Length;
+            }
+
+            return cellFlux;
+        }
+
+        static SoilType ClassifyPseudoSoil(
+            float tempC,
+            float precipPct,
+            float elevationPct,
+            float slope,
+            float coastSaltProxy,
+            float cellFlux,
+            float alluvialFluxThreshold,
+            float alluvialMaxSlope,
+            float coastSaltScale,
+            float salineThresholdScale)
+        {
+            float saltSignal = coastSaltProxy * coastSaltScale;
+            float salineThreshold = 0.3f * salineThresholdScale;
+            if (tempC < -5f)
+                return SoilType.Permafrost;
+            if (saltSignal > salineThreshold)
+                return SoilType.Saline;
+            if (cellFlux > alluvialFluxThreshold && slope < alluvialMaxSlope)
+                return SoilType.Alluvial;
+            if (slope > 0.6f || elevationPct > 80f)
+                return SoilType.Lithosol;
+            if (precipPct < 15f)
+                return SoilType.Aridisol;
+            if (tempC > 20f && precipPct > 60f)
+                return SoilType.Laterite;
+            if (tempC < 20f && precipPct > 30f)
+                return SoilType.Podzol;
+            return SoilType.Chernozem;
+        }
+
+        static BiomeId BiomeFromPseudoSoil(
+            SoilType soil,
+            float tempC,
+            float precipPct,
+            float elevationPct,
+            float slope,
+            float cellFlux,
+            float wetlandFluxThreshold,
+            float wetlandMaxSlope)
+        {
+            switch (soil)
+            {
+                case SoilType.Permafrost:
+                    return tempC < -10f ? BiomeId.Glacier : BiomeId.Tundra;
+                case SoilType.Saline:
+                    return precipPct < 15f ? BiomeId.SaltFlat : BiomeId.CoastalMarsh;
+                case SoilType.Lithosol:
+                    return (tempC < -3f || elevationPct > 85f) ? BiomeId.AlpineBarren : BiomeId.MountainShrub;
+                case SoilType.Alluvial:
+                    return (cellFlux > wetlandFluxThreshold && slope < wetlandMaxSlope) ? BiomeId.Wetland : BiomeId.Floodplain;
+                case SoilType.Aridisol:
+                    if (tempC > 25f) return BiomeId.HotDesert;
+                    if (tempC < 5f) return BiomeId.ColdDesert;
+                    return BiomeId.Scrubland;
+                case SoilType.Laterite:
+                    if (precipPct > 80f) return BiomeId.TropicalRainforest;
+                    if (precipPct > 70f) return BiomeId.TropicalDryForest;
+                    return BiomeId.Savanna;
+                case SoilType.Podzol:
+                    return tempC < 5f ? BiomeId.BorealForest : BiomeId.TemperateForest;
+                default:
+                    return precipPct > 45f ? BiomeId.Woodland : BiomeId.Grassland;
+            }
+        }
+
         static float BaseHabitability(BiomeId biome)
         {
             switch (biome)
             {
                 case BiomeId.Glacier: return 0f;
-                case BiomeId.Tundra: return 15f;
-                case BiomeId.ColdDesert: return 22f;
-                case BiomeId.HotDesert: return 20f;
-                case BiomeId.Scrubland: return 38f;
-                case BiomeId.Grassland: return 62f;
-                case BiomeId.Savanna: return 58f;
-                case BiomeId.BorealForest: return 45f;
-                case BiomeId.TemperateForest: return 66f;
-                case BiomeId.TropicalDryForest: return 62f;
-                case BiomeId.TropicalRainforest: return 54f;
+                case BiomeId.Tundra: return 5f;
+                case BiomeId.SaltFlat: return 2f;
+                case BiomeId.CoastalMarsh: return 10f;
+                case BiomeId.AlpineBarren: return 0f;
+                case BiomeId.MountainShrub: return 8f;
+                case BiomeId.Floodplain: return 90f;
+                case BiomeId.Wetland: return 15f;
+                case BiomeId.HotDesert: return 4f;
+                case BiomeId.ColdDesert: return 5f;
+                case BiomeId.Scrubland: return 15f;
+                case BiomeId.TropicalRainforest: return 60f;
+                case BiomeId.TropicalDryForest: return 50f;
+                case BiomeId.Savanna: return 25f;
+                case BiomeId.BorealForest: return 12f;
+                case BiomeId.TemperateForest: return 70f;
+                case BiomeId.Grassland: return 80f;
+                case BiomeId.Woodland: return 85f;
+                case BiomeId.Lake: return 0f;
                 default: return 40f;
             }
         }
@@ -357,12 +518,20 @@ namespace MapGen.Core
             {
                 case BiomeId.Glacier: return 95f;
                 case BiomeId.Tundra: return 75f;
+                case BiomeId.SaltFlat: return 85f;
+                case BiomeId.CoastalMarsh: return 78f;
+                case BiomeId.AlpineBarren: return 92f;
+                case BiomeId.MountainShrub: return 74f;
+                case BiomeId.Floodplain: return 40f;
+                case BiomeId.Wetland: return 88f;
                 case BiomeId.HotDesert:
                 case BiomeId.ColdDesert: return 80f;
+                case BiomeId.Scrubland: return 64f;
                 case BiomeId.BorealForest: return 68f;
                 case BiomeId.TropicalRainforest: return 72f;
                 case BiomeId.TemperateForest:
                 case BiomeId.TropicalDryForest: return 58f;
+                case BiomeId.Woodland: return 52f;
                 case BiomeId.Grassland:
                 case BiomeId.Savanna: return 42f;
                 default: return 55f;

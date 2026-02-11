@@ -32,6 +32,27 @@ namespace MapGen.Core
         // Scales target county seed count per province.
         public float CountyTargetScale = 1f;
 
+        // Scales coastline salt signal used for pseudo-soil classification.
+        public float BiomeCoastSaltScale = 1f;
+
+        // Scales saline threshold used for pseudo-soil classification.
+        public float BiomeSalineThresholdScale = 1f;
+
+        // Scales slope used for biome soil-classification thresholds.
+        public float BiomeSlopeScale = 1f;
+
+        // Scales alluvial flux threshold used for pseudo-soil classification.
+        public float BiomeAlluvialFluxThresholdScale = 1f;
+
+        // Scales alluvial max-slope threshold used for pseudo-soil classification.
+        public float BiomeAlluvialMaxSlopeScale = 1f;
+
+        // Scales alluvial->wetland flux threshold used for biome split.
+        public float BiomeWetlandFluxThresholdScale = 1f;
+
+        // Scales alluvial->wetland max-slope threshold used for biome split.
+        public float BiomeWetlandMaxSlopeScale = 1f;
+
         public bool IsIdentity() =>
             TerrainMagnitudeScale == 1f
             && AddMagnitudeScale == 1f
@@ -42,7 +63,14 @@ namespace MapGen.Core
             && RiverMinVerticesScale == 1f
             && RealmTargetScale == 1f
             && ProvinceTargetScale == 1f
-            && CountyTargetScale == 1f;
+            && CountyTargetScale == 1f
+            && BiomeCoastSaltScale == 1f
+            && BiomeSalineThresholdScale == 1f
+            && BiomeSlopeScale == 1f
+            && BiomeAlluvialFluxThresholdScale == 1f
+            && BiomeAlluvialMaxSlopeScale == 1f
+            && BiomeWetlandFluxThresholdScale == 1f
+            && BiomeWetlandMaxSlopeScale == 1f;
 
         public HeightmapTemplateTuningProfile Clone() =>
             new HeightmapTemplateTuningProfile
@@ -56,7 +84,14 @@ namespace MapGen.Core
                 RiverMinVerticesScale = RiverMinVerticesScale,
                 RealmTargetScale = RealmTargetScale,
                 ProvinceTargetScale = ProvinceTargetScale,
-                CountyTargetScale = CountyTargetScale
+                CountyTargetScale = CountyTargetScale,
+                BiomeCoastSaltScale = BiomeCoastSaltScale,
+                BiomeSalineThresholdScale = BiomeSalineThresholdScale,
+                BiomeSlopeScale = BiomeSlopeScale,
+                BiomeAlluvialFluxThresholdScale = BiomeAlluvialFluxThresholdScale,
+                BiomeAlluvialMaxSlopeScale = BiomeAlluvialMaxSlopeScale,
+                BiomeWetlandFluxThresholdScale = BiomeWetlandFluxThresholdScale,
+                BiomeWetlandMaxSlopeScale = BiomeWetlandMaxSlopeScale
             };
     }
 }
