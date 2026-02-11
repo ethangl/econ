@@ -26,7 +26,7 @@ namespace MapGen.Core
             var biomes = new BiomeFieldV2(mesh);
             BiomeOpsV2.Compute(biomes, elevation, climate, rivers, config);
             var political = new PoliticalFieldV2(mesh);
-            PoliticalOpsV2.Compute(political, biomes, elevation);
+            PoliticalOpsV2.Compute(political, biomes, elevation, config);
 
             return new MapGenV2Result
             {

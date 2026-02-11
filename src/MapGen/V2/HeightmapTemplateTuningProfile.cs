@@ -23,6 +23,15 @@ namespace MapGen.Core
         // Scales MinRiverVertices and rounds to nearest integer (min 1).
         public float RiverMinVerticesScale = 1f;
 
+        // Scales target realm seed count.
+        public float RealmTargetScale = 1f;
+
+        // Scales target province seed count per realm.
+        public float ProvinceTargetScale = 1f;
+
+        // Scales target county seed count per province.
+        public float CountyTargetScale = 1f;
+
         public bool IsIdentity() =>
             TerrainMagnitudeScale == 1f
             && AddMagnitudeScale == 1f
@@ -30,7 +39,10 @@ namespace MapGen.Core
             && LandMultiplyFactorScale == 1f
             && RiverThresholdScale == 1f
             && RiverTraceThresholdScale == 1f
-            && RiverMinVerticesScale == 1f;
+            && RiverMinVerticesScale == 1f
+            && RealmTargetScale == 1f
+            && ProvinceTargetScale == 1f
+            && CountyTargetScale == 1f;
 
         public HeightmapTemplateTuningProfile Clone() =>
             new HeightmapTemplateTuningProfile
@@ -41,7 +53,10 @@ namespace MapGen.Core
                 LandMultiplyFactorScale = LandMultiplyFactorScale,
                 RiverThresholdScale = RiverThresholdScale,
                 RiverTraceThresholdScale = RiverTraceThresholdScale,
-                RiverMinVerticesScale = RiverMinVerticesScale
+                RiverMinVerticesScale = RiverMinVerticesScale,
+                RealmTargetScale = RealmTargetScale,
+                ProvinceTargetScale = ProvinceTargetScale,
+                CountyTargetScale = CountyTargetScale
             };
     }
 }

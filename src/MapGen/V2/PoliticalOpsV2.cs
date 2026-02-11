@@ -11,12 +11,13 @@ namespace MapGen.Core
         public static void Compute(
             PoliticalFieldV2 political,
             BiomeFieldV2 biomes,
-            ElevationFieldV2 elevation)
+            ElevationFieldV2 elevation,
+            MapGenV2Config config)
         {
             DetectLandmasses(political, biomes, elevation);
-            AssignRealms(political, biomes, elevation);
-            AssignProvinces(political, biomes, elevation);
-            AssignCounties(political, biomes, elevation);
+            AssignRealms(political, biomes, elevation, config);
+            AssignProvinces(political, biomes, elevation, config);
+            AssignCounties(political, biomes, elevation, config);
         }
 
         static void DetectLandmasses(PoliticalFieldV2 pol, BiomeFieldV2 biomes, ElevationFieldV2 elevation)
@@ -68,7 +69,7 @@ namespace MapGen.Core
             pol.LandmassCount = nextLandmassId - 1;
         }
 
-        static void AssignRealms(PoliticalFieldV2 pol, BiomeFieldV2 biomes, ElevationFieldV2 elevation)
+        static void AssignRealms(PoliticalFieldV2 pol, BiomeFieldV2 biomes, ElevationFieldV2 elevation, MapGenV2Config config)
         {
             var mesh = pol.Mesh;
             var landCells = CollectLandCells(elevation, biomes);
@@ -79,7 +80,11 @@ namespace MapGen.Core
                 return;
             }
 
-            int targetRealms = Clamp((int)Math.Round(landCells.Count / 900f), 1, 24);
+            HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(config.Template, config);
+            float realmScale = profile != null ? profile.RealmTargetScale : 1f;
+            if (realmScale <= 0f) realmScale = 1f;
+
+            int targetRealms = Clamp((int)Math.Round((landCells.Count / 900f) * realmScale), 1, 24);
             var capitals = SelectSeeds(
                 landCells,
                 mesh,
@@ -98,9 +103,12 @@ namespace MapGen.Core
                 scoreBias: c => 1f + biomes.Suitability[c] * 0.01f);
         }
 
-        static void AssignProvinces(PoliticalFieldV2 pol, BiomeFieldV2 biomes, ElevationFieldV2 elevation)
+        static void AssignProvinces(PoliticalFieldV2 pol, BiomeFieldV2 biomes, ElevationFieldV2 elevation, MapGenV2Config config)
         {
             var mesh = pol.Mesh;
+            HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(config.Template, config);
+            float provinceScale = profile != null ? profile.ProvinceTargetScale : 1f;
+            if (provinceScale <= 0f) provinceScale = 1f;
             var provinceIds = new int[mesh.CellCount];
             int nextProvince = 1;
 
@@ -116,7 +124,7 @@ namespace MapGen.Core
                 if (realmCells.Count == 0)
                     continue;
 
-                int provinceTarget = Clamp((int)Math.Round(realmCells.Count / 450f), 1, 18);
+                int provinceTarget = Clamp((int)Math.Round((realmCells.Count / 450f) * provinceScale), 1, 18);
                 var seeds = SelectSeeds(
                     realmCells,
                     mesh,
@@ -151,9 +159,12 @@ namespace MapGen.Core
             pol.ProvinceCount = nextProvince - 1;
         }
 
-        static void AssignCounties(PoliticalFieldV2 pol, BiomeFieldV2 biomes, ElevationFieldV2 elevation)
+        static void AssignCounties(PoliticalFieldV2 pol, BiomeFieldV2 biomes, ElevationFieldV2 elevation, MapGenV2Config config)
         {
             var mesh = pol.Mesh;
+            HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(config.Template, config);
+            float countyScale = profile != null ? profile.CountyTargetScale : 1f;
+            if (countyScale <= 0f) countyScale = 1f;
             var countyIds = new int[mesh.CellCount];
             var countySeats = new List<int>();
             int nextCounty = 1;
@@ -170,7 +181,7 @@ namespace MapGen.Core
                 if (provinceCells.Count == 0)
                     continue;
 
-                int countyTarget = Clamp((int)Math.Round(provinceCells.Count / 120f), 1, 22);
+                int countyTarget = Clamp((int)Math.Round((provinceCells.Count / 120f) * countyScale), 1, 32);
                 var seeds = SelectSeeds(
                     provinceCells,
                     mesh,

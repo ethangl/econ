@@ -54,6 +54,9 @@ namespace EconSim.Tests
                 float deltaLand = Math.Abs(c.V2.LandRatio - c.V1.LandRatio);
                 float deltaEdgeLand = Math.Abs(c.V2.EdgeLandRatio - c.V1.EdgeLandRatio);
                 float deltaCoast = Math.Abs(c.V2.CoastRatio - c.V1.CoastRatio);
+                int deltaRealmCount = Math.Abs(c.V2.RealmCount - c.V1.RealmCount);
+                int deltaProvinceCount = Math.Abs(c.V2.ProvinceCount - c.V1.ProvinceCount);
+                int deltaCountyCount = Math.Abs(c.V2.CountyCount - c.V1.CountyCount);
 
                 // Focus guardrails (post-tuning): keep V2 tightly aligned with V1 for visual tuning templates.
                 if (deltaLand > 0.10f)
@@ -62,6 +65,12 @@ namespace EconSim.Tests
                     failures.Add($"{c.Template} seed={c.Seed}: |edge land drift|={deltaEdgeLand:0.000} > 0.100");
                 if (deltaCoast > 0.08f)
                     failures.Add($"{c.Template} seed={c.Seed}: |coast drift|={deltaCoast:0.000} > 0.080");
+                if (deltaRealmCount > 2)
+                    failures.Add($"{c.Template} seed={c.Seed}: |realm count drift|={deltaRealmCount} > 2");
+                if (deltaProvinceCount > 2)
+                    failures.Add($"{c.Template} seed={c.Seed}: |province count drift|={deltaProvinceCount} > 2");
+                if (deltaCountyCount > 8)
+                    failures.Add($"{c.Template} seed={c.Seed}: |county count drift|={deltaCountyCount} > 8");
             }
 
             if (failures.Count > 0)

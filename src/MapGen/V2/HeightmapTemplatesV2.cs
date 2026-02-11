@@ -22,7 +22,10 @@ namespace MapGen.Core
                     LandMultiplyFactorScale = 1.10f,
                     RiverThresholdScale = 0.75f,
                     RiverTraceThresholdScale = 1f,
-                    RiverMinVerticesScale = 1f
+                    RiverMinVerticesScale = 1f,
+                    RealmTargetScale = 1f,
+                    ProvinceTargetScale = 1f,
+                    CountyTargetScale = 3.0f
                 },
                 [HeightmapTemplateType.LowIsland] = new HeightmapTemplateTuningProfile
                 {
@@ -32,7 +35,10 @@ namespace MapGen.Core
                     LandMultiplyFactorScale = 0.90f,
                     RiverThresholdScale = 0.35f,
                     RiverTraceThresholdScale = 0.20f,
-                    RiverMinVerticesScale = 1f
+                    RiverMinVerticesScale = 1f,
+                    RealmTargetScale = 0.50f,
+                    ProvinceTargetScale = 0.67f,
+                    CountyTargetScale = 3.2f
                 },
                 [HeightmapTemplateType.HighIsland] = new HeightmapTemplateTuningProfile
                 {
@@ -42,7 +48,10 @@ namespace MapGen.Core
                     LandMultiplyFactorScale = 1.10f,
                     RiverThresholdScale = 0.75f,
                     RiverTraceThresholdScale = 0.20f,
-                    RiverMinVerticesScale = 1.10f
+                    RiverMinVerticesScale = 1.10f,
+                    RealmTargetScale = 3.0f,
+                    ProvinceTargetScale = 2.0f,
+                    CountyTargetScale = 2.3f
                 },
                 [HeightmapTemplateType.Archipelago] = new HeightmapTemplateTuningProfile
                 {
@@ -52,7 +61,10 @@ namespace MapGen.Core
                     LandMultiplyFactorScale = 1f,
                     RiverThresholdScale = 1.25f,
                     RiverTraceThresholdScale = 0.20f,
-                    RiverMinVerticesScale = 0.75f
+                    RiverMinVerticesScale = 0.75f,
+                    RealmTargetScale = 4.0f,
+                    ProvinceTargetScale = 4.0f,
+                    CountyTargetScale = 3.7f
                 },
             };
 
