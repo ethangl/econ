@@ -1181,11 +1181,9 @@ namespace EconSim.Renderer
 
         private float GetCellHeight(Cell cell)
         {
-            // Convert canonical sea-relative height to world units while preserving legacy scaling.
-            float seaRelativeHeight = Elevation.GetSeaRelativeHeight(cell, mapData.Info);
-            float landRange = Mathf.Max(1f, Elevation.LegacyMaxHeight - Elevation.ResolveSeaLevel(mapData.Info));
-            float normalizedHeight = seaRelativeHeight / landRange;
-            return normalizedHeight * heightScale;
+            // Use world-scale normalized signed height so displacement remains consistent across map scales.
+            float normalizedSignedHeight = Elevation.GetNormalizedSignedHeight(cell, mapData.Info);
+            return normalizedSignedHeight * heightScale;
         }
 
         private Color32 GetCellColor(Cell cell)
@@ -1341,11 +1339,8 @@ namespace EconSim.Renderer
                 }
             }
 
-            // Default ocean color - deep blue, varies slightly by depth.
-            float seaRelativeHeight = Elevation.GetSeaRelativeHeight(cell, mapData.Info);
-            float depthBelowSea = Mathf.Max(0f, -seaRelativeHeight);
-            float seaLevel = Mathf.Max(1f, Elevation.ResolveSeaLevel(mapData.Info));
-            float depthFactor = Mathf.Clamp01(depthBelowSea / seaLevel);  // 0 at sea level, 1 at deepest
+            // Default ocean color - deep blue, varies by normalized depth in meters.
+            float depthFactor = Elevation.GetNormalizedDepth01(cell, mapData.Info); // 0 at sea level, 1 at configured max depth
             return Color32.Lerp(
                 new Color32(50, 100, 150, 255),   // Shallow ocean
                 new Color32(20, 50, 100, 255),    // Deep ocean
@@ -1597,10 +1592,17 @@ namespace EconSim.Renderer
                 probeBuilder.Append(" | Channel=").Append(channelDebugView);
             }
             probeBuilder.AppendLine();
+            float absoluteHeight = Elevation.GetAbsoluteHeight(cell, mapData.Info);
+            float seaRelativeHeight = Elevation.GetSeaRelativeHeight(cell, mapData.Info);
+            float metersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
+            float signedMeters = Elevation.GetSignedMeters(cell, mapData.Info);
+
             probeBuilder.Append("Cell=").Append(cell.Id)
                 .Append(" Land=").Append(cell.IsLand ? "Y" : "N")
-                .Append(" Height=").Append(Elevation.GetAbsoluteHeight(cell, mapData.Info).ToString("F1"))
-                .Append(" ASL=").Append(Elevation.GetSeaRelativeHeight(cell, mapData.Info).ToString("F1"))
+                .Append(" AbsH=").Append(absoluteHeight.ToString("F1"))
+                .Append(" SeaRel=").Append(seaRelativeHeight.ToString("F1"))
+                .Append(" AboveSeaM=").Append(metersAboveSeaLevel.ToString("F0"))
+                .Append(" SignedM=").Append(signedMeters.ToString("F0"))
                 .AppendLine();
             probeBuilder.Append("Realm=").Append(cell.RealmId)
                 .Append(" Province=").Append(cell.ProvinceId)

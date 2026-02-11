@@ -6,7 +6,7 @@ namespace EconSim.Core.Economy
     /// <summary>
     /// Economic state for a single county.
     /// This is the runtime data that changes each tick.
-    /// A county contains one or more cells grouped by CountyGrouper.
+    /// A county contains one or more cells grouped during map generation.
     /// </summary>
     [Serializable]
     public class CountyEconomy

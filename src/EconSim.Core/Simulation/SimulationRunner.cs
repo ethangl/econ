@@ -16,6 +16,7 @@ namespace EconSim.Core.Simulation
         private readonly MapData _mapData;
         private readonly SimulationState _state;
         private readonly List<ITickSystem> _systems;
+        private readonly float _marketZoneMaxTransportCost;
         private float _accumulator;
 
         public float TimeScale
@@ -48,6 +49,9 @@ namespace EconSim.Core.Simulation
             _state.Transport.SetRoadState(_state.Economy.Roads);
             Profiler.End();
             SimLog.Log("Transport", "Transport graph initialized");
+
+            _marketZoneMaxTransportCost = MarketPlacer.ResolveMarketZoneMaxTransportCost(_mapData);
+            SimLog.Log("Market", $"Market zone transport budget: {_marketZoneMaxTransportCost:F1}");
 
             // Place markets (requires transport for accessibility scoring)
             Profiler.Begin("InitializeMarkets");
@@ -161,8 +165,8 @@ namespace EconSim.Core.Simulation
                     };
                 }
 
-                // Compute zone with generous transport cost budget
-                MarketPlacer.ComputeMarketZone(market, _mapData, _state.Transport, maxTransportCost: 100f);
+                // Compute zone using world-scale normalized transport budget.
+                MarketPlacer.ComputeMarketZone(market, _mapData, _state.Transport, maxTransportCost: _marketZoneMaxTransportCost);
                 _state.Economy.Markets[market.Id] = market;
 
                 usedCells.Add(cellId);
@@ -201,7 +205,7 @@ namespace EconSim.Core.Simulation
                 if (market.Type == MarketType.Black)
                     continue;
 
-                MarketPlacer.ComputeMarketZone(market, _mapData, _state.Transport, maxTransportCost: 100f);
+                MarketPlacer.ComputeMarketZone(market, _mapData, _state.Transport, maxTransportCost: _marketZoneMaxTransportCost);
             }
 
             _state.Economy.RebuildCellToMarketLookup();

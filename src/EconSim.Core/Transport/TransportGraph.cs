@@ -64,17 +64,22 @@ namespace EconSim.Core.Transport
         // Impassable threshold (cells with cost >= this are blocked)
         private const float ImpassableThreshold = 100f;
         private const float LegacyMountainStartAbsolute = 70f;
-        private const float LegacyMountainRange = 30f;
+        private const float MinMountainRangeMeters = 1f;
 
-        private readonly float _mountainStartSeaRelative;
+        private readonly float _mountainStartMetersAboveSeaLevel;
+        private readonly float _mountainRangeMeters;
+        private readonly float _distanceNormalizationKm;
 
         public TransportGraph(MapData mapData, int maxCacheSize = 10000)
         {
             _mapData = mapData;
             _maxCacheSize = maxCacheSize;
             _pathCache = new Dictionary<(int, int), PathResult>();
-            float seaLevel = Elevation.ResolveSeaLevel(mapData.Info);
-            _mountainStartSeaRelative = Elevation.SeaRelativeFromAbsolute(LegacyMountainStartAbsolute, seaLevel);
+            _mountainStartMetersAboveSeaLevel = Elevation.AbsoluteToMetersAboveSeaLevel(LegacyMountainStartAbsolute, mapData.Info);
+            _mountainRangeMeters = Math.Max(
+                MinMountainRangeMeters,
+                Elevation.ResolveMaxElevationMeters(mapData.Info) - _mountainStartMetersAboveSeaLevel);
+            _distanceNormalizationKm = WorldScale.ResolveDistanceNormalizationKm(mapData.Info);
 
             // Build biome lookup
             _biomeById = new Dictionary<int, Biome>();
@@ -117,11 +122,11 @@ namespace EconSim.Core.Transport
             }
 
             // Height modifier: higher = harder (mountains).
-            // Keep legacy behavior (absolute > 70) while reading canonical elevation safely.
-            float seaRelativeHeight = Elevation.GetSeaRelativeHeight(cell, _mapData.Info);
-            if (seaRelativeHeight > _mountainStartSeaRelative)
+            // Keep legacy behavior (absolute > 70) calibrated against world-unit meters above sea level.
+            float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, _mapData.Info);
+            if (elevationMetersAboveSeaLevel > _mountainStartMetersAboveSeaLevel)
             {
-                float heightPenalty = (seaRelativeHeight - _mountainStartSeaRelative) / LegacyMountainRange; // 0-1 range
+                float heightPenalty = (elevationMetersAboveSeaLevel - _mountainStartMetersAboveSeaLevel) / _mountainRangeMeters; // 0-1 range
                 baseCost *= 1f + heightPenalty * 2f; // Up to 3x cost at peak
             }
 
@@ -145,8 +150,8 @@ namespace EconSim.Core.Transport
             // Distance factor (Euclidean distance between cell centers)
             float distance = Vec2.Distance(from.Center, to.Center);
 
-            // Scale by some factor to normalize (cells are roughly 10-50 units apart)
-            float distanceFactor = distance / 30f; // Normalize around typical cell spacing
+            // Normalize edge distance by world cell size to keep transport costs scale-consistent.
+            float distanceFactor = distance / _distanceNormalizationKm;
 
             float totalCost = baseCost * distanceFactor;
 
@@ -181,6 +186,14 @@ namespace EconSim.Core.Transport
             }
 
             return totalCost;
+        }
+
+        /// <summary>
+        /// Resolve world-scale distance normalization (km) used by edge-cost calculation.
+        /// </summary>
+        public static float ResolveDistanceNormalizationKm(MapInfo info)
+        {
+            return WorldScale.ResolveDistanceNormalizationKm(info);
         }
 
         /// <summary>

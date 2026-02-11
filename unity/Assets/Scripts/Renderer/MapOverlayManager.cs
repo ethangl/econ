@@ -408,7 +408,7 @@ public class MapOverlayManager
         /// </summary>
         private void GenerateHeightmapTexture()
         {
-            // Sample raw heights from spatial grid (Y-up matches texture row order, no flip needed)
+            // Sample absolute heights from spatial grid (Y-up matches texture row order, no flip needed)
             float[] heightData = new float[gridWidth * gridHeight];
 
             Parallel.For(0, gridHeight, y =>
@@ -1084,7 +1084,7 @@ public class MapOverlayManager
 
         /// <summary>
         /// Apply elevation-based color modifications to biome color.
-        /// Elevation uses Azgaar's absolute scale: 0 = sea level (height 20), 1 = max (height 100).
+        /// Elevation input is normalized absolute height [0..1] from the height texture.
         /// Brightness gradient from 0.4 (coastal) to 1.0 (high), snow blend above 85%.
         /// </summary>
         private Color ApplyElevationZone(float h, float s, float v, float elevation)
@@ -1807,12 +1807,12 @@ public class MapOverlayManager
         }
 
         /// <summary>
-        /// Set sea level in absolute map units (0..100) for water detection.
+        /// Set sea-level threshold in absolute map units (0..100) for water detection.
         /// </summary>
-        public void SetSeaLevel(float level)
+        public void SetSeaLevel(float seaLevelAbsoluteHeight)
         {
             if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(level));
+            terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(seaLevelAbsoluteHeight));
         }
 
         /// <summary>

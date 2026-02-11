@@ -504,7 +504,7 @@ Market placement uses suitability scoring:
 - Resource diversity (unique resources in cell + neighbors)
 - Centrality (land neighbor count)
 
-**Multiple markets:** Markets are placed in different realms to ensure geographic spread. Each market's zone includes all cells within transport cost budget (100). Cells in overlapping zones are assigned to the nearest market by transport cost.
+**Multiple markets:** Markets are placed in different realms to ensure geographic spread. Each market's zone includes all cells within a world-scale normalized transport budget (legacy baseline `100` on default map scale). Cells in overlapping zones are assigned to the nearest market by transport cost.
 
 **Zone visualization:** Each market has a distinct color from a predefined palette (8 colors). The hub province (not just the hub cell) is highlighted with a vivid version of the market color for visibility.
 
@@ -643,7 +643,8 @@ Edge cost formula:
 
 ```
 baseCost = (fromCellCost + toCellCost) / 2
-distanceFactor = euclideanDistance / 30
+distanceNormalizationKm = (worldCellSizeKm > 0 ? worldCellSizeKm * 12 : 30)
+distanceFactor = euclideanDistance / distanceNormalizationKm
 totalCost = baseCost * distanceFactor * riverBonus
 ```
 
@@ -803,11 +804,10 @@ econ/
 │       │   ├── Types.cs           # Vec2, Color32 (Unity-independent)
 │       │   └── SimLog.cs          # Logging utility
 │       ├── Data/
-│       │   └── MapData.cs         # Cell, Province, State, Biome, etc.
+│       │   ├── MapData.cs         # Cell, Province, Realm, County, World metadata
+│       │   └── WorldScale.cs      # Shared world-scale and transport distance helpers
 │       ├── Import/
-│       │   ├── AzgaarData.cs      # Azgaar JSON structure
-│       │   ├── AzgaarParser.cs    # JSON parsing
-│       │   └── MapConverter.cs    # AzgaarMap → MapData
+│       │   └── MapGenAdapter.cs   # MapGen.Core result → MapData conversion
 │       ├── Economy/
 │       │   ├── GoodDef.cs         # Good definitions & registry
 │       │   ├── FacilityDef.cs     # Facility definitions & registry
