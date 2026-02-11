@@ -24,12 +24,14 @@ namespace EconSim.Core.Import
             var biomes = result.Biomes;
             var rivers = result.Rivers;
             var political = result.Political;
-            var world = result.World ?? result.WorldConfig?.BuildMetadata(mesh);
+            var world = result.World;
+            if (world == null)
+                throw new InvalidOperationException("MapGenResult.World metadata is required.");
 
             // MapGen uses Y-up (Y=0 south), same as Unity's texture convention.
             // Pass coordinates through directly — no flip needed.
             int cellCount = mesh.CellCount;
-            float seaLevel = world?.SeaLevelHeight ?? HeightGrid.SeaLevel;
+            float seaLevel = world.SeaLevelHeight;
             Elevation.AssertAbsoluteHeightInRange(seaLevel, "MapGenAdapter sea level");
 
             // Build cells
@@ -52,7 +54,6 @@ namespace EconSim.Core.Import
                     Center = ToECVec2(center),
                     VertexIndices = new List<int>(mesh.CellVertices[i]),
                     NeighborIds = new List<int>(mesh.CellNeighbors[i]),
-                    Height = absoluteHeight,
                     SeaRelativeElevation = seaRelativeElevation,
                     HasSeaRelativeElevation = true,
                     BiomeId = (int)biomes.Biome[i],
@@ -126,23 +127,20 @@ namespace EconSim.Core.Import
                 Seed = "",
                 TotalCells = cellCount,
                 LandCells = landCells,
-                SeaLevel = seaLevel,
-                World = world == null
-                    ? null
-                    : new WorldInfo
-                    {
-                        CellSizeKm = world.CellSizeKm,
-                        MapWidthKm = world.MapWidthKm,
-                        MapHeightKm = world.MapHeightKm,
-                        MapAreaKm2 = world.MapAreaKm2,
-                        LatitudeSouth = world.LatitudeSouth,
-                        LatitudeNorth = world.LatitudeNorth,
-                        MinHeight = world.MinHeight,
-                        SeaLevelHeight = world.SeaLevelHeight,
-                        MaxHeight = world.MaxHeight,
-                        MaxElevationMeters = world.MaxElevationMeters,
-                        MaxSeaDepthMeters = world.MaxSeaDepthMeters
-                    }
+                World = new WorldInfo
+                {
+                    CellSizeKm = world.CellSizeKm,
+                    MapWidthKm = world.MapWidthKm,
+                    MapHeightKm = world.MapHeightKm,
+                    MapAreaKm2 = world.MapAreaKm2,
+                    LatitudeSouth = world.LatitudeSouth,
+                    LatitudeNorth = world.LatitudeNorth,
+                    MinHeight = world.MinHeight,
+                    SeaLevelHeight = world.SeaLevelHeight,
+                    MaxHeight = world.MaxHeight,
+                    MaxElevationMeters = world.MaxElevationMeters,
+                    MaxSeaDepthMeters = world.MaxSeaDepthMeters
+                }
             };
 
             var mapData = new MapData
@@ -160,8 +158,8 @@ namespace EconSim.Core.Import
             };
 
             mapData.BuildLookups();
-            mapData.AssertElevationInvariants(requireCanonical: true);
-            mapData.AssertWorldInvariants(requireWorldMetadata: true);
+            mapData.AssertElevationInvariants();
+            mapData.AssertWorldInvariants();
 
             return mapData;
         }

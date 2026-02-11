@@ -39,9 +39,9 @@ Any world generator must produce a `MapData` that satisfies this contract:
 
 | Component     | Fields                                               | Used By                            |
 | ------------- | ---------------------------------------------------- | ---------------------------------- |
-| **MapInfo**   | Width, Height, Seed, TotalCells, LandCells, SeaLevel, World.* | Rendering, coordinate systems      |
+| **MapInfo**   | Width, Height, Seed, TotalCells, LandCells, World.* | Rendering, coordinate systems      |
 | **Cells**     | Id, Center, VertexIndices, NeighborIds               | Mesh generation, pathfinding       |
-|               | SeaRelativeElevation, HasSeaRelativeElevation, Height (legacy), BiomeId, IsLand, FeatureId | Terrain rendering, transport costs |
+|               | SeaRelativeElevation, HasSeaRelativeElevation, BiomeId, IsLand, FeatureId | Terrain rendering, transport costs |
 |               | RealmId, ProvinceId, CountyId                        | Political display, borders         |
 |               | Population                                           | County grouping, economy           |
 | **Vertices**  | Vec2 positions                                       | Voronoi polygon rendering          |

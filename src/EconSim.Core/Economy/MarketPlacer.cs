@@ -196,15 +196,16 @@ namespace EconSim.Core.Economy
         /// </summary>
         public static float ResolveMarketZoneMaxTransportCost(MapData mapData)
         {
-            float spanCost = WorldScale.ResolveMapSpanCost(mapData?.Info);
-            if (spanCost <= 0f)
-                return LegacyDefaultMarketZoneMaxCost;
+            if (mapData?.Info == null)
+                throw new InvalidOperationException("ResolveMarketZoneMaxTransportCost requires MapData.Info.");
+
+            float spanCost = WorldScale.ResolveMapSpanCost(mapData.Info);
             if (WorldScale.LegacyReferenceMapSpanCost <= 0f)
-                return LegacyDefaultMarketZoneMaxCost;
+                throw new InvalidOperationException("Legacy reference map span cost must be > 0.");
 
             float scaled = LegacyDefaultMarketZoneMaxCost * (spanCost / WorldScale.LegacyReferenceMapSpanCost);
             if (float.IsNaN(scaled) || float.IsInfinity(scaled))
-                return LegacyDefaultMarketZoneMaxCost;
+                throw new InvalidOperationException($"Computed market zone transport cost is not finite: {scaled}");
 
             return Math.Max(MinMarketZoneMaxCost, scaled);
         }

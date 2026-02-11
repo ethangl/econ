@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
@@ -47,12 +48,13 @@ namespace EconSim.Tests
             {
                 Info = new MapInfo
                 {
-                    SeaLevel = 20f,
-                    World = new WorldInfo
-                    {
-                        MaxElevationMeters = 8000f,
-                        MaxSeaDepthMeters = 2000f
-                    }
+                    World = CreateWorldInfo(
+                        cellSizeKm: 2.5f,
+                        mapWidthKm: 10f,
+                        mapHeightKm: 10f,
+                        seaLevel: 20f,
+                        maxElevationMeters: 8000f,
+                        maxSeaDepthMeters: 2000f)
                 },
                 Cells = new List<Cell>
                 {
@@ -60,7 +62,8 @@ namespace EconSim.Tests
                     {
                         Id = 1,
                         IsLand = true,
-                        Height = 69, // below legacy mountain start (70)
+                        SeaRelativeElevation = 49f,
+                        HasSeaRelativeElevation = true,
                         BiomeId = 1,
                         NeighborIds = new List<int>(),
                         Center = new Vec2(0, 0)
@@ -69,7 +72,8 @@ namespace EconSim.Tests
                     {
                         Id = 2,
                         IsLand = true,
-                        Height = 100, // peak height
+                        SeaRelativeElevation = 80f,
+                        HasSeaRelativeElevation = true,
                         BiomeId = 1,
                         NeighborIds = new List<int>(),
                         Center = new Vec2(1, 0)
@@ -106,12 +110,13 @@ namespace EconSim.Tests
                 Info = new MapInfo
                 {
                     Seed = "42",
-                    SeaLevel = 20f,
-                    World = new WorldInfo
-                    {
-                        MaxElevationMeters = 8000f,
-                        MaxSeaDepthMeters = 2000f
-                    }
+                    World = CreateWorldInfo(
+                        cellSizeKm: 2.5f,
+                        mapWidthKm: 10f,
+                        mapHeightKm: 10f,
+                        seaLevel: 20f,
+                        maxElevationMeters: 8000f,
+                        maxSeaDepthMeters: 2000f)
                 },
                 Cells = new List<Cell>
                 {
@@ -119,7 +124,8 @@ namespace EconSim.Tests
                     {
                         Id = 1,
                         IsLand = true,
-                        Height = 40, // below iron threshold anchor (legacy absolute 50)
+                        SeaRelativeElevation = 20f,
+                        HasSeaRelativeElevation = true,
                         BiomeId = 1,
                         CountyId = 10,
                         NeighborIds = new List<int> { 2 },
@@ -129,7 +135,8 @@ namespace EconSim.Tests
                     {
                         Id = 2,
                         IsLand = true,
-                        Height = 80, // above iron threshold anchor
+                        SeaRelativeElevation = 60f,
+                        HasSeaRelativeElevation = true,
                         BiomeId = 1,
                         CountyId = 20,
                         NeighborIds = new List<int> { 1 },
@@ -165,26 +172,31 @@ namespace EconSim.Tests
         [Test]
         public void TransportGraph_DistanceNormalization_ScalesWithWorldCellSize()
         {
-            var legacyMap = BuildTwoCellTransportMap(distanceKm: 30f, cellSizeKm: null);
+            var baselineMap = BuildTwoCellTransportMap(distanceKm: 30f, cellSizeKm: 2.5f);
             var worldScaleMap = BuildTwoCellTransportMap(distanceKm: 60f, cellSizeKm: 5f);
 
-            var legacyGraph = new TransportGraph(legacyMap);
+            var baselineGraph = new TransportGraph(baselineMap);
             var worldScaleGraph = new TransportGraph(worldScaleMap);
 
-            float legacyCost = legacyGraph.GetEdgeCost(legacyMap.CellById[1], legacyMap.CellById[2]);
+            float baselineCost = baselineGraph.GetEdgeCost(baselineMap.CellById[1], baselineMap.CellById[2]);
             float worldScaleCost = worldScaleGraph.GetEdgeCost(worldScaleMap.CellById[1], worldScaleMap.CellById[2]);
 
-            Assert.That(legacyCost, Is.EqualTo(1f).Within(0.0001f), "Legacy normalization should keep 30km edge near 1x distance factor.");
-            Assert.That(worldScaleCost, Is.EqualTo(legacyCost).Within(0.0001f),
+            Assert.That(baselineCost, Is.EqualTo(1f).Within(0.0001f), "Normalization should keep 30km @ 2.5km cells near 1x distance factor.");
+            Assert.That(worldScaleCost, Is.EqualTo(baselineCost).Within(0.0001f),
                 "Distance normalization should preserve equivalent edge cost when world scale doubles.");
         }
 
         [Test]
-        public void MarketPlacer_ZoneBudget_FallsBackToLegacyWithoutWorldMetadata()
+        public void MarketPlacer_ZoneBudget_RequiresWorldMetadata()
         {
-            var mapData = BuildLinearMap();
-            float budget = MarketPlacer.ResolveMarketZoneMaxTransportCost(mapData);
-            Assert.That(budget, Is.EqualTo(100f).Within(0.0001f));
+            var mapData = new MapData
+            {
+                Info = new MapInfo
+                {
+                    World = CreateWorldInfo(cellSizeKm: 2.5f, mapWidthKm: 10f, mapHeightKm: 10f)
+                }
+            };
+            Assert.Throws<InvalidOperationException>(() => MarketPlacer.ResolveMarketZoneMaxTransportCost(mapData));
         }
 
         [Test]
@@ -206,16 +218,13 @@ namespace EconSim.Tests
         }
 
         [Test]
-        public void WorldScale_DistanceNormalization_UsesCellSizeWithLegacyFallback()
+        public void WorldScale_DistanceNormalization_RequiresWorldMetadata()
         {
-            Assert.That(WorldScale.ResolveDistanceNormalizationKm(null), Is.EqualTo(30f).Within(0.0001f));
+            Assert.Throws<InvalidOperationException>(() => WorldScale.ResolveDistanceNormalizationKm(null));
 
             var info = new MapInfo
             {
-                World = new WorldInfo
-                {
-                    CellSizeKm = 5f
-                }
+                World = CreateWorldInfo(cellSizeKm: 5f, mapWidthKm: 100f, mapHeightKm: 50f)
             };
 
             Assert.That(WorldScale.ResolveDistanceNormalizationKm(info), Is.EqualTo(60f).Within(0.0001f));
@@ -225,11 +234,15 @@ namespace EconSim.Tests
         {
             var mapData = new MapData
             {
+                Info = new MapInfo
+                {
+                    World = CreateWorldInfo(cellSizeKm: 2.5f, mapWidthKm: 10f, mapHeightKm: 10f)
+                },
                 Cells = new List<Cell>
                 {
-                    new Cell { Id = 1, IsLand = true, BiomeId = 1, Height = 35, NeighborIds = new List<int> { 2 }, CountyId = 10, Center = new Vec2(0, 0) },
-                    new Cell { Id = 2, IsLand = true, BiomeId = 1, Height = 35, NeighborIds = new List<int> { 1, 3 }, CountyId = 20, Center = new Vec2(1, 0) },
-                    new Cell { Id = 3, IsLand = true, BiomeId = 1, Height = 35, NeighborIds = new List<int> { 2 }, CountyId = 30, Center = new Vec2(2, 0) }
+                    new Cell { Id = 1, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 2 }, CountyId = 10, Center = new Vec2(0, 0) },
+                    new Cell { Id = 2, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 1, 3 }, CountyId = 20, Center = new Vec2(1, 0) },
+                    new Cell { Id = 3, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 2 }, CountyId = 30, Center = new Vec2(2, 0) }
                 },
                 Biomes = new List<Biome>
                 {
@@ -253,31 +266,20 @@ namespace EconSim.Tests
             return mapData;
         }
 
-        private static MapData BuildTwoCellTransportMap(float distanceKm, float? cellSizeKm)
+        private static MapData BuildTwoCellTransportMap(float distanceKm, float cellSizeKm)
         {
             var info = new MapInfo
             {
-                SeaLevel = 20f
+                World = CreateWorldInfo(cellSizeKm, mapWidthKm: distanceKm, mapHeightKm: 10f)
             };
-
-            if (cellSizeKm.HasValue)
-            {
-                info.World = new WorldInfo
-                {
-                    CellSizeKm = cellSizeKm.Value,
-                    SeaLevelHeight = 20f,
-                    MaxElevationMeters = 5000f,
-                    MaxSeaDepthMeters = 1250f
-                };
-            }
 
             var mapData = new MapData
             {
                 Info = info,
                 Cells = new List<Cell>
                 {
-                    new Cell { Id = 1, IsLand = true, BiomeId = 1, Height = 35, NeighborIds = new List<int> { 2 }, Center = new Vec2(0, 0) },
-                    new Cell { Id = 2, IsLand = true, BiomeId = 1, Height = 35, NeighborIds = new List<int> { 1 }, Center = new Vec2(distanceKm, 0) }
+                    new Cell { Id = 1, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 2 }, Center = new Vec2(0, 0) },
+                    new Cell { Id = 2, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 1 }, Center = new Vec2(distanceKm, 0) }
                 },
                 Biomes = new List<Biome>
                 {
@@ -302,17 +304,32 @@ namespace EconSim.Tests
             {
                 Info = new MapInfo
                 {
-                    SeaLevel = 20f,
-                    World = new WorldInfo
-                    {
-                        CellSizeKm = cellSizeKm,
-                        MapWidthKm = mapWidthKm,
-                        MapHeightKm = mapHeightKm,
-                        SeaLevelHeight = 20f,
-                        MaxElevationMeters = 5000f,
-                        MaxSeaDepthMeters = 1250f
-                    }
+                    World = CreateWorldInfo(cellSizeKm, mapWidthKm, mapHeightKm)
                 }
+            };
+        }
+
+        private static WorldInfo CreateWorldInfo(
+            float cellSizeKm,
+            float mapWidthKm,
+            float mapHeightKm,
+            float seaLevel = 20f,
+            float maxElevationMeters = 5000f,
+            float maxSeaDepthMeters = 1250f)
+        {
+            return new WorldInfo
+            {
+                CellSizeKm = cellSizeKm,
+                MapWidthKm = mapWidthKm,
+                MapHeightKm = mapHeightKm,
+                MapAreaKm2 = mapWidthKm * mapHeightKm,
+                LatitudeSouth = 30f,
+                LatitudeNorth = 31f,
+                MinHeight = Elevation.LegacyMinHeight,
+                SeaLevelHeight = seaLevel,
+                MaxHeight = Elevation.LegacyMaxHeight,
+                MaxElevationMeters = maxElevationMeters,
+                MaxSeaDepthMeters = maxSeaDepthMeters
             };
         }
     }

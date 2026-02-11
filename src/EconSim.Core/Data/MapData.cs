@@ -72,7 +72,7 @@ namespace EconSim.Core.Data
         /// Validate elevation invariants across all cells.
         /// Throws if any cell violates canonical or absolute-height constraints.
         /// </summary>
-        public void AssertElevationInvariants(bool requireCanonical)
+        public void AssertElevationInvariants()
         {
             if (Cells == null)
                 throw new InvalidOperationException("MapData.Cells is null.");
@@ -83,7 +83,7 @@ namespace EconSim.Core.Data
                 if (cell == null)
                     throw new InvalidOperationException($"MapData.Cells[{i}] is null.");
 
-                if (requireCanonical && !cell.HasSeaRelativeElevation)
+                if (!cell.HasSeaRelativeElevation)
                 {
                     throw new InvalidOperationException(
                         $"Cell {cell.Id} is missing canonical SeaRelativeElevation.");
@@ -97,37 +97,39 @@ namespace EconSim.Core.Data
         /// <summary>
         /// Validate world-scale metadata invariants.
         /// </summary>
-        public void AssertWorldInvariants(bool requireWorldMetadata)
+        public void AssertWorldInvariants()
         {
-            if (!requireWorldMetadata && (Info == null || Info.World == null))
-                return;
-
             if (Info == null)
                 throw new InvalidOperationException("MapData.Info is null.");
             if (Info.World == null)
                 throw new InvalidOperationException("MapData.Info.World is null.");
 
             WorldInfo world = Info.World;
-            if (world.CellSizeKm <= 0f)
+            if (float.IsNaN(world.MapAreaKm2) || float.IsInfinity(world.MapAreaKm2) || world.MapAreaKm2 <= 0f)
+                throw new InvalidOperationException("World.MapAreaKm2 must be > 0.");
+            if (float.IsNaN(world.CellSizeKm) || float.IsInfinity(world.CellSizeKm) || world.CellSizeKm <= 0f)
                 throw new InvalidOperationException("World.CellSizeKm must be > 0.");
-            if (world.MapWidthKm <= 0f || world.MapHeightKm <= 0f)
+            if (float.IsNaN(world.MapWidthKm) || float.IsInfinity(world.MapWidthKm) || world.MapWidthKm <= 0f ||
+                float.IsNaN(world.MapHeightKm) || float.IsInfinity(world.MapHeightKm) || world.MapHeightKm <= 0f)
                 throw new InvalidOperationException("World map dimensions must be > 0.");
-            if (world.MaxElevationMeters <= 0f)
+            if (float.IsNaN(world.MaxElevationMeters) || float.IsInfinity(world.MaxElevationMeters) || world.MaxElevationMeters <= 0f)
                 throw new InvalidOperationException("World.MaxElevationMeters must be > 0.");
-            if (world.MaxSeaDepthMeters <= 0f)
+            if (float.IsNaN(world.MaxSeaDepthMeters) || float.IsInfinity(world.MaxSeaDepthMeters) || world.MaxSeaDepthMeters <= 0f)
                 throw new InvalidOperationException("World.MaxSeaDepthMeters must be > 0.");
-            if (world.LatitudeNorth <= world.LatitudeSouth)
+            if (float.IsNaN(world.LatitudeNorth) || float.IsInfinity(world.LatitudeNorth) ||
+                float.IsNaN(world.LatitudeSouth) || float.IsInfinity(world.LatitudeSouth) ||
+                world.LatitudeNorth <= world.LatitudeSouth)
                 throw new InvalidOperationException("World latitude span must be increasing (north > south).");
+            if (float.IsNaN(world.MinHeight) || float.IsInfinity(world.MinHeight) ||
+                float.IsNaN(world.SeaLevelHeight) || float.IsInfinity(world.SeaLevelHeight) ||
+                float.IsNaN(world.MaxHeight) || float.IsInfinity(world.MaxHeight))
+            {
+                throw new InvalidOperationException("World height anchors must be finite.");
+            }
             if (world.MinHeight >= world.SeaLevelHeight || world.SeaLevelHeight >= world.MaxHeight)
                 throw new InvalidOperationException("World height anchors must satisfy MinHeight < SeaLevelHeight < MaxHeight.");
             if (world.MinHeight < Elevation.LegacyMinHeight || world.MaxHeight > Elevation.LegacyMaxHeight)
                 throw new InvalidOperationException("World height anchors must remain within legacy absolute range [0, 100].");
-            float infoSeaLevel = Info.SeaLevel;
-            if (infoSeaLevel > Elevation.LegacyMinHeight && infoSeaLevel < Elevation.LegacyMaxHeight &&
-                Math.Abs(world.SeaLevelHeight - infoSeaLevel) > 0.0001f)
-            {
-                throw new InvalidOperationException("World.SeaLevelHeight must match MapInfo.SeaLevel when MapInfo.SeaLevel is set.");
-            }
         }
     }
 
@@ -140,7 +142,6 @@ namespace EconSim.Core.Data
         public string Seed;
         public int TotalCells;
         public int LandCells;
-        public float SeaLevel;  // Legacy absolute-domain sea level anchor (default 20)
         public WorldInfo World;
     }
 
@@ -173,9 +174,8 @@ namespace EconSim.Core.Data
         public List<int> NeighborIds;   // Adjacent cell IDs
 
         // Terrain
-        public int Height;              // Legacy absolute-domain storage (0-100, sea-level anchor = 20)
         public float SeaRelativeElevation; // Canonical elevation (sea level = 0)
-        public bool HasSeaRelativeElevation; // False for legacy maps without canonical value
+        public bool HasSeaRelativeElevation; // Must be true for runtime-generated maps
         public int BiomeId;
         public int SoilId;             // MapGen.Core.SoilType ordinal (0-7)
         public bool IsLand;
@@ -333,26 +333,14 @@ namespace EconSim.Core.Data
     {
         public const float LegacyMinHeight = 0f;
         public const float LegacyMaxHeight = 100f;
-        public const float DefaultSeaLevel = 20f;
-        public const float DefaultMaxElevationMeters = 5000f;
 
         public static float ResolveSeaLevel(MapInfo info)
         {
-            if (info == null)
-                return DefaultSeaLevel;
-
-            // Prefer explicit world metadata when available.
-            if (info.World != null)
-            {
-                float worldSeaLevel = info.World.SeaLevelHeight;
-                if (worldSeaLevel > LegacyMinHeight && worldSeaLevel < LegacyMaxHeight)
-                    return worldSeaLevel;
-            }
-
-            // Fallback to legacy field. Treat unset/invalid metadata as default.
-            float seaLevel = info.SeaLevel;
-            if (seaLevel <= LegacyMinHeight || seaLevel >= LegacyMaxHeight)
-                return DefaultSeaLevel;
+            WorldInfo world = RequireWorldInfo(info, "ResolveSeaLevel");
+            float seaLevel = world.SeaLevelHeight;
+            if (float.IsNaN(seaLevel) || float.IsInfinity(seaLevel) ||
+                seaLevel <= LegacyMinHeight || seaLevel >= LegacyMaxHeight)
+                throw new InvalidOperationException($"World.SeaLevelHeight must be within ({LegacyMinHeight}, {LegacyMaxHeight}), got {seaLevel}.");
 
             return seaLevel;
         }
@@ -370,32 +358,26 @@ namespace EconSim.Core.Data
 
         public static float GetSeaRelativeHeight(Cell cell, MapInfo info)
         {
-            if (cell == null) return 0f;
+            if (cell == null)
+                throw new InvalidOperationException("GetSeaRelativeHeight requires a non-null cell.");
+            if (!cell.HasSeaRelativeElevation)
+                throw new InvalidOperationException($"Cell {cell.Id} is missing canonical SeaRelativeElevation.");
 
-            if (cell.HasSeaRelativeElevation)
-            {
-                float absolute = AbsoluteFromSeaRelative(cell.SeaRelativeElevation, ResolveSeaLevel(info));
-                AssertAbsoluteHeightInRange(absolute, $"cell {cell.Id} (canonical)");
-                return cell.SeaRelativeElevation;
-            }
-
-            return SeaRelativeFromAbsolute(cell.Height, ResolveSeaLevel(info));
+            float absolute = AbsoluteFromSeaRelative(cell.SeaRelativeElevation, ResolveSeaLevel(info));
+            AssertAbsoluteHeightInRange(absolute, $"cell {cell.Id} (canonical)");
+            return cell.SeaRelativeElevation;
         }
 
         public static float GetAbsoluteHeight(Cell cell, MapInfo info)
         {
-            if (cell == null) return ResolveSeaLevel(info);
+            if (cell == null)
+                throw new InvalidOperationException("GetAbsoluteHeight requires a non-null cell.");
+            if (!cell.HasSeaRelativeElevation)
+                throw new InvalidOperationException($"Cell {cell.Id} is missing canonical SeaRelativeElevation.");
 
-            if (cell.HasSeaRelativeElevation)
-            {
-                float absolute = AbsoluteFromSeaRelative(cell.SeaRelativeElevation, ResolveSeaLevel(info));
-                AssertAbsoluteHeightInRange(absolute, $"cell {cell.Id} (canonical)");
-                return absolute;
-            }
-
-            float legacyAbsolute = cell.Height;
-            AssertAbsoluteHeightInRange(legacyAbsolute, $"cell {cell.Id} (legacy)");
-            return legacyAbsolute;
+            float absolute = AbsoluteFromSeaRelative(cell.SeaRelativeElevation, ResolveSeaLevel(info));
+            AssertAbsoluteHeightInRange(absolute, $"cell {cell.Id} (canonical)");
+            return absolute;
         }
 
         public static float NormalizeAbsolute01(float absoluteHeight)
@@ -553,21 +535,27 @@ namespace EconSim.Core.Data
 
         public static float ResolveMaxElevationMeters(MapInfo info)
         {
-            if (info?.World != null && info.World.MaxElevationMeters > 0f)
-                return info.World.MaxElevationMeters;
-
-            return DefaultMaxElevationMeters;
+            WorldInfo world = RequireWorldInfo(info, "ResolveMaxElevationMeters");
+            if (float.IsNaN(world.MaxElevationMeters) || float.IsInfinity(world.MaxElevationMeters) || world.MaxElevationMeters <= 0f)
+                throw new InvalidOperationException($"World.MaxElevationMeters must be > 0, got {world.MaxElevationMeters}.");
+            return world.MaxElevationMeters;
         }
 
         public static float ResolveMaxSeaDepthMeters(MapInfo info)
         {
-            if (info?.World != null && info.World.MaxSeaDepthMeters > 0f)
-                return info.World.MaxSeaDepthMeters;
+            WorldInfo world = RequireWorldInfo(info, "ResolveMaxSeaDepthMeters");
+            if (float.IsNaN(world.MaxSeaDepthMeters) || float.IsInfinity(world.MaxSeaDepthMeters) || world.MaxSeaDepthMeters <= 0f)
+                throw new InvalidOperationException($"World.MaxSeaDepthMeters must be > 0, got {world.MaxSeaDepthMeters}.");
+            return world.MaxSeaDepthMeters;
+        }
 
-            float seaLevel = ResolveSeaLevel(info);
-            float landRange = Math.Max(1f, LegacyMaxHeight - seaLevel);
-            float waterRange = Math.Max(1f, seaLevel - LegacyMinHeight);
-            return ResolveMaxElevationMeters(info) * (waterRange / landRange);
+        private static WorldInfo RequireWorldInfo(MapInfo info, string context)
+        {
+            if (info == null)
+                throw new InvalidOperationException($"{context} requires non-null MapInfo.");
+            if (info.World == null)
+                throw new InvalidOperationException($"{context} requires MapInfo.World metadata.");
+            return info.World;
         }
     }
 }
