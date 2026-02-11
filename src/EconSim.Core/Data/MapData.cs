@@ -20,7 +20,7 @@ namespace EconSim.Core.Data
         public List<Biome> Biomes;
         public List<Burg> Burgs;
         public List<Feature> Features;
-        public List<County> Counties;    // Economic unit groupings (set by CountyGrouper)
+        public List<County> Counties;    // Economic unit groupings assigned during map generation
 
         // Lookup tables (built after loading)
         [NonSerialized] public Dictionary<int, Cell> CellById;
@@ -186,7 +186,7 @@ namespace EconSim.Core.Data
         public int RealmId;             // 0 = none/neutral
         public int ProvinceId;          // 0 = none
         public int BurgId;              // 0 = no settlement
-        public int CountyId;            // County this cell belongs to (set by CountyGrouper)
+        public int CountyId;            // County this cell belongs to (assigned during map generation)
 
         // Rivers
         public int RiverId;             // 0 = no river
@@ -406,11 +406,11 @@ namespace EconSim.Core.Data
         }
 
         /// <summary>
-        /// Convert a cell's canonical elevation to meters above sea level (ASL).
+        /// Convert a cell's canonical elevation to meters above sea level (non-negative).
         /// </summary>
-        public static float GetMetersASL(Cell cell, MapInfo info)
+        public static float GetMetersAboveSeaLevel(Cell cell, MapInfo info)
         {
-            return AbsoluteToMetersASL(GetAbsoluteHeight(cell, info), info);
+            return AbsoluteToMetersAboveSeaLevel(GetAbsoluteHeight(cell, info), info);
         }
 
         /// <summary>
@@ -455,11 +455,11 @@ namespace EconSim.Core.Data
         }
 
         /// <summary>
-        /// Convert absolute map height (0..100) to meters above sea level (ASL, clamped to [0, maxElevation]).
+        /// Convert absolute map height (0..100) to meters above sea level (clamped to [0, maxElevation]).
         /// </summary>
-        public static float AbsoluteToMetersASL(float absoluteHeight, MapInfo info)
+        public static float AbsoluteToMetersAboveSeaLevel(float absoluteHeight, MapInfo info)
         {
-            AssertAbsoluteHeightInRange(absoluteHeight, "AbsoluteToMetersASL input");
+            AssertAbsoluteHeightInRange(absoluteHeight, "AbsoluteToMetersAboveSeaLevel input");
             float seaLevel = ResolveSeaLevel(info);
             float maxElevationMeters = ResolveMaxElevationMeters(info);
 
@@ -474,20 +474,20 @@ namespace EconSim.Core.Data
         /// <summary>
         /// Convert meters above sea level to absolute map height (0..100).
         /// </summary>
-        public static float MetersASLToAbsolute(float metersAsl, MapInfo info)
+        public static float MetersAboveSeaLevelToAbsolute(float metersAboveSeaLevel, MapInfo info)
         {
-            if (float.IsNaN(metersAsl) || float.IsInfinity(metersAsl))
-                throw new InvalidOperationException($"MetersASLToAbsolute input is not finite: {metersAsl}");
+            if (float.IsNaN(metersAboveSeaLevel) || float.IsInfinity(metersAboveSeaLevel))
+                throw new InvalidOperationException($"MetersAboveSeaLevelToAbsolute input is not finite: {metersAboveSeaLevel}");
 
             float seaLevel = ResolveSeaLevel(info);
-            if (metersAsl <= 0f)
+            if (metersAboveSeaLevel <= 0f)
                 return seaLevel;
 
             float maxElevationMeters = ResolveMaxElevationMeters(info);
-            float normalized = Math.Min(1f, metersAsl / maxElevationMeters);
+            float normalized = Math.Min(1f, metersAboveSeaLevel / maxElevationMeters);
             float landRange = Math.Max(1f, LegacyMaxHeight - seaLevel);
             float absolute = seaLevel + normalized * landRange;
-            AssertAbsoluteHeightInRange(absolute, "MetersASLToAbsolute output");
+            AssertAbsoluteHeightInRange(absolute, "MetersAboveSeaLevelToAbsolute output");
             return absolute;
         }
 

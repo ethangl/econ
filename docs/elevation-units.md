@@ -20,17 +20,18 @@ Always use `EconSim.Core.Data.Elevation` helpers:
 - `ResolveSeaLevel(MapInfo)`
 - `GetSeaRelativeHeight(Cell, MapInfo)`
 - `GetAbsoluteHeight(Cell, MapInfo)`
-- `GetMetersASL(Cell, MapInfo)`
+- `GetMetersAboveSeaLevel(Cell, MapInfo)`
 - `GetSignedMeters(Cell, MapInfo)`
 - `GetNormalizedSignedHeight(Cell, MapInfo)`
 - `GetNormalizedDepth01(Cell, MapInfo)`
 - `NormalizeAbsolute01(float)`
-- `AbsoluteToMetersASL(float, MapInfo)`
-- `MetersASLToAbsolute(float, MapInfo)`
+- `AbsoluteToMetersAboveSeaLevel(float, MapInfo)`
+- `MetersAboveSeaLevelToAbsolute(float, MapInfo)`
 - `SeaRelativeToSignedMeters(float, MapInfo)`
 - `SignedMetersToSeaRelative(float, MapInfo)`
 
 Notes:
+
 - `ResolveSeaLevel(MapInfo)` prefers `MapInfo.World.SeaLevelHeight` when present and valid, then falls back to legacy `MapInfo.SeaLevel`, then default `20`.
 
 ## Practical Guidance
@@ -39,8 +40,8 @@ Notes:
   - `SeaRelativeElevation`
   - `HasSeaRelativeElevation = true`
 - For gameplay thresholds, prefer meter-space comparisons:
-  - convert threshold anchors once with `AbsoluteToMetersASL(legacyAbsoluteThreshold, info)`
-  - compare against per-cell meters (`AbsoluteToMetersASL(GetAbsoluteHeight(cell, info), info)`)
+  - convert threshold anchors once with `AbsoluteToMetersAboveSeaLevel(legacyAbsoluteThreshold, info)`
+  - compare against per-cell meters (`AbsoluteToMetersAboveSeaLevel(GetAbsoluteHeight(cell, info), info)`)
 - Keep morphology logic unchanged unless explicitly tuning map generation behavior.
 - Current consumers using this pattern:
   - `EconSim.Core.Economy.EconomyInitializer`
@@ -68,12 +69,3 @@ Notes:
 - EditMode regressions include:
   - distribution baseline gates (`landRatio`, `waterRatio`, `riverCellRatio`, elevation `p10/p50/p90`)
   - source-usage guard that fails if production code reads raw `cell.Height` outside `MapData` helpers.
-
-## CI Gate
-
-- GitHub Actions workflow: `.github/workflows/ci.yml`
-- PR gate runs:
-  - `dotnet build unity/EconSim.EditModeTests.csproj`
-  - Unity EditMode tests via `game-ci/unity-test-runner`
-- Required repo secret:
-  - `UNITY_LICENSE` (and optionally `UNITY_EMAIL` / `UNITY_PASSWORD` based on license activation mode)

@@ -1592,10 +1592,17 @@ namespace EconSim.Renderer
                 probeBuilder.Append(" | Channel=").Append(channelDebugView);
             }
             probeBuilder.AppendLine();
+            float absoluteHeight = Elevation.GetAbsoluteHeight(cell, mapData.Info);
+            float seaRelativeHeight = Elevation.GetSeaRelativeHeight(cell, mapData.Info);
+            float metersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
+            float signedMeters = Elevation.GetSignedMeters(cell, mapData.Info);
+
             probeBuilder.Append("Cell=").Append(cell.Id)
                 .Append(" Land=").Append(cell.IsLand ? "Y" : "N")
-                .Append(" Height=").Append(Elevation.GetAbsoluteHeight(cell, mapData.Info).ToString("F1"))
-                .Append(" ASL=").Append(Elevation.GetSeaRelativeHeight(cell, mapData.Info).ToString("F1"))
+                .Append(" AbsH=").Append(absoluteHeight.ToString("F1"))
+                .Append(" SeaRel=").Append(seaRelativeHeight.ToString("F1"))
+                .Append(" AboveSeaM=").Append(metersAboveSeaLevel.ToString("F0"))
+                .Append(" SignedM=").Append(signedMeters.ToString("F0"))
                 .AppendLine();
             probeBuilder.Append("Realm=").Append(cell.RealmId)
                 .Append(" Province=").Append(cell.ProvinceId)

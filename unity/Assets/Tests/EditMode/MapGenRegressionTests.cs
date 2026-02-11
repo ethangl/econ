@@ -612,7 +612,7 @@ namespace EconSim.Tests
         }
 
         [Test]
-        public void ElevationWorldUnitConversions_RoundTripAslAndSigned()
+        public void ElevationWorldUnitConversions_RoundTripAboveSeaLevelAndSigned()
         {
             var info = new MapInfo
             {
@@ -625,12 +625,12 @@ namespace EconSim.Tests
             };
 
             float seaAbsolute = Elevation.ResolveSeaLevel(info);
-            Assert.That(Elevation.AbsoluteToMetersASL(seaAbsolute, info), Is.EqualTo(0f).Within(0.0001f));
-            Assert.That(Elevation.MetersASLToAbsolute(0f, info), Is.EqualTo(seaAbsolute).Within(0.0001f));
+            Assert.That(Elevation.AbsoluteToMetersAboveSeaLevel(seaAbsolute, info), Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(Elevation.MetersAboveSeaLevelToAbsolute(0f, info), Is.EqualTo(seaAbsolute).Within(0.0001f));
 
-            float peakAsl = Elevation.AbsoluteToMetersASL(Elevation.LegacyMaxHeight, info);
-            Assert.That(peakAsl, Is.EqualTo(6000f).Within(0.0001f));
-            Assert.That(Elevation.MetersASLToAbsolute(6000f, info), Is.EqualTo(Elevation.LegacyMaxHeight).Within(0.0001f));
+            float peakMetersAboveSeaLevel = Elevation.AbsoluteToMetersAboveSeaLevel(Elevation.LegacyMaxHeight, info);
+            Assert.That(peakMetersAboveSeaLevel, Is.EqualTo(6000f).Within(0.0001f));
+            Assert.That(Elevation.MetersAboveSeaLevelToAbsolute(6000f, info), Is.EqualTo(Elevation.LegacyMaxHeight).Within(0.0001f));
 
             float signedUp = Elevation.SeaRelativeToSignedMeters(40f, info);
             float roundTripUp = Elevation.SignedMetersToSeaRelative(signedUp, info);
@@ -660,7 +660,7 @@ namespace EconSim.Tests
                 SeaRelativeElevation = 40f,
                 HasSeaRelativeElevation = true
             };
-            Assert.That(Elevation.GetMetersASL(canonicalCell, info), Is.EqualTo(3000f).Within(0.0001f));
+            Assert.That(Elevation.GetMetersAboveSeaLevel(canonicalCell, info), Is.EqualTo(3000f).Within(0.0001f));
             Assert.That(Elevation.GetSignedMeters(canonicalCell, info), Is.EqualTo(3000f).Within(0.0001f));
 
             var legacyCell = new Cell
@@ -668,7 +668,7 @@ namespace EconSim.Tests
                 Height = 10,
                 HasSeaRelativeElevation = false
             };
-            Assert.That(Elevation.GetMetersASL(legacyCell, info), Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(Elevation.GetMetersAboveSeaLevel(legacyCell, info), Is.EqualTo(0f).Within(0.0001f));
             Assert.That(Elevation.GetSignedMeters(legacyCell, info), Is.EqualTo(-750f).Within(0.0001f));
         }
 

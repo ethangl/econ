@@ -66,7 +66,7 @@ namespace EconSim.Core.Transport
         private const float LegacyMountainStartAbsolute = 70f;
         private const float MinMountainRangeMeters = 1f;
 
-        private readonly float _mountainStartMetersAsl;
+        private readonly float _mountainStartMetersAboveSeaLevel;
         private readonly float _mountainRangeMeters;
         private readonly float _distanceNormalizationKm;
 
@@ -75,10 +75,10 @@ namespace EconSim.Core.Transport
             _mapData = mapData;
             _maxCacheSize = maxCacheSize;
             _pathCache = new Dictionary<(int, int), PathResult>();
-            _mountainStartMetersAsl = Elevation.AbsoluteToMetersASL(LegacyMountainStartAbsolute, mapData.Info);
+            _mountainStartMetersAboveSeaLevel = Elevation.AbsoluteToMetersAboveSeaLevel(LegacyMountainStartAbsolute, mapData.Info);
             _mountainRangeMeters = Math.Max(
                 MinMountainRangeMeters,
-                Elevation.ResolveMaxElevationMeters(mapData.Info) - _mountainStartMetersAsl);
+                Elevation.ResolveMaxElevationMeters(mapData.Info) - _mountainStartMetersAboveSeaLevel);
             _distanceNormalizationKm = WorldScale.ResolveDistanceNormalizationKm(mapData.Info);
 
             // Build biome lookup
@@ -122,11 +122,11 @@ namespace EconSim.Core.Transport
             }
 
             // Height modifier: higher = harder (mountains).
-            // Keep legacy behavior (absolute > 70) calibrated against world-unit meters ASL.
-            float elevationMetersAsl = Elevation.GetMetersASL(cell, _mapData.Info);
-            if (elevationMetersAsl > _mountainStartMetersAsl)
+            // Keep legacy behavior (absolute > 70) calibrated against world-unit meters above sea level.
+            float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, _mapData.Info);
+            if (elevationMetersAboveSeaLevel > _mountainStartMetersAboveSeaLevel)
             {
-                float heightPenalty = (elevationMetersAsl - _mountainStartMetersAsl) / _mountainRangeMeters; // 0-1 range
+                float heightPenalty = (elevationMetersAboveSeaLevel - _mountainStartMetersAboveSeaLevel) / _mountainRangeMeters; // 0-1 range
                 baseCost *= 1f + heightPenalty * 2f; // Up to 3x cost at peak
             }
 

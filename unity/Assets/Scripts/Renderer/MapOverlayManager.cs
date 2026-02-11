@@ -408,7 +408,7 @@ public class MapOverlayManager
         /// </summary>
         private void GenerateHeightmapTexture()
         {
-            // Sample raw heights from spatial grid (Y-up matches texture row order, no flip needed)
+            // Sample absolute heights from spatial grid (Y-up matches texture row order, no flip needed)
             float[] heightData = new float[gridWidth * gridHeight];
 
             Parallel.For(0, gridHeight, y =>
@@ -1807,12 +1807,12 @@ public class MapOverlayManager
         }
 
         /// <summary>
-        /// Set sea level in absolute map units (0..100) for water detection.
+        /// Set sea-level threshold in absolute map units (0..100) for water detection.
         /// </summary>
-        public void SetSeaLevel(float level)
+        public void SetSeaLevel(float seaLevelAbsoluteHeight)
         {
             if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(level));
+            terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(seaLevelAbsoluteHeight));
         }
 
         /// <summary>

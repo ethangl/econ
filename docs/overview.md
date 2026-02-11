@@ -39,14 +39,14 @@ Any world generator must produce a `MapData` that satisfies this contract:
 
 | Component     | Fields                                               | Used By                            |
 | ------------- | ---------------------------------------------------- | ---------------------------------- |
-| **MapInfo**   | Width, Height, Seed, TotalCells, LandCells, SeaLevel | Rendering, coordinate systems      |
+| **MapInfo**   | Width, Height, Seed, TotalCells, LandCells, SeaLevel, World.* | Rendering, coordinate systems      |
 | **Cells**     | Id, Center, VertexIndices, NeighborIds               | Mesh generation, pathfinding       |
-|               | Height, BiomeId, IsLand, FeatureId                   | Terrain rendering, transport costs |
-|               | StateId, ProvinceId                                  | Political display, borders         |
+|               | SeaRelativeElevation, HasSeaRelativeElevation, Height (legacy), BiomeId, IsLand, FeatureId | Terrain rendering, transport costs |
+|               | RealmId, ProvinceId, CountyId                        | Political display, borders         |
 |               | Population                                           | County grouping, economy           |
 | **Vertices**  | Vec2 positions                                       | Voronoi polygon rendering          |
 | **Realms**    | Id, Name, Color, ProvinceIds                         | Political mode, borders            |
-| **Provinces** | Id, Name, StateId, CellIds                           | Province mode, grouping            |
+| **Provinces** | Id, Name, RealmId, CellIds                           | Province mode, grouping            |
 | **Rivers**    | Id, CellPath, Width, Discharge                       | River rendering, transport         |
 | **Biomes**    | Id, Name, Color, Habitability, MovementCost          | Terrain colors, pathfinding        |
 | **Features**  | Id, Type (ocean/lake/island)                         | Water detection, transport         |
@@ -55,8 +55,8 @@ Any world generator must produce a `MapData` that satisfies this contract:
 
 | Component           | Computed By              | Notes                      |
 | ------------------- | ------------------------ | -------------------------- |
-| **Counties**        | `CountyGrouper`          | Groups cells by population |
-| **Lookup tables**   | `MapData.BuildLookups()` | CellById, StateById, etc.  |
+| **Counties**        | MapGen political pipeline + adapter | Grouped before runtime simulation |
+| **Lookup tables**   | `MapData.BuildLookups()` | CellById, RealmById, ProvinceById, CountyById, etc. |
 | **Markets**         | `MarketPlacer`           | Trade zones                |
 | **Transport graph** | `TransportGraph`         | Pathfinding weights        |
 
@@ -65,7 +65,7 @@ Any world generator must produce a `MapData` that satisfies this contract:
 1. All cell IDs are unique and sequential from 0
 2. All vertex indices in cells are valid into Vertices list
 3. All neighbor IDs reference existing cells
-4. Cell.StateId = 0 means neutral/unclaimed (valid)
+4. Cell.RealmId = 0 means neutral/unclaimed (valid)
 5. Cell.ProvinceId = 0 means no province (valid for neutral)
 6. Rivers have ordered CellPath from source to mouth
 7. Every land cell has a valid BiomeId
@@ -91,9 +91,9 @@ Reframing: which geographic features actually drive interesting economic dynamic
 
 ## Cell Scale
 
-**Design decision: 2.5 km × 2.5 km cells (6.25 km² area)**
+**Design decision: configurable cell scale (default 2.5 km × 2.5 km, 6.25 km² area)**
 
-This is a fixed constant across all maps, enabling tessellated submaps that stitch together seamlessly.
+Cell scale is emitted via `MapInfo.World.CellSizeKm` and defaults to `2.5 km` unless generation config overrides it.
 
 ### Map Dimensions Are Derived, Not Specified
 
@@ -103,7 +103,7 @@ Since cell size is fixed, map dimensions follow from cell count and aspect ratio
 | ------------ | ------- | ------------------------------ |
 | Cell count   | 20,000  | Controls map complexity/detail |
 | Aspect ratio | 16:9    | Controls map shape             |
-| Cell size    | 2.5 km  | Fixed constant (~1.5 mi)       |
+| Cell size    | 2.5 km  | Default (~1.5 mi), configurable |
 
 **Derivation:**
 

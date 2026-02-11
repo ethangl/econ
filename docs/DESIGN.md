@@ -804,11 +804,10 @@ econ/
 │       │   ├── Types.cs           # Vec2, Color32 (Unity-independent)
 │       │   └── SimLog.cs          # Logging utility
 │       ├── Data/
-│       │   └── MapData.cs         # Cell, Province, State, Biome, etc.
+│       │   ├── MapData.cs         # Cell, Province, Realm, County, World metadata
+│       │   └── WorldScale.cs      # Shared world-scale and transport distance helpers
 │       ├── Import/
-│       │   ├── AzgaarData.cs      # Azgaar JSON structure
-│       │   ├── AzgaarParser.cs    # JSON parsing
-│       │   └── MapConverter.cs    # AzgaarMap → MapData
+│       │   └── MapGenAdapter.cs   # MapGen.Core result → MapData conversion
 │       ├── Economy/
 │       │   ├── GoodDef.cs         # Good definitions & registry
 │       │   ├── FacilityDef.cs     # Facility definitions & registry

@@ -11,7 +11,7 @@ namespace EconSim.Core.Economy
     public static class EconomyInitializer
     {
         private static Random _random = new Random(42); // Re-seeded per initialization
-        // Legacy absolute thresholds retained as calibration anchors while logic runs in meters ASL.
+        // Legacy absolute thresholds retained as calibration anchors while logic runs in meters above sea level.
         private const float LegacyElevation40Absolute = 40f;
         private const float LegacyElevation45Absolute = 45f;
         private const float LegacyElevation50Absolute = 50f;
@@ -66,9 +66,9 @@ namespace EconSim.Core.Economy
 
             SimLog.Log("Economy", $"Biomes available: {string.Join(", ", biomeNames.Values)}");
 
-            float elevation40Meters = ResolveThresholdMetersAsl(mapData.Info, LegacyElevation40Absolute);
-            float elevation45Meters = ResolveThresholdMetersAsl(mapData.Info, LegacyElevation45Absolute);
-            float elevation50Meters = ResolveThresholdMetersAsl(mapData.Info, LegacyElevation50Absolute);
+            float elevation40Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, LegacyElevation40Absolute);
+            float elevation45Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, LegacyElevation45Absolute);
+            float elevation50Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, LegacyElevation50Absolute);
 
             // Debug: log elevation distribution for mining resources.
             int cellsAbove40 = 0, cellsAbove45 = 0, cellsAbove50 = 0;
@@ -78,16 +78,16 @@ namespace EconSim.Core.Economy
             {
                 if (!cell.IsLand) continue;
                 float absoluteElevation = Elevation.GetAbsoluteHeight(cell, mapData.Info);
-                float elevationMetersAsl = Elevation.GetMetersASL(cell, mapData.Info);
+                float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
                 if (absoluteElevation > maxHeightAbsolute) maxHeightAbsolute = absoluteElevation;
-                if (elevationMetersAsl > maxHeightMeters) maxHeightMeters = elevationMetersAsl;
-                if (elevationMetersAsl > elevation40Meters) cellsAbove40++;
-                if (elevationMetersAsl > elevation45Meters) cellsAbove45++;
-                if (elevationMetersAsl > elevation50Meters) cellsAbove50++;
+                if (elevationMetersAboveSeaLevel > maxHeightMeters) maxHeightMeters = elevationMetersAboveSeaLevel;
+                if (elevationMetersAboveSeaLevel > elevation40Meters) cellsAbove40++;
+                if (elevationMetersAboveSeaLevel > elevation45Meters) cellsAbove45++;
+                if (elevationMetersAboveSeaLevel > elevation50Meters) cellsAbove50++;
             }
             SimLog.Log(
                 "Economy",
-                $"Elevation distribution: maxAbs={maxHeightAbsolute:F1}, maxAsl={maxHeightMeters:F0}m, >{elevation40Meters:F0}m={cellsAbove40}, >{elevation45Meters:F0}m={cellsAbove45}, >{elevation50Meters:F0}m={cellsAbove50}");
+                $"Elevation distribution: maxAbs={maxHeightAbsolute:F1}, maxAboveSea={maxHeightMeters:F0}m, >{elevation40Meters:F0}m={cellsAbove40}, >{elevation45Meters:F0}m={cellsAbove45}, >{elevation50Meters:F0}m={cellsAbove50}");
 
             var resourceCounts = new Dictionary<string, int>();
 
@@ -100,7 +100,7 @@ namespace EconSim.Core.Economy
                     continue;
 
                 var resources = new Dictionary<string, float>();
-                float elevationMetersAsl = Elevation.GetMetersASL(cell, mapData.Info);
+                float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
 
                 // Check each raw good's terrain affinity
                 foreach (var good in economy.Goods.ByCategory(GoodCategory.Raw))
@@ -112,12 +112,12 @@ namespace EconSim.Core.Economy
                     // Special case: iron_ore uses height (mountains) not biome
                     if (good.Id == "iron_ore")
                     {
-                        matches = elevationMetersAsl > elevation50Meters;
+                        matches = elevationMetersAboveSeaLevel > elevation50Meters;
                     }
                     // Special case: gold_ore uses high terrain with rare probability
                     else if (good.Id == "gold_ore")
                     {
-                        matches = elevationMetersAsl > elevation45Meters && _random.NextDouble() < 0.25;
+                        matches = elevationMetersAboveSeaLevel > elevation45Meters && _random.NextDouble() < 0.25;
                     }
                     else
                     {
@@ -333,8 +333,8 @@ namespace EconSim.Core.Economy
                 biomeNames[biome.Id] = biome.Name;
             }
 
-            float elevation45Meters = ResolveThresholdMetersAsl(mapData.Info, LegacyElevation45Absolute);
-            float elevation50Meters = ResolveThresholdMetersAsl(mapData.Info, LegacyElevation50Absolute);
+            float elevation45Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, LegacyElevation45Absolute);
+            float elevation50Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, LegacyElevation50Absolute);
 
             foreach (var cell in mapData.Cells)
             {
@@ -342,7 +342,7 @@ namespace EconSim.Core.Economy
                 if (!biomeNames.TryGetValue(cell.BiomeId, out var biomeName)) continue;
 
                 var resources = new HashSet<string>();
-                float elevationMetersAsl = Elevation.GetMetersASL(cell, mapData.Info);
+                float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
 
                 foreach (var good in economy.Goods.ByCategory(GoodCategory.Raw))
                 {
@@ -351,11 +351,11 @@ namespace EconSim.Core.Economy
                     bool matches = false;
                     if (good.Id == "iron_ore")
                     {
-                        matches = elevationMetersAsl > elevation50Meters;
+                        matches = elevationMetersAboveSeaLevel > elevation50Meters;
                     }
                     else if (good.Id == "gold_ore")
                     {
-                        matches = elevationMetersAsl > elevation45Meters;
+                        matches = elevationMetersAboveSeaLevel > elevation45Meters;
                     }
                     else
                     {
@@ -413,9 +413,9 @@ namespace EconSim.Core.Economy
             return -1;
         }
 
-        private static float ResolveThresholdMetersAsl(MapInfo info, float legacyAbsoluteThreshold)
+        private static float ResolveThresholdMetersAboveSeaLevel(MapInfo info, float legacyAbsoluteThreshold)
         {
-            return Elevation.AbsoluteToMetersASL(legacyAbsoluteThreshold, info);
+            return Elevation.AbsoluteToMetersAboveSeaLevel(legacyAbsoluteThreshold, info);
         }
     }
 }
