@@ -22,6 +22,8 @@ Always use `EconSim.Core.Data.Elevation` helpers:
 - `GetAbsoluteHeight(Cell, MapInfo)`
 - `GetMetersASL(Cell, MapInfo)`
 - `GetSignedMeters(Cell, MapInfo)`
+- `GetNormalizedSignedHeight(Cell, MapInfo)`
+- `GetNormalizedDepth01(Cell, MapInfo)`
 - `NormalizeAbsolute01(float)`
 - `AbsoluteToMetersASL(float, MapInfo)`
 - `MetersASLToAbsolute(float, MapInfo)`

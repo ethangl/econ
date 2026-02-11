@@ -673,6 +673,45 @@ namespace EconSim.Tests
         }
 
         [Test]
+        public void ElevationNormalizedSignedAndDepthHelpers_AreWorldScaleConsistent()
+        {
+            var info = new MapInfo
+            {
+                SeaLevel = 20f,
+                World = new WorldInfo
+                {
+                    MaxElevationMeters = 6000f,
+                    MaxSeaDepthMeters = 1500f
+                }
+            };
+
+            var landCell = new Cell
+            {
+                Height = 60,
+                SeaRelativeElevation = 40f,
+                HasSeaRelativeElevation = true
+            };
+            Assert.That(Elevation.GetNormalizedSignedHeight(landCell, info), Is.EqualTo(0.5f).Within(0.0001f));
+            Assert.That(Elevation.GetNormalizedDepth01(landCell, info), Is.EqualTo(0f).Within(0.0001f));
+
+            var midDepthCell = new Cell
+            {
+                Height = 10,
+                HasSeaRelativeElevation = false
+            };
+            Assert.That(Elevation.GetNormalizedSignedHeight(midDepthCell, info), Is.EqualTo(-0.125f).Within(0.0001f));
+            Assert.That(Elevation.GetNormalizedDepth01(midDepthCell, info), Is.EqualTo(0.5f).Within(0.0001f));
+
+            var maxDepthCell = new Cell
+            {
+                Height = 0,
+                HasSeaRelativeElevation = false
+            };
+            Assert.That(Elevation.GetNormalizedSignedHeight(maxDepthCell, info), Is.EqualTo(-0.25f).Within(0.0001f));
+            Assert.That(Elevation.GetNormalizedDepth01(maxDepthCell, info), Is.EqualTo(1f).Within(0.0001f));
+        }
+
+        [Test]
         public void ElevationHelpers_RejectOutOfRangeAbsoluteValues()
         {
             var info = new MapInfo { SeaLevel = 20f };

@@ -422,6 +422,39 @@ namespace EconSim.Core.Data
         }
 
         /// <summary>
+        /// Normalize signed cell elevation by max elevation meters for terrain displacement.
+        /// Land is [0..1], water is negative down to -maxDepth/maxElevation.
+        /// </summary>
+        public static float GetNormalizedSignedHeight(Cell cell, MapInfo info)
+        {
+            float maxElevationMeters = ResolveMaxElevationMeters(info);
+            if (maxElevationMeters <= 0f)
+                return 0f;
+
+            float signedMeters = GetSignedMeters(cell, info);
+            float normalized = signedMeters / maxElevationMeters;
+            float minNormalized = -ResolveMaxSeaDepthMeters(info) / maxElevationMeters;
+            return Math.Max(minNormalized, Math.Min(1f, normalized));
+        }
+
+        /// <summary>
+        /// Normalize water depth to [0..1], where 0 is sea level and 1 is max configured sea depth.
+        /// Land cells return 0.
+        /// </summary>
+        public static float GetNormalizedDepth01(Cell cell, MapInfo info)
+        {
+            float signedMeters = GetSignedMeters(cell, info);
+            if (signedMeters >= 0f)
+                return 0f;
+
+            float maxSeaDepthMeters = ResolveMaxSeaDepthMeters(info);
+            if (maxSeaDepthMeters <= 0f)
+                return 0f;
+
+            return Math.Min(1f, -signedMeters / maxSeaDepthMeters);
+        }
+
+        /// <summary>
         /// Convert absolute map height (0..100) to meters above sea level (ASL, clamped to [0, maxElevation]).
         /// </summary>
         public static float AbsoluteToMetersASL(float absoluteHeight, MapInfo info)

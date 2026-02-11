@@ -1084,7 +1084,7 @@ public class MapOverlayManager
 
         /// <summary>
         /// Apply elevation-based color modifications to biome color.
-        /// Elevation uses Azgaar's absolute scale: 0 = sea level (height 20), 1 = max (height 100).
+        /// Elevation input is normalized absolute height [0..1] from the height texture.
         /// Brightness gradient from 0.4 (coastal) to 1.0 (high), snow blend above 85%.
         /// </summary>
         private Color ApplyElevationZone(float h, float s, float v, float elevation)
