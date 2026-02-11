@@ -20,6 +20,8 @@ Always use `EconSim.Core.Data.Elevation` helpers:
 - `ResolveSeaLevel(MapInfo)`
 - `GetSeaRelativeHeight(Cell, MapInfo)`
 - `GetAbsoluteHeight(Cell, MapInfo)`
+- `GetMetersASL(Cell, MapInfo)`
+- `GetSignedMeters(Cell, MapInfo)`
 - `NormalizeAbsolute01(float)`
 - `AbsoluteToMetersASL(float, MapInfo)`
 - `MetersASLToAbsolute(float, MapInfo)`

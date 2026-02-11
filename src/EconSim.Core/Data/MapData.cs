@@ -118,6 +118,12 @@ namespace EconSim.Core.Data
                 throw new InvalidOperationException("World.MaxSeaDepthMeters must be > 0.");
             if (world.LatitudeNorth <= world.LatitudeSouth)
                 throw new InvalidOperationException("World latitude span must be increasing (north > south).");
+            if (world.MinHeight >= world.SeaLevelHeight || world.SeaLevelHeight >= world.MaxHeight)
+                throw new InvalidOperationException("World height anchors must satisfy MinHeight < SeaLevelHeight < MaxHeight.");
+            if (world.MinHeight < Elevation.LegacyMinHeight || world.MaxHeight > Elevation.LegacyMaxHeight)
+                throw new InvalidOperationException("World height anchors must remain within legacy absolute range [0, 100].");
+            if (Math.Abs(world.SeaLevelHeight - Elevation.ResolveSeaLevel(Info)) > 0.0001f)
+                throw new InvalidOperationException("World.SeaLevelHeight must match MapInfo.SeaLevel.");
         }
     }
 
@@ -385,6 +391,22 @@ namespace EconSim.Core.Data
             AssertAbsoluteHeightInRange(absoluteHeight, "NormalizeAbsolute01 input");
             float clamped = Math.Max(LegacyMinHeight, Math.Min(LegacyMaxHeight, absoluteHeight));
             return clamped / LegacyMaxHeight;
+        }
+
+        /// <summary>
+        /// Convert a cell's canonical elevation to meters above sea level (ASL).
+        /// </summary>
+        public static float GetMetersASL(Cell cell, MapInfo info)
+        {
+            return AbsoluteToMetersASL(GetAbsoluteHeight(cell, info), info);
+        }
+
+        /// <summary>
+        /// Convert a cell's canonical elevation to signed meters relative to sea level.
+        /// </summary>
+        public static float GetSignedMeters(Cell cell, MapInfo info)
+        {
+            return SeaRelativeToSignedMeters(GetSeaRelativeHeight(cell, info), info);
         }
 
         /// <summary>

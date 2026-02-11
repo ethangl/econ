@@ -574,6 +574,8 @@ namespace EconSim.Tests
     {
         private static readonly Regex RawCellHeightPattern =
             new Regex(@"\b(?:cell|[A-Za-z_][A-Za-z0-9_]*Cell)\.Height\b", RegexOptions.Compiled);
+        private static readonly Regex RawMapInfoSeaLevelPattern =
+            new Regex(@"\b(?:[A-Za-z_][A-Za-z0-9_]*\.Info|[A-Za-z_][A-Za-z0-9_]*Info|info|Info)\.SeaLevel\b", RegexOptions.Compiled);
 
         [Test]
         public void ElevationHelpers_SupportCanonicalAndLegacyRoundTrip()
@@ -635,6 +637,37 @@ namespace EconSim.Tests
             float signedDown = Elevation.SeaRelativeToSignedMeters(-10f, info);
             float roundTripDown = Elevation.SignedMetersToSeaRelative(signedDown, info);
             Assert.That(roundTripDown, Is.EqualTo(-10f).Within(0.0001f));
+        }
+
+        [Test]
+        public void ElevationCellMetersHelpers_SupportCanonicalAndLegacyCells()
+        {
+            var info = new MapInfo
+            {
+                SeaLevel = 20f,
+                World = new WorldInfo
+                {
+                    MaxElevationMeters = 6000f,
+                    MaxSeaDepthMeters = 1500f
+                }
+            };
+
+            var canonicalCell = new Cell
+            {
+                Height = 60,
+                SeaRelativeElevation = 40f,
+                HasSeaRelativeElevation = true
+            };
+            Assert.That(Elevation.GetMetersASL(canonicalCell, info), Is.EqualTo(3000f).Within(0.0001f));
+            Assert.That(Elevation.GetSignedMeters(canonicalCell, info), Is.EqualTo(3000f).Within(0.0001f));
+
+            var legacyCell = new Cell
+            {
+                Height = 10,
+                HasSeaRelativeElevation = false
+            };
+            Assert.That(Elevation.GetMetersASL(legacyCell, info), Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(Elevation.GetSignedMeters(legacyCell, info), Is.EqualTo(-750f).Within(0.0001f));
         }
 
         [Test]
@@ -921,6 +954,55 @@ namespace EconSim.Tests
 
             Assert.That(violations, Is.Empty,
                 "Raw cell.Height usage is forbidden outside Elevation helpers. Use Elevation.GetAbsoluteHeight/GetSeaRelativeHeight.\n" +
+                string.Join("\n", violations));
+        }
+
+        [Test]
+        [Category("M3Regression")]
+        public void ProductionCode_DoesNotReadMapInfoSeaLevelOutsideElevationHelpers()
+        {
+            string repoRoot = Path.GetFullPath(Path.Combine(Application.dataPath, "..", ".."));
+            string srcRoot = Path.Combine(repoRoot, "src");
+            string unityScriptsRoot = Path.Combine(Application.dataPath, "Scripts");
+            var roots = new[] { srcRoot, unityScriptsRoot };
+            var violations = new List<string>();
+
+            for (int r = 0; r < roots.Length; r++)
+            {
+                string root = roots[r];
+                if (!Directory.Exists(root))
+                    continue;
+
+                string[] files = Directory.GetFiles(root, "*.cs", SearchOption.AllDirectories);
+                for (int f = 0; f < files.Length; f++)
+                {
+                    string file = Path.GetFullPath(files[f]);
+                    string normalizedFile = file.Replace('\\', '/');
+                    if (normalizedFile.EndsWith("/Data/MapData.cs", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    string source = File.ReadAllText(file);
+                    MatchCollection matches = RawMapInfoSeaLevelPattern.Matches(source);
+                    for (int m = 0; m < matches.Count; m++)
+                    {
+                        Match match = matches[m];
+                        int line = 1;
+                        for (int i = 0; i < match.Index; i++)
+                        {
+                            if (source[i] == '\n')
+                                line++;
+                        }
+
+                        string relative = file.StartsWith(repoRoot, StringComparison.Ordinal)
+                            ? file.Substring(repoRoot.Length + 1)
+                            : file;
+                        violations.Add($"{relative}:{line}: {match.Value}");
+                    }
+                }
+            }
+
+            Assert.That(violations, Is.Empty,
+                "Direct MapInfo.SeaLevel reads are forbidden outside Elevation helpers. Use Elevation.ResolveSeaLevel.\n" +
                 string.Join("\n", violations));
         }
     }

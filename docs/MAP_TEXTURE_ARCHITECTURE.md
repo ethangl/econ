@@ -339,8 +339,7 @@ Add permanent debug tooling:
 - checksum regression for render height + normal outputs.
 
 These tools are mandatory before adding large new data domains.
-These validation gates are tracked as required completion criteria for Milestone M3 (`M3-S4`) in the backlog.
-Execution checklist: `M3_TEXTURE_REGRESSION_CHECKLIST.md`.
+These validation gates are required completion criteria for Milestone M3 (`M3-S4`) and are enforced by EditMode regression tests.
 
 Status snapshot (February 11, 2026):
 

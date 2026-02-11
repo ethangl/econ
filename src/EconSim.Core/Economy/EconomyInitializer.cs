@@ -78,7 +78,7 @@ namespace EconSim.Core.Economy
             {
                 if (!cell.IsLand) continue;
                 float absoluteElevation = Elevation.GetAbsoluteHeight(cell, mapData.Info);
-                float elevationMetersAsl = Elevation.AbsoluteToMetersASL(absoluteElevation, mapData.Info);
+                float elevationMetersAsl = Elevation.GetMetersASL(cell, mapData.Info);
                 if (absoluteElevation > maxHeightAbsolute) maxHeightAbsolute = absoluteElevation;
                 if (elevationMetersAsl > maxHeightMeters) maxHeightMeters = elevationMetersAsl;
                 if (elevationMetersAsl > elevation40Meters) cellsAbove40++;
@@ -100,7 +100,7 @@ namespace EconSim.Core.Economy
                     continue;
 
                 var resources = new Dictionary<string, float>();
-                float elevationMetersAsl = Elevation.AbsoluteToMetersASL(Elevation.GetAbsoluteHeight(cell, mapData.Info), mapData.Info);
+                float elevationMetersAsl = Elevation.GetMetersASL(cell, mapData.Info);
 
                 // Check each raw good's terrain affinity
                 foreach (var good in economy.Goods.ByCategory(GoodCategory.Raw))
@@ -342,7 +342,7 @@ namespace EconSim.Core.Economy
                 if (!biomeNames.TryGetValue(cell.BiomeId, out var biomeName)) continue;
 
                 var resources = new HashSet<string>();
-                float elevationMetersAsl = Elevation.AbsoluteToMetersASL(Elevation.GetAbsoluteHeight(cell, mapData.Info), mapData.Info);
+                float elevationMetersAsl = Elevation.GetMetersASL(cell, mapData.Info);
 
                 foreach (var good in economy.Goods.ByCategory(GoodCategory.Raw))
                 {

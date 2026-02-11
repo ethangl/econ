@@ -121,9 +121,7 @@ namespace EconSim.Core.Transport
 
             // Height modifier: higher = harder (mountains).
             // Keep legacy behavior (absolute > 70) calibrated against world-unit meters ASL.
-            float elevationMetersAsl = Elevation.AbsoluteToMetersASL(
-                Elevation.GetAbsoluteHeight(cell, _mapData.Info),
-                _mapData.Info);
+            float elevationMetersAsl = Elevation.GetMetersASL(cell, _mapData.Info);
             if (elevationMetersAsl > _mountainStartMetersAsl)
             {
                 float heightPenalty = (elevationMetersAsl - _mountainStartMetersAsl) / _mountainRangeMeters; // 0-1 range
