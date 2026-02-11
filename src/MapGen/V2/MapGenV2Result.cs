@@ -9,6 +9,8 @@ namespace MapGen.Core
         public ElevationFieldV2 Elevation;
         public ClimateFieldV2 Climate;
         public RiverFieldV2 Rivers;
+        public BiomeFieldV2 Biomes;
+        public PoliticalFieldV2 Political;
         public WorldMetadata World;
     }
 }

@@ -23,6 +23,10 @@ namespace MapGen.Core
             PrecipitationOpsV2.Compute(climate, elevation, config, world);
             var rivers = new RiverFieldV2(mesh);
             FlowOpsV2.Compute(rivers, elevation, climate, config);
+            var biomes = new BiomeFieldV2(mesh);
+            BiomeOpsV2.Compute(biomes, elevation, climate, rivers, config);
+            var political = new PoliticalFieldV2(mesh);
+            PoliticalOpsV2.Compute(political, biomes, elevation);
 
             return new MapGenV2Result
             {
@@ -30,6 +34,8 @@ namespace MapGen.Core
                 Elevation = elevation,
                 Climate = climate,
                 Rivers = rivers,
+                Biomes = biomes,
+                Political = political,
                 World = world
             };
         }

@@ -30,6 +30,8 @@ namespace EconSim.Tests
             Assert.That(runA.Elevation, Is.Not.Null);
             Assert.That(runA.Climate, Is.Not.Null);
             Assert.That(runA.Rivers, Is.Not.Null);
+            Assert.That(runA.Biomes, Is.Not.Null);
+            Assert.That(runA.Political, Is.Not.Null);
             Assert.That(runA.World, Is.Not.Null);
 
             int requestedMin = (int)(config.CellCount * 0.95f);
@@ -69,6 +71,21 @@ namespace EconSim.Tests
 
             Assert.That(runA.Rivers.Rivers.Length, Is.EqualTo(runB.Rivers.Rivers.Length),
                 "River extraction determinism failed.");
+
+            Assert.That(runA.Biomes.Biome.Length, Is.EqualTo(runB.Biomes.Biome.Length));
+            for (int i = 0; i < runA.Biomes.CellCount; i++)
+            {
+                Assert.That(runA.Biomes.Biome[i], Is.EqualTo(runB.Biomes.Biome[i]),
+                    $"Biome determinism failed at cell {i}.");
+                Assert.That(runA.Biomes.Suitability[i], Is.EqualTo(runB.Biomes.Suitability[i]).Within(0.0001f),
+                    $"Suitability determinism failed at cell {i}.");
+                Assert.That(runA.Biomes.Population[i], Is.EqualTo(runB.Biomes.Population[i]).Within(0.0001f),
+                    $"Population determinism failed at cell {i}.");
+            }
+
+            Assert.That(runA.Political.RealmCount, Is.EqualTo(runB.Political.RealmCount), "Realm-count determinism failed.");
+            Assert.That(runA.Political.ProvinceCount, Is.EqualTo(runB.Political.ProvinceCount), "Province-count determinism failed.");
+            Assert.That(runA.Political.CountyCount, Is.EqualTo(runB.Political.CountyCount), "County-count determinism failed.");
         }
     }
 }
