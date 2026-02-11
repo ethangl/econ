@@ -31,6 +31,7 @@ namespace MapGen.Core
         public int Seed = 12345;
         public int CellCount = 10000;
         public float AspectRatio = 16f / 9f;
+        public float CellSizeKm = 2.5f;
         public HeightmapTemplateType Template = HeightmapTemplateType.LowIsland;
         public float LatitudeSouth = 30f;
         public float RiverThreshold = 240f;
@@ -60,6 +61,7 @@ namespace MapGen.Core
         public HeightGrid Heights;
         public ClimateData Climate;
         public WorldConfig WorldConfig;
+        public WorldMetadata World;
         public RiverData Rivers;
         public BiomeData Biomes;
         public PoliticalData Political;
@@ -71,12 +73,10 @@ namespace MapGen.Core
     /// </summary>
     public static class MapGenPipeline
     {
-        const float CellSizeKm = 2.5f;
-
         public static MapGenResult Generate(MapGenConfig config)
         {
             // 1. Cell mesh: JitteredGrid -> VoronoiBuilder.Build -> ComputeAreas
-            float cellArea = CellSizeKm * CellSizeKm;
+            float cellArea = config.CellSizeKm * config.CellSizeKm;
             float mapArea = config.CellCount * cellArea;
             float mapWidth = (float)Math.Sqrt(mapArea * config.AspectRatio);
             float mapHeight = mapWidth / config.AspectRatio;
@@ -92,8 +92,13 @@ namespace MapGen.Core
             HeightmapDSL.Execute(heights, script, config.HeightmapSeed);
 
             // 3. Climate: WorldConfig + TemperatureOps + PrecipitationOps
-            var worldConfig = new WorldConfig { LatitudeSouth = config.LatitudeSouth };
+            var worldConfig = new WorldConfig
+            {
+                LatitudeSouth = config.LatitudeSouth,
+                CellSizeKm = config.CellSizeKm
+            };
             worldConfig.AutoLatitudeSpan(mesh);
+            var worldMetadata = worldConfig.BuildMetadata(mesh);
             var climate = new ClimateData(mesh);
             TemperatureOps.Compute(climate, heights, worldConfig);
             PrecipitationOps.Compute(climate, heights, worldConfig);
@@ -142,6 +147,7 @@ namespace MapGen.Core
                 Heights = heights,
                 Climate = climate,
                 WorldConfig = worldConfig,
+                World = worldMetadata,
                 Rivers = rivers,
                 Biomes = biomes,
                 Political = political

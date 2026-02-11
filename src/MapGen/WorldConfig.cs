@@ -83,5 +83,31 @@ namespace MapGen.Core
             float latSpan = mapHeightKm / 111f; // ~111 km per degree latitude
             LatitudeNorth = LatitudeSouth + latSpan;
         }
+
+        /// <summary>
+        /// Build explicit world-scale metadata for downstream systems.
+        /// </summary>
+        public WorldMetadata BuildMetadata(CellMesh mesh)
+        {
+            float seaLevel = HeightGrid.SeaLevel;
+            float landRange = Math.Max(1f, HeightGrid.MaxHeight - seaLevel);
+            float waterRange = Math.Max(1f, seaLevel - HeightGrid.MinHeight);
+            float maxSeaDepthMeters = MaxElevationMeters * (waterRange / landRange);
+
+            return new WorldMetadata
+            {
+                CellSizeKm = CellSizeKm,
+                MapWidthKm = mesh.Width,
+                MapHeightKm = mesh.Height,
+                MapAreaKm2 = mesh.Width * mesh.Height,
+                LatitudeSouth = LatitudeSouth,
+                LatitudeNorth = LatitudeNorth,
+                MinHeight = HeightGrid.MinHeight,
+                SeaLevelHeight = seaLevel,
+                MaxHeight = HeightGrid.MaxHeight,
+                MaxElevationMeters = MaxElevationMeters,
+                MaxSeaDepthMeters = maxSeaDepthMeters
+            };
+        }
     }
 }

@@ -163,6 +163,41 @@ namespace EconSim.Tests
                 Assert.Fail(string.Join("\n\n", failures));
         }
 
+        [Test]
+        public void Pipeline_EmitsWorldMetadata_AndAdapterPreservesIt()
+        {
+            var baselines = LoadBaselines();
+            foreach (var baseline in baselines)
+            {
+                var config = CreateConfig(baseline.Seed, baseline.Template);
+                var result = MapGenPipeline.Generate(config);
+                Assert.That(result.World, Is.Not.Null, "MapGenResult.World metadata must be present.");
+
+                var world = result.World;
+                Assert.That(world.CellSizeKm, Is.GreaterThan(0f));
+                Assert.That(world.MapWidthKm, Is.GreaterThan(0f));
+                Assert.That(world.MapHeightKm, Is.GreaterThan(0f));
+                Assert.That(world.MapAreaKm2, Is.GreaterThan(0f));
+                Assert.That(world.LatitudeNorth, Is.GreaterThan(world.LatitudeSouth));
+                Assert.That(world.MaxElevationMeters, Is.GreaterThan(0f));
+                Assert.That(world.MaxSeaDepthMeters, Is.GreaterThan(0f));
+                Assert.That(world.SeaLevelHeight, Is.EqualTo(HeightGrid.SeaLevel).Within(0.0001f));
+
+                var mapData = MapGenAdapter.Convert(result);
+                Assert.That(mapData.Info.World, Is.Not.Null, "MapInfo.World must be populated from mapgen metadata.");
+
+                var infoWorld = mapData.Info.World;
+                Assert.That(infoWorld.CellSizeKm, Is.EqualTo(world.CellSizeKm).Within(0.0001f));
+                Assert.That(infoWorld.MapWidthKm, Is.EqualTo(world.MapWidthKm).Within(0.0001f));
+                Assert.That(infoWorld.MapHeightKm, Is.EqualTo(world.MapHeightKm).Within(0.0001f));
+                Assert.That(infoWorld.MapAreaKm2, Is.EqualTo(world.MapAreaKm2).Within(0.001f));
+                Assert.That(infoWorld.LatitudeSouth, Is.EqualTo(world.LatitudeSouth).Within(0.0001f));
+                Assert.That(infoWorld.LatitudeNorth, Is.EqualTo(world.LatitudeNorth).Within(0.0001f));
+                Assert.That(infoWorld.MaxElevationMeters, Is.EqualTo(world.MaxElevationMeters).Within(0.0001f));
+                Assert.That(infoWorld.MaxSeaDepthMeters, Is.EqualTo(world.MaxSeaDepthMeters).Within(0.0001f));
+            }
+        }
+
         private static MapGenConfig CreateConfig(int seed, HeightmapTemplateType template)
         {
             return new MapGenConfig
@@ -570,6 +605,36 @@ namespace EconSim.Tests
 
             Assert.That(Elevation.GetSeaRelativeHeight(legacyCell, info), Is.EqualTo(-8f).Within(0.0001f));
             Assert.That(Elevation.GetAbsoluteHeight(legacyCell, info), Is.EqualTo(12f).Within(0.0001f));
+        }
+
+        [Test]
+        public void ElevationWorldUnitConversions_RoundTripAslAndSigned()
+        {
+            var info = new MapInfo
+            {
+                SeaLevel = 20f,
+                World = new WorldInfo
+                {
+                    MaxElevationMeters = 6000f,
+                    MaxSeaDepthMeters = 1500f
+                }
+            };
+
+            float seaAbsolute = Elevation.ResolveSeaLevel(info);
+            Assert.That(Elevation.AbsoluteToMetersASL(seaAbsolute, info), Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(Elevation.MetersASLToAbsolute(0f, info), Is.EqualTo(seaAbsolute).Within(0.0001f));
+
+            float peakAsl = Elevation.AbsoluteToMetersASL(Elevation.LegacyMaxHeight, info);
+            Assert.That(peakAsl, Is.EqualTo(6000f).Within(0.0001f));
+            Assert.That(Elevation.MetersASLToAbsolute(6000f, info), Is.EqualTo(Elevation.LegacyMaxHeight).Within(0.0001f));
+
+            float signedUp = Elevation.SeaRelativeToSignedMeters(40f, info);
+            float roundTripUp = Elevation.SignedMetersToSeaRelative(signedUp, info);
+            Assert.That(roundTripUp, Is.EqualTo(40f).Within(0.0001f));
+
+            float signedDown = Elevation.SeaRelativeToSignedMeters(-10f, info);
+            float roundTripDown = Elevation.SignedMetersToSeaRelative(signedDown, info);
+            Assert.That(roundTripDown, Is.EqualTo(-10f).Within(0.0001f));
         }
 
         [Test]

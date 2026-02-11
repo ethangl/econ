@@ -21,6 +21,10 @@ Always use `EconSim.Core.Data.Elevation` helpers:
 - `GetSeaRelativeHeight(Cell, MapInfo)`
 - `GetAbsoluteHeight(Cell, MapInfo)`
 - `NormalizeAbsolute01(float)`
+- `AbsoluteToMetersASL(float, MapInfo)`
+- `MetersASLToAbsolute(float, MapInfo)`
+- `SeaRelativeToSignedMeters(float, MapInfo)`
+- `SignedMetersToSeaRelative(float, MapInfo)`
 
 ## Practical Guidance
 
@@ -30,6 +34,17 @@ Always use `EconSim.Core.Data.Elevation` helpers:
 - For thresholds originally defined in absolute legacy units (for example `> 50`), convert once via:
   - `SeaRelativeFromAbsolute(legacyAbsoluteThreshold, ResolveSeaLevel(info))`
 - Keep morphology logic unchanged unless explicitly tuning map generation behavior.
+
+## World Metadata
+
+- `MapGenResult.World` is emitted by mapgen as explicit world-scale output.
+- `MapInfo.World` carries that metadata into EconSim runtime.
+- Canonical fields include:
+  - `CellSizeKm`
+  - `MapWidthKm`, `MapHeightKm`, `MapAreaKm2`
+  - `LatitudeSouth`, `LatitudeNorth`
+  - `MaxElevationMeters`, `MaxSeaDepthMeters`
+  - `MinHeight`, `SeaLevelHeight`, `MaxHeight`
 
 ## Enforcement Gates
 

@@ -24,6 +24,7 @@ namespace EconSim.Core.Import
             var biomes = result.Biomes;
             var rivers = result.Rivers;
             var political = result.Political;
+            var world = result.World ?? result.WorldConfig?.BuildMetadata(mesh);
 
             // MapGen uses Y-up (Y=0 south), same as Unity's texture convention.
             // Pass coordinates through directly — no flip needed.
@@ -124,7 +125,23 @@ namespace EconSim.Core.Import
                 Seed = "",
                 TotalCells = cellCount,
                 LandCells = landCells,
-                SeaLevel = seaLevel
+                SeaLevel = seaLevel,
+                World = world == null
+                    ? null
+                    : new WorldInfo
+                    {
+                        CellSizeKm = world.CellSizeKm,
+                        MapWidthKm = world.MapWidthKm,
+                        MapHeightKm = world.MapHeightKm,
+                        MapAreaKm2 = world.MapAreaKm2,
+                        LatitudeSouth = world.LatitudeSouth,
+                        LatitudeNorth = world.LatitudeNorth,
+                        MinHeight = world.MinHeight,
+                        SeaLevelHeight = world.SeaLevelHeight,
+                        MaxHeight = world.MaxHeight,
+                        MaxElevationMeters = world.MaxElevationMeters,
+                        MaxSeaDepthMeters = world.MaxSeaDepthMeters
+                    }
             };
 
             var mapData = new MapData
@@ -143,6 +160,7 @@ namespace EconSim.Core.Import
 
             mapData.BuildLookups();
             mapData.AssertElevationInvariants(requireCanonical: true);
+            mapData.AssertWorldInvariants(requireWorldMetadata: true);
 
             return mapData;
         }
