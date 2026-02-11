@@ -5,7 +5,6 @@ using EconSim.Core.Data;
 using EconSim.Core.Economy;
 using EconSim.Core.Rendering;
 using EconSim.Bridge;
-using MapGen.Core;
 using Profiler = EconSim.Core.Common.StartupProfiler;
 
 namespace EconSim.Renderer
@@ -101,7 +100,6 @@ public class MapOverlayManager
         private MapData mapData;
         private EconomyState economyState;
         private Material terrainMaterial;
-        private readonly ElevationDomain elevationDomain;
 
         // Resolution multiplier for higher quality borders
         private int resolutionMultiplier;
@@ -190,7 +188,6 @@ public class MapOverlayManager
             this.mapData = mapData;
             this.terrainMaterial = terrainMaterial;
             this.resolutionMultiplier = Mathf.Clamp(resolutionMultiplier, 1, 8);
-            elevationDomain = ElevationDomains.InferFromSeaLevel(mapData?.Info?.SeaLevel ?? ElevationDomains.Simulation.SeaLevel);
 
             baseWidth = mapData.Info.Width;
             baseHeight = mapData.Info.Height;
@@ -238,7 +235,6 @@ public class MapOverlayManager
             Profiler.Begin("ApplyTexturesToMaterial");
             ApplyTexturesToMaterial();
             Profiler.End();
-            SetSeaLevel(elevationDomain.SeaLevel / elevationDomain.Max);
 
             // Debug output
             TextureDebugger.SaveTexture(heightmapTexture, "heightmap");
@@ -427,8 +423,8 @@ public class MapOverlayManager
                     float height = 0f;
                     if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
                     {
-                        // Normalize active elevation domain to 0-1.
-                        height = cell.Height / elevationDomain.Max;
+                        // Normalize 0-100 to 0-1
+                        height = cell.Height / 100f;
                     }
 
                     heightData[idx] = height;
@@ -1087,7 +1083,7 @@ public class MapOverlayManager
 
         /// <summary>
         /// Apply elevation-based color modifications to biome color.
-        /// Elevation is normalized land height: 0 = sea level, 1 = domain max.
+        /// Elevation uses Azgaar's absolute scale: 0 = sea level (height 20), 1 = max (height 100).
         /// Brightness gradient from 0.4 (coastal) to 1.0 (high), snow blend above 85%.
         /// </summary>
         private Color ApplyElevationZone(float h, float s, float v, float elevation)

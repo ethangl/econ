@@ -19,7 +19,7 @@ namespace MapGen.Core
             {
                 float lat = CellLatitude(mesh, i, config);
                 float seaLevelTemp = SeaLevelTemperature(lat, config);
-                float elevationM = config.HeightToMeters(heights.Heights[i], heights.Domain);
+                float elevationM = config.HeightToMeters(heights.Heights[i]);
                 float lapseCorrection = -config.LapseRate * elevationM / 1000f;
 
                 climate.Temperature[i] = seaLevelTemp + lapseCorrection;

@@ -26,8 +26,6 @@ namespace MapGen.Core
         public CellMesh Mesh { get; }
         public int VertexCount => Mesh.VertexCount;
         public int EdgeCount => Mesh.EdgeCount;
-        public float SeaLevel { get; set; } = ElevationDomains.Dsl.SeaLevel;
-        public float MinLakeDepth { get; set; } = LegacyMinLakeDepth;
 
         public RiverData(CellMesh mesh)
         {
@@ -45,11 +43,8 @@ namespace MapGen.Core
                 FlowTarget[i] = -1;
         }
 
-        /// <summary>
-        /// Legacy minimum depth in DSL domain (0-100) for a vertex to count as lake.
-        /// Runtime MinLakeDepth is derived from this in the active domain.
-        /// </summary>
-        public const float LegacyMinLakeDepth = 2f;
+        /// <summary>Minimum depth (water level - terrain) for a vertex to count as lake.</summary>
+        public const float MinLakeDepth = 2f;
 
         /// <summary>Is this vertex a lake? (water level sufficiently above terrain height)</summary>
         public bool IsLake(int vertex)
@@ -60,7 +55,7 @@ namespace MapGen.Core
         /// <summary>Is this vertex in the ocean? (interpolated height at or below sea level)</summary>
         public bool IsOcean(int vertex)
         {
-            return VertexHeight[vertex] <= SeaLevel;
+            return VertexHeight[vertex] <= HeightGrid.SeaLevel;
         }
     }
 

@@ -87,25 +87,22 @@ namespace MapGen.Core
             mesh.ComputeAreas();
 
             // 2. Heightmap: HeightmapDSL.Execute with template
-            var heights = new HeightGrid(mesh, ElevationDomains.Dsl);
+            var heights = new HeightGrid(mesh);
             string script = HeightmapTemplates.GetTemplate(config.Template.ToString());
             HeightmapDSL.Execute(heights, script, config.HeightmapSeed);
 
-            // 3. Explicit domain boundary: DSL shaping -> simulation/runtime domain.
-            heights.RescaleTo(ElevationDomains.Simulation);
-
-            // 4. Climate: WorldConfig + TemperatureOps + PrecipitationOps
+            // 3. Climate: WorldConfig + TemperatureOps + PrecipitationOps
             var worldConfig = new WorldConfig { LatitudeSouth = config.LatitudeSouth };
             worldConfig.AutoLatitudeSpan(mesh);
             var climate = new ClimateData(mesh);
             TemperatureOps.Compute(climate, heights, worldConfig);
             PrecipitationOps.Compute(climate, heights, worldConfig);
 
-            // 5. Rivers: FlowOps.Compute
+            // 4. Rivers: FlowOps.Compute
             var rivers = new RiverData(mesh);
             FlowOps.Compute(rivers, heights, climate, config.RiverThreshold, config.RiverTraceThreshold, config.MinRiverVertices);
 
-            // 6. Biomes: full BiomeOps pipeline + Suitability + Population
+            // 5. Biomes: full BiomeOps pipeline + Suitability + Population
             var biomes = new BiomeData(mesh);
             BiomeOps.ComputeLakeCells(biomes, heights, rivers);
             BiomeOps.ComputeSlope(biomes, heights);
@@ -130,7 +127,7 @@ namespace MapGen.Core
             GeographyOps.ComputeCoastDistance(biomes, heights);
             GeographyOps.ComputeWaterFeatures(biomes, heights);
 
-            // 7. Political: 6-stage PoliticalOps pipeline
+            // 6. Political: 6-stage PoliticalOps pipeline
             var political = new PoliticalData(mesh);
             PoliticalOps.DetectLandmasses(political, heights, biomes);
             PoliticalOps.PlaceCapitals(political, biomes, heights);

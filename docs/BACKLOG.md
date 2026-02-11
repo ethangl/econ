@@ -115,12 +115,6 @@ Goal: keep DSL morphology stable while moving simulation/render to `0-255`.
 
 Reference: `ELEVATION_255_MIGRATION_CHECKLIST.md`
 
-Current status:
-
-- `M2-S1` is complete in code (explicit DSL/Simulation domains + pipeline boundary).
-- `M2-S2` is complete in code (render + adapter normalization; no sea-level visual artifacts reported).
-- `M2-S3` is accepted complete (biome/transport/resource thresholds retuned; biome/resource placement validation waived due missing harness).
-
 ### M2-S1 Domain abstraction and boundary
 
 - **Type:** refactor
@@ -132,7 +126,6 @@ Current status:
 - **Done when:**
   - DSL domain (`0-100`) and simulation domain (`0-255`) are explicit,
   - rescale boundary exists in `MapGenPipeline` right after DSL.
-- **Status:** DONE.
 
 ### M2-S2 Render + adapter normalization
 
@@ -145,7 +138,6 @@ Current status:
 - **Done when:**
   - no hardcoded `/100` or `20` assumptions remain in render bridge path,
   - shader sea level comes from normalized simulation constants.
-- **Status:** DONE.
 
 ### M2-S3 Threshold retuning pass
 
@@ -158,7 +150,6 @@ Current status:
 - **Done when:**
   - biome/transport/resource thresholds expressed in normalized land-space,
   - seed regression suite passes with acceptable deltas.
-- **Status:** DONE (accepted without biome/resource validation harness).
 
 ---
 

@@ -78,7 +78,7 @@ namespace EconSim.Core.Data
         public string Seed;
         public int TotalCells;
         public int LandCells;
-        public float SeaLevel;  // Height value for sea level in the active map domain.
+        public float SeaLevel;  // Height value for sea level (typically 20)
     }
 
     /// <summary>
@@ -94,7 +94,7 @@ namespace EconSim.Core.Data
         public List<int> NeighborIds;   // Adjacent cell IDs
 
         // Terrain
-        public int Height;              // Height in the active map domain.
+        public int Height;              // 0-100, sea level = 20
         public int BiomeId;
         public int SoilId;             // MapGen.Core.SoilType ordinal (0-7)
         public bool IsLand;

@@ -6,7 +6,6 @@ using UnityEngine.UIElements;
 using EconSim.Core.Data;
 using EconSim.Bridge;
 using EconSim.Camera;
-using MapGen.Core;
 using Profiler = EconSim.Core.Common.StartupProfiler;
 
 namespace EconSim.Renderer
@@ -60,7 +59,6 @@ namespace EconSim.Renderer
         public event Action<SelectionDepth> OnSelectionChanged;
 
         private MapData mapData;
-        private ElevationDomain elevationDomain = ElevationDomains.Simulation;
         private EconSim.Core.Economy.EconomyState economyState;
         private MeshFilter meshFilter;
         private MeshRenderer meshRenderer;
@@ -414,7 +412,6 @@ namespace EconSim.Renderer
         public void Initialize(MapData data)
         {
             mapData = data;
-            elevationDomain = ElevationDomains.InferFromSeaLevel(mapData?.Info?.SeaLevel ?? ElevationDomains.Simulation.SeaLevel);
 
             Profiler.Begin("GenerateMesh");
             GenerateMesh();
@@ -450,7 +447,6 @@ namespace EconSim.Renderer
 
             // Height displacement is disabled (elevation is now shown via biome-elevation tinting)
             overlayManager.SetHeightDisplacementEnabled(false);
-            overlayManager.SetSeaLevel(elevationDomain.SeaLevel / elevationDomain.Max);
 
             // Sync shader mode with current map mode
             overlayManager.SetMapMode(currentMode);
@@ -1185,8 +1181,8 @@ namespace EconSim.Renderer
 
         private float GetCellHeight(Cell cell)
         {
-            // Convert height to world units in the active elevation domain.
-            float normalizedHeight = (cell.Height - elevationDomain.SeaLevel) / elevationDomain.LandRange;
+            // Convert height (0-100, sea level 20) to world units
+            float normalizedHeight = (cell.Height - mapData.Info.SeaLevel) / 80f;  // -0.25 to 1.0
             return normalizedHeight * heightScale;
         }
 
@@ -1344,8 +1340,7 @@ namespace EconSim.Renderer
             }
 
             // Default ocean color - deep blue, varies slightly by depth
-            float depthFactor = Mathf.Clamp01((elevationDomain.SeaLevel - cell.Height) /
-                                              Mathf.Max(elevationDomain.SeaLevel - elevationDomain.Min, 1f));
+            float depthFactor = Mathf.Clamp01((20 - cell.Height) / 20f);  // 0 at sea level, 1 at deepest
             return Color32.Lerp(
                 new Color32(50, 100, 150, 255),   // Shallow ocean
                 new Color32(20, 50, 100, 255),    // Deep ocean
