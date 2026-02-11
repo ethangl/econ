@@ -190,12 +190,12 @@ Material:
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.000005936593
+    - _HoverIntensity: 0.0003754087
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
-    - _MapMode: 1
+    - _MapMode: 4
     - _MarketBorderDarkening: 0.688
     - _MarketBorderWidth: 0.25
     - _Metallic: 0

@@ -88,6 +88,7 @@ namespace EconSim.Core
                 Profiler.Begin("MapGenAdapter Convert V2");
                 MapData = MapGenAdapter.Convert(v2Result);
                 Profiler.End();
+                LogMapGenV2Summary(v2Result, MapData);
             }
             else
             {
@@ -126,6 +127,44 @@ namespace EconSim.Core
                 RiverTraceThreshold = config.RiverTraceThreshold,
                 MinRiverVertices = config.MinRiverVertices
             };
+        }
+
+        static void LogMapGenV2Summary(MapGenV2Result result, MapData runtimeMap)
+        {
+            if (result?.Elevation == null || result.Rivers == null)
+                return;
+
+            float landRatio = result.Elevation.LandRatio();
+            int riverCount = result.Rivers.Rivers != null ? result.Rivers.Rivers.Length : 0;
+            float p50Meters = Percentile(result.Elevation.ElevationMetersSigned, 0.5f);
+
+            float runtimeLandRatio = 0f;
+            if (runtimeMap?.Cells != null && runtimeMap.Cells.Count > 0)
+                runtimeLandRatio = runtimeMap.Info.LandCells / (float)runtimeMap.Cells.Count;
+
+            Debug.Log(
+                $"MapGen V2 summary: land={landRatio:0.000}, runtimeLand={runtimeLandRatio:0.000}, rivers={riverCount}, elevP50={p50Meters:0.0}m");
+        }
+
+        static float Percentile(float[] values, float q)
+        {
+            if (values == null || values.Length == 0)
+                return 0f;
+
+            var sorted = (float[])values.Clone();
+            Array.Sort(sorted);
+
+            if (q <= 0f) return sorted[0];
+            if (q >= 1f) return sorted[sorted.Length - 1];
+
+            float index = q * (sorted.Length - 1);
+            int lo = (int)Mathf.Floor(index);
+            int hi = (int)Mathf.Ceil(index);
+            if (lo == hi)
+                return sorted[lo];
+
+            float t = index - lo;
+            return sorted[lo] + (sorted[hi] - sorted[lo]) * t;
         }
 
         private void InitializeWithMapData()
