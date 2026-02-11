@@ -63,12 +63,18 @@ namespace EconSim.Core.Transport
 
         // Impassable threshold (cells with cost >= this are blocked)
         private const float ImpassableThreshold = 100f;
+        private const float LegacyMountainStartAbsolute = 70f;
+        private const float LegacyMountainRange = 30f;
+
+        private readonly float _mountainStartSeaRelative;
 
         public TransportGraph(MapData mapData, int maxCacheSize = 10000)
         {
             _mapData = mapData;
             _maxCacheSize = maxCacheSize;
             _pathCache = new Dictionary<(int, int), PathResult>();
+            float seaLevel = Elevation.ResolveSeaLevel(mapData.Info);
+            _mountainStartSeaRelative = Elevation.SeaRelativeFromAbsolute(LegacyMountainStartAbsolute, seaLevel);
 
             // Build biome lookup
             _biomeById = new Dictionary<int, Biome>();
@@ -110,12 +116,12 @@ namespace EconSim.Core.Transport
                 baseCost = Math.Max(1f, Math.Min(baseCost, 20f));
             }
 
-            // Height modifier: higher = harder (mountains)
-            // Height 20 = sea level, 100 = peak
-            // Cells above 70 get increasingly difficult
-            if (cell.Height > 70)
+            // Height modifier: higher = harder (mountains).
+            // Keep legacy behavior (absolute > 70) while reading canonical elevation safely.
+            float seaRelativeHeight = Elevation.GetSeaRelativeHeight(cell, _mapData.Info);
+            if (seaRelativeHeight > _mountainStartSeaRelative)
             {
-                float heightPenalty = (cell.Height - 70) / 30f; // 0-1 range
+                float heightPenalty = (seaRelativeHeight - _mountainStartSeaRelative) / LegacyMountainRange; // 0-1 range
                 baseCost *= 1f + heightPenalty * 2f; // Up to 3x cost at peak
             }
 

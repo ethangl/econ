@@ -67,6 +67,32 @@ namespace EconSim.Core.Data
                 }
             }
         }
+
+        /// <summary>
+        /// Validate elevation invariants across all cells.
+        /// Throws if any cell violates canonical or absolute-height constraints.
+        /// </summary>
+        public void AssertElevationInvariants(bool requireCanonical)
+        {
+            if (Cells == null)
+                throw new InvalidOperationException("MapData.Cells is null.");
+
+            for (int i = 0; i < Cells.Count; i++)
+            {
+                Cell cell = Cells[i];
+                if (cell == null)
+                    throw new InvalidOperationException($"MapData.Cells[{i}] is null.");
+
+                if (requireCanonical && !cell.HasSeaRelativeElevation)
+                {
+                    throw new InvalidOperationException(
+                        $"Cell {cell.Id} is missing canonical SeaRelativeElevation.");
+                }
+
+                float absoluteHeight = Elevation.GetAbsoluteHeight(cell, Info);
+                Elevation.AssertAbsoluteHeightInRange(absoluteHeight, $"cell {cell.Id}");
+            }
+        }
     }
 
     [Serializable]
@@ -95,6 +121,8 @@ namespace EconSim.Core.Data
 
         // Terrain
         public int Height;              // 0-100, sea level = 20
+        public float SeaRelativeElevation; // Canonical elevation (sea level = 0)
+        public bool HasSeaRelativeElevation; // False for legacy maps without canonical value
         public int BiomeId;
         public int SoilId;             // MapGen.Core.SoilType ordinal (0-7)
         public bool IsLand;
@@ -243,5 +271,91 @@ namespace EconSim.Core.Data
         public bool IsOcean => Type == "ocean" || Type == "sea";
         public bool IsLake => Type == "lake";
         public bool IsWater => IsOcean || IsLake;
+    }
+
+    /// <summary>
+    /// Elevation conversion helpers for canonical sea-relative and legacy absolute values.
+    /// </summary>
+    public static class Elevation
+    {
+        public const float LegacyMinHeight = 0f;
+        public const float LegacyMaxHeight = 100f;
+        public const float DefaultSeaLevel = 20f;
+
+        public static float ResolveSeaLevel(MapInfo info)
+        {
+            if (info == null)
+                return DefaultSeaLevel;
+
+            // Treat unset/invalid metadata as default to keep downstream thresholds stable.
+            float seaLevel = info.SeaLevel;
+            if (seaLevel <= LegacyMinHeight || seaLevel >= LegacyMaxHeight)
+                return DefaultSeaLevel;
+
+            return seaLevel;
+        }
+
+        public static float SeaRelativeFromAbsolute(float absoluteHeight, float seaLevel)
+        {
+            AssertAbsoluteHeightInRange(absoluteHeight, "SeaRelativeFromAbsolute input");
+            return absoluteHeight - seaLevel;
+        }
+
+        public static float AbsoluteFromSeaRelative(float seaRelativeHeight, float seaLevel)
+        {
+            return seaRelativeHeight + seaLevel;
+        }
+
+        public static float GetSeaRelativeHeight(Cell cell, MapInfo info)
+        {
+            if (cell == null) return 0f;
+
+            if (cell.HasSeaRelativeElevation)
+            {
+                float absolute = AbsoluteFromSeaRelative(cell.SeaRelativeElevation, ResolveSeaLevel(info));
+                AssertAbsoluteHeightInRange(absolute, $"cell {cell.Id} (canonical)");
+                return cell.SeaRelativeElevation;
+            }
+
+            return SeaRelativeFromAbsolute(cell.Height, ResolveSeaLevel(info));
+        }
+
+        public static float GetAbsoluteHeight(Cell cell, MapInfo info)
+        {
+            if (cell == null) return ResolveSeaLevel(info);
+
+            if (cell.HasSeaRelativeElevation)
+            {
+                float absolute = AbsoluteFromSeaRelative(cell.SeaRelativeElevation, ResolveSeaLevel(info));
+                AssertAbsoluteHeightInRange(absolute, $"cell {cell.Id} (canonical)");
+                return absolute;
+            }
+
+            float legacyAbsolute = cell.Height;
+            AssertAbsoluteHeightInRange(legacyAbsolute, $"cell {cell.Id} (legacy)");
+            return legacyAbsolute;
+        }
+
+        public static float NormalizeAbsolute01(float absoluteHeight)
+        {
+            AssertAbsoluteHeightInRange(absoluteHeight, "NormalizeAbsolute01 input");
+            float clamped = Math.Max(LegacyMinHeight, Math.Min(LegacyMaxHeight, absoluteHeight));
+            return clamped / LegacyMaxHeight;
+        }
+
+        public static void AssertAbsoluteHeightInRange(float absoluteHeight, string context)
+        {
+            if (float.IsNaN(absoluteHeight) || float.IsInfinity(absoluteHeight))
+            {
+                throw new InvalidOperationException(
+                    $"Absolute elevation is not finite ({absoluteHeight}) for {context}.");
+            }
+
+            if (absoluteHeight < LegacyMinHeight || absoluteHeight > LegacyMaxHeight)
+            {
+                throw new InvalidOperationException(
+                    $"Absolute elevation {absoluteHeight} is out of range [{LegacyMinHeight}, {LegacyMaxHeight}] for {context}.");
+            }
+        }
     }
 }

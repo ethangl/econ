@@ -1181,8 +1181,10 @@ namespace EconSim.Renderer
 
         private float GetCellHeight(Cell cell)
         {
-            // Convert height (0-100, sea level 20) to world units
-            float normalizedHeight = (cell.Height - mapData.Info.SeaLevel) / 80f;  // -0.25 to 1.0
+            // Convert canonical sea-relative height to world units while preserving legacy scaling.
+            float seaRelativeHeight = Elevation.GetSeaRelativeHeight(cell, mapData.Info);
+            float landRange = Mathf.Max(1f, Elevation.LegacyMaxHeight - Elevation.ResolveSeaLevel(mapData.Info));
+            float normalizedHeight = seaRelativeHeight / landRange;
             return normalizedHeight * heightScale;
         }
 
@@ -1339,8 +1341,11 @@ namespace EconSim.Renderer
                 }
             }
 
-            // Default ocean color - deep blue, varies slightly by depth
-            float depthFactor = Mathf.Clamp01((20 - cell.Height) / 20f);  // 0 at sea level, 1 at deepest
+            // Default ocean color - deep blue, varies slightly by depth.
+            float seaRelativeHeight = Elevation.GetSeaRelativeHeight(cell, mapData.Info);
+            float depthBelowSea = Mathf.Max(0f, -seaRelativeHeight);
+            float seaLevel = Mathf.Max(1f, Elevation.ResolveSeaLevel(mapData.Info));
+            float depthFactor = Mathf.Clamp01(depthBelowSea / seaLevel);  // 0 at sea level, 1 at deepest
             return Color32.Lerp(
                 new Color32(50, 100, 150, 255),   // Shallow ocean
                 new Color32(20, 50, 100, 255),    // Deep ocean
@@ -1594,7 +1599,8 @@ namespace EconSim.Renderer
             probeBuilder.AppendLine();
             probeBuilder.Append("Cell=").Append(cell.Id)
                 .Append(" Land=").Append(cell.IsLand ? "Y" : "N")
-                .Append(" Height=").Append(cell.Height.ToString("F1"))
+                .Append(" Height=").Append(Elevation.GetAbsoluteHeight(cell, mapData.Info).ToString("F1"))
+                .Append(" ASL=").Append(Elevation.GetSeaRelativeHeight(cell, mapData.Info).ToString("F1"))
                 .AppendLine();
             probeBuilder.Append("Realm=").Append(cell.RealmId)
                 .Append(" Province=").Append(cell.ProvinceId)

@@ -14,8 +14,6 @@ namespace EconSim.Core.Import
     /// </summary>
     public static class MapGenAdapter
     {
-        private const int SeaLevel = 20;
-
         /// <summary>
         /// Convert a MapGenResult into a fully populated MapData ready for simulation.
         /// </summary>
@@ -30,19 +28,31 @@ namespace EconSim.Core.Import
             // MapGen uses Y-up (Y=0 south), same as Unity's texture convention.
             // Pass coordinates through directly — no flip needed.
             int cellCount = mesh.CellCount;
+            float seaLevel = HeightGrid.SeaLevel;
 
             // Build cells
             var cells = new List<Cell>(cellCount);
             for (int i = 0; i < cellCount; i++)
             {
                 var center = mesh.CellCenters[i];
+                float sourceHeight = heights.Heights[i];
+                if (float.IsNaN(sourceHeight) || float.IsInfinity(sourceHeight))
+                {
+                    throw new InvalidOperationException($"MapGen returned non-finite height for cell {i}: {sourceHeight}");
+                }
+
+                int absoluteHeight = (int)Math.Round(sourceHeight);
+                Elevation.AssertAbsoluteHeightInRange(absoluteHeight, $"MapGenAdapter source cell {i}");
+                float seaRelativeElevation = Elevation.SeaRelativeFromAbsolute(absoluteHeight, seaLevel);
                 var cell = new Cell
                 {
                     Id = i,
                     Center = ToECVec2(center),
                     VertexIndices = new List<int>(mesh.CellVertices[i]),
                     NeighborIds = new List<int>(mesh.CellNeighbors[i]),
-                    Height = (int)Math.Round(heights.Heights[i]),
+                    Height = absoluteHeight,
+                    SeaRelativeElevation = seaRelativeElevation,
+                    HasSeaRelativeElevation = true,
                     BiomeId = (int)biomes.Biome[i],
                     SoilId = (int)biomes.Soil[i],
                     IsLand = !heights.IsWater(i) && !biomes.IsLakeCell[i],
@@ -51,6 +61,10 @@ namespace EconSim.Core.Import
                     CountyId = political.CountyId[i],
                     Population = biomes.Population[i],
                 };
+
+                if (!cell.HasSeaRelativeElevation)
+                    throw new InvalidOperationException($"Cell {i} was generated without canonical SeaRelativeElevation.");
+
                 cells.Add(cell);
             }
 
@@ -110,7 +124,7 @@ namespace EconSim.Core.Import
                 Seed = "",
                 TotalCells = cellCount,
                 LandCells = landCells,
-                SeaLevel = SeaLevel
+                SeaLevel = seaLevel
             };
 
             var mapData = new MapData
@@ -128,6 +142,7 @@ namespace EconSim.Core.Import
             };
 
             mapData.BuildLookups();
+            mapData.AssertElevationInvariants(requireCanonical: true);
 
             return mapData;
         }

@@ -423,8 +423,9 @@ public class MapOverlayManager
                     float height = 0f;
                     if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
                     {
-                        // Normalize 0-100 to 0-1
-                        height = cell.Height / 100f;
+                        // Normalize absolute height to 0-1 via canonical elevation helpers.
+                        float absoluteHeight = Elevation.GetAbsoluteHeight(cell, mapData.Info);
+                        height = Elevation.NormalizeAbsolute01(absoluteHeight);
                     }
 
                     heightData[idx] = height;
@@ -1160,6 +1161,7 @@ public class MapOverlayManager
             cellToMarketTexture.SetPixels(emptyMarkets);
             cellToMarketTexture.Apply();
             terrainMaterial.SetTexture(CellToMarketTexId, cellToMarketTexture);
+            terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(Elevation.ResolveSeaLevel(mapData.Info)));
 
             // Water layer properties are set via shader defaults + material Inspector
             // (not overwritten here so Inspector tweaks persist)
@@ -1805,12 +1807,12 @@ public class MapOverlayManager
         }
 
         /// <summary>
-        /// Set the sea level threshold for water detection.
+        /// Set sea level in absolute map units (0..100) for water detection.
         /// </summary>
         public void SetSeaLevel(float level)
         {
             if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SeaLevelId, level);
+            terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(level));
         }
 
         /// <summary>

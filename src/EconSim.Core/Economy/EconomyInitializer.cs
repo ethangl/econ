@@ -11,6 +11,9 @@ namespace EconSim.Core.Economy
     public static class EconomyInitializer
     {
         private static Random _random = new Random(42); // Re-seeded per initialization
+        private const float LegacyElevation40Absolute = 40f;
+        private const float LegacyElevation45Absolute = 45f;
+        private const float LegacyElevation50Absolute = 50f;
 
         /// <summary>
         /// Fully initialize economy from map data.
@@ -62,16 +65,23 @@ namespace EconSim.Core.Economy
 
             SimLog.Log("Economy", $"Biomes available: {string.Join(", ", biomeNames.Values)}");
 
+            float seaLevel = Elevation.ResolveSeaLevel(mapData.Info);
+            float elevation40 = Elevation.SeaRelativeFromAbsolute(LegacyElevation40Absolute, seaLevel);
+            float elevation45 = Elevation.SeaRelativeFromAbsolute(LegacyElevation45Absolute, seaLevel);
+            float elevation50 = Elevation.SeaRelativeFromAbsolute(LegacyElevation50Absolute, seaLevel);
+
             // Debug: log height distribution for mining resources
             int cellsAbove40 = 0, cellsAbove45 = 0, cellsAbove50 = 0;
             float maxHeight = 0;
             foreach (var cell in mapData.Cells)
             {
                 if (!cell.IsLand) continue;
-                if (cell.Height > maxHeight) maxHeight = cell.Height;
-                if (cell.Height > 40) cellsAbove40++;
-                if (cell.Height > 45) cellsAbove45++;
-                if (cell.Height > 50) cellsAbove50++;
+                float seaRelativeElevation = Elevation.GetSeaRelativeHeight(cell, mapData.Info);
+                float absoluteElevation = Elevation.AbsoluteFromSeaRelative(seaRelativeElevation, seaLevel);
+                if (absoluteElevation > maxHeight) maxHeight = absoluteElevation;
+                if (seaRelativeElevation > elevation40) cellsAbove40++;
+                if (seaRelativeElevation > elevation45) cellsAbove45++;
+                if (seaRelativeElevation > elevation50) cellsAbove50++;
             }
             SimLog.Log("Economy", $"Height distribution: max={maxHeight:F1}, >40={cellsAbove40}, >45={cellsAbove45}, >50={cellsAbove50}");
 
@@ -86,6 +96,7 @@ namespace EconSim.Core.Economy
                     continue;
 
                 var resources = new Dictionary<string, float>();
+                float seaRelativeElevation = Elevation.GetSeaRelativeHeight(cell, mapData.Info);
 
                 // Check each raw good's terrain affinity
                 foreach (var good in economy.Goods.ByCategory(GoodCategory.Raw))
@@ -97,12 +108,12 @@ namespace EconSim.Core.Economy
                     // Special case: iron_ore uses height (mountains) not biome
                     if (good.Id == "iron_ore")
                     {
-                        matches = cell.Height > 50;
+                        matches = seaRelativeElevation > elevation50;
                     }
                     // Special case: gold_ore uses high terrain with rare probability
                     else if (good.Id == "gold_ore")
                     {
-                        matches = cell.Height > 45 && _random.NextDouble() < 0.25;
+                        matches = seaRelativeElevation > elevation45 && _random.NextDouble() < 0.25;
                     }
                     else
                     {
@@ -318,12 +329,17 @@ namespace EconSim.Core.Economy
                 biomeNames[biome.Id] = biome.Name;
             }
 
+            float seaLevel = Elevation.ResolveSeaLevel(mapData.Info);
+            float elevation45 = Elevation.SeaRelativeFromAbsolute(LegacyElevation45Absolute, seaLevel);
+            float elevation50 = Elevation.SeaRelativeFromAbsolute(LegacyElevation50Absolute, seaLevel);
+
             foreach (var cell in mapData.Cells)
             {
                 if (!cell.IsLand) continue;
                 if (!biomeNames.TryGetValue(cell.BiomeId, out var biomeName)) continue;
 
                 var resources = new HashSet<string>();
+                float seaRelativeElevation = Elevation.GetSeaRelativeHeight(cell, mapData.Info);
 
                 foreach (var good in economy.Goods.ByCategory(GoodCategory.Raw))
                 {
@@ -332,11 +348,11 @@ namespace EconSim.Core.Economy
                     bool matches = false;
                     if (good.Id == "iron_ore")
                     {
-                        matches = cell.Height > 50;
+                        matches = seaRelativeElevation > elevation50;
                     }
                     else if (good.Id == "gold_ore")
                     {
-                        matches = cell.Height > 45;
+                        matches = seaRelativeElevation > elevation45;
                     }
                     else
                     {
