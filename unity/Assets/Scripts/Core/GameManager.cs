@@ -20,7 +20,7 @@ namespace EconSim.Core
         [SerializeField] private MapView mapView;
         [SerializeField] private MapCamera mapCamera;
         [Header("Generation")]
-        [SerializeField] private bool useMapGenV2 = false;
+        [SerializeField] private bool useMapGenV2 = true;
 
         public MapData MapData { get; private set; }
         public MapGenResult MapGenResult { get; private set; }
