@@ -504,7 +504,7 @@ Market placement uses suitability scoring:
 - Resource diversity (unique resources in cell + neighbors)
 - Centrality (land neighbor count)
 
-**Multiple markets:** Markets are placed in different realms to ensure geographic spread. Each market's zone includes all cells within transport cost budget (100). Cells in overlapping zones are assigned to the nearest market by transport cost.
+**Multiple markets:** Markets are placed in different realms to ensure geographic spread. Each market's zone includes all cells within a world-scale normalized transport budget (legacy baseline `100` on default map scale). Cells in overlapping zones are assigned to the nearest market by transport cost.
 
 **Zone visualization:** Each market has a distinct color from a predefined palette (8 colors). The hub province (not just the hub cell) is highlighted with a vivid version of the market color for visibility.
 

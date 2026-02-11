@@ -179,6 +179,32 @@ namespace EconSim.Tests
                 "Distance normalization should preserve equivalent edge cost when world scale doubles.");
         }
 
+        [Test]
+        public void MarketPlacer_ZoneBudget_FallsBackToLegacyWithoutWorldMetadata()
+        {
+            var mapData = BuildLinearMap();
+            float budget = MarketPlacer.ResolveMarketZoneMaxTransportCost(mapData);
+            Assert.That(budget, Is.EqualTo(100f).Within(0.0001f));
+        }
+
+        [Test]
+        public void MarketPlacer_ZoneBudget_ScalesWithLargerWorldAtSameCellSize()
+        {
+            var mapData = BuildBudgetMap(mapWidthKm: 666.6667f, mapHeightKm: 375f, cellSizeKm: 2.5f);
+            float budget = MarketPlacer.ResolveMarketZoneMaxTransportCost(mapData);
+            Assert.That(budget, Is.EqualTo(200f).Within(0.5f),
+                "Doubling map dimensions at same cell size should roughly double market zone budget.");
+        }
+
+        [Test]
+        public void MarketPlacer_ZoneBudget_RemainsStableWhenWorldAndCellSizeScaleTogether()
+        {
+            var mapData = BuildBudgetMap(mapWidthKm: 666.6667f, mapHeightKm: 375f, cellSizeKm: 5f);
+            float budget = MarketPlacer.ResolveMarketZoneMaxTransportCost(mapData);
+            Assert.That(budget, Is.EqualTo(100f).Within(0.5f),
+                "If world dimensions and cell size scale together, normalized budget should remain stable.");
+        }
+
         private static MapData BuildLinearMap()
         {
             var mapData = new MapData
@@ -252,6 +278,26 @@ namespace EconSim.Tests
 
             mapData.BuildLookups();
             return mapData;
+        }
+
+        private static MapData BuildBudgetMap(float mapWidthKm, float mapHeightKm, float cellSizeKm)
+        {
+            return new MapData
+            {
+                Info = new MapInfo
+                {
+                    SeaLevel = 20f,
+                    World = new WorldInfo
+                    {
+                        CellSizeKm = cellSizeKm,
+                        MapWidthKm = mapWidthKm,
+                        MapHeightKm = mapHeightKm,
+                        SeaLevelHeight = 20f,
+                        MaxElevationMeters = 5000f,
+                        MaxSeaDepthMeters = 1250f
+                    }
+                }
+            };
         }
     }
 }

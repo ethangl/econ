@@ -191,7 +191,10 @@ namespace EconSim.Core.Transport
             return totalCost;
         }
 
-        private static float ResolveDistanceNormalizationKm(MapInfo info)
+        /// <summary>
+        /// Resolve world-scale distance normalization (km) used by edge-cost calculation.
+        /// </summary>
+        public static float ResolveDistanceNormalizationKm(MapInfo info)
         {
             if (info?.World != null && info.World.CellSizeKm > 0f)
             {
