@@ -14,10 +14,6 @@ namespace EconSim.Core.Economy
     {
         private const float LegacyDefaultMarketZoneMaxCost = 100f;
         private const float MinMarketZoneMaxCost = 50f;
-        private const float LegacyReferenceCellCount = 10000f;
-        private const float LegacyReferenceCellSizeKm = 2.5f;
-        private const float LegacyReferenceAspectRatio = 16f / 9f;
-        private static readonly float LegacyReferenceSpanCost = ComputeLegacyReferenceSpanCost();
 
         /// <summary>
         /// Compute market suitability score for a cell.
@@ -200,22 +196,13 @@ namespace EconSim.Core.Economy
         /// </summary>
         public static float ResolveMarketZoneMaxTransportCost(MapData mapData)
         {
-            if (mapData?.Info?.World == null)
+            float spanCost = WorldScale.ResolveMapSpanCost(mapData?.Info);
+            if (spanCost <= 0f)
+                return LegacyDefaultMarketZoneMaxCost;
+            if (WorldScale.LegacyReferenceMapSpanCost <= 0f)
                 return LegacyDefaultMarketZoneMaxCost;
 
-            float widthKm = mapData.Info.World.MapWidthKm;
-            float heightKm = mapData.Info.World.MapHeightKm;
-            if (widthKm <= 0f || heightKm <= 0f)
-                return LegacyDefaultMarketZoneMaxCost;
-
-            float diagonalKm = (float)Math.Sqrt((widthKm * widthKm) + (heightKm * heightKm));
-            float normalizationKm = TransportGraph.ResolveDistanceNormalizationKm(mapData.Info);
-            float spanCost = diagonalKm / Math.Max(1f, normalizationKm);
-
-            if (LegacyReferenceSpanCost <= 0f)
-                return LegacyDefaultMarketZoneMaxCost;
-
-            float scaled = LegacyDefaultMarketZoneMaxCost * (spanCost / LegacyReferenceSpanCost);
+            float scaled = LegacyDefaultMarketZoneMaxCost * (spanCost / WorldScale.LegacyReferenceMapSpanCost);
             if (float.IsNaN(scaled) || float.IsInfinity(scaled))
                 return LegacyDefaultMarketZoneMaxCost;
 
@@ -246,19 +233,6 @@ namespace EconSim.Core.Economy
             }
 
             SimLog.Log("Market", $"Market '{market.Name}' zone: {market.ZoneCellIds.Count} cells (max cost: {resolvedMaxTransportCost:F1})");
-        }
-
-        private static float ComputeLegacyReferenceSpanCost()
-        {
-            float mapAreaKm2 = LegacyReferenceCellCount * LegacyReferenceCellSizeKm * LegacyReferenceCellSizeKm;
-            float mapWidthKm = (float)Math.Sqrt(mapAreaKm2 * LegacyReferenceAspectRatio);
-            float mapHeightKm = mapWidthKm / LegacyReferenceAspectRatio;
-            float diagonalKm = (float)Math.Sqrt((mapWidthKm * mapWidthKm) + (mapHeightKm * mapHeightKm));
-            float normalizationKm = TransportGraph.ResolveDistanceNormalizationKm(new MapInfo
-            {
-                World = new WorldInfo { CellSizeKm = LegacyReferenceCellSizeKm }
-            });
-            return diagonalKm / Math.Max(1f, normalizationKm);
         }
     }
 }

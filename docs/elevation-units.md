@@ -48,6 +48,7 @@ Notes:
 
 - `MapGenResult.World` is emitted by mapgen as explicit world-scale output.
 - `MapInfo.World` carries that metadata into EconSim runtime.
+- Runtime world-scale normalization utilities live in `EconSim.Core.Data.WorldScale` (distance normalization, map span cost).
 - Canonical fields include:
   - `CellSizeKm`
   - `MapWidthKm`, `MapHeightKm`, `MapAreaKm2`

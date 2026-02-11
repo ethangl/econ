@@ -205,6 +205,22 @@ namespace EconSim.Tests
                 "If world dimensions and cell size scale together, normalized budget should remain stable.");
         }
 
+        [Test]
+        public void WorldScale_DistanceNormalization_UsesCellSizeWithLegacyFallback()
+        {
+            Assert.That(WorldScale.ResolveDistanceNormalizationKm(null), Is.EqualTo(30f).Within(0.0001f));
+
+            var info = new MapInfo
+            {
+                World = new WorldInfo
+                {
+                    CellSizeKm = 5f
+                }
+            };
+
+            Assert.That(WorldScale.ResolveDistanceNormalizationKm(info), Is.EqualTo(60f).Within(0.0001f));
+        }
+
         private static MapData BuildLinearMap()
         {
             var mapData = new MapData
