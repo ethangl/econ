@@ -8,6 +8,8 @@ namespace MapGen.Core
     {
         public float LandRatio;
         public float WaterRatio;
+        public float EdgeLandRatio;
+        public float CoastRatio;
         public float ElevationP10Meters;
         public float ElevationP50Meters;
         public float ElevationP90Meters;
@@ -95,9 +97,9 @@ namespace MapGen.Core
             {
                 MapGenComparisonCase c = cases[i];
                 sb.AppendLine($"Case {i + 1}: seed={c.Seed}, template={c.Template}, requestedCells={c.CellCount}");
-                sb.AppendLine($"  V1 land={Fmt(c.V1.LandRatio)} water={Fmt(c.V1.WaterRatio)} elev[p10,p50,p90]=[{Fmt(c.V1.ElevationP10Meters)}, {Fmt(c.V1.ElevationP50Meters)}, {Fmt(c.V1.ElevationP90Meters)}] m");
-                sb.AppendLine($"  V2 land={Fmt(c.V2.LandRatio)} water={Fmt(c.V2.WaterRatio)} elev[p10,p50,p90]=[{Fmt(c.V2.ElevationP10Meters)}, {Fmt(c.V2.ElevationP50Meters)}, {Fmt(c.V2.ElevationP90Meters)}] m");
-                sb.AppendLine($"  Delta land={Fmt(c.V2.LandRatio - c.V1.LandRatio)} riverCount={c.V2.RiverCount - c.V1.RiverCount} riverCoverage={Fmt(c.V2.RiverCoverage - c.V1.RiverCoverage)}");
+                sb.AppendLine($"  V1 land={Fmt(c.V1.LandRatio)} water={Fmt(c.V1.WaterRatio)} edgeLand={Fmt(c.V1.EdgeLandRatio)} coast={Fmt(c.V1.CoastRatio)} elev[p10,p50,p90]=[{Fmt(c.V1.ElevationP10Meters)}, {Fmt(c.V1.ElevationP50Meters)}, {Fmt(c.V1.ElevationP90Meters)}] m");
+                sb.AppendLine($"  V2 land={Fmt(c.V2.LandRatio)} water={Fmt(c.V2.WaterRatio)} edgeLand={Fmt(c.V2.EdgeLandRatio)} coast={Fmt(c.V2.CoastRatio)} elev[p10,p50,p90]=[{Fmt(c.V2.ElevationP10Meters)}, {Fmt(c.V2.ElevationP50Meters)}, {Fmt(c.V2.ElevationP90Meters)}] m");
+                sb.AppendLine($"  Delta land={Fmt(c.V2.LandRatio - c.V1.LandRatio)} edgeLand={Fmt(c.V2.EdgeLandRatio - c.V1.EdgeLandRatio)} coast={Fmt(c.V2.CoastRatio - c.V1.CoastRatio)} riverCount={c.V2.RiverCount - c.V1.RiverCount} riverCoverage={Fmt(c.V2.RiverCoverage - c.V1.RiverCoverage)}");
                 sb.AppendLine($"  V1 rivers={c.V1.RiverCount}, coverage={Fmt(c.V1.RiverCoverage)} realms/provinces/counties={c.V1.RealmCount}/{c.V1.ProvinceCount}/{c.V1.CountyCount}");
                 sb.AppendLine($"  V2 rivers={c.V2.RiverCount}, coverage={Fmt(c.V2.RiverCoverage)} realms/provinces/counties={c.V2.RealmCount}/{c.V2.ProvinceCount}/{c.V2.CountyCount}");
                 sb.AppendLine($"  Biome overlap={Fmt(BiomeOverlap(c.V1.BiomeCounts, c.V2.BiomeCounts))}");
@@ -111,14 +113,27 @@ namespace MapGen.Core
         {
             int n = result.Mesh.CellCount;
             int land = 0;
+            int edgeCells = 0;
+            int edgeLand = 0;
             var signed = new float[n];
             int biomeCount = Enum.GetValues(typeof(BiomeId)).Length;
             var biomeCounts = new int[biomeCount];
+            float edgeMarginX = result.Mesh.Width * 0.12f;
+            float edgeMarginY = result.Mesh.Height * 0.12f;
 
             for (int i = 0; i < n; i++)
             {
                 bool isLand = !result.Heights.IsWater(i) && !result.Biomes.IsLakeCell[i];
                 if (isLand) land++;
+
+                Vec2 center = result.Mesh.CellCenters[i];
+                bool isEdge = center.X <= edgeMarginX || center.X >= result.Mesh.Width - edgeMarginX
+                    || center.Y <= edgeMarginY || center.Y >= result.Mesh.Height - edgeMarginY;
+                if (isEdge)
+                {
+                    edgeCells++;
+                    if (isLand) edgeLand++;
+                }
 
                 signed[i] = LegacyAbsoluteToSignedMeters(result.Heights.Heights[i], result.World);
 
@@ -132,11 +147,15 @@ namespace MapGen.Core
                 riverVertices += result.Rivers.Rivers[i].Vertices.Length;
 
             float landRatio = n > 0 ? land / (float)n : 0f;
+            float edgeLandRatio = edgeCells > 0 ? edgeLand / (float)edgeCells : 0f;
+            float coastRatio = ComputeCoastRatio(result.Mesh, c => !result.Heights.IsWater(c) && !result.Biomes.IsLakeCell[c]);
 
             return new MapGenComparisonMetrics
             {
                 LandRatio = landRatio,
                 WaterRatio = 1f - landRatio,
+                EdgeLandRatio = edgeLandRatio,
+                CoastRatio = coastRatio,
                 ElevationP10Meters = Percentile(signed, 0.10f),
                 ElevationP50Meters = Percentile(signed, 0.50f),
                 ElevationP90Meters = Percentile(signed, 0.90f),
@@ -153,14 +172,27 @@ namespace MapGen.Core
         {
             int n = result.Mesh.CellCount;
             int land = 0;
+            int edgeCells = 0;
+            int edgeLand = 0;
             var signed = new float[n];
             int biomeCount = Enum.GetValues(typeof(BiomeId)).Length;
             var biomeCounts = new int[biomeCount];
+            float edgeMarginX = result.Mesh.Width * 0.12f;
+            float edgeMarginY = result.Mesh.Height * 0.12f;
 
             for (int i = 0; i < n; i++)
             {
                 bool isLand = result.Elevation.IsLand(i) && !result.Biomes.IsLakeCell[i];
                 if (isLand) land++;
+
+                Vec2 center = result.Mesh.CellCenters[i];
+                bool isEdge = center.X <= edgeMarginX || center.X >= result.Mesh.Width - edgeMarginX
+                    || center.Y <= edgeMarginY || center.Y >= result.Mesh.Height - edgeMarginY;
+                if (isEdge)
+                {
+                    edgeCells++;
+                    if (isLand) edgeLand++;
+                }
 
                 signed[i] = result.Elevation.ElevationMetersSigned[i];
 
@@ -174,11 +206,15 @@ namespace MapGen.Core
                 riverVertices += result.Rivers.Rivers[i].Vertices.Length;
 
             float landRatio = n > 0 ? land / (float)n : 0f;
+            float edgeLandRatio = edgeCells > 0 ? edgeLand / (float)edgeCells : 0f;
+            float coastRatio = ComputeCoastRatio(result.Mesh, c => result.Elevation.IsLand(c) && !result.Biomes.IsLakeCell[c]);
 
             return new MapGenComparisonMetrics
             {
                 LandRatio = landRatio,
                 WaterRatio = 1f - landRatio,
+                EdgeLandRatio = edgeLandRatio,
+                CoastRatio = coastRatio,
                 ElevationP10Meters = Percentile(signed, 0.10f),
                 ElevationP50Meters = Percentile(signed, 0.50f),
                 ElevationP90Meters = Percentile(signed, 0.90f),
@@ -202,6 +238,29 @@ namespace MapGen.Core
 
             float waterRange = Math.Max(1f, sea - 0f);
             return -((sea - absoluteHeight) / waterRange) * world.MaxSeaDepthMeters;
+        }
+
+        static float ComputeCoastRatio(CellMesh mesh, Func<int, bool> isLand)
+        {
+            int candidateEdges = 0;
+            int coastEdges = 0;
+            for (int i = 0; i < mesh.EdgeCount; i++)
+            {
+                var edge = mesh.EdgeCells[i];
+                int c0 = edge.C0;
+                int c1 = edge.C1;
+                if (c0 < 0 || c1 < 0)
+                    continue;
+
+                candidateEdges++;
+                if (isLand(c0) != isLand(c1))
+                    coastEdges++;
+            }
+
+            if (candidateEdges == 0)
+                return 0f;
+
+            return coastEdges / (float)candidateEdges;
         }
 
         static float Percentile(float[] values, float q)

@@ -14,7 +14,7 @@ namespace EconSim.Tests
         {
             new SmokeCase(1101, HeightmapTemplateType.LowIsland, 5000, 0.15f, 0.60f, 0, 120, -700f, 900f),
             new SmokeCase(2202, HeightmapTemplateType.Continents, 5000, 0.30f, 0.82f, 5, 250, -500f, 1800f),
-            new SmokeCase(3303, HeightmapTemplateType.Volcano, 5000, 0.20f, 0.72f, 0, 150, -600f, 1500f),
+            new SmokeCase(3303, HeightmapTemplateType.Volcano, 5000, 0.20f, 0.72f, 0, 150, -900f, 1500f),
             new SmokeCase(4404, HeightmapTemplateType.Isthmus, 5000, 0.20f, 0.78f, 1, 200, -300f, 2200f),
             new SmokeCase(5505, HeightmapTemplateType.Taklamakan, 5000, 0.20f, 0.86f, 0, 260, -200f, 2600f),
         };

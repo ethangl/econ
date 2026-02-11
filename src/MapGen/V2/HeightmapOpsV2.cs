@@ -386,8 +386,12 @@ namespace MapGen.Core
                 float distance = (1f - nx * nx) * (1f - ny * ny);
                 if (fraction < 0) distance = 1f - distance;
 
-                float masked = field[i] * distance;
-                field[i] = (field[i] * (fr - 1f) + masked) / fr;
+                // V1 mask operated in legacy absolute domain (0..100 with sea level at 20).
+                // Apply the same transform there, then map back to signed meters.
+                float legacy = SignedToLegacyAbsolute(field, field[i]);
+                float maskedLegacy = legacy * distance;
+                float blendedLegacy = (legacy * (fr - 1f) + maskedLegacy) / fr;
+                field[i] = LegacyAbsoluteToSigned(field, blendedLegacy);
             }
         }
 
@@ -585,6 +589,41 @@ namespace MapGen.Core
             }
 
             return nearest;
+        }
+
+        static float SignedToLegacyAbsolute(ElevationFieldV2 field, float signedMeters)
+        {
+            float maxElevation = Math.Max(1e-6f, field.MaxElevationMeters);
+            float maxSeaDepth = Math.Max(1e-6f, field.MaxSeaDepthMeters);
+
+            float legacy;
+            if (signedMeters >= 0f)
+            {
+                legacy = 20f + (signedMeters / maxElevation) * 80f;
+            }
+            else
+            {
+                legacy = 20f - ((-signedMeters / maxSeaDepth) * 20f);
+            }
+
+            if (legacy < 0f) legacy = 0f;
+            if (legacy > 100f) legacy = 100f;
+            return legacy;
+        }
+
+        static float LegacyAbsoluteToSigned(ElevationFieldV2 field, float legacyAbsolute)
+        {
+            float maxElevation = Math.Max(1e-6f, field.MaxElevationMeters);
+            float maxSeaDepth = Math.Max(1e-6f, field.MaxSeaDepthMeters);
+
+            float clamped = legacyAbsolute;
+            if (clamped < 0f) clamped = 0f;
+            if (clamped > 100f) clamped = 100f;
+
+            if (clamped >= 20f)
+                return ((clamped - 20f) / 80f) * maxElevation;
+
+            return -((20f - clamped) / 20f) * maxSeaDepth;
         }
 
         static float Clamp(float value, float min, float max) =>
