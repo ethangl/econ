@@ -11,6 +11,13 @@ using Profiler = EconSim.Core.Common.StartupProfiler;
 
 namespace EconSim.Core
 {
+    public enum MapGenerationMode
+    {
+        V2Default = 0,
+        ForceV1 = 1,
+        ForceV2 = 2
+    }
+
     /// <summary>
     /// Main entry point. Generates map and wires together simulation and rendering.
     /// </summary>
@@ -20,12 +27,17 @@ namespace EconSim.Core
         [SerializeField] private MapView mapView;
         [SerializeField] private MapCamera mapCamera;
         [Header("Generation")]
-        [SerializeField] private bool useMapGenV2 = true;
+        [SerializeField] private MapGenerationMode generationMode = MapGenerationMode.V2Default;
 
         public MapData MapData { get; private set; }
         public MapGenResult MapGenResult { get; private set; }
         public MapGenV2Result MapGenV2Result { get; private set; }
         public ISimulation Simulation => _simulation;
+        public MapGenerationMode GenerationMode
+        {
+            get => generationMode;
+            set => generationMode = value;
+        }
 
         /// <summary>
         /// Fired when the map has finished loading and the simulation is ready.
@@ -74,7 +86,8 @@ namespace EconSim.Core
                 Seed = UnityEngine.Random.Range(1, int.MaxValue)
             };
 
-            if (useMapGenV2)
+            bool runV2 = ShouldRunV2(generationMode);
+            if (runV2)
             {
                 MapGenV2Config v2Config = ToMapGenV2Config(config);
 
@@ -92,6 +105,8 @@ namespace EconSim.Core
             }
             else
             {
+                // Temporary V1 escape hatch while V2 is primary runtime generation path.
+                // Keep this branch until V2 stabilization is considered complete.
                 Profiler.Begin("MapGen Pipeline");
                 var result = MapGenPipeline.Generate(config);
                 Profiler.End();
@@ -111,6 +126,22 @@ namespace EconSim.Core
 
             Profiler.End();
             Profiler.LogResults();
+        }
+
+        static bool ShouldRunV2(MapGenerationMode mode)
+        {
+            switch (mode)
+            {
+                case MapGenerationMode.V2Default:
+                    return true;
+                case MapGenerationMode.ForceV2:
+                    return true;
+                case MapGenerationMode.ForceV1:
+                    return false;
+                default:
+                    Debug.LogWarning($"Unknown generation mode '{mode}', defaulting to V2.");
+                    return true;
+            }
         }
 
         private static MapGenV2Config ToMapGenV2Config(MapGenConfig config)
