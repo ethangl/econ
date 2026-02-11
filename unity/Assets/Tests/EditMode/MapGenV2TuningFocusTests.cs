@@ -55,13 +55,13 @@ namespace EconSim.Tests
                 float deltaEdgeLand = Math.Abs(c.V2.EdgeLandRatio - c.V1.EdgeLandRatio);
                 float deltaCoast = Math.Abs(c.V2.CoastRatio - c.V1.CoastRatio);
 
-                // Tuning guardrails (broad on purpose): keep V2 in the same visual regime as V1.
-                if (deltaLand > 0.18f)
-                    failures.Add($"{c.Template} seed={c.Seed}: |land ratio drift|={deltaLand:0.000} > 0.180");
-                if (deltaEdgeLand > 0.16f)
-                    failures.Add($"{c.Template} seed={c.Seed}: |edge land drift|={deltaEdgeLand:0.000} > 0.160");
-                if (deltaCoast > 0.18f)
-                    failures.Add($"{c.Template} seed={c.Seed}: |coast drift|={deltaCoast:0.000} > 0.180");
+                // Focus guardrails (post-tuning): keep V2 tightly aligned with V1 for visual tuning templates.
+                if (deltaLand > 0.10f)
+                    failures.Add($"{c.Template} seed={c.Seed}: |land ratio drift|={deltaLand:0.000} > 0.100");
+                if (deltaEdgeLand > 0.10f)
+                    failures.Add($"{c.Template} seed={c.Seed}: |edge land drift|={deltaEdgeLand:0.000} > 0.100");
+                if (deltaCoast > 0.08f)
+                    failures.Add($"{c.Template} seed={c.Seed}: |coast drift|={deltaCoast:0.000} > 0.080");
             }
 
             if (failures.Count > 0)

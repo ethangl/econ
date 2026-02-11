@@ -10,6 +10,40 @@ namespace MapGen.Core
     /// </summary>
     public static class HeightmapTemplatesV2
     {
+        static readonly IReadOnlyDictionary<HeightmapTemplateType, HeightmapTemplateTuningProfile> TunedProfiles
+            = new Dictionary<HeightmapTemplateType, HeightmapTemplateTuningProfile>
+            {
+                // Set after focused V2-vs-V1 drift sweeps.
+                [HeightmapTemplateType.Continents] = new HeightmapTemplateTuningProfile
+                {
+                    TerrainMagnitudeScale = 1.05f,
+                    AddMagnitudeScale = 1f,
+                    MaskScale = 0.90f,
+                    LandMultiplyFactorScale = 1.10f
+                },
+                [HeightmapTemplateType.LowIsland] = new HeightmapTemplateTuningProfile
+                {
+                    TerrainMagnitudeScale = 1.05f,
+                    AddMagnitudeScale = 1f,
+                    MaskScale = 1f,
+                    LandMultiplyFactorScale = 0.90f
+                },
+                [HeightmapTemplateType.HighIsland] = new HeightmapTemplateTuningProfile
+                {
+                    TerrainMagnitudeScale = 0.95f,
+                    AddMagnitudeScale = 0.90f,
+                    MaskScale = 0.90f,
+                    LandMultiplyFactorScale = 1.10f
+                },
+                [HeightmapTemplateType.Archipelago] = new HeightmapTemplateTuningProfile
+                {
+                    TerrainMagnitudeScale = 0.95f,
+                    AddMagnitudeScale = 0.90f,
+                    MaskScale = 0.90f,
+                    LandMultiplyFactorScale = 1f
+                },
+            };
+
         public static string GetTemplate(HeightmapTemplateType template, MapGenV2Config config)
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
@@ -36,7 +70,12 @@ namespace MapGen.Core
                 output.AppendLine(converted);
             }
 
-            return output.ToString();
+            string script = output.ToString();
+            HeightmapTemplateTuningProfile profile = ResolveTuningProfile(template, config);
+            if (profile == null || profile.IsIdentity())
+                return script;
+
+            return ApplyTuningProfile(script, profile);
         }
 
         public static (float min, float max) GetLandRatioBand(HeightmapTemplateType template)
@@ -101,6 +140,114 @@ namespace MapGen.Core
                 default:
                     return line;
             }
+        }
+
+        static HeightmapTemplateTuningProfile ResolveTuningProfile(HeightmapTemplateType template, MapGenV2Config config)
+        {
+            if (config != null && config.TemplateTuningOverride != null)
+                return config.TemplateTuningOverride;
+
+            if (TunedProfiles.TryGetValue(template, out HeightmapTemplateTuningProfile profile))
+                return profile;
+
+            return null;
+        }
+
+        static string ApplyTuningProfile(string script, HeightmapTemplateTuningProfile profile)
+        {
+            var output = new StringBuilder();
+            string[] lines = script.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string raw in lines)
+            {
+                string line = raw.Trim();
+                if (line.Length == 0)
+                    continue;
+                if (line.StartsWith("#", StringComparison.Ordinal))
+                {
+                    output.AppendLine(line);
+                    continue;
+                }
+
+                output.AppendLine(ApplyTuningToLine(line, profile));
+            }
+
+            return output.ToString();
+        }
+
+        static string ApplyTuningToLine(string line, HeightmapTemplateTuningProfile profile)
+        {
+            string[] parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+                return line;
+
+            string op = parts[0].ToLowerInvariant();
+            switch (op)
+            {
+                case "hill":
+                case "pit":
+                case "range":
+                case "trough":
+                    if (parts.Length >= 3)
+                        parts[2] = ScaleMeterToken(parts[2], profile.TerrainMagnitudeScale);
+                    return Join(parts);
+
+                case "add":
+                    if (parts.Length >= 2)
+                        parts[1] = ScaleMeterToken(parts[1], profile.AddMagnitudeScale);
+                    return Join(parts);
+
+                case "mask":
+                    if (parts.Length >= 2)
+                        parts[1] = ScaleFloat(parts[1], profile.MaskScale);
+                    return Join(parts);
+
+                case "multiply":
+                    if (parts.Length >= 3
+                        && string.Equals(parts[2], "land", StringComparison.OrdinalIgnoreCase)
+                        && parts.Length >= 2)
+                    {
+                        float factor = ParseFloat(parts[1]);
+                        float scaled = 1f + (factor - 1f) * profile.LandMultiplyFactorScale;
+                        parts[1] = FormatFloat(scaled);
+                    }
+
+                    return Join(parts);
+
+                default:
+                    return line;
+            }
+        }
+
+        static string ScaleMeterToken(string token, float scale)
+        {
+            if (Math.Abs(scale - 1f) < 0.0001f)
+                return token;
+
+            if (!TryParseRange(token, out string minRaw, out string maxRaw))
+            {
+                float value = ParseMetersToken(token);
+                return FormatMeters(value * scale);
+            }
+
+            float minV = ParseMetersToken(minRaw) * scale;
+            float maxV = ParseMetersToken(maxRaw) * scale;
+            if (maxV < minV)
+            {
+                float t = minV;
+                minV = maxV;
+                maxV = t;
+            }
+
+            return FormatMeters(minV) + "-" + FormatMeters(maxV);
+        }
+
+        static string ScaleFloat(string token, float scale)
+        {
+            if (Math.Abs(scale - 1f) < 0.0001f)
+                return token;
+
+            float value = ParseFloat(token);
+            return FormatFloat(value * scale);
         }
 
         static string ConvertRangeSelector(string token, MapGenV2Config config)
@@ -189,7 +336,7 @@ namespace MapGen.Core
 
                 char prev = t[i - 1];
                 char next = t[i + 1];
-                bool prevOk = char.IsDigit(prev) || prev == '.' || prev == ')';
+                bool prevOk = char.IsDigit(prev) || prev == '.' || prev == ')' || prev == 'm' || prev == '%';
                 bool nextOk = char.IsDigit(next) || next == '.' || next == '-';
                 if (!prevOk || !nextOk)
                     continue;
@@ -203,6 +350,20 @@ namespace MapGen.Core
         }
 
         static float ParseFloat(string token) => float.Parse(token, NumberStyles.Float, CultureInfo.InvariantCulture);
+
+        static float ParseMetersToken(string token)
+        {
+            string t = token.Trim().ToLowerInvariant();
+            if (t.EndsWith("m", StringComparison.Ordinal))
+                t = t.Substring(0, t.Length - 1);
+            return ParseFloat(t);
+        }
+
+        static string FormatFloat(float value)
+        {
+            float rounded = (float)Math.Round(value, 3, MidpointRounding.AwayFromZero);
+            return rounded.ToString("0.###", CultureInfo.InvariantCulture);
+        }
 
         static string Join(IReadOnlyList<string> parts)
         {

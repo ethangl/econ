@@ -57,10 +57,17 @@ namespace MapGen.Core
 
         public static MapGenComparisonCase Compare(MapGenConfig config)
         {
+            return Compare(config, null);
+        }
+
+        public static MapGenComparisonCase Compare(MapGenConfig config, HeightmapTemplateTuningProfile tuningOverride)
+        {
             if (config == null) throw new ArgumentNullException(nameof(config));
 
             MapGenResult v1 = MapGenPipeline.Generate(config);
-            MapGenV2Result v2 = MapGenPipelineV2.Generate(CreateV2Config(config));
+            MapGenV2Config v2Config = CreateV2Config(config);
+            v2Config.TemplateTuningOverride = tuningOverride;
+            MapGenV2Result v2 = MapGenPipelineV2.Generate(v2Config);
 
             return new MapGenComparisonCase
             {

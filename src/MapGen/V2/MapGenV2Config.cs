@@ -40,6 +40,9 @@ namespace MapGen.Core
         public float RiverTraceThreshold = 12f;
         public int MinRiverVertices = 12;
 
+        // Optional per-template tuning override used by analysis/sweeps.
+        public HeightmapTemplateTuningProfile TemplateTuningOverride;
+
         // Sub-seed constants (golden-ratio hashing for decorrelation).
         const uint MeshXor = 0x9E3779B9;
         const uint ElevationXor = 0xA54FF53A;
