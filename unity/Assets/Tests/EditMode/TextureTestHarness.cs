@@ -149,7 +149,9 @@ namespace EconSim.Tests
             Assert.That(root, Is.Not.Null, "Failed to parse texture hash baseline JSON.");
             Assert.That(root.cases, Is.Not.Null, "Texture hash baseline JSON must contain 'cases'.");
 
-            TextureHashBaselineJsonCase match = null;
+            string platform = Application.platform.ToString();
+            TextureHashBaselineJsonCase platformMatch = null;
+            TextureHashBaselineJsonCase fallbackMatch = null;
             for (int i = 0; i < root.cases.Length; i++)
             {
                 TextureHashBaselineJsonCase candidate = root.cases[i];
@@ -159,12 +161,24 @@ namespace EconSim.Tests
                 if (candidate.cellCount > 0 && candidate.cellCount != cellCount)
                     continue;
 
-                match = candidate;
-                break;
+                if (!string.IsNullOrEmpty(candidate.platform))
+                {
+                    if (string.Equals(candidate.platform, platform, StringComparison.OrdinalIgnoreCase))
+                    {
+                        platformMatch = candidate;
+                        break;
+                    }
+
+                    continue;
+                }
+
+                if (fallbackMatch == null)
+                    fallbackMatch = candidate;
             }
 
+            TextureHashBaselineJsonCase match = platformMatch ?? fallbackMatch;
             Assert.That(match, Is.Not.Null,
-                $"No texture hash baseline entry for seed={seed}, template={template}, cellCount={cellCount}");
+                $"No texture hash baseline entry for seed={seed}, template={template}, cellCount={cellCount}, platform={platform}");
             Assert.That(match.textures, Is.Not.Null.And.Not.Empty,
                 $"Texture hash baseline entry has no textures for seed={seed}, template={template}");
 
@@ -222,6 +236,7 @@ namespace EconSim.Tests
             {
                 string fullPath = Path.Combine(Application.dataPath, TextureHashBaselineFileRelativePath);
                 TextureHashBaselineFile root = LoadTextureHashBaselineFileForWrite(fullPath);
+                string platform = Application.platform.ToString();
 
                 int matchIndex = -1;
                 for (int i = 0; i < root.cases.Length; i++)
@@ -229,7 +244,8 @@ namespace EconSim.Tests
                     TextureHashBaselineJsonCase candidate = root.cases[i];
                     if (candidate.seed == seed &&
                         candidate.template == template.ToString() &&
-                        candidate.cellCount == cellCount)
+                        candidate.cellCount == cellCount &&
+                        string.Equals(candidate.platform, platform, StringComparison.OrdinalIgnoreCase))
                     {
                         matchIndex = i;
                         break;
@@ -252,6 +268,7 @@ namespace EconSim.Tests
                     seed = seed,
                     template = template.ToString(),
                     cellCount = cellCount,
+                    platform = platform,
                     textures = entries.ToArray()
                 };
 
@@ -265,7 +282,9 @@ namespace EconSim.Tests
                 {
                     int seedCompare = a.seed.CompareTo(b.seed);
                     if (seedCompare != 0) return seedCompare;
-                    return string.CompareOrdinal(a.template, b.template);
+                    int templateCompare = string.CompareOrdinal(a.template, b.template);
+                    if (templateCompare != 0) return templateCompare;
+                    return string.CompareOrdinal(a.platform ?? string.Empty, b.platform ?? string.Empty);
                 });
 
                 root.cases = cases.ToArray();
@@ -356,6 +375,7 @@ namespace EconSim.Tests
         public int seed;
         public string template;
         public int cellCount;
+        public string platform;
         public TextureHashEntry[] textures;
     }
 

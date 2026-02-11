@@ -16,6 +16,22 @@
       ]
     },
     {
+      "seed": 12345,
+      "template": "LowIsland",
+      "cellCount": 5000,
+      "platform": "LinuxEditor",
+      "textures": [
+        { "property": "_HeightmapTex", "sha256": "7FC7908AF702367F10D5650863C691C35EF61C653E344CBEAEA25C4E976504EE" },
+        { "property": "_RiverMaskTex", "sha256": "81453588DFB85E8CF0D1489D2EB2580568EA40E7F27F3796D49B1EC706220B12" },
+        { "property": "_RealmBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
+        { "property": "_ProvinceBorderDistTex", "sha256": "D2254CE78D453F2D0982C40D94E813F2E61B61D494C6CE5527776B0221FAF852" },
+        { "property": "_CountyBorderDistTex", "sha256": "20E45C6AF57EE1603980616CDCB260A0FF678C45E377E4DB96C6C793EBE8A26F" },
+        { "property": "_MarketBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
+        { "property": "_CellToMarketTex", "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179" },
+        { "property": "_RoadMaskTex", "sha256": "642495CDD35DF2BA1D6E9B2749BE930CFB00D1D9079ABA5DECBC69019C9CDD07" }
+      ]
+    },
+    {
       "seed": 424242,
       "template": "Continents",
       "cellCount": 5000,
@@ -31,12 +47,44 @@
       ]
     },
     {
+      "seed": 424242,
+      "template": "Continents",
+      "cellCount": 5000,
+      "platform": "LinuxEditor",
+      "textures": [
+        { "property": "_HeightmapTex", "sha256": "199F2A1EDD84D8A689781C03758CD43409632C70DD1181FE24E5EE27743DD567" },
+        { "property": "_RiverMaskTex", "sha256": "F15967733145CE4D43CE405B4E77F5AB56F88B2BC82C56E4D018F532734E51C5" },
+        { "property": "_RealmBorderDistTex", "sha256": "7EA02130810F420498051F0B3555C981EC0CFA2A4811F9F9682797EC8786DDD5" },
+        { "property": "_ProvinceBorderDistTex", "sha256": "BC479067F406CA04BE6FD36EFE940118CC16FCF71747EADDFCD2E406F79978D6" },
+        { "property": "_CountyBorderDistTex", "sha256": "6C7EE05CF297082C8C3A4CFDB4CB34C49A085BA5498138E78055D0D2993095B3" },
+        { "property": "_MarketBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
+        { "property": "_CellToMarketTex", "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179" },
+        { "property": "_RoadMaskTex", "sha256": "642495CDD35DF2BA1D6E9B2749BE930CFB00D1D9079ABA5DECBC69019C9CDD07" }
+      ]
+    },
+    {
       "seed": 8675309,
       "template": "Pangea",
       "cellCount": 5000,
       "textures": [
         { "property": "_HeightmapTex", "sha256": "B6F1D8E7D55D107B317578D80DF02B180709082EE702D4183450CDBEF076F47F" },
         { "property": "_RiverMaskTex", "sha256": "490B0AD2E996FCC599366FB66F0A19812223D6297809E02BAF3E714C1222BDAF" },
+        { "property": "_RealmBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
+        { "property": "_ProvinceBorderDistTex", "sha256": "E26BF4F19B8A79D9880DA9B8D509116E7AD035021DEA63EBB6BF826A656EB62E" },
+        { "property": "_CountyBorderDistTex", "sha256": "C0AD13A6A7C01A3CB4861F04EA9EB9D36875B14D1978CC32C6FB8604F297A140" },
+        { "property": "_MarketBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
+        { "property": "_CellToMarketTex", "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179" },
+        { "property": "_RoadMaskTex", "sha256": "642495CDD35DF2BA1D6E9B2749BE930CFB00D1D9079ABA5DECBC69019C9CDD07" }
+      ]
+    },
+    {
+      "seed": 8675309,
+      "template": "Pangea",
+      "cellCount": 5000,
+      "platform": "LinuxEditor",
+      "textures": [
+        { "property": "_HeightmapTex", "sha256": "B6F1D8E7D55D107B317578D80DF02B180709082EE702D4183450CDBEF076F47F" },
+        { "property": "_RiverMaskTex", "sha256": "F4DEB23F088C9120BCE1C7A2D9B5F7D519BA3FD3990F52243048ED9AA7EF3999" },
         { "property": "_RealmBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
         { "property": "_ProvinceBorderDistTex", "sha256": "E26BF4F19B8A79D9880DA9B8D509116E7AD035021DEA63EBB6BF826A656EB62E" },
         { "property": "_CountyBorderDistTex", "sha256": "C0AD13A6A7C01A3CB4861F04EA9EB9D36875B14D1978CC32C6FB8604F297A140" },
