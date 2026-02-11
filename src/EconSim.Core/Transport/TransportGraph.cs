@@ -64,17 +64,20 @@ namespace EconSim.Core.Transport
         // Impassable threshold (cells with cost >= this are blocked)
         private const float ImpassableThreshold = 100f;
         private const float LegacyMountainStartAbsolute = 70f;
-        private const float LegacyMountainRange = 30f;
+        private const float MinMountainRangeMeters = 1f;
 
-        private readonly float _mountainStartSeaRelative;
+        private readonly float _mountainStartMetersAsl;
+        private readonly float _mountainRangeMeters;
 
         public TransportGraph(MapData mapData, int maxCacheSize = 10000)
         {
             _mapData = mapData;
             _maxCacheSize = maxCacheSize;
             _pathCache = new Dictionary<(int, int), PathResult>();
-            float seaLevel = Elevation.ResolveSeaLevel(mapData.Info);
-            _mountainStartSeaRelative = Elevation.SeaRelativeFromAbsolute(LegacyMountainStartAbsolute, seaLevel);
+            _mountainStartMetersAsl = Elevation.AbsoluteToMetersASL(LegacyMountainStartAbsolute, mapData.Info);
+            _mountainRangeMeters = Math.Max(
+                MinMountainRangeMeters,
+                Elevation.ResolveMaxElevationMeters(mapData.Info) - _mountainStartMetersAsl);
 
             // Build biome lookup
             _biomeById = new Dictionary<int, Biome>();
@@ -117,11 +120,13 @@ namespace EconSim.Core.Transport
             }
 
             // Height modifier: higher = harder (mountains).
-            // Keep legacy behavior (absolute > 70) while reading canonical elevation safely.
-            float seaRelativeHeight = Elevation.GetSeaRelativeHeight(cell, _mapData.Info);
-            if (seaRelativeHeight > _mountainStartSeaRelative)
+            // Keep legacy behavior (absolute > 70) calibrated against world-unit meters ASL.
+            float elevationMetersAsl = Elevation.AbsoluteToMetersASL(
+                Elevation.GetAbsoluteHeight(cell, _mapData.Info),
+                _mapData.Info);
+            if (elevationMetersAsl > _mountainStartMetersAsl)
             {
-                float heightPenalty = (seaRelativeHeight - _mountainStartSeaRelative) / LegacyMountainRange; // 0-1 range
+                float heightPenalty = (elevationMetersAsl - _mountainStartMetersAsl) / _mountainRangeMeters; // 0-1 range
                 baseCost *= 1f + heightPenalty * 2f; // Up to 3x cost at peak
             }
 

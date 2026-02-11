@@ -40,6 +40,128 @@ namespace EconSim.Tests
             Assert.That(economy.Roads.GetRoadTier(2, 3), Is.Not.EqualTo(RoadTier.None));
         }
 
+        [Test]
+        public void TransportGraph_MountainPenalty_UsesWorldUnitCalibration()
+        {
+            var mapData = new MapData
+            {
+                Info = new MapInfo
+                {
+                    SeaLevel = 20f,
+                    World = new WorldInfo
+                    {
+                        MaxElevationMeters = 8000f,
+                        MaxSeaDepthMeters = 2000f
+                    }
+                },
+                Cells = new List<Cell>
+                {
+                    new Cell
+                    {
+                        Id = 1,
+                        IsLand = true,
+                        Height = 69, // below legacy mountain start (70)
+                        BiomeId = 1,
+                        NeighborIds = new List<int>(),
+                        Center = new Vec2(0, 0)
+                    },
+                    new Cell
+                    {
+                        Id = 2,
+                        IsLand = true,
+                        Height = 100, // peak height
+                        BiomeId = 1,
+                        NeighborIds = new List<int>(),
+                        Center = new Vec2(1, 0)
+                    }
+                },
+                Biomes = new List<Biome>
+                {
+                    new Biome { Id = 1, Name = "Plains", MovementCost = 50 }
+                },
+                Counties = new List<County>(),
+                Provinces = new List<Province>(),
+                Realms = new List<Realm>(),
+                Rivers = new List<River>(),
+                Burgs = new List<Burg>(),
+                Features = new List<Feature>(),
+                Vertices = new List<Vec2>()
+            };
+            mapData.BuildLookups();
+
+            var transport = new TransportGraph(mapData);
+
+            float foothillCost = transport.GetCellMovementCost(mapData.CellById[1]);
+            float peakCost = transport.GetCellMovementCost(mapData.CellById[2]);
+
+            Assert.That(foothillCost, Is.EqualTo(1f).Within(0.0001f), "Cell below mountain threshold should not pay height penalty.");
+            Assert.That(peakCost, Is.EqualTo(3f).Within(0.0001f), "Peak cell should reach full mountain penalty (~3x base).");
+        }
+
+        [Test]
+        public void EconomyInitializer_IronOreThreshold_RemainsStableWithWorldMetadata()
+        {
+            var mapData = new MapData
+            {
+                Info = new MapInfo
+                {
+                    Seed = "42",
+                    SeaLevel = 20f,
+                    World = new WorldInfo
+                    {
+                        MaxElevationMeters = 8000f,
+                        MaxSeaDepthMeters = 2000f
+                    }
+                },
+                Cells = new List<Cell>
+                {
+                    new Cell
+                    {
+                        Id = 1,
+                        IsLand = true,
+                        Height = 40, // below iron threshold anchor (legacy absolute 50)
+                        BiomeId = 1,
+                        CountyId = 10,
+                        NeighborIds = new List<int> { 2 },
+                        Center = new Vec2(0, 0)
+                    },
+                    new Cell
+                    {
+                        Id = 2,
+                        IsLand = true,
+                        Height = 80, // above iron threshold anchor
+                        BiomeId = 1,
+                        CountyId = 20,
+                        NeighborIds = new List<int> { 1 },
+                        Center = new Vec2(1, 0)
+                    }
+                },
+                Biomes = new List<Biome>
+                {
+                    new Biome { Id = 1, Name = "Mountain", MovementCost = 80 }
+                },
+                Counties = new List<County>
+                {
+                    new County { Id = 10, SeatCellId = 1, CellIds = new List<int> { 1 }, TotalPopulation = 5000, Centroid = new Vec2(0, 0) },
+                    new County { Id = 20, SeatCellId = 2, CellIds = new List<int> { 2 }, TotalPopulation = 5000, Centroid = new Vec2(1, 0) }
+                },
+                Provinces = new List<Province>(),
+                Realms = new List<Realm>(),
+                Rivers = new List<River>(),
+                Burgs = new List<Burg>(),
+                Features = new List<Feature>(),
+                Vertices = new List<Vec2>()
+            };
+            mapData.BuildLookups();
+
+            var economy = EconomyInitializer.Initialize(mapData);
+            var lowCounty = economy.GetCounty(10);
+            var highCounty = economy.GetCounty(20);
+
+            Assert.That(lowCounty.Resources.ContainsKey("iron_ore"), Is.False, "Low-elevation county should not receive iron ore.");
+            Assert.That(highCounty.Resources.ContainsKey("iron_ore"), Is.True, "High-elevation county should receive iron ore.");
+        }
+
         private static MapData BuildLinearMap()
         {
             var mapData = new MapData

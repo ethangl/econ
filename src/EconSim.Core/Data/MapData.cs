@@ -130,7 +130,7 @@ namespace EconSim.Core.Data
         public string Seed;
         public int TotalCells;
         public int LandCells;
-        public float SeaLevel;  // Height value for sea level (typically 20)
+        public float SeaLevel;  // Legacy absolute-domain sea level anchor (default 20)
         public WorldInfo World;
     }
 
@@ -163,7 +163,7 @@ namespace EconSim.Core.Data
         public List<int> NeighborIds;   // Adjacent cell IDs
 
         // Terrain
-        public int Height;              // 0-100, sea level = 20
+        public int Height;              // Legacy absolute-domain storage (0-100, sea-level anchor = 20)
         public float SeaRelativeElevation; // Canonical elevation (sea level = 0)
         public bool HasSeaRelativeElevation; // False for legacy maps without canonical value
         public int BiomeId;

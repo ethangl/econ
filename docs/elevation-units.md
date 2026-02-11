@@ -31,9 +31,13 @@ Always use `EconSim.Core.Data.Elevation` helpers:
 - When writing map cells from mapgen output, set:
   - `SeaRelativeElevation`
   - `HasSeaRelativeElevation = true`
-- For thresholds originally defined in absolute legacy units (for example `> 50`), convert once via:
-  - `SeaRelativeFromAbsolute(legacyAbsoluteThreshold, ResolveSeaLevel(info))`
+- For gameplay thresholds, prefer meter-space comparisons:
+  - convert threshold anchors once with `AbsoluteToMetersASL(legacyAbsoluteThreshold, info)`
+  - compare against per-cell meters (`AbsoluteToMetersASL(GetAbsoluteHeight(cell, info), info)`)
 - Keep morphology logic unchanged unless explicitly tuning map generation behavior.
+- Current consumers using this pattern:
+  - `EconSim.Core.Economy.EconomyInitializer`
+  - `EconSim.Core.Transport.TransportGraph`
 
 ## World Metadata
 
