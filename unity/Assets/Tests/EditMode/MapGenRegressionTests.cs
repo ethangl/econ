@@ -181,10 +181,12 @@ namespace EconSim.Tests
                 Assert.That(world.LatitudeNorth, Is.GreaterThan(world.LatitudeSouth));
                 Assert.That(world.MaxElevationMeters, Is.GreaterThan(0f));
                 Assert.That(world.MaxSeaDepthMeters, Is.GreaterThan(0f));
-                Assert.That(world.SeaLevelHeight, Is.EqualTo(HeightGrid.SeaLevel).Within(0.0001f));
+                Assert.That(world.SeaLevelHeight, Is.GreaterThan(world.MinHeight).And.LessThan(world.MaxHeight));
 
                 var mapData = MapGenAdapter.Convert(result);
                 Assert.That(mapData.Info.World, Is.Not.Null, "MapInfo.World must be populated from mapgen metadata.");
+                Assert.That(mapData.Info.SeaLevel, Is.EqualTo(world.SeaLevelHeight).Within(0.0001f),
+                    "MapInfo.SeaLevel should be sourced from world metadata.");
 
                 var infoWorld = mapData.Info.World;
                 Assert.That(infoWorld.CellSizeKm, Is.EqualTo(world.CellSizeKm).Within(0.0001f));

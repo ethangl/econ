@@ -29,7 +29,8 @@ namespace EconSim.Core.Import
             // MapGen uses Y-up (Y=0 south), same as Unity's texture convention.
             // Pass coordinates through directly — no flip needed.
             int cellCount = mesh.CellCount;
-            float seaLevel = HeightGrid.SeaLevel;
+            float seaLevel = world?.SeaLevelHeight ?? HeightGrid.SeaLevel;
+            Elevation.AssertAbsoluteHeightInRange(seaLevel, "MapGenAdapter sea level");
 
             // Build cells
             var cells = new List<Cell>(cellCount);
