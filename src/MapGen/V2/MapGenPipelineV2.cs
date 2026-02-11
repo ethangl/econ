@@ -14,15 +14,23 @@ namespace MapGen.Core
             config.Validate();
 
             CellMesh mesh = GenerateMesh(config);
+            WorldMetadata world = BuildWorldMetadata(config, mesh);
             var elevation = new ElevationFieldV2(mesh, config.MaxSeaDepthMeters, config.MaxElevationMeters);
             GenerateElevationFromDsl(elevation, config);
             EnsureNonDegenerateLandWater(elevation);
+            var climate = new ClimateFieldV2(mesh);
+            TemperatureOpsV2.Compute(climate, elevation, config, world);
+            PrecipitationOpsV2.Compute(climate, elevation, config, world);
+            var rivers = new RiverFieldV2(mesh);
+            FlowOpsV2.Compute(rivers, elevation, climate, config);
 
             return new MapGenV2Result
             {
                 Mesh = mesh,
                 Elevation = elevation,
-                World = BuildWorldMetadata(config, mesh)
+                Climate = climate,
+                Rivers = rivers,
+                World = world
             };
         }
 

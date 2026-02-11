@@ -28,6 +28,8 @@ namespace EconSim.Tests
             Assert.That(runA, Is.Not.Null);
             Assert.That(runA.Mesh, Is.Not.Null);
             Assert.That(runA.Elevation, Is.Not.Null);
+            Assert.That(runA.Climate, Is.Not.Null);
+            Assert.That(runA.Rivers, Is.Not.Null);
             Assert.That(runA.World, Is.Not.Null);
 
             int requestedMin = (int)(config.CellCount * 0.95f);
@@ -54,6 +56,19 @@ namespace EconSim.Tests
                 Assert.That(a, Is.InRange(-config.MaxSeaDepthMeters, config.MaxElevationMeters));
                 Assert.That(a, Is.EqualTo(b).Within(0.0001f), $"V2 pipeline must be deterministic at cell {i}.");
             }
+
+            Assert.That(runA.Climate.TemperatureC.Length, Is.EqualTo(runB.Climate.TemperatureC.Length));
+            Assert.That(runA.Climate.PrecipitationMmYear.Length, Is.EqualTo(runB.Climate.PrecipitationMmYear.Length));
+            for (int i = 0; i < runA.Climate.CellCount; i++)
+            {
+                Assert.That(runA.Climate.TemperatureC[i], Is.EqualTo(runB.Climate.TemperatureC[i]).Within(0.0001f),
+                    $"Temperature determinism failed at cell {i}.");
+                Assert.That(runA.Climate.PrecipitationMmYear[i], Is.EqualTo(runB.Climate.PrecipitationMmYear[i]).Within(0.0001f),
+                    $"Precipitation determinism failed at cell {i}.");
+            }
+
+            Assert.That(runA.Rivers.Rivers.Length, Is.EqualTo(runB.Rivers.Rivers.Length),
+                "River extraction determinism failed.");
         }
     }
 }

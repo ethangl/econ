@@ -7,6 +7,8 @@ namespace MapGen.Core
     {
         public CellMesh Mesh;
         public ElevationFieldV2 Elevation;
+        public ClimateFieldV2 Climate;
+        public RiverFieldV2 Rivers;
         public WorldMetadata World;
     }
 }
