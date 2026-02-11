@@ -66,7 +66,56 @@ namespace MapGen.Core
                 throw new InvalidOperationException($"No V2 template found for {config.Template}.");
 
             HeightmapDslV2.Execute(elevation, script, config.ElevationSeed);
+            ConstrainLandRatioBand(elevation, config.Template);
             elevation.ClampAll();
+        }
+
+        static void ConstrainLandRatioBand(ElevationFieldV2 elevation, HeightmapTemplateType template)
+        {
+            var (minLand, maxLand) = HeightmapTemplatesV2.GetLandRatioBand(template);
+            for (int iter = 0; iter < 3; iter++)
+            {
+                float current = elevation.LandRatio();
+                if (current >= minLand && current <= maxLand)
+                    return;
+
+                float target = current > maxLand ? maxLand : minLand;
+                float shift = ComputeSeaShiftForTargetLandRatio(elevation.ElevationMetersSigned, target);
+                if (float.IsNaN(shift) || float.IsInfinity(shift))
+                    return;
+
+                if (current > maxLand)
+                    shift -= 0.001f;
+                else
+                    shift += 0.001f;
+
+                for (int i = 0; i < elevation.CellCount; i++)
+                    elevation[i] = elevation[i] + shift;
+
+                elevation.ClampAll();
+            }
+        }
+
+        static float ComputeSeaShiftForTargetLandRatio(float[] elevations, float targetLandRatio)
+        {
+            if (elevations == null || elevations.Length == 0)
+                return 0f;
+
+            float t = targetLandRatio;
+            if (t < 0f) t = 0f;
+            if (t > 1f) t = 1f;
+
+            float waterRatio = 1f - t;
+            int n = elevations.Length;
+            var sorted = (float[])elevations.Clone();
+            Array.Sort(sorted);
+
+            int idx = (int)Math.Floor(waterRatio * (n - 1));
+            if (idx < 0) idx = 0;
+            if (idx >= n) idx = n - 1;
+
+            float cutoff = sorted[idx];
+            return -cutoff;
         }
 
         static void EnsureNonDegenerateLandWater(ElevationFieldV2 elevation)

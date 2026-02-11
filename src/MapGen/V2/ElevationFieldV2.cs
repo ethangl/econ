@@ -20,6 +20,8 @@ namespace MapGen.Core
             MaxSeaDepthMeters = maxSeaDepthMeters;
             MaxElevationMeters = maxElevationMeters;
             ElevationMetersSigned = new float[mesh.CellCount];
+            for (int i = 0; i < ElevationMetersSigned.Length; i++)
+                ElevationMetersSigned[i] = -MaxSeaDepthMeters;
         }
 
         public float this[int cellIndex]

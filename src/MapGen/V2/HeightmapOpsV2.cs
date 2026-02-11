@@ -44,7 +44,7 @@ namespace MapGen.Core
 
         static float ShapeUnitMeters(ElevationFieldV2 field)
         {
-            float unit = field.MaxElevationMeters / 100f;
+            float unit = (field.MaxElevationMeters + field.MaxSeaDepthMeters) / 100f;
             if (unit <= 0f || float.IsNaN(unit) || float.IsInfinity(unit))
                 return 1f;
             return unit;
@@ -61,7 +61,7 @@ namespace MapGen.Core
                 return;
 
             float blobPower = GetBlobPower(cellCount);
-            float hUnits = Math.Min(Math.Max(ToShapeUnits(field, heightMeters), 0f), 100f);
+            int hUnits = (int)Math.Min(Math.Max(ToShapeUnits(field, heightMeters), 0f), 100f);
 
             int seedCell = -1;
             for (int attempt = 0; attempt < 50; attempt++)
@@ -80,7 +80,7 @@ namespace MapGen.Core
             if (seedCell < 0)
                 return;
 
-            var changeUnits = new float[cellCount];
+            var changeUnits = new int[cellCount];
             changeUnits[seedCell] = hUnits;
 
             var queue = new Queue<int>();
@@ -91,11 +91,11 @@ namespace MapGen.Core
                 int q = queue.Dequeue();
                 foreach (int c in field.Mesh.CellNeighbors[q])
                 {
-                    if (c < 0 || c >= cellCount || changeUnits[c] > 0f)
+                    if (c < 0 || c >= cellCount || changeUnits[c] > 0)
                         continue;
 
-                    changeUnits[c] = (float)(Math.Pow(changeUnits[q], blobPower) * (0.9 + rng.NextDouble() * 0.2));
-                    if (changeUnits[c] > 1f)
+                    changeUnits[c] = (int)(Math.Pow(changeUnits[q], blobPower) * (0.9 + rng.NextDouble() * 0.2));
+                    if (changeUnits[c] > 1)
                         queue.Enqueue(c);
                 }
             }

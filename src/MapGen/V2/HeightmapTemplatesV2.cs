@@ -151,7 +151,7 @@ namespace MapGen.Core
 
         static float LegacyDeltaToMeters(float legacyDelta, MapGenV2Config config)
         {
-            float unit = config.MaxElevationMeters / 100f;
+            float unit = (config.MaxElevationMeters + config.MaxSeaDepthMeters) / 100f;
             return legacyDelta * unit;
         }
 
