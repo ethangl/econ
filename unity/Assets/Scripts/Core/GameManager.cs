@@ -19,9 +19,12 @@ namespace EconSim.Core
         [Header("References")]
         [SerializeField] private MapView mapView;
         [SerializeField] private MapCamera mapCamera;
+        [Header("Generation")]
+        [SerializeField] private bool useMapGenV2 = false;
 
         public MapData MapData { get; private set; }
         public MapGenResult MapGenResult { get; private set; }
+        public MapGenV2Result MapGenV2Result { get; private set; }
         public ISimulation Simulation => _simulation;
 
         /// <summary>
@@ -71,15 +74,34 @@ namespace EconSim.Core
                 Seed = UnityEngine.Random.Range(1, int.MaxValue)
             };
 
-            Profiler.Begin("MapGen Pipeline");
-            var result = MapGenPipeline.Generate(config);
-            Profiler.End();
+            if (useMapGenV2)
+            {
+                MapGenV2Config v2Config = ToMapGenV2Config(config);
 
-            MapGenResult = result;
+                Profiler.Begin("MapGen V2 Pipeline");
+                var v2Result = MapGenPipelineV2.Generate(v2Config);
+                Profiler.End();
 
-            Profiler.Begin("MapGenAdapter Convert");
-            MapData = MapGenAdapter.Convert(result);
-            Profiler.End();
+                MapGenV2Result = v2Result;
+                MapGenResult = null;
+
+                Profiler.Begin("MapGenAdapter Convert V2");
+                MapData = MapGenAdapter.Convert(v2Result);
+                Profiler.End();
+            }
+            else
+            {
+                Profiler.Begin("MapGen Pipeline");
+                var result = MapGenPipeline.Generate(config);
+                Profiler.End();
+
+                MapGenResult = result;
+                MapGenV2Result = null;
+
+                Profiler.Begin("MapGenAdapter Convert");
+                MapData = MapGenAdapter.Convert(result);
+                Profiler.End();
+            }
 
             // Update info with seed
             MapData.Info.Seed = config.Seed.ToString();
@@ -88,6 +110,22 @@ namespace EconSim.Core
 
             Profiler.End();
             Profiler.LogResults();
+        }
+
+        private static MapGenV2Config ToMapGenV2Config(MapGenConfig config)
+        {
+            return new MapGenV2Config
+            {
+                Seed = config.Seed,
+                CellCount = config.CellCount,
+                AspectRatio = config.AspectRatio,
+                CellSizeKm = config.CellSizeKm,
+                Template = config.Template,
+                LatitudeSouth = config.LatitudeSouth,
+                RiverThreshold = config.RiverThreshold,
+                RiverTraceThreshold = config.RiverTraceThreshold,
+                MinRiverVertices = config.MinRiverVertices
+            };
         }
 
         private void InitializeWithMapData()
