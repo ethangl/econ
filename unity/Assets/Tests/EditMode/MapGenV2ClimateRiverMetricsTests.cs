@@ -57,13 +57,15 @@ namespace EconSim.Tests
 
                 int riverCount = result.Rivers.Rivers.Length;
                 int riverVertexTotal = 0;
+                int effectiveMinVertices = config.EffectiveMinRiverVertices;
+                float effectiveTraceThreshold = config.EffectiveRiverTraceThreshold;
                 for (int i = 0; i < riverCount; i++)
                 {
                     RiverV2 river = result.Rivers.Rivers[i];
                     Assert.That(river.Vertices, Is.Not.Null, $"River path missing for {template} river {river.Id}");
-                    Assert.That(river.Vertices.Length, Is.GreaterThanOrEqualTo(config.MinRiverVertices),
+                    Assert.That(river.Vertices.Length, Is.GreaterThanOrEqualTo(effectiveMinVertices),
                         $"River shorter than minimum for {template} river {river.Id}");
-                    Assert.That(river.Discharge, Is.GreaterThanOrEqualTo(config.RiverTraceThreshold),
+                    Assert.That(river.Discharge, Is.GreaterThanOrEqualTo(effectiveTraceThreshold),
                         $"River discharge below trace threshold for {template} river {river.Id}");
                     riverVertexTotal += river.Vertices.Length;
                 }

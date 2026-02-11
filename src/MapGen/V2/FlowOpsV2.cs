@@ -21,9 +21,9 @@ namespace MapGen.Core
             ExtractRivers(
                 data,
                 vertexPairToEdge,
-                config.RiverThreshold,
-                config.RiverTraceThreshold,
-                config.MinRiverVertices);
+                config.EffectiveRiverThreshold,
+                config.EffectiveRiverTraceThreshold,
+                config.EffectiveMinRiverVertices);
         }
 
         static long PairKey(int a, int b)

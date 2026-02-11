@@ -14,11 +14,23 @@ namespace MapGen.Core
         // Scales multiply-land factor around 1.0: new = 1 + (old - 1) * scale.
         public float LandMultiplyFactorScale = 1f;
 
+        // Scales RiverThreshold used for river mouth detection / extraction.
+        public float RiverThresholdScale = 1f;
+
+        // Scales RiverTraceThreshold used for upstream tracing and biome river influence.
+        public float RiverTraceThresholdScale = 1f;
+
+        // Scales MinRiverVertices and rounds to nearest integer (min 1).
+        public float RiverMinVerticesScale = 1f;
+
         public bool IsIdentity() =>
             TerrainMagnitudeScale == 1f
             && AddMagnitudeScale == 1f
             && MaskScale == 1f
-            && LandMultiplyFactorScale == 1f;
+            && LandMultiplyFactorScale == 1f
+            && RiverThresholdScale == 1f
+            && RiverTraceThresholdScale == 1f
+            && RiverMinVerticesScale == 1f;
 
         public HeightmapTemplateTuningProfile Clone() =>
             new HeightmapTemplateTuningProfile
@@ -26,7 +38,10 @@ namespace MapGen.Core
                 TerrainMagnitudeScale = TerrainMagnitudeScale,
                 AddMagnitudeScale = AddMagnitudeScale,
                 MaskScale = MaskScale,
-                LandMultiplyFactorScale = LandMultiplyFactorScale
+                LandMultiplyFactorScale = LandMultiplyFactorScale,
+                RiverThresholdScale = RiverThresholdScale,
+                RiverTraceThresholdScale = RiverTraceThresholdScale,
+                RiverMinVerticesScale = RiverMinVerticesScale
             };
     }
 }

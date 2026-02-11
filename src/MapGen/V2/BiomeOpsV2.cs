@@ -241,7 +241,7 @@ namespace MapGen.Core
             RiverFieldV2 rivers,
             MapGenV2Config config)
         {
-            bool[] cellHasRiver = ComputeCellHasRiver(biome.Mesh, rivers, config.RiverTraceThreshold);
+            bool[] cellHasRiver = ComputeCellHasRiver(biome.Mesh, rivers, config.EffectiveRiverTraceThreshold);
             int n = biome.CellCount;
 
             for (int i = 0; i < n; i++)

@@ -43,6 +43,40 @@ namespace MapGen.Core
         // Optional per-template tuning override used by analysis/sweeps.
         public HeightmapTemplateTuningProfile TemplateTuningOverride;
 
+        public float EffectiveRiverThreshold
+        {
+            get
+            {
+                HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(Template, this);
+                float scale = profile != null ? profile.RiverThresholdScale : 1f;
+                if (scale <= 0f) scale = 1f;
+                return RiverThreshold * scale;
+            }
+        }
+
+        public float EffectiveRiverTraceThreshold
+        {
+            get
+            {
+                HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(Template, this);
+                float scale = profile != null ? profile.RiverTraceThresholdScale : 1f;
+                if (scale <= 0f) scale = 1f;
+                return RiverTraceThreshold * scale;
+            }
+        }
+
+        public int EffectiveMinRiverVertices
+        {
+            get
+            {
+                HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(Template, this);
+                float scale = profile != null ? profile.RiverMinVerticesScale : 1f;
+                if (scale <= 0f) scale = 1f;
+                int effective = (int)Math.Round(MinRiverVertices * scale, MidpointRounding.AwayFromZero);
+                return Math.Max(1, effective);
+            }
+        }
+
         // Sub-seed constants (golden-ratio hashing for decorrelation).
         const uint MeshXor = 0x9E3779B9;
         const uint ElevationXor = 0xA54FF53A;

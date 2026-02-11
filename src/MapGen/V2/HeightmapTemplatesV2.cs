@@ -19,28 +19,40 @@ namespace MapGen.Core
                     TerrainMagnitudeScale = 1.05f,
                     AddMagnitudeScale = 1f,
                     MaskScale = 0.90f,
-                    LandMultiplyFactorScale = 1.10f
+                    LandMultiplyFactorScale = 1.10f,
+                    RiverThresholdScale = 0.75f,
+                    RiverTraceThresholdScale = 1f,
+                    RiverMinVerticesScale = 1f
                 },
                 [HeightmapTemplateType.LowIsland] = new HeightmapTemplateTuningProfile
                 {
                     TerrainMagnitudeScale = 1.05f,
                     AddMagnitudeScale = 1f,
                     MaskScale = 1f,
-                    LandMultiplyFactorScale = 0.90f
+                    LandMultiplyFactorScale = 0.90f,
+                    RiverThresholdScale = 0.35f,
+                    RiverTraceThresholdScale = 0.20f,
+                    RiverMinVerticesScale = 1f
                 },
                 [HeightmapTemplateType.HighIsland] = new HeightmapTemplateTuningProfile
                 {
                     TerrainMagnitudeScale = 0.95f,
                     AddMagnitudeScale = 0.90f,
                     MaskScale = 0.90f,
-                    LandMultiplyFactorScale = 1.10f
+                    LandMultiplyFactorScale = 1.10f,
+                    RiverThresholdScale = 0.75f,
+                    RiverTraceThresholdScale = 0.20f,
+                    RiverMinVerticesScale = 1.10f
                 },
                 [HeightmapTemplateType.Archipelago] = new HeightmapTemplateTuningProfile
                 {
                     TerrainMagnitudeScale = 0.95f,
                     AddMagnitudeScale = 0.90f,
                     MaskScale = 0.90f,
-                    LandMultiplyFactorScale = 1f
+                    LandMultiplyFactorScale = 1f,
+                    RiverThresholdScale = 1.25f,
+                    RiverTraceThresholdScale = 0.20f,
+                    RiverMinVerticesScale = 0.75f
                 },
             };
 
@@ -142,7 +154,7 @@ namespace MapGen.Core
             }
         }
 
-        static HeightmapTemplateTuningProfile ResolveTuningProfile(HeightmapTemplateType template, MapGenV2Config config)
+        public static HeightmapTemplateTuningProfile ResolveTuningProfile(HeightmapTemplateType template, MapGenV2Config config)
         {
             if (config != null && config.TemplateTuningOverride != null)
                 return config.TemplateTuningOverride;
