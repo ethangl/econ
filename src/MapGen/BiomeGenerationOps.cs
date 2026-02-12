@@ -26,19 +26,19 @@ namespace MapGen.Core
         static void ComputeLakeCells(BiomeField biome, ElevationField elevation, RiverField rivers)
         {
             var mesh = biome.Mesh;
-            for (int i = 0; i < mesh.CellCount; i++)
+            ParallelOps.For(0, mesh.CellCount, i =>
             {
                 if (elevation.IsLand(i))
                 {
                     biome.IsLakeCell[i] = false;
-                    continue;
+                    return;
                 }
 
                 int[] verts = mesh.CellVertices[i];
                 if (verts == null || verts.Length == 0)
                 {
                     biome.IsLakeCell[i] = false;
-                    continue;
+                    return;
                 }
 
                 int lakeVerts = 0;
@@ -50,7 +50,7 @@ namespace MapGen.Core
                 }
 
                 biome.IsLakeCell[i] = lakeVerts * 2 >= verts.Length;
-            }
+            });
         }
 
         static void ComputeWaterFeatures(BiomeField biome, ElevationField elevation)
@@ -216,7 +216,7 @@ namespace MapGen.Core
         {
             var mesh = biome.Mesh;
             int n = mesh.CellCount;
-            for (int i = 0; i < n; i++)
+            ParallelOps.For(0, n, i =>
             {
                 float maxDh = 0f;
                 int[] neighbors = mesh.CellNeighbors[i];
@@ -231,7 +231,7 @@ namespace MapGen.Core
                 }
 
                 biome.Slope[i] = Clamp01(maxDh / 1000f);
-            }
+            });
         }
 
         static void AssignBiomesAndSuitability(
@@ -266,7 +266,7 @@ namespace MapGen.Core
             if (woodlandPrecipThresholdScale <= 0f) woodlandPrecipThresholdScale = 1f;
             int n = biome.CellCount;
 
-            for (int i = 0; i < n; i++)
+            ParallelOps.For(0, n, i =>
             {
                 bool isLand = elevation.IsLand(i) && !biome.IsLakeCell[i];
                 if (!isLand)
@@ -280,7 +280,7 @@ namespace MapGen.Core
                     biome.Habitability[i] = 0f;
                     biome.MovementCost[i] = 100f;
                     biome.Suitability[i] = 0f;
-                    continue;
+                    return;
                 }
 
                 float temp = climate.TemperatureC[i];
@@ -370,7 +370,7 @@ namespace MapGen.Core
                 biome.Habitability[i] = Clamp(habitability, 0f, 100f);
                 biome.MovementCost[i] = movement + slope * 15f;
                 biome.Suitability[i] = Clamp(suitability, 0f, 100f);
-            }
+            });
         }
 
         static void ComputePopulation(BiomeField biome, ElevationField elevation)
@@ -378,18 +378,18 @@ namespace MapGen.Core
             var mesh = biome.Mesh;
             bool hasAreas = mesh.CellAreas != null && mesh.CellAreas.Length == mesh.CellCount;
 
-            for (int i = 0; i < mesh.CellCount; i++)
+            ParallelOps.For(0, mesh.CellCount, i =>
             {
                 if (!(elevation.IsLand(i) && !biome.IsLakeCell[i]))
                 {
                     biome.Population[i] = 0f;
-                    continue;
+                    return;
                 }
 
                 float area = hasAreas ? mesh.CellAreas[i] : 1f;
                 if (area < 0.01f) area = 0.01f;
                 biome.Population[i] = biome.Suitability[i] * area * 0.08f;
-            }
+            });
         }
 
         static bool[] ComputeCellHasRiver(CellMesh mesh, RiverField rivers, float riverTraceThreshold)
@@ -413,11 +413,11 @@ namespace MapGen.Core
         static float[] ComputeCellFluxFromVertices(CellMesh mesh, RiverField rivers)
         {
             var cellFlux = new float[mesh.CellCount];
-            for (int i = 0; i < mesh.CellCount; i++)
+            ParallelOps.For(0, mesh.CellCount, i =>
             {
                 int[] verts = mesh.CellVertices[i];
                 if (verts == null || verts.Length == 0)
-                    continue;
+                    return;
 
                 float sum = 0f;
                 for (int v = 0; v < verts.Length; v++)
@@ -429,7 +429,7 @@ namespace MapGen.Core
                 }
 
                 cellFlux[i] = sum / verts.Length;
-            }
+            });
 
             return cellFlux;
         }

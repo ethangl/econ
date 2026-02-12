@@ -419,7 +419,7 @@ namespace MapGen.Core
             float w = field.Mesh.Width;
             float h = field.Mesh.Height;
 
-            for (int i = 0; i < field.CellCount; i++)
+            ParallelOps.For(0, field.CellCount, i =>
             {
                 Vec2 center = field.Mesh.CellCenters[i];
                 float nx = (2f * center.X) / w - 1f;
@@ -429,14 +429,14 @@ namespace MapGen.Core
 
                 float masked = field[i] * distance;
                 field[i] = (field[i] * (fr - 1f) + masked) / fr;
-            }
+            });
         }
 
         public static void Add(ElevationField field, float valueMeters, float minHeightMeters, float maxHeightMeters)
         {
             bool isLandRange = Math.Abs(minHeightMeters) < 0.0001f && maxHeightMeters > 0f;
 
-            for (int i = 0; i < field.CellCount; i++)
+            ParallelOps.For(0, field.CellCount, i =>
             {
                 float h = field[i];
                 if (h >= minHeightMeters && h <= maxHeightMeters)
@@ -447,14 +447,14 @@ namespace MapGen.Core
 
                     field[i] = next;
                 }
-            }
+            });
         }
 
         public static void Multiply(ElevationField field, float factor, float minHeightMeters, float maxHeightMeters)
         {
             bool isLandRange = Math.Abs(minHeightMeters) < 0.0001f && maxHeightMeters > 0f;
 
-            for (int i = 0; i < field.CellCount; i++)
+            ParallelOps.For(0, field.CellCount, i =>
             {
                 float h = field[i];
                 if (h >= minHeightMeters && h <= maxHeightMeters)
@@ -464,7 +464,7 @@ namespace MapGen.Core
                     else
                         field[i] = h * factor;
                 }
-            }
+            });
         }
 
         public static void Smooth(ElevationField field, int fr)
@@ -472,9 +472,10 @@ namespace MapGen.Core
             if (fr < 1)
                 fr = 1;
 
-            var temp = new float[field.CellCount];
+            int cellCount = field.CellCount;
+            var temp = new float[cellCount];
 
-            for (int i = 0; i < field.CellCount; i++)
+            ParallelOps.For(0, cellCount, i =>
             {
                 int[] neighbors = field.Mesh.CellNeighbors[i];
                 float sum = field[i];
@@ -482,7 +483,7 @@ namespace MapGen.Core
 
                 foreach (int n in neighbors)
                 {
-                    if (n >= 0 && n < field.CellCount)
+                    if (n >= 0 && n < cellCount)
                     {
                         sum += field[n];
                         count++;
@@ -491,9 +492,9 @@ namespace MapGen.Core
 
                 float mean = sum / count;
                 temp[i] = fr <= 1 ? mean : ((field[i] * (fr - 1)) + mean) / fr;
-            }
+            });
 
-            Array.Copy(temp, field.ElevationMetersSigned, field.CellCount);
+            Array.Copy(temp, field.ElevationMetersSigned, cellCount);
             field.ClampAll();
         }
 

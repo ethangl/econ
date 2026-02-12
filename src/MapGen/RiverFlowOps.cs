@@ -56,14 +56,14 @@ namespace MapGen.Core
             if (fluxScale < 1e-6f)
                 fluxScale = 1f;
 
-            for (int v = 0; v < mesh.VertexCount; v++)
+            ParallelOps.For(0, mesh.VertexCount, v =>
             {
                 int[] cells = mesh.VertexCells[v];
                 if (cells == null || cells.Length == 0)
                 {
                     data.VertexElevationMeters[v] = 0f;
                     data.VertexPrecipFlux[v] = 0f;
-                    continue;
+                    return;
                 }
 
                 float sumH = 0f;
@@ -86,7 +86,7 @@ namespace MapGen.Core
                     data.VertexElevationMeters[v] = sumH / count;
                     data.VertexPrecipFlux[v] = sumP / count;
                 }
-            }
+            });
         }
 
         static void DepressionFill(RiverField data)

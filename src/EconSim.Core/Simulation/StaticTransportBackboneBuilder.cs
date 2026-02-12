@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
+using EconSim.Core.Transport;
 
 namespace EconSim.Core.Simulation
 {
@@ -47,6 +49,24 @@ namespace EconSim.Core.Simulation
     /// </summary>
     public static class StaticTransportBackboneBuilder
     {
+        private const int MinRoutesForParallelPathfinding = 16;
+
+        private readonly struct RouteComputationResult
+        {
+            public readonly bool IsMissing;
+            public readonly List<int> Path;
+            public readonly float Weight;
+
+            public RouteComputationResult(bool isMissing, List<int> path, float weight)
+            {
+                IsMissing = isMissing;
+                Path = path;
+                Weight = weight;
+            }
+
+            public static RouteComputationResult Missing => new RouteComputationResult(true, null, 0f);
+        }
+
         public static StaticBackboneStats Build(SimulationState state, MapData mapData)
         {
             var economy = state?.Economy;
@@ -66,36 +86,65 @@ namespace EconSim.Core.Simulation
             }
 
             var routePairs = BuildRoutePairs(majorCountyIds, mapData);
+            if (routePairs.Count == 0)
+            {
+                roads.ApplyStaticTraffic(new Dictionary<(int, int), float>(), 1f, 2f);
+                transport.ClearCache();
+                return new StaticBackboneStats(
+                    mapData.Counties.Count,
+                    majorCountyIds.Count,
+                    0,
+                    0,
+                    0,
+                    0,
+                    1f,
+                    2f);
+            }
+
             var edgeUsage = new Dictionary<(int, int), float>();
+            bool[] isLandById = BuildLandLookup(mapData);
             int routedPairs = 0;
             int missingPairs = 0;
+            var routeResults = new RouteComputationResult[routePairs.Count];
 
-            foreach (var (countyAId, countyBId) in routePairs)
+            bool useParallelRoutes = routePairs.Count >= MinRoutesForParallelPathfinding && Environment.ProcessorCount > 1;
+
+            if (useParallelRoutes)
             {
-                if (!mapData.CountyById.TryGetValue(countyAId, out var countyA) ||
-                    !mapData.CountyById.TryGetValue(countyBId, out var countyB))
+                Parallel.For(
+                    0,
+                    routePairs.Count,
+                    () =>
+                    {
+                        var localTransport = new TransportGraph(mapData);
+                        localTransport.SetRoadState(roads);
+                        return localTransport;
+                    },
+                    (index, _, localTransport) =>
+                    {
+                        routeResults[index] = ComputeRoute(routePairs[index], mapData, localTransport);
+                        return localTransport;
+                    },
+                    localTransport => localTransport.ClearCache());
+            }
+            else
+            {
+                for (int i = 0; i < routePairs.Count; i++)
+                {
+                    routeResults[i] = ComputeRoute(routePairs[i], mapData, transport);
+                }
+            }
+
+            for (int i = 0; i < routeResults.Length; i++)
+            {
+                var result = routeResults[i];
+                if (result.IsMissing)
                 {
                     missingPairs++;
                     continue;
                 }
 
-                int seatA = countyA.SeatCellId;
-                int seatB = countyB.SeatCellId;
-                if (seatA <= 0 || seatB <= 0)
-                {
-                    missingPairs++;
-                    continue;
-                }
-
-                var path = transport.FindPath(seatA, seatB);
-                if (!path.Found || path.Path.Count < 2)
-                {
-                    missingPairs++;
-                    continue;
-                }
-
-                float routeWeight = ComputeRouteWeight(countyA, countyB);
-                AccumulateLandEdgeUsage(path.Path, routeWeight, mapData, edgeUsage);
+                AccumulateLandEdgeUsage(result.Path, result.Weight, isLandById, edgeUsage);
                 routedPairs++;
             }
 
@@ -205,19 +254,67 @@ namespace EconSim.Core.Simulation
             return Math.Max(SimulationConfig.Roads.MinRouteWeight, geometricMean / SimulationConfig.Roads.RoutePopulationScale);
         }
 
+        private static RouteComputationResult ComputeRoute(
+            (int countyAId, int countyBId) routePair,
+            MapData mapData,
+            TransportGraph transport)
+        {
+            if (!mapData.CountyById.TryGetValue(routePair.countyAId, out var countyA) ||
+                !mapData.CountyById.TryGetValue(routePair.countyBId, out var countyB))
+            {
+                return RouteComputationResult.Missing;
+            }
+
+            int seatA = countyA.SeatCellId;
+            int seatB = countyB.SeatCellId;
+            if (seatA <= 0 || seatB <= 0)
+            {
+                return RouteComputationResult.Missing;
+            }
+
+            var path = transport.FindPath(seatA, seatB);
+            if (!path.Found || path.Path.Count < 2)
+            {
+                return RouteComputationResult.Missing;
+            }
+
+            float routeWeight = ComputeRouteWeight(countyA, countyB);
+            return new RouteComputationResult(false, path.Path, routeWeight);
+        }
+
+        private static bool[] BuildLandLookup(MapData mapData)
+        {
+            int maxCellId = 0;
+            for (int i = 0; i < mapData.Cells.Count; i++)
+            {
+                if (mapData.Cells[i].Id > maxCellId)
+                    maxCellId = mapData.Cells[i].Id;
+            }
+
+            var isLandById = new bool[maxCellId + 1];
+            for (int i = 0; i < mapData.Cells.Count; i++)
+            {
+                var cell = mapData.Cells[i];
+                if (cell.Id >= 0 && cell.Id < isLandById.Length)
+                    isLandById[cell.Id] = cell.IsLand;
+            }
+
+            return isLandById;
+        }
+
         private static void AccumulateLandEdgeUsage(
             List<int> path,
             float weight,
-            MapData mapData,
+            bool[] isLandById,
             Dictionary<(int, int), float> edgeUsage)
         {
             for (int i = 0; i < path.Count - 1; i++)
             {
                 int cellA = path[i];
                 int cellB = path[i + 1];
-                if (!mapData.CellById.TryGetValue(cellA, out var a) ||
-                    !mapData.CellById.TryGetValue(cellB, out var b) ||
-                    !a.IsLand || !b.IsLand)
+                if (cellA < 0 || cellB < 0 ||
+                    cellA >= isLandById.Length || cellB >= isLandById.Length ||
+                    !isLandById[cellA] || !isLandById[cellB])
                 {
                     continue;
                 }
