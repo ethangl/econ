@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
 using MapGen.Core;
+using PopGen.Core;
 using MGVec2 = MapGen.Core.Vec2;
 using ECVec2 = EconSim.Core.Common.Vec2;
 using ECRiver = EconSim.Core.Data.River;
@@ -116,11 +117,17 @@ namespace EconSim.Core.Import
                     Length = points.Count,
                 });
             }
-            PoliticalData legacyPolitical = ToPoliticalData(mesh, political);
-            var burgs = BuildBurgs(cells, legacyPolitical);
-            var realms = BuildRealms(cells, legacyPolitical);
-            var provinces = BuildProvinces(cells, legacyPolitical);
-            var counties = BuildCounties(cells, legacyPolitical);
+
+            PopGenSeed popSeed = generationContext.HasValue
+                ? new PopGenSeed(generationContext.Value.PopGenSeed)
+                : PopGenSeed.Default;
+            PopGenResult popResult = PopGenPipeline.Generate(result, new PopGenConfig(), popSeed);
+
+            ApplyCellBurgIds(cells, popResult.CellBurgId);
+            var burgs = ConvertBurgs(popResult.Burgs);
+            var realms = ConvertRealms(popResult.Realms);
+            var provinces = ConvertProvinces(popResult.Provinces);
+            var counties = ConvertCounties(popResult.Counties);
             var biomeDefs = BuildBiomeDefinitions();
 
             int landCells = 0;
@@ -186,341 +193,125 @@ namespace EconSim.Core.Import
         static ECVec2 ToECVec2(MGVec2 v) => new ECVec2(v.X, v.Y);
 
 
-        static PoliticalData ToPoliticalData(CellMesh mesh, PoliticalField source)
+        static void ApplyCellBurgIds(List<Cell> cells, int[] cellBurgId)
         {
-            var data = new PoliticalData(mesh)
-            {
-                RealmCount = source.RealmCount,
-                ProvinceCount = source.ProvinceCount,
-                CountyCount = source.CountyCount,
-                LandmassCount = source.LandmassCount,
-                Capitals = source.Capitals ?? Array.Empty<int>(),
-                CountySeats = source.CountySeats ?? Array.Empty<int>()
-            };
-
-            if (source.LandmassId != null && source.LandmassId.Length == data.LandmassId.Length)
-                Array.Copy(source.LandmassId, data.LandmassId, source.LandmassId.Length);
-            if (source.RealmId != null && source.RealmId.Length == data.RealmId.Length)
-                Array.Copy(source.RealmId, data.RealmId, source.RealmId.Length);
-            if (source.ProvinceId != null && source.ProvinceId.Length == data.ProvinceId.Length)
-                Array.Copy(source.ProvinceId, data.ProvinceId, source.ProvinceId.Length);
-            if (source.CountyId != null && source.CountyId.Length == data.CountyId.Length)
-                Array.Copy(source.CountyId, data.CountyId, source.CountyId.Length);
-
-            return data;
+            if (cellBurgId == null) return;
+            int n = Math.Min(cells.Count, cellBurgId.Length);
+            for (int i = 0; i < n; i++)
+                cells[i].BurgId = cellBurgId[i];
         }
 
-        #region Burgs
-
-        static List<Burg> BuildBurgs(List<Cell> cells, PoliticalData political)
+        static List<Burg> ConvertBurgs(PopBurg[] source)
         {
-            var burgs = new List<Burg>();
-            if (political.CountySeats == null) return burgs;
+            if (source == null || source.Length == 0)
+                return new List<Burg>();
 
-            // County seats become burgs
-            for (int ci = 0; ci < political.CountySeats.Length; ci++)
+            var burgs = new List<Burg>(source.Length);
+            for (int i = 0; i < source.Length; i++)
             {
-                int countyId = ci + 1; // 1-based
-                int cellId = political.CountySeats[ci];
-                if (cellId < 0 || cellId >= cells.Count) continue;
-
-                var cell = cells[cellId];
-                int burgId = ci + 1; // 1-based
-
-                bool isCapital = false;
-                if (political.Capitals != null)
+                PopBurg b = source[i];
+                burgs.Add(new Burg
                 {
-                    for (int ri = 0; ri < political.Capitals.Length; ri++)
-                    {
-                        if (political.Capitals[ri] == cellId)
-                        {
-                            isCapital = true;
-                            break;
-                        }
-                    }
-                }
-
-                var burg = new Burg
-                {
-                    Id = burgId,
-                    Name = $"Town {burgId}",
-                    Position = cell.Center,
-                    CellId = cellId,
-                    RealmId = cell.RealmId,
-                    CultureId = 0,
-                    Population = cell.Population,
-                    IsCapital = isCapital,
-                    IsPort = false,
-                    Type = isCapital ? "Capital" : "Town",
-                    Group = isCapital ? "capital" : "town",
-                };
-                burgs.Add(burg);
-
-                cell.BurgId = burgId;
+                    Id = b.Id,
+                    Name = b.Name,
+                    Position = ToECVec2(b.Position),
+                    CellId = b.CellId,
+                    RealmId = b.RealmId,
+                    CultureId = b.CultureId,
+                    Population = b.Population,
+                    IsCapital = b.IsCapital,
+                    IsPort = b.IsPort,
+                    Type = b.Type,
+                    Group = b.Group
+                });
             }
 
             return burgs;
         }
 
-        #endregion
-
-        #region Realms
-
-        static List<Realm> BuildRealms(List<Cell> cells, PoliticalData political)
+        static List<Province> ConvertProvinces(PopProvince[] source)
         {
-            var realms = new List<Realm>();
-            if (political.RealmCount == 0) return realms;
+            if (source == null || source.Length == 0)
+                return new List<Province>();
 
-            // Gather cells per realm
-            var realmCells = new Dictionary<int, List<int>>();
-            for (int i = 0; i < cells.Count; i++)
+            var provinces = new List<Province>(source.Length);
+            for (int i = 0; i < source.Length; i++)
             {
-                int rid = political.RealmId[i];
-                if (rid <= 0) continue;
-                if (!realmCells.TryGetValue(rid, out var list))
-                {
-                    list = new List<int>();
-                    realmCells[rid] = list;
-                }
-                list.Add(i);
-            }
-
-            // Gather provinces per realm
-            var realmProvinces = new Dictionary<int, HashSet<int>>();
-            for (int i = 0; i < cells.Count; i++)
-            {
-                int rid = political.RealmId[i];
-                int pid = political.ProvinceId[i];
-                if (rid <= 0 || pid <= 0) continue;
-                if (!realmProvinces.TryGetValue(rid, out var set))
-                {
-                    set = new HashSet<int>();
-                    realmProvinces[rid] = set;
-                }
-                set.Add(pid);
-            }
-
-            // Generate realm colors using even hue distribution
-            for (int si = 0; si < political.RealmCount; si++)
-            {
-                int realmId = si + 1;
-                if (!realmCells.TryGetValue(realmId, out var rCells)) continue;
-
-                float h = (float)si / political.RealmCount;
-                float s = 0.42f + (ColorMath.HashToUnitFloat(realmId + 3000) - 0.5f) * 0.16f;
-                float v = 0.70f + (ColorMath.HashToUnitFloat(realmId + 4000) - 0.5f) * 0.16f;
-                s = Math.Max(0.28f, Math.Min(0.55f, s));
-                v = Math.Max(0.58f, Math.Min(0.85f, v));
-
-                int capitalCell = (political.Capitals != null && si < political.Capitals.Length)
-                    ? political.Capitals[si]
-                    : rCells[0];
-
-                // Find capital burg ID
-                int capitalBurgId = 0;
-                if (capitalCell >= 0 && capitalCell < cells.Count)
-                    capitalBurgId = cells[capitalCell].BurgId;
-
-                // Province IDs
-                var provIds = new List<int>();
-                if (realmProvinces.TryGetValue(realmId, out var pset))
-                    provIds.AddRange(pset);
-
-                // Population
-                float totalPop = 0;
-                foreach (int ci in rCells)
-                    totalPop += cells[ci].Population;
-
-                // Center = capital cell
-                var centerPos = capitalCell >= 0 && capitalCell < cells.Count
-                    ? cells[capitalCell].Center
-                    : ECVec2.Zero;
-
-                realms.Add(new Realm
-                {
-                    Id = realmId,
-                    Name = $"Kingdom {realmId}",
-                    FullName = $"Kingdom of Region {realmId}",
-                    GovernmentForm = "",
-                    CapitalBurgId = capitalBurgId,
-                    CenterCellId = capitalCell,
-                    CultureId = 0,
-                    Color = ColorMath.HsvToColor32(h, s, v),
-                    LabelPosition = centerPos,
-                    ProvinceIds = provIds,
-                    NeighborRealmIds = new List<int>(),
-                    UrbanPopulation = 0,
-                    RuralPopulation = totalPop,
-                    TotalArea = rCells.Count
-                });
-            }
-
-            // Compute neighbor realms
-            var realmById = new Dictionary<int, Realm>();
-            foreach (var r in realms)
-                realmById[r.Id] = r;
-
-            for (int i = 0; i < cells.Count; i++)
-            {
-                int rid = political.RealmId[i];
-                if (rid <= 0) continue;
-                foreach (int nb in cells[i].NeighborIds)
-                {
-                    if (nb >= 0 && nb < cells.Count)
-                    {
-                        int nrid = political.RealmId[nb];
-                        if (nrid > 0 && nrid != rid)
-                        {
-                            if (realmById.TryGetValue(rid, out var r) && !r.NeighborRealmIds.Contains(nrid))
-                                r.NeighborRealmIds.Add(nrid);
-                        }
-                    }
-                }
-            }
-
-            return realms;
-        }
-
-        #endregion
-
-        #region Provinces
-
-        static List<Province> BuildProvinces(List<Cell> cells, PoliticalData political)
-        {
-            var provinces = new List<Province>();
-            if (political.ProvinceCount == 0) return provinces;
-
-            // Gather cells per province
-            var provCells = new Dictionary<int, List<int>>();
-            var provRealm = new Dictionary<int, int>();
-            for (int i = 0; i < cells.Count; i++)
-            {
-                int pid = political.ProvinceId[i];
-                if (pid <= 0) continue;
-                if (!provCells.TryGetValue(pid, out var list))
-                {
-                    list = new List<int>();
-                    provCells[pid] = list;
-                }
-                list.Add(i);
-                provRealm[pid] = political.RealmId[i];
-            }
-
-            foreach (var kvp in provCells)
-            {
-                int pid = kvp.Key;
-                var pCells = kvp.Value;
-                int realmId = provRealm.TryGetValue(pid, out var sid) ? sid : 0;
-
-                // Find highest-pop cell as center
-                int centerCell = pCells[0];
-                float maxPop = 0;
-                foreach (int ci in pCells)
-                {
-                    if (cells[ci].Population > maxPop)
-                    {
-                        maxPop = cells[ci].Population;
-                        centerCell = ci;
-                    }
-                }
-
-                // Province color derived from realm color with small variance
-                float h = ColorMath.HashToUnitFloat(pid * 7919);
-                float s = 0.35f + ColorMath.HashToUnitFloat(pid + 5000) * 0.15f;
-                float v = 0.65f + ColorMath.HashToUnitFloat(pid + 6000) * 0.15f;
-
+                PopProvince p = source[i];
                 provinces.Add(new Province
                 {
-                    Id = pid,
-                    Name = $"Province {pid}",
-                    FullName = $"Province {pid}",
-                    RealmId = realmId,
-                    CenterCellId = centerCell,
-                    CapitalBurgId = cells[centerCell].BurgId,
-                    Color = ColorMath.HsvToColor32(h, s, v),
-                    LabelPosition = cells[centerCell].Center,
-                    CellIds = new List<int>(pCells)
+                    Id = p.Id,
+                    Name = p.Name,
+                    FullName = p.FullName,
+                    RealmId = p.RealmId,
+                    CenterCellId = p.CenterCellId,
+                    CapitalBurgId = p.CapitalBurgId,
+                    Color = ToECColor32(p.Color),
+                    LabelPosition = ToECVec2(p.LabelPosition),
+                    CellIds = p.CellIds != null ? new List<int>(p.CellIds) : new List<int>()
                 });
             }
 
             return provinces;
         }
 
-        #endregion
-
-        #region Counties
-
-        static List<County> BuildCounties(List<Cell> cells, PoliticalData political)
+        static List<Realm> ConvertRealms(PopRealm[] source)
         {
-            var counties = new List<County>();
-            if (political.CountyCount == 0) return counties;
+            if (source == null || source.Length == 0)
+                return new List<Realm>();
 
-            // Gather cells per county
-            var countyCells = new Dictionary<int, List<int>>();
-            for (int i = 0; i < cells.Count; i++)
+            var realms = new List<Realm>(source.Length);
+            for (int i = 0; i < source.Length; i++)
             {
-                int cid = political.CountyId[i];
-                if (cid <= 0) continue;
-                if (!countyCells.TryGetValue(cid, out var list))
+                PopRealm r = source[i];
+                realms.Add(new Realm
                 {
-                    list = new List<int>();
-                    countyCells[cid] = list;
-                }
-                list.Add(i);
+                    Id = r.Id,
+                    Name = r.Name,
+                    FullName = r.FullName,
+                    GovernmentForm = r.GovernmentForm,
+                    CapitalBurgId = r.CapitalBurgId,
+                    CenterCellId = r.CenterCellId,
+                    CultureId = r.CultureId,
+                    Color = ToECColor32(r.Color),
+                    LabelPosition = ToECVec2(r.LabelPosition),
+                    ProvinceIds = r.ProvinceIds != null ? new List<int>(r.ProvinceIds) : new List<int>(),
+                    NeighborRealmIds = r.NeighborRealmIds != null ? new List<int>(r.NeighborRealmIds) : new List<int>(),
+                    UrbanPopulation = r.UrbanPopulation,
+                    RuralPopulation = r.RuralPopulation,
+                    TotalArea = r.TotalArea
+                });
             }
 
-            foreach (var kvp in countyCells)
+            return realms;
+        }
+
+        static List<County> ConvertCounties(PopCounty[] source)
+        {
+            if (source == null || source.Length == 0)
+                return new List<County>();
+
+            var counties = new List<County>(source.Length);
+            for (int i = 0; i < source.Length; i++)
             {
-                int cid = kvp.Key;
-                var cCells = kvp.Value;
-
-                int seatCell = (political.CountySeats != null && cid - 1 >= 0 && cid - 1 < political.CountySeats.Length)
-                    ? political.CountySeats[cid - 1]
-                    : cCells[0];
-
-                float totalPop = 0;
-                float sumX = 0, sumY = 0, sumW = 0;
-                int provinceId = 0;
-                int realmId = 0;
-
-                foreach (int ci in cCells)
-                {
-                    var cell = cells[ci];
-                    totalPop += cell.Population;
-                    float w = cell.Population > 0 ? cell.Population : 1;
-                    sumX += cell.Center.X * w;
-                    sumY += cell.Center.Y * w;
-                    sumW += w;
-                    if (provinceId == 0) provinceId = cell.ProvinceId;
-                    if (realmId == 0) realmId = cell.RealmId;
-                }
-
-                var centroid = sumW > 0
-                    ? new ECVec2(sumX / sumW, sumY / sumW)
-                    : cells[seatCell].Center;
-
-                // Name from burg if seat has one
-                string name = cells[seatCell].BurgId > 0
-                    ? $"Town {cells[seatCell].BurgId}"
-                    : $"County {cid}";
-
+                PopCounty c = source[i];
                 counties.Add(new County
                 {
-                    Id = cid,
-                    Name = name,
-                    SeatCellId = seatCell,
-                    CellIds = new List<int>(cCells),
-                    ProvinceId = provinceId,
-                    RealmId = realmId,
-                    TotalPopulation = totalPop,
-                    Centroid = centroid
+                    Id = c.Id,
+                    Name = c.Name,
+                    SeatCellId = c.SeatCellId,
+                    CellIds = c.CellIds != null ? new List<int>(c.CellIds) : new List<int>(),
+                    ProvinceId = c.ProvinceId,
+                    RealmId = c.RealmId,
+                    TotalPopulation = c.TotalPopulation,
+                    Centroid = ToECVec2(c.Centroid)
                 });
             }
 
             return counties;
         }
 
-        #endregion
+        static Color32 ToECColor32(PopColor32 color) => new Color32(color.R, color.G, color.B, color.A);
 
         #region Biome Definitions
 
