@@ -194,6 +194,7 @@ public class MapOverlayManager
 
         private const int OverlayTextureCacheVersion = 1;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
+        private const string CacheSpatialGridFile = "spatial_grid.bin";
         private const string CachePoliticalIdsFile = "political_ids.bin";
         private const string CacheGeographyBaseFile = "geography_base.bin";
         private const string CacheRiverMaskFile = "river_mask.bin";
@@ -238,9 +239,20 @@ public class MapOverlayManager
             gridWidth = baseWidth * this.resolutionMultiplier;
             gridHeight = baseHeight * this.resolutionMultiplier;
 
-            Profiler.Begin("BuildSpatialGrid");
-            BuildSpatialGrid();
-            Profiler.End();
+            bool loadedSpatialGrid = false;
+            if (preferCachedOverlayTextures && !string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
+            {
+                Profiler.Begin("LoadSpatialGridCache");
+                loadedSpatialGrid = TryLoadSpatialGridCache(overlayTextureCacheDirectory);
+                Profiler.End();
+            }
+
+            if (!loadedSpatialGrid)
+            {
+                Profiler.Begin("BuildSpatialGrid");
+                BuildSpatialGrid();
+                Profiler.End();
+            }
 
             bool loadedFromTextureCache = false;
             if (preferCachedOverlayTextures && !string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
@@ -294,6 +306,68 @@ public class MapOverlayManager
             if (!loadedFromTextureCache && !string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
             {
                 TrySaveOverlayTextureCache(overlayTextureCacheDirectory);
+            }
+            else if (!loadedSpatialGrid && !string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
+            {
+                // Backfill spatial grid cache when loading an older texture cache that predates it.
+                TrySaveSpatialGridCache(overlayTextureCacheDirectory);
+            }
+        }
+
+        private bool TryLoadSpatialGridCache(string cacheDirectory)
+        {
+            try
+            {
+                if (!Directory.Exists(cacheDirectory))
+                    return false;
+
+                string metadataPath = Path.Combine(cacheDirectory, OverlayTextureCacheMetadataFileName);
+                if (!File.Exists(metadataPath))
+                    return false;
+
+                OverlayTextureCacheMetadata metadata = JsonUtility.FromJson<OverlayTextureCacheMetadata>(File.ReadAllText(metadataPath));
+                if (!IsOverlayTextureCacheMetadataCompatible(metadata))
+                    return false;
+
+                string spatialGridPath = Path.Combine(cacheDirectory, CacheSpatialGridFile);
+                if (!File.Exists(spatialGridPath))
+                    return false;
+
+                byte[] bytes = File.ReadAllBytes(spatialGridPath);
+                int expectedBytes = gridWidth * gridHeight * sizeof(int);
+                if (bytes.Length != expectedBytes)
+                    return false;
+
+                int[] loadedSpatialGrid = new int[gridWidth * gridHeight];
+                Buffer.BlockCopy(bytes, 0, loadedSpatialGrid, 0, bytes.Length);
+                spatialGrid = loadedSpatialGrid;
+
+                Debug.Log($"MapOverlayManager: Loaded cached spatial grid from {spatialGridPath}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"MapOverlayManager: Failed to load spatial grid cache ({cacheDirectory}): {ex.Message}");
+                return false;
+            }
+        }
+
+        private void TrySaveSpatialGridCache(string cacheDirectory)
+        {
+            if (spatialGrid == null || spatialGrid.Length == 0)
+                return;
+
+            try
+            {
+                Directory.CreateDirectory(cacheDirectory);
+                string spatialGridPath = Path.Combine(cacheDirectory, CacheSpatialGridFile);
+                byte[] bytes = new byte[spatialGrid.Length * sizeof(int)];
+                Buffer.BlockCopy(spatialGrid, 0, bytes, 0, bytes.Length);
+                File.WriteAllBytes(spatialGridPath, bytes);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"MapOverlayManager: Failed to save spatial grid cache ({cacheDirectory}): {ex.Message}");
             }
         }
 
@@ -431,6 +505,7 @@ public class MapOverlayManager
                     return;
 
                 Directory.CreateDirectory(cacheDirectory);
+                TrySaveSpatialGridCache(cacheDirectory);
 
                 SaveTextureToRaw(Path.Combine(cacheDirectory, CachePoliticalIdsFile), politicalIdsTexture);
                 SaveTextureToRaw(Path.Combine(cacheDirectory, CacheGeographyBaseFile), geographyBaseTexture);
