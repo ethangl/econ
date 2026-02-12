@@ -35,8 +35,7 @@ namespace EconSim.Camera
         private Vector2 mapCenter = Vector2.zero;
 
         // Input
-        private KeyCode panModifierKey = KeyCode.Mouse2;  // Middle mouse button
-        private KeyCode spacebarPanKey = KeyCode.Space;   // Hold to enable drag pan
+        private float dragStartThresholdPixels = 3f;
         private bool invertPan = false;
 
         private UnityEngine.Camera cam;
@@ -52,20 +51,29 @@ namespace EconSim.Camera
         private bool isFocusPanning;  // True when animating to a FocusOn target
 
         private Vector3 lastMousePosition;
-        private bool isDragging;
-        private bool isSpacebarPanning;
-        private bool isSpacebarHeld;
-
-        // Cursor textures (created at runtime)
-        private Texture2D openHandCursor;
-        private Texture2D closedHandCursor;
-        private Vector2 cursorHotspot = new Vector2(8, 8);
+        private Vector3 primaryMouseDownPosition;
+        private bool isMiddleMouseDragging;
+        private bool isPrimaryPointerDown;
+        private bool isPrimaryDragging;
+        private bool suppressSelectionOnPrimaryRelease;
 
         /// <summary>
-        /// True when the camera is in panning mode (spacebar held or middle mouse).
+        /// True when the camera is in panning mode (mouse button held).
         /// Other systems should not process clicks during this time.
         /// </summary>
-        public bool IsPanningMode => isSpacebarHeld || isDragging || isSpacebarPanning;
+        public bool IsPanningMode => isMiddleMouseDragging || isPrimaryPointerDown;
+
+        /// <summary>
+        /// Returns whether the last primary-button release ended a drag gesture.
+        /// Clears the latched suppression flag after reading.
+        /// </summary>
+        public bool ConsumeSelectionReleaseSuppression()
+        {
+            bool suppress = suppressSelectionOnPrimaryRelease
+                || (isPrimaryDragging && Input.GetMouseButtonUp(0));
+            suppressSelectionOnPrimaryRelease = false;
+            return suppress;
+        }
 
         private void Awake()
         {
@@ -102,96 +110,6 @@ namespace EconSim.Camera
             // Position camera at center of map
             CenterOnMap();
 
-            // Create hand cursors
-            CreateHandCursors();
-        }
-
-        private void OnDestroy()
-        {
-            // Clean up cursor textures
-            if (openHandCursor != null) Destroy(openHandCursor);
-            if (closedHandCursor != null) Destroy(closedHandCursor);
-        }
-
-        private void CreateHandCursors()
-        {
-            // Create simple 16x16 hand cursor textures
-            openHandCursor = CreateHandTexture(false);
-            closedHandCursor = CreateHandTexture(true);
-        }
-
-        private Texture2D CreateHandTexture(bool closed)
-        {
-            var tex = new Texture2D(16, 16, TextureFormat.RGBA32, false);
-            tex.filterMode = FilterMode.Point;
-
-            // Clear to transparent
-            var clear = new Color(0, 0, 0, 0);
-            var black = Color.black;
-            var white = Color.white;
-
-            for (int y = 0; y < 16; y++)
-                for (int x = 0; x < 16; x++)
-                    tex.SetPixel(x, y, clear);
-
-            if (closed)
-            {
-                // Closed hand (grabbing) - simple fist shape
-                // Palm
-                for (int y = 2; y <= 7; y++)
-                    for (int x = 3; x <= 12; x++)
-                        tex.SetPixel(x, y, white);
-                // Outline
-                for (int x = 3; x <= 12; x++) { tex.SetPixel(x, 1, black); tex.SetPixel(x, 8, black); }
-                for (int y = 2; y <= 7; y++) { tex.SetPixel(2, y, black); tex.SetPixel(13, y, black); }
-                // Finger bumps on top
-                for (int i = 0; i < 4; i++)
-                {
-                    int x = 4 + i * 2;
-                    tex.SetPixel(x, 9, white); tex.SetPixel(x + 1, 9, white);
-                    tex.SetPixel(x, 10, black); tex.SetPixel(x + 1, 10, black);
-                }
-            }
-            else
-            {
-                // Open hand - palm with fingers
-                // Palm
-                for (int y = 1; y <= 5; y++)
-                    for (int x = 3; x <= 12; x++)
-                        tex.SetPixel(x, y, white);
-                // Outline palm
-                for (int x = 3; x <= 12; x++) { tex.SetPixel(x, 0, black); tex.SetPixel(x, 6, black); }
-                for (int y = 1; y <= 5; y++) { tex.SetPixel(2, y, black); tex.SetPixel(13, y, black); }
-                // Fingers
-                for (int i = 0; i < 4; i++)
-                {
-                    int x = 4 + i * 2;
-                    for (int y = 7; y <= 12; y++) { tex.SetPixel(x, y, white); tex.SetPixel(x + 1, y, white); }
-                    // Outline
-                    tex.SetPixel(x - 1, 7, black); tex.SetPixel(x + 2, 7, black);
-                    for (int y = 7; y <= 12; y++) { tex.SetPixel(x - 1, y, black); tex.SetPixel(x + 2, y, black); }
-                    tex.SetPixel(x, 13, black); tex.SetPixel(x + 1, 13, black);
-                }
-            }
-
-            tex.Apply();
-            return tex;
-        }
-
-        private void UpdateCursor()
-        {
-            if (isSpacebarPanning || isDragging)
-            {
-                Cursor.SetCursor(closedHandCursor, cursorHotspot, CursorMode.Auto);
-            }
-            else if (isSpacebarHeld)
-            {
-                Cursor.SetCursor(openHandCursor, cursorHotspot, CursorMode.Auto);
-            }
-            else
-            {
-                Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
-            }
         }
 
         private void Update()
@@ -281,51 +199,43 @@ namespace EconSim.Camera
                 isFocusPanning = false;
             }
 
-            // Track cursor state changes
-            bool wasInPanMode = IsPanningMode;
-
-            // Mouse drag pan (middle mouse button)
-            if (Input.GetKeyDown(panModifierKey) || Input.GetMouseButtonDown(2))
+            if (Input.GetMouseButtonDown(2))
             {
-                isDragging = true;
+                isMiddleMouseDragging = true;
                 lastMousePosition = Input.mousePosition;
             }
-
-            if (Input.GetKeyUp(panModifierKey) || Input.GetMouseButtonUp(2))
+            if (Input.GetMouseButtonUp(2))
             {
-                isDragging = false;
+                isMiddleMouseDragging = false;
             }
 
-            // Track spacebar held state (for cursor and click blocking)
-            if (Input.GetKeyDown(spacebarPanKey))
+            if (Input.GetMouseButtonDown(0))
             {
-                isSpacebarHeld = true;
-            }
-            if (Input.GetKeyUp(spacebarPanKey))
-            {
-                isSpacebarHeld = false;
-                isSpacebarPanning = false;
-            }
-
-            // Spacebar + left click drag pan (laptop-friendly)
-            if (isSpacebarHeld && Input.GetMouseButtonDown(0))
-            {
-                isSpacebarPanning = true;
+                isPrimaryPointerDown = true;
+                isPrimaryDragging = false;
+                primaryMouseDownPosition = Input.mousePosition;
                 lastMousePosition = Input.mousePosition;
             }
-
             if (Input.GetMouseButtonUp(0))
             {
-                isSpacebarPanning = false;
+                suppressSelectionOnPrimaryRelease = isPrimaryDragging;
+                isPrimaryPointerDown = false;
+                isPrimaryDragging = false;
             }
 
-            // Update cursor when pan mode changes
-            if (wasInPanMode != IsPanningMode || (isSpacebarHeld && Input.GetMouseButtonDown(0)) || Input.GetMouseButtonUp(0))
+            if (isPrimaryPointerDown && !isPrimaryDragging)
             {
-                UpdateCursor();
+                Vector3 totalPrimaryDelta = Input.mousePosition - primaryMouseDownPosition;
+                if (totalPrimaryDelta.sqrMagnitude >= dragStartThresholdPixels * dragStartThresholdPixels)
+                {
+                    isPrimaryDragging = true;
+                }
             }
 
-            if (isDragging || isSpacebarPanning)
+            bool isDragging = (isMiddleMouseDragging && Input.GetMouseButton(2))
+                || (isPrimaryDragging && Input.GetMouseButton(0));
+
+            if (isDragging)
             {
                 Vector3 delta = Input.mousePosition - lastMousePosition;
                 lastMousePosition = Input.mousePosition;
@@ -346,6 +256,11 @@ namespace EconSim.Camera
 
                 // Cancel focus panning when user drags
                 isFocusPanning = false;
+            }
+            else if (isPrimaryPointerDown || isMiddleMouseDragging)
+            {
+                // Keep frame-to-frame drag delta stable while waiting for drag threshold.
+                lastMousePosition = Input.mousePosition;
             }
         }
 
