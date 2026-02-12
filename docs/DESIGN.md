@@ -490,7 +490,7 @@ For each county C:
 - Counties crossing threshold become recognized markets
 - Declining markets fade to local trading
 
-### Implementation Notes (v1)
+### Implementation Notes (Current)
 
 **Classes:** `Market`, `MarketPlacer`, `TradeSystem`
 
@@ -622,7 +622,7 @@ Note: Road/path and river bonuses don't stack - the best modifier wins.
   - Lazy compute + LRU cache
   - Or hierarchical (region→region precomputed, local on demand)
 
-### Implementation Notes (v1)
+### Implementation Notes (Current)
 
 **Class:** `TransportGraph`
 

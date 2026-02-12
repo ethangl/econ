@@ -59,7 +59,7 @@ Vegetation type determines what you can extract and what it costs to change.
 
 **Crop potential** is the agricultural yield if the cell were farmed. This combines soil fertility with vegetation clearability. Grass on chernozem = immediately farmable. Broadleaf forest on laterite = high clearing cost, moderate fertility once cleared. Coniferous forest on podzol = moderate clearing cost, poor farming due to acidic soil.
 
-**Clearing cost** represents the labor/time to convert vegetation to farmland. This is a gameplay-relevant property — settling dense forest takes investment, while grasslands are ready to farm. Cleared forest doesn't regenerate in our timescale (no reforestation simulation in v1).
+**Clearing cost** represents the labor/time to convert vegetation to farmland. This is a gameplay-relevant property — settling dense forest takes investment, while grasslands are ready to farm. Cleared forest doesn't regenerate in our timescale (no reforestation simulation in the current implementation).
 
 ## Elevation Effects
 
