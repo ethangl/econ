@@ -77,7 +77,7 @@ namespace PopGen.Core
     }
 
     /// <summary>
-    /// PopGen output consumed by adapter layers.
+    /// PopGen output consumed by world-import layers.
     /// </summary>
     public sealed class PopGenResult
     {

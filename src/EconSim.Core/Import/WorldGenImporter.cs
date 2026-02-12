@@ -11,9 +11,9 @@ using ECRiver = EconSim.Core.Data.River;
 namespace EconSim.Core.Import
 {
     /// <summary>
-    /// Converts MapGen pipeline output into EconSim MapData.
+    /// Converts MapGen + PopGen output into EconSim MapData.
     /// </summary>
-    public static class MapGenAdapter
+    public static class WorldGenImporter
     {
         /// <summary>
         /// Convert a MapGenResult into a fully populated MapData ready for simulation.

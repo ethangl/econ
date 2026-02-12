@@ -210,7 +210,7 @@ namespace EconSim.Tests
             };
 
             var mapResult = MapGenPipeline.Generate(config);
-            var mapData = MapGenAdapter.Convert(mapResult);
+            var mapData = WorldGenImporter.Convert(mapResult);
 
             lock (MapDataCacheLock)
             {

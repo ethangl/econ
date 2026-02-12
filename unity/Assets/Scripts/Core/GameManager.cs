@@ -103,8 +103,8 @@ namespace EconSim.Core
 
             MapGenResult = result;
 
-            Profiler.Begin("MapGenAdapter Convert");
-            MapData = MapGenAdapter.Convert(result, generationContext);
+            Profiler.Begin("WorldGenImporter Convert");
+            MapData = WorldGenImporter.Convert(result, generationContext);
             Profiler.End();
             LogMapGenSummary(result, MapData);
 
