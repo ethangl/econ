@@ -23,6 +23,7 @@ namespace EconSim.Renderer
         [SerializeField] private Material terrainMaterial;
         [SerializeField] private bool renderLandOnly = false;
         private bool showRealmCapitalMarkers = true;
+        private bool showMarketLocationMarkers = true;
         private float realmCapitalMarkerHeight = 0.1f;
         private float realmCapitalMarkerDiameter = 0.02f;
         private float realmCapitalMarkerBaseOffset = 0.02f;
@@ -69,6 +70,7 @@ namespace EconSim.Renderer
         private Mesh mesh;
         private MapOverlayManager overlayManager;
         private Transform realmCapitalMarkerRoot;
+        private Transform marketLocationMarkerRoot;
         private Material realmCapitalMarkerMaterial;
 
         // Cell mesh data
@@ -135,6 +137,7 @@ namespace EconSim.Renderer
             OnCellClicked -= HandleShaderSelection;
 
             DestroyRealmCapitalMarkers();
+            DestroyMarketLocationMarkers();
             DestroyRealmCapitalMarkerMaterial();
 
             // Clean up overlay manager textures
@@ -431,7 +434,8 @@ namespace EconSim.Renderer
             Profiler.End();
 
             BuildRealmCapitalMarkers();
-            UpdateRealmCapitalMarkersVisibility();
+            BuildMarketLocationMarkers();
+            UpdateModeMarkerVisibility();
 
             // Subscribe to cell clicks for shader selection
             if (useShaderOverlays && overlayManager != null)
@@ -904,7 +908,7 @@ namespace EconSim.Renderer
                     ClearDrillDownSelection();
                 }
 
-                UpdateRealmCapitalMarkersVisibility();
+                UpdateModeMarkerVisibility();
             }
         }
 
@@ -1011,6 +1015,81 @@ namespace EconSim.Renderer
             }
         }
 
+        private void BuildMarketLocationMarkers()
+        {
+            DestroyMarketLocationMarkers();
+
+            if (!showMarketLocationMarkers || mapData == null || economyState?.Markets == null || economyState.Markets.Count == 0)
+                return;
+
+            if (mapData.CellById == null)
+            {
+                mapData.BuildLookups();
+            }
+
+            EnsureRealmCapitalMarkerMaterial();
+
+            var root = new GameObject("MarketLocationMarkers");
+            root.transform.SetParent(transform, false);
+            marketLocationMarkerRoot = root.transform;
+
+            float markerHeight = Mathf.Max(0.1f, realmCapitalMarkerHeight);
+            float markerDiameter = Mathf.Max(0.005f, realmCapitalMarkerDiameter);
+            float markerScaleY = markerHeight * 0.5f; // Unity cylinder mesh has height 2 at scale.y = 1
+
+            foreach (var market in economyState.Markets.Values)
+            {
+                if (market == null || market.Id <= 0)
+                    continue;
+
+                int locationCellId = market.LocationCellId;
+                if (locationCellId <= 0 || !mapData.CellById.TryGetValue(locationCellId, out var locationCell))
+                    continue;
+
+                if (!locationCell.IsLand)
+                    continue;
+
+                GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                marker.name = $"MarketLocationMarker_{market.Id}";
+                marker.transform.SetParent(marketLocationMarkerRoot, false);
+
+                float surfaceY = GetCellSurfaceY(locationCell);
+                marker.transform.localPosition = DataToLocal(locationCell.Center.X, locationCell.Center.Y) +
+                    Vector3.up * (surfaceY + realmCapitalMarkerBaseOffset + markerHeight * 0.5f);
+                marker.transform.localScale = new Vector3(markerDiameter, markerScaleY, markerDiameter);
+
+                var collider = marker.GetComponent<Collider>();
+                if (collider != null)
+                    Destroy(collider);
+
+                var renderer = marker.GetComponent<MeshRenderer>();
+                if (renderer != null && realmCapitalMarkerMaterial != null)
+                {
+                    renderer.sharedMaterial = realmCapitalMarkerMaterial;
+                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                }
+            }
+        }
+
+        private void UpdateMarketLocationMarkersVisibility()
+        {
+            if (marketLocationMarkerRoot == null)
+                return;
+
+            bool isVisible = showMarketLocationMarkers && currentMode == MapMode.Market;
+            if (marketLocationMarkerRoot.gameObject.activeSelf != isVisible)
+            {
+                marketLocationMarkerRoot.gameObject.SetActive(isVisible);
+            }
+        }
+
+        private void UpdateModeMarkerVisibility()
+        {
+            UpdateRealmCapitalMarkersVisibility();
+            UpdateMarketLocationMarkersVisibility();
+        }
+
         private void DestroyRealmCapitalMarkers()
         {
             if (realmCapitalMarkerRoot == null)
@@ -1026,6 +1105,23 @@ namespace EconSim.Renderer
             }
 
             realmCapitalMarkerRoot = null;
+        }
+
+        private void DestroyMarketLocationMarkers()
+        {
+            if (marketLocationMarkerRoot == null)
+                return;
+
+            if (Application.isPlaying)
+            {
+                Destroy(marketLocationMarkerRoot.gameObject);
+            }
+            else
+            {
+                DestroyImmediate(marketLocationMarkerRoot.gameObject);
+            }
+
+            marketLocationMarkerRoot = null;
         }
 
         private void EnsureRealmCapitalMarkerMaterial()
@@ -1681,6 +1777,9 @@ namespace EconSim.Renderer
             {
                 overlayManager.SetEconomyState(economy);
             }
+
+            BuildMarketLocationMarkers();
+            UpdateModeMarkerVisibility();
         }
 
         /// <summary>
@@ -1860,7 +1959,8 @@ namespace EconSim.Renderer
             {
                 GenerateMesh();
                 BuildRealmCapitalMarkers();
-                UpdateRealmCapitalMarkersVisibility();
+                BuildMarketLocationMarkers();
+                UpdateModeMarkerVisibility();
                 if (overlayManager != null)
                 {
                     overlayManager.SetHeightDisplacementEnabled(useGridMesh);
