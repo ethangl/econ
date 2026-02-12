@@ -105,6 +105,9 @@ Shader "EconSim/MapOverlay"
         _WaterAbsorption ("Water Absorption (RGB)", Color) = (2.2, 0.9, 0.35, 1)
         _WaterOpticalDepth ("Water Optical Depth", Range(0.1, 8)) = 3.0
         _WaterDepthExponent ("Water Depth Exponent", Range(0.2, 3)) = 1.35
+        _WaterRefractionStrength ("Seabed Refraction", Range(0, 0.02)) = 0.0035
+        _WaterRefractionScale ("Refraction Scale", Float) = 0.035
+        _WaterRefractionSpeed ("Refraction Speed", Float) = 0.02
         _WaterShallowAlpha ("River Alpha", Range(0, 1)) = 0.5
         _ShimmerScale ("Shimmer Scale", Float) = 0.02
         _ShimmerSpeed ("Shimmer Speed", Float) = 0.03
@@ -195,6 +198,9 @@ Shader "EconSim/MapOverlay"
             fixed4 _WaterAbsorption;
             float _WaterOpticalDepth;
             float _WaterDepthExponent;
+            float _WaterRefractionStrength;
+            float _WaterRefractionScale;
+            float _WaterRefractionSpeed;
             float _WaterShallowAlpha;
             float _ShimmerScale;
             float _ShimmerSpeed;
@@ -340,7 +346,7 @@ Shader "EconSim/MapOverlay"
                 }
                 else
                 {
-                    afterMapMode = ComputeWater(isCellWater, height, riverMask, IN.worldUV, afterMapMode);
+                    afterMapMode = ComputeWater(isCellWater, height, riverMask, uv, IN.worldUV, afterMapMode);
                 }
                 float3 afterWater = afterMapMode;
                 float3 relitColor = ApplyReliefShading(afterWater, uv, isWater);

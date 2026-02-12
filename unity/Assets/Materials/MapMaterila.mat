@@ -194,11 +194,11 @@ Material:
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.75905627
+    - _HoverIntensity: 6e-45
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
-    - _HoveredRealmId: 0.000030518044
+    - _HoveredRealmId: -1
     - _MapMode: 1
     - _MarketBorderDarkening: 0.688
     - _MarketBorderWidth: 0.25
@@ -235,9 +235,9 @@ Material:
     - _SelectionDimming: 1
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
-    - _ShimmerIntensity: 0.08
-    - _ShimmerScale: 0.02
-    - _ShimmerSpeed: 0.03
+    - _ShimmerIntensity: 0.2
+    - _ShimmerScale: 4
+    - _ShimmerSpeed: 4
     - _ShowCountyBorders: 0
     - _ShowMarketBorders: 0
     - _ShowProvinceBorders: 0
@@ -254,6 +254,9 @@ Material:
     - _WaterDepthRange: 1
     - _WaterGradientRadius: 11
     - _WaterOpticalDepth: 6
+    - _WaterRefractionScale: 0.1
+    - _WaterRefractionSpeed: 0.1
+    - _WaterRefractionStrength: 0.02
     - _WaterShallowAlpha: 0.822
     - _ZWrite: 1
     m_Colors:
