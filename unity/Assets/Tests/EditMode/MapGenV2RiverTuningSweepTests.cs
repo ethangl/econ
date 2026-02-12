@@ -12,6 +12,14 @@ namespace EconSim.Tests
     [Category("MapGenV2Tuning")]
     public class MapGenV2RiverTuningSweepTests
     {
+        static readonly float[] FullThresholdCandidates = { 0.35f, 0.50f, 0.75f, 0.90f, 1.00f, 1.10f, 1.25f };
+        static readonly float[] FullTraceCandidates = { 0.20f, 0.35f, 0.50f, 0.65f, 0.75f, 0.90f, 1.00f };
+        static readonly float[] FullMinVerticesCandidates = { 0.40f, 0.55f, 0.75f, 0.90f, 1.00f, 1.10f };
+
+        static readonly float[] SmokeThresholdCandidates = { 0.75f, 0.95f, 1.15f };
+        static readonly float[] SmokeTraceCandidates = { 0.30f, 0.60f, 0.90f };
+        static readonly float[] SmokeMinVerticesCandidates = { 0.75f, 1.00f, 1.20f };
+
         readonly FocusCase[] _focusCases =
         {
             new FocusCase(2202, HeightmapTemplateType.Continents, 5000),
@@ -21,7 +29,38 @@ namespace EconSim.Tests
         };
 
         [Test]
-        public void SweepFocusedTemplates_RiverDriftProfiles()
+        public void SweepFocusedTemplates_RiverDriftProfiles_Smoke()
+        {
+            RunSweep(
+                SmokeThresholdCandidates,
+                SmokeTraceCandidates,
+                SmokeMinVerticesCandidates,
+                defaultVsBestTolerance: -1f,
+                summaryName: "mapgen_v2_focus_river_tuning_sweep_summary.txt",
+                csvName: "mapgen_v2_focus_river_tuning_sweep_candidates.csv");
+        }
+
+        [Test]
+        [Explicit("Long-running offline river sweep for manual retuning sessions.")]
+        [Category("MapGenV2TuningOffline")]
+        public void SweepFocusedTemplates_RiverDriftProfiles_OfflineFull()
+        {
+            RunSweep(
+                FullThresholdCandidates,
+                FullTraceCandidates,
+                FullMinVerticesCandidates,
+                defaultVsBestTolerance: 0.03f,
+                summaryName: "mapgen_v2_focus_river_tuning_sweep_summary_full.txt",
+                csvName: "mapgen_v2_focus_river_tuning_sweep_candidates_full.csv");
+        }
+
+        void RunSweep(
+            float[] thresholdCandidates,
+            float[] traceCandidates,
+            float[] minVerticesCandidates,
+            float defaultVsBestTolerance,
+            string summaryName,
+            string csvName)
         {
             var summary = new StringBuilder();
             var failures = new List<string>();
@@ -36,7 +75,12 @@ namespace EconSim.Tests
             for (int i = 0; i < _focusCases.Length; i++)
             {
                 FocusCase focus = _focusCases[i];
-                SweepResult best = SweepTemplate(focus, csv);
+                SweepResult best = SweepTemplate(
+                    focus,
+                    csv,
+                    thresholdCandidates,
+                    traceCandidates,
+                    minVerticesCandidates);
 
                 summary.AppendLine($"{focus.Template} seed={focus.Seed}");
                 summary.AppendLine(
@@ -48,7 +92,8 @@ namespace EconSim.Tests
                 summary.AppendLine($"  Default profile drift: riverCount={best.DefaultDeltaRiverCount:+#;-#;0} ({best.DefaultDeltaRiverCountNorm:0.000} normalized), riverCoverage={best.DefaultDeltaRiverCoverage:+0.000;-0.000;0.000}, score={best.DefaultScore:0.000}");
                 summary.AppendLine();
 
-                if (best.DefaultScore > best.Score + 0.03f)
+                if (defaultVsBestTolerance >= 0f &&
+                    best.DefaultScore > best.Score + defaultVsBestTolerance)
                 {
                     failures.Add(
                         $"{focus.Template}: built-in river profile is not near best-candidate score. " +
@@ -58,8 +103,8 @@ namespace EconSim.Tests
 
             string debugDir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "debug"));
             Directory.CreateDirectory(debugDir);
-            string txtPath = Path.Combine(debugDir, "mapgen_v2_focus_river_tuning_sweep_summary.txt");
-            string csvPath = Path.Combine(debugDir, "mapgen_v2_focus_river_tuning_sweep_candidates.csv");
+            string txtPath = Path.Combine(debugDir, summaryName);
+            string csvPath = Path.Combine(debugDir, csvName);
             File.WriteAllText(txtPath, summary.ToString());
             File.WriteAllText(csvPath, csv.ToString());
 
@@ -73,7 +118,12 @@ namespace EconSim.Tests
                 string.Join(Environment.NewLine, failures));
         }
 
-        SweepResult SweepTemplate(FocusCase focus, StringBuilder csv)
+        SweepResult SweepTemplate(
+            FocusCase focus,
+            StringBuilder csv,
+            float[] thresholdCandidates,
+            float[] traceCandidates,
+            float[] minVerticesCandidates)
         {
             var config = new MapGenConfig
             {
@@ -91,10 +141,6 @@ namespace EconSim.Tests
                 MapGenComparison.CreateV2Config(config));
             if (baseProfile == null)
                 baseProfile = new HeightmapTemplateTuningProfile();
-
-            float[] thresholdCandidates = { 0.35f, 0.50f, 0.75f, 0.90f, 1.00f, 1.10f, 1.25f };
-            float[] traceCandidates = { 0.20f, 0.35f, 0.50f, 0.65f, 0.75f, 0.90f, 1.00f };
-            float[] minVerticesCandidates = { 0.40f, 0.55f, 0.75f, 0.90f, 1.00f, 1.10f };
 
             SweepResult best = default;
             bool hasBest = false;
