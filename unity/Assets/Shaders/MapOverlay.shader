@@ -52,8 +52,10 @@ Shader "EconSim/MapOverlay"
         _HoveredMarketId ("Hovered Market ID (normalized)", Float) = -1
         _HoverIntensity ("Hover Intensity", Range(0, 1)) = 0
 
-        // Soil overlay (mode 6)
+        // Soil overlay (mode 6, vertex-blended)
         _SoilHeightFloor ("Soil Height Floor", Range(0, 1)) = 0
+        _SoilBlendRadius ("Soil Blend Radius (texels)", Range(0.25, 6)) = 1.0
+        _SoilBlendSharpness ("Soil Blend Sharpness", Range(0.5, 6)) = 1.4
         _SoilColor0 ("Permafrost", Color) = (0.80, 0.85, 0.90, 1)
         _SoilColor1 ("Saline", Color) = (0.92, 0.90, 0.82, 1)
         _SoilColor2 ("Lithosol", Color) = (0.70, 0.68, 0.65, 1)
@@ -151,6 +153,7 @@ Shader "EconSim/MapOverlay"
 
             sampler2D _PoliticalIdsTex;
             sampler2D _GeographyBaseTex;
+            float4 _GeographyBaseTex_TexelSize;  // (1/width, 1/height, width, height)
             sampler2D _CellDataTex; // Legacy compatibility path.
             sampler2D _ModeColorResolve;
             int _UseModeColorResolve;
@@ -162,6 +165,8 @@ Shader "EconSim/MapOverlay"
             sampler2D _BiomePaletteTex;
             sampler2D _BiomeMatrixTex;
             float _SoilHeightFloor;
+            float _SoilBlendRadius;
+            float _SoilBlendSharpness;
             fixed4 _SoilColor0;
             fixed4 _SoilColor1;
             fixed4 _SoilColor2;
@@ -248,6 +253,103 @@ Shader "EconSim/MapOverlay"
             #include "MapOverlay.Composite.cginc"
             #include "MapOverlay.ResolveModes.cginc"
 
+            float3 SoilColorFromId(int soilId)
+            {
+                if (soilId <= 0) return _SoilColor0.rgb;
+                if (soilId == 1) return _SoilColor1.rgb;
+                if (soilId == 2) return _SoilColor2.rgb;
+                if (soilId == 3) return _SoilColor3.rgb;
+                if (soilId == 4) return _SoilColor4.rgb;
+                if (soilId == 5) return _SoilColor5.rgb;
+                if (soilId == 6) return _SoilColor6.rgb;
+                return _SoilColor7.rgb;
+            }
+
+            int DecodeSoilIdFromGeography(float4 geographyBase)
+            {
+                return (int)clamp(round(geographyBase.g * 65535.0), 0.0, 7.0);
+            }
+
+            void AccumulateBlendSoilSample(
+                float2 sampleUv,
+                float weight,
+                inout float w0,
+                inout float w1,
+                inout float w2,
+                inout float w3,
+                inout float w4,
+                inout float w5,
+                inout float w6,
+                inout float w7)
+            {
+                float4 sampleGeo = SampleGeographyBase(sampleUv);
+                if (sampleGeo.a >= 0.5)
+                    return;
+
+                int sampleSoilId = DecodeSoilIdFromGeography(sampleGeo);
+                if (sampleSoilId <= 0) w0 += weight;
+                else if (sampleSoilId == 1) w1 += weight;
+                else if (sampleSoilId == 2) w2 += weight;
+                else if (sampleSoilId == 3) w3 += weight;
+                else if (sampleSoilId == 4) w4 += weight;
+                else if (sampleSoilId == 5) w5 += weight;
+                else if (sampleSoilId == 6) w6 += weight;
+                else w7 += weight;
+            }
+
+            float3 ComputeBlendedSoilColor(float2 uv, int centerSoilId)
+            {
+                float2 texelStep = _GeographyBaseTex_TexelSize.xy * max(_SoilBlendRadius, 0.25);
+                float w0 = 0.0;
+                float w1 = 0.0;
+                float w2 = 0.0;
+                float w3 = 0.0;
+                float w4 = 0.0;
+                float w5 = 0.0;
+                float w6 = 0.0;
+                float w7 = 0.0;
+
+                // Neighborhood accumulation preserving categorical composition.
+                AccumulateBlendSoilSample(uv, 3.0, w0, w1, w2, w3, w4, w5, w6, w7);
+                AccumulateBlendSoilSample(uv + float2(-texelStep.x, 0), 2.0, w0, w1, w2, w3, w4, w5, w6, w7);
+                AccumulateBlendSoilSample(uv + float2(texelStep.x, 0), 2.0, w0, w1, w2, w3, w4, w5, w6, w7);
+                AccumulateBlendSoilSample(uv + float2(0, -texelStep.y), 2.0, w0, w1, w2, w3, w4, w5, w6, w7);
+                AccumulateBlendSoilSample(uv + float2(0, texelStep.y), 2.0, w0, w1, w2, w3, w4, w5, w6, w7);
+                AccumulateBlendSoilSample(uv + float2(-texelStep.x, -texelStep.y), 1.5, w0, w1, w2, w3, w4, w5, w6, w7);
+                AccumulateBlendSoilSample(uv + float2(texelStep.x, -texelStep.y), 1.5, w0, w1, w2, w3, w4, w5, w6, w7);
+                AccumulateBlendSoilSample(uv + float2(-texelStep.x, texelStep.y), 1.5, w0, w1, w2, w3, w4, w5, w6, w7);
+                AccumulateBlendSoilSample(uv + float2(texelStep.x, texelStep.y), 1.5, w0, w1, w2, w3, w4, w5, w6, w7);
+                AccumulateBlendSoilSample(uv + float2(-2.0 * texelStep.x, 0), 1.0, w0, w1, w2, w3, w4, w5, w6, w7);
+                AccumulateBlendSoilSample(uv + float2(2.0 * texelStep.x, 0), 1.0, w0, w1, w2, w3, w4, w5, w6, w7);
+                AccumulateBlendSoilSample(uv + float2(0, -2.0 * texelStep.y), 1.0, w0, w1, w2, w3, w4, w5, w6, w7);
+                AccumulateBlendSoilSample(uv + float2(0, 2.0 * texelStep.y), 1.0, w0, w1, w2, w3, w4, w5, w6, w7);
+
+                float sharpness = max(_SoilBlendSharpness, 0.5);
+                w0 = w0 > 0.0 ? pow(w0, sharpness) : 0.0;
+                w1 = w1 > 0.0 ? pow(w1, sharpness) : 0.0;
+                w2 = w2 > 0.0 ? pow(w2, sharpness) : 0.0;
+                w3 = w3 > 0.0 ? pow(w3, sharpness) : 0.0;
+                w4 = w4 > 0.0 ? pow(w4, sharpness) : 0.0;
+                w5 = w5 > 0.0 ? pow(w5, sharpness) : 0.0;
+                w6 = w6 > 0.0 ? pow(w6, sharpness) : 0.0;
+                w7 = w7 > 0.0 ? pow(w7, sharpness) : 0.0;
+
+                float weightSum = w0 + w1 + w2 + w3 + w4 + w5 + w6 + w7;
+                if (weightSum <= 1e-5)
+                    return SoilColorFromId(centerSoilId);
+
+                float invWeight = 1.0 / weightSum;
+                float3 blendColor = _SoilColor0.rgb * (w0 * invWeight);
+                blendColor += _SoilColor1.rgb * (w1 * invWeight);
+                blendColor += _SoilColor2.rgb * (w2 * invWeight);
+                blendColor += _SoilColor3.rgb * (w3 * invWeight);
+                blendColor += _SoilColor4.rgb * (w4 * invWeight);
+                blendColor += _SoilColor5.rgb * (w5 * invWeight);
+                blendColor += _SoilColor6.rgb * (w6 * invWeight);
+                blendColor += _SoilColor7.rgb * (w7 * invWeight);
+                return blendColor;
+            }
+
             // ========================================================================
             // Fragment shader: layered compositing
             // ========================================================================
@@ -272,7 +374,7 @@ Shader "EconSim/MapOverlay"
                 float marketId = LookupMarketIdFromCounty(countyId);
 
                 float biomeId = geographyBase.r;
-                int soilId = (int)clamp(round(geographyBase.g * 65535.0), 0.0, 7.0);
+                int soilId = DecodeSoilIdFromGeography(geographyBase);
                 bool isCellWater = geographyBase.a >= 0.5;
 
                 float riverMask = tex2D(_RiverMaskTex, IN.dataUV).r;
@@ -293,7 +395,7 @@ Shader "EconSim/MapOverlay"
                 }
                 else if (_MapMode == 6)
                 {
-                    // Soil mode: grayscale heightmap × soil color
+                    // Soil mode: grayscale heightmap × blended soil color.
                     if (isCellWater)
                     {
                         terrain = ComputeTerrain(uv, isCellWater, biomeId, height);
@@ -301,17 +403,7 @@ Shader "EconSim/MapOverlay"
                     else
                     {
                         float landHeight = NormalizeLandHeight(height);
-
-                        float3 soilColor;
-                        if (soilId <= 0) soilColor = _SoilColor0.rgb;
-                        else if (soilId == 1) soilColor = _SoilColor1.rgb;
-                        else if (soilId == 2) soilColor = _SoilColor2.rgb;
-                        else if (soilId == 3) soilColor = _SoilColor3.rgb;
-                        else if (soilId == 4) soilColor = _SoilColor4.rgb;
-                        else if (soilId == 5) soilColor = _SoilColor5.rgb;
-                        else if (soilId == 6) soilColor = _SoilColor6.rgb;
-                        else soilColor = _SoilColor7.rgb;
-
+                        float3 soilColor = ComputeBlendedSoilColor(uv, soilId);
                         float brightness = lerp(_SoilHeightFloor, 1.0, landHeight);
                         terrain = soilColor * brightness;
                     }
