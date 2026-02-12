@@ -180,6 +180,14 @@ float3 ComputeChannelInspector(float2 uv, float4 politicalIds, float4 geographyB
     {
         return tex2D(_ReliefNormalTex, uv).rgb;
     }
+    else if (_DebugView == 17)
+    {
+        sampleValue = saturate((tex2D(_VegetationTex, uv).r * 65535.0) / 6.0);
+    }
+    else if (_DebugView == 18)
+    {
+        sampleValue = tex2D(_VegetationTex, uv).g;
+    }
 
     return float3(sampleValue, sampleValue, sampleValue);
 }

@@ -19,6 +19,7 @@ Shader "EconSim/MapOverlay"
         // Split core textures (M3-S1)
         _PoliticalIdsTex ("Political IDs", 2D) = "black" {}
         _GeographyBaseTex ("Geography Base", 2D) = "black" {}
+        _VegetationTex ("Vegetation Data", 2D) = "black" {}
         // Legacy packed texture kept for migration compatibility.
         _CellDataTex ("Cell Data (Legacy)", 2D) = "black" {}
 
@@ -64,6 +65,14 @@ Shader "EconSim/MapOverlay"
         _SoilColor5 ("Laterite", Color) = (0.82, 0.42, 0.25, 1)
         _SoilColor6 ("Podzol", Color) = (0.62, 0.58, 0.48, 1)
         _SoilColor7 ("Chernozem", Color) = (0.38, 0.33, 0.27, 1)
+        _VegetationBlend ("Vegetation Blend", Range(0, 1)) = 1
+        _VegetationColor0 ("Vegetation None", Color) = (0.0, 0.0, 0.0, 1)
+        _VegetationColor1 ("Vegetation Lichen/Moss", Color) = (0.52, 0.62, 0.44, 1)
+        _VegetationColor2 ("Vegetation Grass", Color) = (0.48, 0.63, 0.27, 1)
+        _VegetationColor3 ("Vegetation Shrub", Color) = (0.41, 0.52, 0.25, 1)
+        _VegetationColor4 ("Vegetation Deciduous", Color) = (0.27, 0.45, 0.19, 1)
+        _VegetationColor5 ("Vegetation Coniferous", Color) = (0.17, 0.33, 0.20, 1)
+        _VegetationColor6 ("Vegetation Broadleaf", Color) = (0.18, 0.37, 0.14, 1)
 
         // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome, 6=soil, 7=channel inspector
         _MapMode ("Map Mode", Int) = 0
@@ -154,6 +163,7 @@ Shader "EconSim/MapOverlay"
             sampler2D _PoliticalIdsTex;
             sampler2D _GeographyBaseTex;
             float4 _GeographyBaseTex_TexelSize;  // (1/width, 1/height, width, height)
+            sampler2D _VegetationTex;
             sampler2D _CellDataTex; // Legacy compatibility path.
             sampler2D _ModeColorResolve;
             int _UseModeColorResolve;
@@ -175,6 +185,14 @@ Shader "EconSim/MapOverlay"
             fixed4 _SoilColor5;
             fixed4 _SoilColor6;
             fixed4 _SoilColor7;
+            float _VegetationBlend;
+            fixed4 _VegetationColor0;
+            fixed4 _VegetationColor1;
+            fixed4 _VegetationColor2;
+            fixed4 _VegetationColor3;
+            fixed4 _VegetationColor4;
+            fixed4 _VegetationColor5;
+            fixed4 _VegetationColor6;
 
             int _MapMode;
             int _DebugView;
@@ -268,6 +286,28 @@ Shader "EconSim/MapOverlay"
             int DecodeSoilIdFromGeography(float4 geographyBase)
             {
                 return (int)clamp(round(geographyBase.g * 65535.0), 0.0, 7.0);
+            }
+
+            int DecodeVegetationType(float2 uv)
+            {
+                float vegetationType = tex2D(_VegetationTex, uv).r;
+                return (int)clamp(round(vegetationType * 65535.0), 0.0, 6.0);
+            }
+
+            float DecodeVegetationDensity(float2 uv)
+            {
+                return saturate(tex2D(_VegetationTex, uv).g);
+            }
+
+            float3 VegetationColorFromId(int vegetationId)
+            {
+                if (vegetationId <= 0) return _VegetationColor0.rgb;
+                if (vegetationId == 1) return _VegetationColor1.rgb;
+                if (vegetationId == 2) return _VegetationColor2.rgb;
+                if (vegetationId == 3) return _VegetationColor3.rgb;
+                if (vegetationId == 4) return _VegetationColor4.rgb;
+                if (vegetationId == 5) return _VegetationColor5.rgb;
+                return _VegetationColor6.rgb;
             }
 
             void AccumulateBlendSoilSample(
@@ -404,8 +444,14 @@ Shader "EconSim/MapOverlay"
                     {
                         float landHeight = NormalizeLandHeight(height);
                         float3 soilColor = ComputeBlendedSoilColor(uv, soilId);
+                        int vegetationType = DecodeVegetationType(uv);
+                        float vegetationCoverage = DecodeVegetationDensity(uv) * saturate(_VegetationBlend);
+                        if (vegetationType <= 0)
+                            vegetationCoverage = 0.0;
+                        float3 vegetationColor = VegetationColorFromId(vegetationType);
+                        float3 blendedColor = lerp(soilColor, vegetationColor, vegetationCoverage);
                         float brightness = lerp(_SoilHeightFloor, 1.0, landHeight);
-                        terrain = soilColor * brightness;
+                        terrain = blendedColor * brightness;
                     }
                 }
                 else

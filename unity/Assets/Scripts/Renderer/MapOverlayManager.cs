@@ -35,13 +35,16 @@ public class MapOverlayManager
             Heightmap = 13,
             RoadMask = 14,
             ModeColorResolve = 15,
-            ReliefNormal = 16
+            ReliefNormal = 16,
+            VegetationType = 17,
+            VegetationDensity = 18
         }
 
         // Shader property IDs (cached for performance)
         private static readonly int CellDataTexId = Shader.PropertyToID("_CellDataTex");
         private static readonly int PoliticalIdsTexId = Shader.PropertyToID("_PoliticalIdsTex");
         private static readonly int GeographyBaseTexId = Shader.PropertyToID("_GeographyBaseTex");
+        private static readonly int VegetationTexId = Shader.PropertyToID("_VegetationTex");
         private static readonly int ModeColorResolveTexId = Shader.PropertyToID("_ModeColorResolve");
         private static readonly int UseModeColorResolveId = Shader.PropertyToID("_UseModeColorResolve");
         private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
@@ -109,6 +112,7 @@ public class MapOverlayManager
         // Data textures
         private Texture2D politicalIdsTexture;  // RGBAFloat: RealmId, ProvinceId, CountyId, reserved
         private Texture2D geographyBaseTexture; // RGBAFloat: BiomeId, SoilId, reserved, WaterFlag
+        private Texture2D vegetationTexture;    // RGFloat: VegetationTypeId, VegetationDensity
 
         /// <summary>
         /// Compatibility accessor for callers expecting a single cell-data texture.
@@ -141,6 +145,8 @@ public class MapOverlayManager
         private int[] cellCountyIdById;
         private int[] cellBiomeIdById;
         private int[] cellSoilIdById;
+        private int[] cellVegetationTypeById;
+        private float[] cellVegetationDensityById;
 
         // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
         private const int ReliefBlurRadius = 4;
@@ -325,6 +331,9 @@ public class MapOverlayManager
             GenerateBiomeElevationMatrix();
             Profiler.End();
 
+            Profiler.Begin("GenerateVegetationTexture");
+            GenerateVegetationTexture();
+            Profiler.End();
 
 
             Profiler.Begin("ApplyTexturesToMaterial");
@@ -362,6 +371,8 @@ public class MapOverlayManager
             cellCountyIdById = new int[lookupSize];
             cellBiomeIdById = new int[lookupSize];
             cellSoilIdById = new int[lookupSize];
+            cellVegetationTypeById = new int[lookupSize];
+            cellVegetationDensityById = new float[lookupSize];
 
             for (int i = 0; i < mapData.Cells.Count; i++)
             {
@@ -378,6 +389,11 @@ public class MapOverlayManager
                 cellCountyIdById[cellId] = cell.CountyId;
                 cellBiomeIdById[cellId] = cell.BiomeId;
                 cellSoilIdById[cellId] = cell.SoilId;
+                cellVegetationTypeById[cellId] = Mathf.Clamp(cell.VegetationTypeId, 0, 255);
+                float vegetationDensity = float.IsNaN(cell.VegetationDensity) || float.IsInfinity(cell.VegetationDensity)
+                    ? 0f
+                    : cell.VegetationDensity;
+                cellVegetationDensityById[cellId] = Mathf.Clamp01(vegetationDensity);
             }
         }
 
@@ -915,6 +931,42 @@ public class MapOverlayManager
             geographyBaseTexture.Apply();
 
             Debug.Log($"MapOverlayManager: Generated core textures {gridWidth}x{gridHeight}");
+        }
+
+        private void GenerateVegetationTexture()
+        {
+            vegetationTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RGFloat, false);
+            vegetationTexture.name = "VegetationTexture";
+            vegetationTexture.filterMode = FilterMode.Point;
+            vegetationTexture.wrapMode = TextureWrapMode.Clamp;
+
+            var vegetationPixels = new Color[gridWidth * gridHeight];
+
+            Parallel.For(0, gridHeight, y =>
+            {
+                int row = y * gridWidth;
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int gridIdx = row + x;
+                    int cellId = spatialGrid[gridIdx];
+
+                    if (cellId >= 0 && cellId < cellIsLandById.Length && cellIsLandById[cellId])
+                    {
+                        vegetationPixels[gridIdx] = new Color(
+                            cellVegetationTypeById[cellId] / 65535f,
+                            cellVegetationDensityById[cellId],
+                            0f,
+                            0f);
+                    }
+                    else
+                    {
+                        vegetationPixels[gridIdx] = new Color(0f, 0f, 0f, 0f);
+                    }
+                }
+            });
+
+            vegetationTexture.SetPixels(vegetationPixels);
+            vegetationTexture.Apply();
         }
 
         /// <summary>
@@ -1721,6 +1773,7 @@ public class MapOverlayManager
 
             terrainMaterial.SetTexture(PoliticalIdsTexId, politicalIdsTexture);
             terrainMaterial.SetTexture(GeographyBaseTexId, geographyBaseTexture);
+            terrainMaterial.SetTexture(VegetationTexId, vegetationTexture);
             terrainMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
             terrainMaterial.SetTexture(HeightmapTexId, heightmapTexture);
             terrainMaterial.SetTexture(ReliefNormalTexId, reliefNormalTexture);
@@ -2794,6 +2847,7 @@ public class MapOverlayManager
             var texturesToDestroy = new HashSet<Texture2D>();
             AddTextureForDestroy(texturesToDestroy, politicalIdsTexture);
             AddTextureForDestroy(texturesToDestroy, geographyBaseTexture);
+            AddTextureForDestroy(texturesToDestroy, vegetationTexture);
             AddTextureForDestroy(texturesToDestroy, heightmapTexture);
             AddTextureForDestroy(texturesToDestroy, reliefNormalTexture);
             AddTextureForDestroy(texturesToDestroy, riverMaskTexture);
@@ -2820,6 +2874,7 @@ public class MapOverlayManager
 
             politicalIdsTexture = null;
             geographyBaseTexture = null;
+            vegetationTexture = null;
             heightmapTexture = null;
             reliefNormalTexture = null;
             riverMaskTexture = null;

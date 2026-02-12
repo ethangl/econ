@@ -118,6 +118,46 @@ namespace EconSim.Tests
             }
         }
 
+        [Test]
+        public void Convert_VegetationRoundTripsAndIsNotUniform()
+        {
+            WorldGenerationContext context = WorldGenerationContext.FromRootSeed(1357911);
+            MapGenResult map = GenerateMap(context.MapGenSeed, cellCount: 4500);
+            MapData runtime = WorldGenImporter.Convert(map, context);
+
+            Assert.That(map.Biomes.Vegetation, Is.Not.Null);
+            Assert.That(map.Biomes.VegetationDensity, Is.Not.Null);
+            Assert.That(map.Biomes.Vegetation.Length, Is.EqualTo(runtime.Cells.Count));
+            Assert.That(map.Biomes.VegetationDensity.Length, Is.EqualTo(runtime.Cells.Count));
+
+            var vegetationTypesOnLand = new HashSet<int>();
+            float minDensityOnLand = float.MaxValue;
+            float maxDensityOnLand = float.MinValue;
+
+            for (int i = 0; i < runtime.Cells.Count; i++)
+            {
+                int expectedType = (int)map.Biomes.Vegetation[i];
+                int actualType = runtime.Cells[i].VegetationTypeId;
+                float expectedDensity = map.Biomes.VegetationDensity[i];
+                float actualDensity = runtime.Cells[i].VegetationDensity;
+
+                Assert.That(actualType, Is.EqualTo(expectedType), $"VegetationTypeId mismatch at cell {i}.");
+                Assert.That(actualType, Is.InRange(0, 6), $"VegetationTypeId out of range at cell {i}.");
+                Assert.That(actualDensity, Is.EqualTo(expectedDensity).Within(1e-6f), $"VegetationDensity mismatch at cell {i}.");
+                Assert.That(actualDensity, Is.InRange(0f, 1f), $"VegetationDensity out of range at cell {i}.");
+
+                if (!runtime.Cells[i].IsLand)
+                    continue;
+
+                vegetationTypesOnLand.Add(actualType);
+                if (actualDensity < minDensityOnLand) minDensityOnLand = actualDensity;
+                if (actualDensity > maxDensityOnLand) maxDensityOnLand = actualDensity;
+            }
+
+            Assert.That(vegetationTypesOnLand.Count, Is.GreaterThan(1), "Vegetation type is unexpectedly uniform across land cells.");
+            Assert.That(maxDensityOnLand - minDensityOnLand, Is.GreaterThan(0.05f), "Vegetation density is unexpectedly uniform across land cells.");
+        }
+
         static MapGenResult GenerateMap(int seed, int cellCount)
         {
             var config = new MapGenConfig

@@ -43,6 +43,8 @@ namespace EconSim.Core.Import
 
             int cellCount = mesh.CellCount;
             bool hasSoilData = biomes.Soil != null && biomes.Soil.Length == cellCount;
+            bool hasVegetationTypeData = biomes.Vegetation != null && biomes.Vegetation.Length == cellCount;
+            bool hasVegetationDensityData = biomes.VegetationDensity != null && biomes.VegetationDensity.Length == cellCount;
             var cells = new List<Cell>(cellCount);
             for (int i = 0; i < cellCount; i++)
             {
@@ -65,6 +67,8 @@ namespace EconSim.Core.Import
                     HasSeaRelativeElevation = true,
                     BiomeId = (int)biomes.Biome[i],
                     SoilId = hasSoilData ? (int)biomes.Soil[i] : 0,
+                    VegetationTypeId = hasVegetationTypeData ? (int)biomes.Vegetation[i] : 0,
+                    VegetationDensity = hasVegetationDensityData ? Clamp01(biomes.VegetationDensity[i]) : 0f,
                     IsLand = elevation.IsLand(i) && !biomes.IsLakeCell[i],
                     RealmId = political.RealmId[i],
                     ProvinceId = political.ProvinceId[i],
@@ -192,6 +196,7 @@ namespace EconSim.Core.Import
         }
 
         static ECVec2 ToECVec2(MGVec2 v) => new ECVec2(v.X, v.Y);
+        static float Clamp01(float value) => value < 0f ? 0f : (value > 1f ? 1f : value);
 
 
         static void ApplyCellBurgIds(List<Cell> cells, int[] cellBurgId)
