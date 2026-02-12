@@ -421,7 +421,10 @@ namespace EconSim.Renderer
             return closestCell;
         }
 
-        public void Initialize(MapData data)
+        public void Initialize(
+            MapData data,
+            string overlayTextureCacheDirectory = null,
+            bool preferCachedOverlayTextures = false)
         {
             mapData = data;
 
@@ -430,7 +433,7 @@ namespace EconSim.Renderer
             Profiler.End();
 
             Profiler.Begin("InitializeOverlays");
-            InitializeOverlays();
+            InitializeOverlays(overlayTextureCacheDirectory, preferCachedOverlayTextures);
             Profiler.End();
 
             BuildRealmCapitalMarkers();
@@ -444,7 +447,7 @@ namespace EconSim.Renderer
             }
         }
 
-        private void InitializeOverlays()
+        private void InitializeOverlays(string overlayTextureCacheDirectory, bool preferCachedOverlayTextures)
         {
             if (!useShaderOverlays || mapData == null)
                 return;
@@ -459,7 +462,12 @@ namespace EconSim.Renderer
             if (mat == null)
                 return;
 
-            overlayManager = new MapOverlayManager(mapData, mat, overlayResolutionMultiplier);
+            overlayManager = new MapOverlayManager(
+                mapData,
+                mat,
+                overlayResolutionMultiplier,
+                overlayTextureCacheDirectory,
+                preferCachedOverlayTextures);
 
             // Height displacement follows grid-mesh mode.
             overlayManager.SetHeightDisplacementEnabled(useGridMesh);

@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using UnityEngine;
 using EconSim.Core.Data;
@@ -190,13 +192,42 @@ public class MapOverlayManager
             new Color(70/255f, 130/255f, 180/255f),   // Steel blue
         };
 
+        private const int OverlayTextureCacheVersion = 1;
+        private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
+        private const string CachePoliticalIdsFile = "political_ids.bin";
+        private const string CacheGeographyBaseFile = "geography_base.bin";
+        private const string CacheRiverMaskFile = "river_mask.bin";
+        private const string CacheHeightmapFile = "heightmap.bin";
+        private const string CacheReliefNormalFile = "relief_normal.bin";
+        private const string CacheRealmBorderFile = "realm_border_dist.bin";
+        private const string CacheProvinceBorderFile = "province_border_dist.bin";
+        private const string CacheCountyBorderFile = "county_border_dist.bin";
+
+        [Serializable]
+        private sealed class OverlayTextureCacheMetadata
+        {
+            public int Version;
+            public int GridWidth;
+            public int GridHeight;
+            public int BaseWidth;
+            public int BaseHeight;
+            public int ResolutionMultiplier;
+            public int RootSeed;
+            public int MapGenSeed;
+        }
+
         /// <summary>
         /// Create overlay manager with specified resolution multiplier.
         /// </summary>
         /// <param name="mapData">Map data source</param>
         /// <param name="terrainMaterial">Material to apply textures to</param>
         /// <param name="resolutionMultiplier">Multiplier for data texture resolution (1=base, 2=2x, 3=3x). Higher = smoother borders but more memory.</param>
-        public MapOverlayManager(MapData mapData, Material terrainMaterial, int resolutionMultiplier = 2)
+        public MapOverlayManager(
+            MapData mapData,
+            Material terrainMaterial,
+            int resolutionMultiplier = 2,
+            string overlayTextureCacheDirectory = null,
+            bool preferCachedOverlayTextures = false)
         {
             this.mapData = mapData;
             this.terrainMaterial = terrainMaterial;
@@ -211,29 +242,40 @@ public class MapOverlayManager
             BuildSpatialGrid();
             Profiler.End();
 
-            Profiler.Begin("GenerateDataTextures");
-            GenerateDataTextures();
-            Profiler.End();
+            bool loadedFromTextureCache = false;
+            if (preferCachedOverlayTextures && !string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
+            {
+                Profiler.Begin("LoadOverlayTextureCache");
+                loadedFromTextureCache = TryLoadOverlayTextureCache(overlayTextureCacheDirectory);
+                Profiler.End();
+            }
 
-            Profiler.Begin("GenerateRiverMaskTexture");
-            GenerateRiverMaskTexture();
-            Profiler.End();
+            if (!loadedFromTextureCache)
+            {
+                Profiler.Begin("GenerateDataTextures");
+                GenerateDataTextures();
+                Profiler.End();
 
-            Profiler.Begin("GenerateHeightmapTexture");
-            GenerateHeightmapTexture();
-            Profiler.End();
+                Profiler.Begin("GenerateRiverMaskTexture");
+                GenerateRiverMaskTexture();
+                Profiler.End();
 
-            Profiler.Begin("GenerateRealmBorderDistTexture");
-            GenerateRealmBorderDistTexture();
-            Profiler.End();
+                Profiler.Begin("GenerateHeightmapTexture");
+                GenerateHeightmapTexture();
+                Profiler.End();
 
-            Profiler.Begin("GenerateProvinceBorderDistTexture");
-            GenerateProvinceBorderDistTexture();
-            Profiler.End();
+                Profiler.Begin("GenerateRealmBorderDistTexture");
+                GenerateRealmBorderDistTexture();
+                Profiler.End();
 
-            Profiler.Begin("GenerateCountyBorderDistTexture");
-            GenerateCountyBorderDistTexture();
-            Profiler.End();
+                Profiler.Begin("GenerateProvinceBorderDistTexture");
+                GenerateProvinceBorderDistTexture();
+                Profiler.End();
+
+                Profiler.Begin("GenerateCountyBorderDistTexture");
+                GenerateCountyBorderDistTexture();
+                Profiler.End();
+            }
 
             Profiler.Begin("GeneratePaletteTextures");
             GeneratePaletteTextures();
@@ -249,10 +291,262 @@ public class MapOverlayManager
             ApplyTexturesToMaterial();
             Profiler.End();
 
-            // Debug output
-            TextureDebugger.SaveTexture(heightmapTexture, "heightmap");
-            TextureDebugger.SaveTexture(politicalIdsTexture, "political_ids");
-            TextureDebugger.SaveTexture(geographyBaseTexture, "geography_base");
+            if (!loadedFromTextureCache && !string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
+            {
+                TrySaveOverlayTextureCache(overlayTextureCacheDirectory);
+            }
+        }
+
+        private bool TryLoadOverlayTextureCache(string cacheDirectory)
+        {
+            try
+            {
+                if (!Directory.Exists(cacheDirectory))
+                    return false;
+
+                string metadataPath = Path.Combine(cacheDirectory, OverlayTextureCacheMetadataFileName);
+                if (!File.Exists(metadataPath))
+                    return false;
+
+                OverlayTextureCacheMetadata metadata = JsonUtility.FromJson<OverlayTextureCacheMetadata>(File.ReadAllText(metadataPath));
+                if (!IsOverlayTextureCacheMetadataCompatible(metadata))
+                    return false;
+
+                Texture2D loadedPoliticalIds = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CachePoliticalIdsFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.RGBAFloat,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp);
+
+                Texture2D loadedGeographyBase = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheGeographyBaseFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.RGBAFloat,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp);
+
+                Texture2D loadedRiverMask = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheRiverMaskFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.R8,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    out byte[] loadedRiverMaskPixels);
+
+                Texture2D loadedHeightmap = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheHeightmapFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.RFloat,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp);
+
+                Texture2D loadedReliefNormal = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheReliefNormalFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.RGBA32,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    linear: true);
+
+                Texture2D loadedRealmBorder = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheRealmBorderFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.R8,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    anisoLevel: 8);
+
+                Texture2D loadedProvinceBorder = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheProvinceBorderFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.R8,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    anisoLevel: 8);
+
+                Texture2D loadedCountyBorder = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheCountyBorderFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.R8,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    anisoLevel: 8);
+
+                if (loadedPoliticalIds == null ||
+                    loadedGeographyBase == null ||
+                    loadedRiverMask == null ||
+                    loadedHeightmap == null ||
+                    loadedReliefNormal == null ||
+                    loadedRealmBorder == null ||
+                    loadedProvinceBorder == null ||
+                    loadedCountyBorder == null)
+                {
+                    DestroyTexture(loadedPoliticalIds);
+                    DestroyTexture(loadedGeographyBase);
+                    DestroyTexture(loadedRiverMask);
+                    DestroyTexture(loadedHeightmap);
+                    DestroyTexture(loadedReliefNormal);
+                    DestroyTexture(loadedRealmBorder);
+                    DestroyTexture(loadedProvinceBorder);
+                    DestroyTexture(loadedCountyBorder);
+                    return false;
+                }
+
+                politicalIdsTexture = loadedPoliticalIds;
+                geographyBaseTexture = loadedGeographyBase;
+                riverMaskTexture = loadedRiverMask;
+                heightmapTexture = loadedHeightmap;
+                reliefNormalTexture = loadedReliefNormal;
+                realmBorderDistTexture = loadedRealmBorder;
+                provinceBorderDistTexture = loadedProvinceBorder;
+                countyBorderDistTexture = loadedCountyBorder;
+                riverMaskPixels = loadedRiverMaskPixels;
+                politicalIdsPixels = politicalIdsTexture.GetPixels();
+                geographyBasePixels = geographyBaseTexture.GetPixels();
+
+                Debug.Log($"MapOverlayManager: Loaded cached overlay textures from {cacheDirectory}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"MapOverlayManager: Failed to load overlay texture cache ({cacheDirectory}): {ex.Message}");
+                return false;
+            }
+        }
+
+        private void TrySaveOverlayTextureCache(string cacheDirectory)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(cacheDirectory))
+                    return;
+
+                Directory.CreateDirectory(cacheDirectory);
+
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CachePoliticalIdsFile), politicalIdsTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheGeographyBaseFile), geographyBaseTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheRiverMaskFile), riverMaskTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheHeightmapFile), heightmapTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheReliefNormalFile), reliefNormalTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheRealmBorderFile), realmBorderDistTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheProvinceBorderFile), provinceBorderDistTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheCountyBorderFile), countyBorderDistTexture);
+
+                var metadata = new OverlayTextureCacheMetadata
+                {
+                    Version = OverlayTextureCacheVersion,
+                    GridWidth = gridWidth,
+                    GridHeight = gridHeight,
+                    BaseWidth = baseWidth,
+                    BaseHeight = baseHeight,
+                    ResolutionMultiplier = resolutionMultiplier,
+                    RootSeed = mapData?.Info != null ? mapData.Info.RootSeed : 0,
+                    MapGenSeed = mapData?.Info != null ? mapData.Info.MapGenSeed : 0
+                };
+
+                string metadataPath = Path.Combine(cacheDirectory, OverlayTextureCacheMetadataFileName);
+                File.WriteAllText(metadataPath, JsonUtility.ToJson(metadata, false));
+                Debug.Log($"MapOverlayManager: Saved overlay texture cache to {cacheDirectory}");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"MapOverlayManager: Failed to save overlay texture cache ({cacheDirectory}): {ex.Message}");
+            }
+        }
+
+        private bool IsOverlayTextureCacheMetadataCompatible(OverlayTextureCacheMetadata metadata)
+        {
+            if (metadata == null)
+                return false;
+
+            if (metadata.Version != OverlayTextureCacheVersion)
+                return false;
+
+            if (metadata.GridWidth != gridWidth ||
+                metadata.GridHeight != gridHeight ||
+                metadata.BaseWidth != baseWidth ||
+                metadata.BaseHeight != baseHeight ||
+                metadata.ResolutionMultiplier != resolutionMultiplier)
+            {
+                return false;
+            }
+
+            if (mapData?.Info != null)
+            {
+                if (metadata.RootSeed > 0 && mapData.Info.RootSeed > 0 && metadata.RootSeed != mapData.Info.RootSeed)
+                    return false;
+                if (metadata.MapGenSeed > 0 && mapData.Info.MapGenSeed > 0 && metadata.MapGenSeed != mapData.Info.MapGenSeed)
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static Texture2D LoadTextureFromRaw(
+            string path,
+            int width,
+            int height,
+            TextureFormat format,
+            FilterMode filterMode,
+            TextureWrapMode wrapMode,
+            out byte[] rawBytes,
+            int anisoLevel = 1,
+            bool linear = false)
+        {
+            rawBytes = null;
+            if (!File.Exists(path))
+                return null;
+
+            Texture2D texture = null;
+            try
+            {
+                rawBytes = File.ReadAllBytes(path);
+                texture = new Texture2D(width, height, format, false, linear);
+                texture.LoadRawTextureData(rawBytes);
+                texture.filterMode = filterMode;
+                texture.wrapMode = wrapMode;
+                texture.anisoLevel = anisoLevel;
+                texture.Apply(false, false);
+                return texture;
+            }
+            catch
+            {
+                if (texture != null)
+                    DestroyTexture(texture);
+                rawBytes = null;
+                return null;
+            }
+        }
+
+        private static Texture2D LoadTextureFromRaw(
+            string path,
+            int width,
+            int height,
+            TextureFormat format,
+            FilterMode filterMode,
+            TextureWrapMode wrapMode,
+            int anisoLevel = 1,
+            bool linear = false)
+        {
+            return LoadTextureFromRaw(path, width, height, format, filterMode, wrapMode, out _, anisoLevel, linear);
+        }
+
+        private static void SaveTextureToRaw(string path, Texture2D texture)
+        {
+            if (texture == null)
+                throw new InvalidOperationException($"Cannot cache null texture: {path}");
+
+            byte[] raw = texture.GetRawTextureData<byte>().ToArray();
+            File.WriteAllBytes(path, raw);
         }
 
         /// <summary>
@@ -2348,9 +2642,9 @@ public class MapOverlayManager
         private static void DestroyTexture(Texture2D texture)
         {
             if (Application.isPlaying)
-                Object.Destroy(texture);
+                UnityEngine.Object.Destroy(texture);
             else
-                Object.DestroyImmediate(texture);
+                UnityEngine.Object.DestroyImmediate(texture);
         }
     }
 }
