@@ -92,11 +92,7 @@ public class MapOverlayManager
         // Water layer property IDs
         private static readonly int WaterShallowColorId = Shader.PropertyToID("_WaterShallowColor");
         private static readonly int WaterDeepColorId = Shader.PropertyToID("_WaterDeepColor");
-        private static readonly int WaterDepthRangeId = Shader.PropertyToID("_WaterDepthRange");
         private static readonly int WaterShallowAlphaId = Shader.PropertyToID("_WaterShallowAlpha");
-        private static readonly int WaterDeepAlphaId = Shader.PropertyToID("_WaterDeepAlpha");
-        private static readonly int RiverDepthId = Shader.PropertyToID("_RiverDepth");
-        private static readonly int RiverDarkenId = Shader.PropertyToID("_RiverDarken");
         private static readonly int ShimmerScaleId = Shader.PropertyToID("_ShimmerScale");
         private static readonly int ShimmerSpeedId = Shader.PropertyToID("_ShimmerSpeed");
         private static readonly int ShimmerIntensityId = Shader.PropertyToID("_ShimmerIntensity");

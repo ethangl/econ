@@ -68,13 +68,12 @@ namespace EconSim.Editor
 
         private static readonly (string name, string label)[] WaterRenderingProps = new[]
         {
-            ("_WaterShallowColor", "Freshwater Color"),
-            ("_WaterShallowAlpha", "Freshwater Alpha"),
-            ("_WaterDeepColor", "Ocean Color"),
-            ("_WaterDeepAlpha", "Ocean Alpha"),
-            ("_WaterDepthRange", "Ocean Depth Range"),
-            ("_RiverDepth", "River Depth"),
-            ("_RiverDarken", "River Darken"),
+            ("_WaterShallowColor", "Shallow Water Color"),
+            ("_WaterShallowAlpha", "River Alpha"),
+            ("_WaterDeepColor", "Deep Water Color"),
+            ("_WaterAbsorption", "Ocean Absorption (RGB)"),
+            ("_WaterOpticalDepth", "Ocean Optical Depth"),
+            ("_WaterDepthExponent", "Ocean Depth Exponent"),
             ("_ShimmerScale", "Shimmer Scale"),
             ("_ShimmerSpeed", "Shimmer Speed"),
             ("_ShimmerIntensity", "Shimmer Intensity"),

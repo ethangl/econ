@@ -100,13 +100,12 @@ Shader "EconSim/MapOverlay"
         _PathWidth ("Path Width", Range(0.2, 4)) = 0.8
 
         // Water layer properties
-        _WaterShallowColor ("Water Shallow Color", Color) = (0.25, 0.55, 0.65, 1)
-        _WaterDeepColor ("Water Deep Color", Color) = (0.06, 0.12, 0.25, 1)
-        _WaterDepthRange ("Water Depth Range", Float) = 0.2
-        _WaterShallowAlpha ("Water Shallow Alpha", Range(0, 1)) = 0.5
-        _WaterDeepAlpha ("Water Deep Alpha", Range(0, 1)) = 0.95
-        _RiverDepth ("River Depth", Range(0, 0.5)) = 0.1
-        _RiverDarken ("River Darken", Range(0, 1)) = 0.3
+        _WaterShallowColor ("Shallow Water Color", Color) = (0.25, 0.55, 0.65, 1)
+        _WaterDeepColor ("Deep Water Color", Color) = (0.06, 0.12, 0.25, 1)
+        _WaterAbsorption ("Water Absorption (RGB)", Color) = (2.2, 0.9, 0.35, 1)
+        _WaterOpticalDepth ("Water Optical Depth", Range(0.1, 8)) = 3.0
+        _WaterDepthExponent ("Water Depth Exponent", Range(0.2, 3)) = 1.35
+        _WaterShallowAlpha ("River Alpha", Range(0, 1)) = 0.5
         _ShimmerScale ("Shimmer Scale", Float) = 0.02
         _ShimmerSpeed ("Shimmer Speed", Float) = 0.03
         _ShimmerIntensity ("Shimmer Intensity", Range(0, 0.2)) = 0.08
@@ -193,11 +192,10 @@ Shader "EconSim/MapOverlay"
             // Water layer uniforms
             fixed4 _WaterShallowColor;
             fixed4 _WaterDeepColor;
-            float _WaterDepthRange;
+            fixed4 _WaterAbsorption;
+            float _WaterOpticalDepth;
+            float _WaterDepthExponent;
             float _WaterShallowAlpha;
-            float _WaterDeepAlpha;
-            float _RiverDepth;
-            float _RiverDarken;
             float _ShimmerScale;
             float _ShimmerSpeed;
             float _ShimmerIntensity;
@@ -292,7 +290,7 @@ Shader "EconSim/MapOverlay"
                     // Soil mode: grayscale heightmap × soil color
                     if (isCellWater)
                     {
-                        terrain = ComputeTerrain(uv, isCellWater, biomeId, height, riverMask);
+                        terrain = ComputeTerrain(uv, isCellWater, biomeId, height);
                     }
                     else
                     {
@@ -314,7 +312,7 @@ Shader "EconSim/MapOverlay"
                 }
                 else
                 {
-                    terrain = ComputeTerrain(uv, isCellWater, biomeId, height, riverMask);
+                    terrain = ComputeTerrain(uv, isCellWater, biomeId, height);
                 }
 
                 // ---- Layer 2: Map mode ----
@@ -333,21 +331,18 @@ Shader "EconSim/MapOverlay"
 
                 // ---- Layer 3: Water ----
 
-                float3 waterColor;
-                float waterAlpha;
-
                 if (_MapMode == 0)
                 {
                     // Height mode: no water overlay (already has its own water colors)
-                    waterColor = float3(0, 0, 0);
-                    waterAlpha = 0;
+                    // Keep the height-mode water gradient untouched.
+                    // (ComputeWater is only for normal overlay compositing.)
+                    // NOP
                 }
                 else
                 {
-                    ComputeWater(isCellWater, height, riverMask, IN.worldUV, waterColor, waterAlpha);
+                    afterMapMode = ComputeWater(isCellWater, height, riverMask, IN.worldUV, afterMapMode);
                 }
-
-                float3 afterWater = lerp(afterMapMode, waterColor, waterAlpha);
+                float3 afterWater = afterMapMode;
                 float3 relitColor = ApplyReliefShading(afterWater, uv, isWater);
 
                 // ---- Layer 4: Selection / hover (operates on composited color) ----
