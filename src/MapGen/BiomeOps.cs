@@ -296,7 +296,7 @@ namespace MapGen.Core
 
         /// <summary>
         /// Wind-deposited silt from bare arid/frozen source areas.
-        /// Reuses the same wind-sweep pattern as PrecipitationOps.
+        /// Reuses the same wind-sweep pattern as PrecipitationModelOps.
         /// </summary>
         public static void ComputeLoess(BiomeData biome, HeightGrid heights,
             ClimateData climate, WorldConfig config)

@@ -95,7 +95,7 @@ Fauna abundance beyond subsistence needs becomes harvestable for trade (meat, hi
 
 ## Depletion (Future)
 
-In v1, fauna abundance is static — computed at generation time and doesn't change. Future versions could model:
+In the current implementation, fauna abundance is static — computed at generation time and doesn't change. Future versions could model:
 
 - Overhunting reducing game/fur abundance
 - Overfishing depleting fish stocks

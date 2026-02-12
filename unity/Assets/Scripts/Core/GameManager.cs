@@ -13,8 +13,7 @@ namespace EconSim.Core
 {
     public enum MapGenerationMode
     {
-        V2Default = 0,
-        ForceV2 = 1
+        Default = 0
     }
 
     /// <summary>
@@ -26,11 +25,10 @@ namespace EconSim.Core
         [SerializeField] private MapView mapView;
         [SerializeField] private MapCamera mapCamera;
         [Header("Generation")]
-        [SerializeField] private MapGenerationMode generationMode = MapGenerationMode.V2Default;
+        [SerializeField] private MapGenerationMode generationMode = MapGenerationMode.Default;
 
         public MapData MapData { get; private set; }
         public MapGenResult MapGenResult { get; private set; }
-        public MapGenV2Result MapGenV2Result { get; private set; }
         public ISimulation Simulation => _simulation;
         public MapGenerationMode GenerationMode
         {
@@ -85,24 +83,22 @@ namespace EconSim.Core
                 Seed = UnityEngine.Random.Range(1, int.MaxValue)
             };
 
-            MapGenV2Config v2Config = ToMapGenV2Config(config);
             Debug.Log(
-                $"MapGen V2 config: cells={v2Config.CellCount}, template={v2Config.Template}, " +
-                $"riverThreshold={v2Config.EffectiveRiverThreshold:0.0}, " +
-                $"riverTrace={v2Config.EffectiveRiverTraceThreshold:0.0}, " +
-                $"minRiverVertices={v2Config.EffectiveMinRiverVertices}");
+                $"MapGen config: cells={config.CellCount}, template={config.Template}, " +
+                $"riverThreshold={config.EffectiveRiverThreshold:0.0}, " +
+                $"riverTrace={config.EffectiveRiverTraceThreshold:0.0}, " +
+                $"minRiverVertices={config.EffectiveMinRiverVertices}");
 
-            Profiler.Begin("MapGen V2 Pipeline");
-            var v2Result = MapGenPipelineV2.Generate(v2Config);
+            Profiler.Begin("MapGen Pipeline");
+            var result = MapGenPipeline.Generate(config);
             Profiler.End();
 
-            MapGenV2Result = v2Result;
-            MapGenResult = null;
+            MapGenResult = result;
 
-            Profiler.Begin("MapGenAdapter Convert V2");
-            MapData = MapGenAdapter.Convert(v2Result);
+            Profiler.Begin("MapGenAdapter Convert");
+            MapData = MapGenAdapter.Convert(result);
             Profiler.End();
-            LogMapGenV2Summary(v2Result, MapData);
+            LogMapGenSummary(result, MapData);
 
             // Update info with seed
             MapData.Info.Seed = config.Seed.ToString();
@@ -113,23 +109,7 @@ namespace EconSim.Core
             Profiler.LogResults();
         }
 
-        private static MapGenV2Config ToMapGenV2Config(MapGenConfig config)
-        {
-            return new MapGenV2Config
-            {
-                Seed = config.Seed,
-                CellCount = config.CellCount,
-                AspectRatio = config.AspectRatio,
-                CellSizeKm = config.CellSizeKm,
-                Template = config.Template,
-                LatitudeSouth = config.LatitudeSouth,
-                RiverThreshold = config.RiverThreshold,
-                RiverTraceThreshold = config.RiverTraceThreshold,
-                MinRiverVertices = config.MinRiverVertices
-            };
-        }
-
-        static void LogMapGenV2Summary(MapGenV2Result result, MapData runtimeMap)
+        static void LogMapGenSummary(MapGenResult result, MapData runtimeMap)
         {
             if (result?.Elevation == null || result.Rivers == null)
                 return;
@@ -143,7 +123,7 @@ namespace EconSim.Core
                 runtimeLandRatio = runtimeMap.Info.LandCells / (float)runtimeMap.Cells.Count;
 
             Debug.Log(
-                $"MapGen V2 summary: land={landRatio:0.000}, runtimeLand={runtimeLandRatio:0.000}, rivers={riverCount}, elevP50={p50Meters:0.0}m");
+                $"MapGen summary: land={landRatio:0.000}, runtimeLand={runtimeLandRatio:0.000}, rivers={riverCount}, elevP50={p50Meters:0.0}m");
         }
 
         static float Percentile(float[] values, float q)

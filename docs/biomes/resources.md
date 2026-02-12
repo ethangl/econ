@@ -92,7 +92,7 @@ A cell with multiple resource types (grassland near a river with fishing, adjace
 
 ## Future Extensions
 
-Resources to add later (not in v1):
+Resources to add later (not in the current implementation):
 
 - **Horses** — military/transport; Grassland, Savanna biomes
 - **Spices/Dyes** — luxury trade goods; Tropical Rainforest, Tropical Dry Forest

@@ -100,32 +100,27 @@ namespace EconSim.Editor
 
         private static string FormatCellInfo(int cell, MapGenResult result)
         {
-            var heights = result.Heights;
+            var elevation = result.Elevation;
             var biomes = result.Biomes;
             var climate = result.Climate;
             var political = result.Political;
 
-            bool isWater = heights.IsWater(cell);
+            bool isWater = elevation.IsWater(cell);
             bool isLake = biomes.IsLakeCell[cell];
 
             if (isWater && !isLake)
-                return $"Cell {cell}  |  Ocean  |  Height: {heights.Heights[cell]:F1}";
+                return $"Cell {cell}  |  Ocean  |  Elev: {elevation.ElevationMetersSigned[cell]:F1}m";
 
             if (isLake)
-                return $"Cell {cell}  |  Lake  |  Height: {heights.Heights[cell]:F1}";
+                return $"Cell {cell}  |  Lake  |  Elev: {elevation.ElevationMetersSigned[cell]:F1}m";
 
             var sb = new System.Text.StringBuilder(256);
-            sb.Append($"Cell {cell}  |  {biomes.Biome[cell]}  |  {biomes.Soil[cell]}  |  {biomes.Vegetation[cell]} ({biomes.VegetationDensity[cell]:P0})");
-            sb.Append($"  |  Fert: {biomes.Fertility[cell]:F2}  |  Hab: {biomes.Habitability[cell]:F0}  |  Sub: {biomes.Subsistence[cell]:F2}");
-            sb.Append($"  |  H: {heights.Heights[cell]:F1}  |  T: {climate.Temperature[cell]:F1}  |  P: {climate.Precipitation[cell]:F1}");
-
-            if (biomes.IronAbundance[cell] > 0.01f) sb.Append($"  |  Iron: {biomes.IronAbundance[cell]:F2}");
-            if (biomes.GoldAbundance[cell] > 0.01f) sb.Append($"  |  Gold: {biomes.GoldAbundance[cell]:F2}");
-            if (biomes.LeadAbundance[cell] > 0.01f) sb.Append($"  |  Lead: {biomes.LeadAbundance[cell]:F2}");
-            if (biomes.SaltAbundance[cell] > 0.01f) sb.Append($"  |  Salt: {biomes.SaltAbundance[cell]:F2}");
-            if (biomes.StoneAbundance[cell] > 0.01f) sb.Append($"  |  Stone: {biomes.StoneAbundance[cell]:F2}");
-
-            sb.Append($"  |  Suit: {biomes.Suitability[cell]:F1} (geo: {biomes.SuitabilityGeo[cell]:F1})");
+            sb.Append($"Cell {cell}  |  {biomes.Biome[cell]}");
+            sb.Append($"  |  Elev: {elevation.ElevationMetersSigned[cell]:F1}m");
+            sb.Append($"  |  Temp: {climate.TemperatureC[cell]:F1}C  |  Precip: {climate.PrecipitationMmYear[cell]:F0}mm");
+            sb.Append($"  |  Slope: {biomes.Slope[cell]:F2}");
+            sb.Append($"  |  Suit: {biomes.Suitability[cell]:F1}  |  Pop: {biomes.Population[cell]:F1}");
+            sb.Append($"  |  Move: {biomes.MovementCost[cell]:F2}  |  CoastDist: {biomes.CoastDistance[cell]}");
 
             if (political.RealmId[cell] > 0)
                 sb.Append($"  |  R{political.RealmId[cell]} P{political.ProvinceId[cell]} C{political.CountyId[cell]}");
