@@ -22,6 +22,10 @@ namespace EconSim.Renderer
         public float CellScale => cellScale;
         [SerializeField] private Material terrainMaterial;
         [SerializeField] private bool renderLandOnly = false;
+        private bool showRealmCapitalMarkers = true;
+        private float realmCapitalMarkerHeight = 0.1f;
+        private float realmCapitalMarkerDiameter = 0.02f;
+        private float realmCapitalMarkerBaseOffset = 0.02f;
 
         // Map mode (not serialized - always starts in Political per CLAUDE.md guidance)
         private MapMode currentMode = MapMode.Political;
@@ -64,6 +68,8 @@ namespace EconSim.Renderer
         private MeshRenderer meshRenderer;
         private Mesh mesh;
         private MapOverlayManager overlayManager;
+        private Transform realmCapitalMarkerRoot;
+        private Material realmCapitalMarkerMaterial;
 
         // Cell mesh data
         private List<Vector3> vertices = new List<Vector3>();
@@ -127,6 +133,9 @@ namespace EconSim.Renderer
         {
             // Unsubscribe from shader selection
             OnCellClicked -= HandleShaderSelection;
+
+            DestroyRealmCapitalMarkers();
+            DestroyRealmCapitalMarkerMaterial();
 
             // Clean up overlay manager textures
             overlayManager?.Dispose();
@@ -421,6 +430,9 @@ namespace EconSim.Renderer
             InitializeOverlays();
             Profiler.End();
 
+            BuildRealmCapitalMarkers();
+            UpdateRealmCapitalMarkersVisibility();
+
             // Subscribe to cell clicks for shader selection
             if (useShaderOverlays && overlayManager != null)
             {
@@ -668,11 +680,12 @@ namespace EconSim.Renderer
         /// </summary>
         private Vector3 DataToWorld(float dataX, float dataY)
         {
-            return new Vector3(
-                dataX * cellScale + transform.position.x,
-                0f,
-                dataY * cellScale + transform.position.z
-            );
+            return transform.position + DataToLocal(dataX, dataY);
+        }
+
+        private Vector3 DataToLocal(float dataX, float dataY)
+        {
+            return new Vector3(dataX * cellScale, 0f, dataY * cellScale);
         }
 
         /// <summary>
@@ -890,7 +903,171 @@ namespace EconSim.Renderer
                     // Clear drill-down selection when changing modes
                     ClearDrillDownSelection();
                 }
+
+                UpdateRealmCapitalMarkersVisibility();
             }
+        }
+
+        private void BuildRealmCapitalMarkers()
+        {
+            DestroyRealmCapitalMarkers();
+
+            if (!showRealmCapitalMarkers || mapData == null || mapData.Realms == null || mapData.Realms.Count == 0)
+                return;
+
+            if (mapData.CellById == null)
+            {
+                mapData.BuildLookups();
+            }
+
+            EnsureRealmCapitalMarkerMaterial();
+
+            var burgById = new Dictionary<int, Burg>();
+            if (mapData.Burgs != null)
+            {
+                foreach (var burg in mapData.Burgs)
+                {
+                    if (burg != null && burg.Id > 0)
+                        burgById[burg.Id] = burg;
+                }
+            }
+
+            var root = new GameObject("RealmCapitalMarkers");
+            root.transform.SetParent(transform, false);
+            realmCapitalMarkerRoot = root.transform;
+
+            float markerHeight = Mathf.Max(0.1f, realmCapitalMarkerHeight);
+            float markerDiameter = Mathf.Max(0.005f, realmCapitalMarkerDiameter);
+            float markerScaleY = markerHeight * 0.5f; // Unity cylinder mesh has height 2 at scale.y = 1
+
+            foreach (var realm in mapData.Realms)
+            {
+                if (realm == null || realm.Id <= 0)
+                    continue;
+
+                int capitalCellId = ResolveRealmCapitalCellId(realm, burgById);
+                if (capitalCellId <= 0 || !mapData.CellById.TryGetValue(capitalCellId, out var capitalCell))
+                    continue;
+
+                if (!capitalCell.IsLand)
+                    continue;
+
+                GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                marker.name = $"RealmCapitalMarker_{realm.Id}";
+                marker.transform.SetParent(realmCapitalMarkerRoot, false);
+
+                float surfaceY = GetCellSurfaceY(capitalCell);
+                marker.transform.localPosition = DataToLocal(capitalCell.Center.X, capitalCell.Center.Y) +
+                    Vector3.up * (surfaceY + realmCapitalMarkerBaseOffset + markerHeight * 0.5f);
+                marker.transform.localScale = new Vector3(markerDiameter, markerScaleY, markerDiameter);
+
+                var collider = marker.GetComponent<Collider>();
+                if (collider != null)
+                    Destroy(collider);
+
+                var renderer = marker.GetComponent<MeshRenderer>();
+                if (renderer != null && realmCapitalMarkerMaterial != null)
+                {
+                    renderer.sharedMaterial = realmCapitalMarkerMaterial;
+                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                }
+            }
+        }
+
+        private int ResolveRealmCapitalCellId(Realm realm, Dictionary<int, Burg> burgById)
+        {
+            if (realm.CapitalBurgId > 0 && burgById != null && burgById.TryGetValue(realm.CapitalBurgId, out var capitalBurg))
+            {
+                return capitalBurg.CellId;
+            }
+
+            return realm.CenterCellId;
+        }
+
+        private float GetCellSurfaceY(Cell cell)
+        {
+            if (cell == null)
+                return 0f;
+
+            if (useGridMesh && useShaderOverlays)
+            {
+                float normalizedSignedHeight = Elevation.GetNormalizedSignedHeight(cell, mapData.Info);
+                return normalizedSignedHeight * gridHeightScale;
+            }
+
+            return GetCellHeight(cell);
+        }
+
+        private void UpdateRealmCapitalMarkersVisibility()
+        {
+            if (realmCapitalMarkerRoot == null)
+                return;
+
+            bool isVisible = showRealmCapitalMarkers && currentMode == MapMode.Political;
+            if (realmCapitalMarkerRoot.gameObject.activeSelf != isVisible)
+            {
+                realmCapitalMarkerRoot.gameObject.SetActive(isVisible);
+            }
+        }
+
+        private void DestroyRealmCapitalMarkers()
+        {
+            if (realmCapitalMarkerRoot == null)
+                return;
+
+            if (Application.isPlaying)
+            {
+                Destroy(realmCapitalMarkerRoot.gameObject);
+            }
+            else
+            {
+                DestroyImmediate(realmCapitalMarkerRoot.gameObject);
+            }
+
+            realmCapitalMarkerRoot = null;
+        }
+
+        private void EnsureRealmCapitalMarkerMaterial()
+        {
+            if (realmCapitalMarkerMaterial != null)
+                return;
+
+            Shader markerShader = Shader.Find("Unlit/Color");
+            if (markerShader == null)
+            {
+                markerShader = Shader.Find("Standard");
+            }
+
+            if (markerShader == null)
+                return;
+
+            realmCapitalMarkerMaterial = new Material(markerShader)
+            {
+                color = Color.white
+            };
+
+            if (realmCapitalMarkerMaterial.HasProperty("_Glossiness"))
+            {
+                realmCapitalMarkerMaterial.SetFloat("_Glossiness", 0f);
+            }
+        }
+
+        private void DestroyRealmCapitalMarkerMaterial()
+        {
+            if (realmCapitalMarkerMaterial == null)
+                return;
+
+            if (Application.isPlaying)
+            {
+                Destroy(realmCapitalMarkerMaterial);
+            }
+            else
+            {
+                DestroyImmediate(realmCapitalMarkerMaterial);
+            }
+
+            realmCapitalMarkerMaterial = null;
         }
 
         /// <summary>
@@ -1682,6 +1859,8 @@ namespace EconSim.Renderer
             if (mapData != null)
             {
                 GenerateMesh();
+                BuildRealmCapitalMarkers();
+                UpdateRealmCapitalMarkersVisibility();
                 if (overlayManager != null)
                 {
                     overlayManager.SetHeightDisplacementEnabled(useGridMesh);
