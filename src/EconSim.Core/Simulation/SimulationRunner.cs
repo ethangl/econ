@@ -15,7 +15,7 @@ namespace EconSim.Core.Simulation
     /// </summary>
     public class SimulationRunner : ISimulation
     {
-        private const int BootstrapCacheVersion = 1;
+        private const int BootstrapCacheVersion = 2;
         private const string BootstrapCacheFileName = "simulation_bootstrap.bin";
 
         private readonly MapData _mapData;
@@ -260,6 +260,27 @@ namespace EconSim.Core.Simulation
                     };
 
                     InitializeMarketGoods(market);
+
+                    int zoneEntryCount = reader.ReadInt32();
+                    if (zoneEntryCount > 0 && market.Type != MarketType.Black)
+                    {
+                        for (int zoneIndex = 0; zoneIndex < zoneEntryCount; zoneIndex++)
+                        {
+                            int zoneCellId = reader.ReadInt32();
+                            float zoneCost = reader.ReadSingle();
+                            market.ZoneCellIds.Add(zoneCellId);
+                            market.ZoneCellCosts[zoneCellId] = zoneCost;
+                        }
+                    }
+                    else
+                    {
+                        for (int zoneIndex = 0; zoneIndex < zoneEntryCount; zoneIndex++)
+                        {
+                            reader.ReadInt32();
+                            reader.ReadSingle();
+                        }
+                    }
+
                     _state.Economy.Markets[market.Id] = market;
                 }
 
@@ -390,6 +411,18 @@ namespace EconSim.Core.Simulation
                     writer.Write(market.Name ?? string.Empty);
                     writer.Write((int)market.Type);
                     writer.Write(market.SuitabilityScore);
+                    int zoneEntryCount = market.Type == MarketType.Black
+                        ? 0
+                        : (market.ZoneCellCosts?.Count ?? 0);
+                    writer.Write(zoneEntryCount);
+                    if (zoneEntryCount > 0)
+                    {
+                        foreach (var zoneEntry in market.ZoneCellCosts)
+                        {
+                            writer.Write(zoneEntry.Key);
+                            writer.Write(zoneEntry.Value);
+                        }
+                    }
                 }
 
                 writer.Write(_state.Economy.CountyToMarket.Count);
