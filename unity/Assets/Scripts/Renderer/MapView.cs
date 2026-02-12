@@ -201,14 +201,13 @@ namespace EconSim.Renderer
                 }
             }
 
-            // Click to select cell (but not when camera is in panning mode or over UI)
-            if (Input.GetMouseButtonDown(0))
+            // Select on left-button release (unless that release ended a drag pan).
+            if (Input.GetMouseButtonUp(0))
             {
-                // Skip if pointer is over a UI Toolkit element
-                if (IsPointerOverUI())
-                    return;
+                bool suppressSelection = mapCameraController != null
+                    && mapCameraController.ConsumeSelectionReleaseSuppression();
 
-                if (mapCameraController == null || !mapCameraController.IsPanningMode)
+                if (!suppressSelection && !IsPointerOverUI())
                 {
                     HandleClick();
                 }
