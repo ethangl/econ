@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using UnityEngine;
 using EconSim.Core.Data;
@@ -131,6 +133,11 @@ public class MapOverlayManager
         private Texture2D roadDistTexture;             // R8: distance to nearest road centerline (texels, dynamic)
         private Texture2D modeColorResolveTexture;     // RGBA32: resolved per-mode color overlay
         private byte[] riverMaskPixels;                // Cached to drive relief synthesis near rivers.
+        private string overlayTextureCacheDirectory;
+        private int cachedCountyToMarketHash;
+        private int cachedRoadStateHash;
+        private bool overlayCacheDirty;
+        private bool pendingMarketModePrewarm;
 
         // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
         private const int ReliefBlurRadius = 4;
@@ -190,50 +197,107 @@ public class MapOverlayManager
             new Color(70/255f, 130/255f, 180/255f),   // Steel blue
         };
 
+        private const int OverlayTextureCacheVersion = 2;
+        private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
+        private const string CacheSpatialGridFile = "spatial_grid.bin";
+        private const string CachePoliticalIdsFile = "political_ids.bin";
+        private const string CacheGeographyBaseFile = "geography_base.bin";
+        private const string CacheRiverMaskFile = "river_mask.bin";
+        private const string CacheHeightmapFile = "heightmap.bin";
+        private const string CacheReliefNormalFile = "relief_normal.bin";
+        private const string CacheRealmBorderFile = "realm_border_dist.bin";
+        private const string CacheProvinceBorderFile = "province_border_dist.bin";
+        private const string CacheCountyBorderFile = "county_border_dist.bin";
+        private const string CacheMarketBorderFile = "market_border_dist.bin";
+        private const string CacheRoadDistFile = "road_dist.bin";
+
+        [Serializable]
+        private sealed class OverlayTextureCacheMetadata
+        {
+            public int Version;
+            public int GridWidth;
+            public int GridHeight;
+            public int BaseWidth;
+            public int BaseHeight;
+            public int ResolutionMultiplier;
+            public int RootSeed;
+            public int MapGenSeed;
+            public int CountyToMarketHash;
+            public int RoadStateHash;
+        }
+
         /// <summary>
         /// Create overlay manager with specified resolution multiplier.
         /// </summary>
         /// <param name="mapData">Map data source</param>
         /// <param name="terrainMaterial">Material to apply textures to</param>
         /// <param name="resolutionMultiplier">Multiplier for data texture resolution (1=base, 2=2x, 3=3x). Higher = smoother borders but more memory.</param>
-        public MapOverlayManager(MapData mapData, Material terrainMaterial, int resolutionMultiplier = 2)
+        public MapOverlayManager(
+            MapData mapData,
+            Material terrainMaterial,
+            int resolutionMultiplier = 2,
+            string overlayTextureCacheDirectory = null,
+            bool preferCachedOverlayTextures = false)
         {
             this.mapData = mapData;
             this.terrainMaterial = terrainMaterial;
             this.resolutionMultiplier = Mathf.Clamp(resolutionMultiplier, 1, 8);
+            this.overlayTextureCacheDirectory = overlayTextureCacheDirectory;
 
             baseWidth = mapData.Info.Width;
             baseHeight = mapData.Info.Height;
             gridWidth = baseWidth * this.resolutionMultiplier;
             gridHeight = baseHeight * this.resolutionMultiplier;
 
-            Profiler.Begin("BuildSpatialGrid");
-            BuildSpatialGrid();
-            Profiler.End();
+            bool loadedSpatialGrid = false;
+            if (preferCachedOverlayTextures && !string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
+            {
+                Profiler.Begin("LoadSpatialGridCache");
+                loadedSpatialGrid = TryLoadSpatialGridCache(overlayTextureCacheDirectory);
+                Profiler.End();
+            }
 
-            Profiler.Begin("GenerateDataTextures");
-            GenerateDataTextures();
-            Profiler.End();
+            if (!loadedSpatialGrid)
+            {
+                Profiler.Begin("BuildSpatialGrid");
+                BuildSpatialGrid();
+                Profiler.End();
+            }
 
-            Profiler.Begin("GenerateRiverMaskTexture");
-            GenerateRiverMaskTexture();
-            Profiler.End();
+            bool loadedFromTextureCache = false;
+            if (preferCachedOverlayTextures && !string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
+            {
+                Profiler.Begin("LoadOverlayTextureCache");
+                loadedFromTextureCache = TryLoadOverlayTextureCache(overlayTextureCacheDirectory);
+                Profiler.End();
+            }
 
-            Profiler.Begin("GenerateHeightmapTexture");
-            GenerateHeightmapTexture();
-            Profiler.End();
+            if (!loadedFromTextureCache)
+            {
+                Profiler.Begin("GenerateDataTextures");
+                GenerateDataTextures();
+                Profiler.End();
 
-            Profiler.Begin("GenerateRealmBorderDistTexture");
-            GenerateRealmBorderDistTexture();
-            Profiler.End();
+                Profiler.Begin("GenerateRiverMaskTexture");
+                GenerateRiverMaskTexture();
+                Profiler.End();
 
-            Profiler.Begin("GenerateProvinceBorderDistTexture");
-            GenerateProvinceBorderDistTexture();
-            Profiler.End();
+                Profiler.Begin("GenerateHeightmapTexture");
+                GenerateHeightmapTexture();
+                Profiler.End();
 
-            Profiler.Begin("GenerateCountyBorderDistTexture");
-            GenerateCountyBorderDistTexture();
-            Profiler.End();
+                Profiler.Begin("GenerateRealmBorderDistTexture");
+                GenerateRealmBorderDistTexture();
+                Profiler.End();
+
+                Profiler.Begin("GenerateProvinceBorderDistTexture");
+                GenerateProvinceBorderDistTexture();
+                Profiler.End();
+
+                Profiler.Begin("GenerateCountyBorderDistTexture");
+                GenerateCountyBorderDistTexture();
+                Profiler.End();
+            }
 
             Profiler.Begin("GeneratePaletteTextures");
             GeneratePaletteTextures();
@@ -249,10 +313,355 @@ public class MapOverlayManager
             ApplyTexturesToMaterial();
             Profiler.End();
 
-            // Debug output
-            TextureDebugger.SaveTexture(heightmapTexture, "heightmap");
-            TextureDebugger.SaveTexture(politicalIdsTexture, "political_ids");
-            TextureDebugger.SaveTexture(geographyBaseTexture, "geography_base");
+            if (!loadedFromTextureCache && !string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
+            {
+                TrySaveOverlayTextureCache(overlayTextureCacheDirectory);
+            }
+            else if (!loadedSpatialGrid && !string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
+            {
+                // Backfill spatial grid cache when loading an older texture cache that predates it.
+                TrySaveSpatialGridCache(overlayTextureCacheDirectory);
+            }
+        }
+
+        private bool TryLoadSpatialGridCache(string cacheDirectory)
+        {
+            try
+            {
+                if (!Directory.Exists(cacheDirectory))
+                    return false;
+
+                string metadataPath = Path.Combine(cacheDirectory, OverlayTextureCacheMetadataFileName);
+                if (!File.Exists(metadataPath))
+                    return false;
+
+                OverlayTextureCacheMetadata metadata = JsonUtility.FromJson<OverlayTextureCacheMetadata>(File.ReadAllText(metadataPath));
+                if (!IsOverlayTextureCacheMetadataCompatible(metadata))
+                    return false;
+
+                string spatialGridPath = Path.Combine(cacheDirectory, CacheSpatialGridFile);
+                if (!File.Exists(spatialGridPath))
+                    return false;
+
+                byte[] bytes = File.ReadAllBytes(spatialGridPath);
+                int expectedBytes = gridWidth * gridHeight * sizeof(int);
+                if (bytes.Length != expectedBytes)
+                    return false;
+
+                int[] loadedSpatialGrid = new int[gridWidth * gridHeight];
+                Buffer.BlockCopy(bytes, 0, loadedSpatialGrid, 0, bytes.Length);
+                spatialGrid = loadedSpatialGrid;
+
+                Debug.Log($"MapOverlayManager: Loaded cached spatial grid from {spatialGridPath}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"MapOverlayManager: Failed to load spatial grid cache ({cacheDirectory}): {ex.Message}");
+                return false;
+            }
+        }
+
+        private void TrySaveSpatialGridCache(string cacheDirectory)
+        {
+            if (spatialGrid == null || spatialGrid.Length == 0)
+                return;
+
+            try
+            {
+                Directory.CreateDirectory(cacheDirectory);
+                string spatialGridPath = Path.Combine(cacheDirectory, CacheSpatialGridFile);
+                byte[] bytes = new byte[spatialGrid.Length * sizeof(int)];
+                Buffer.BlockCopy(spatialGrid, 0, bytes, 0, bytes.Length);
+                File.WriteAllBytes(spatialGridPath, bytes);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"MapOverlayManager: Failed to save spatial grid cache ({cacheDirectory}): {ex.Message}");
+            }
+        }
+
+        private bool TryLoadOverlayTextureCache(string cacheDirectory)
+        {
+            try
+            {
+                if (!Directory.Exists(cacheDirectory))
+                    return false;
+
+                string metadataPath = Path.Combine(cacheDirectory, OverlayTextureCacheMetadataFileName);
+                if (!File.Exists(metadataPath))
+                    return false;
+
+                OverlayTextureCacheMetadata metadata = JsonUtility.FromJson<OverlayTextureCacheMetadata>(File.ReadAllText(metadataPath));
+                if (!IsOverlayTextureCacheMetadataCompatible(metadata))
+                    return false;
+
+                Texture2D loadedPoliticalIds = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CachePoliticalIdsFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.RGBAFloat,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp);
+
+                Texture2D loadedGeographyBase = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheGeographyBaseFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.RGBAFloat,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp);
+
+                Texture2D loadedRiverMask = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheRiverMaskFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.R8,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    out byte[] loadedRiverMaskPixels);
+
+                Texture2D loadedHeightmap = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheHeightmapFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.RFloat,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp);
+
+                Texture2D loadedReliefNormal = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheReliefNormalFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.RGBA32,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    linear: true);
+
+                Texture2D loadedRealmBorder = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheRealmBorderFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.R8,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    anisoLevel: 8);
+
+                Texture2D loadedProvinceBorder = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheProvinceBorderFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.R8,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    anisoLevel: 8);
+
+                Texture2D loadedCountyBorder = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheCountyBorderFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.R8,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    anisoLevel: 8);
+
+                Texture2D loadedMarketBorder = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheMarketBorderFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.R8,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    anisoLevel: 8);
+
+                Texture2D loadedRoadDist = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheRoadDistFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.R8,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    anisoLevel: 8);
+
+                if (loadedPoliticalIds == null ||
+                    loadedGeographyBase == null ||
+                    loadedRiverMask == null ||
+                    loadedHeightmap == null ||
+                    loadedReliefNormal == null ||
+                    loadedRealmBorder == null ||
+                    loadedProvinceBorder == null ||
+                    loadedCountyBorder == null)
+                {
+                    DestroyTexture(loadedPoliticalIds);
+                    DestroyTexture(loadedGeographyBase);
+                    DestroyTexture(loadedRiverMask);
+                    DestroyTexture(loadedHeightmap);
+                    DestroyTexture(loadedReliefNormal);
+                    DestroyTexture(loadedRealmBorder);
+                    DestroyTexture(loadedProvinceBorder);
+                    DestroyTexture(loadedCountyBorder);
+                    return false;
+                }
+
+                politicalIdsTexture = loadedPoliticalIds;
+                geographyBaseTexture = loadedGeographyBase;
+                riverMaskTexture = loadedRiverMask;
+                heightmapTexture = loadedHeightmap;
+                reliefNormalTexture = loadedReliefNormal;
+                realmBorderDistTexture = loadedRealmBorder;
+                provinceBorderDistTexture = loadedProvinceBorder;
+                countyBorderDistTexture = loadedCountyBorder;
+                marketBorderDistTexture = loadedMarketBorder;
+                roadDistTexture = loadedRoadDist;
+                riverMaskPixels = loadedRiverMaskPixels;
+                politicalIdsPixels = null;
+                geographyBasePixels = null;
+                cachedCountyToMarketHash = metadata.CountyToMarketHash;
+                cachedRoadStateHash = metadata.RoadStateHash;
+
+                Debug.Log($"MapOverlayManager: Loaded cached overlay textures from {cacheDirectory}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"MapOverlayManager: Failed to load overlay texture cache ({cacheDirectory}): {ex.Message}");
+                return false;
+            }
+        }
+
+        private bool TrySaveOverlayTextureCache(string cacheDirectory)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(cacheDirectory))
+                    return false;
+
+                Directory.CreateDirectory(cacheDirectory);
+                TrySaveSpatialGridCache(cacheDirectory);
+
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CachePoliticalIdsFile), politicalIdsTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheGeographyBaseFile), geographyBaseTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheRiverMaskFile), riverMaskTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheHeightmapFile), heightmapTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheReliefNormalFile), reliefNormalTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheRealmBorderFile), realmBorderDistTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheProvinceBorderFile), provinceBorderDistTexture);
+                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheCountyBorderFile), countyBorderDistTexture);
+                if (marketBorderDistTexture != null)
+                    SaveTextureToRaw(Path.Combine(cacheDirectory, CacheMarketBorderFile), marketBorderDistTexture);
+                if (roadDistTexture != null)
+                    SaveTextureToRaw(Path.Combine(cacheDirectory, CacheRoadDistFile), roadDistTexture);
+
+                var metadata = new OverlayTextureCacheMetadata
+                {
+                    Version = OverlayTextureCacheVersion,
+                    GridWidth = gridWidth,
+                    GridHeight = gridHeight,
+                    BaseWidth = baseWidth,
+                    BaseHeight = baseHeight,
+                    ResolutionMultiplier = resolutionMultiplier,
+                    RootSeed = mapData?.Info != null ? mapData.Info.RootSeed : 0,
+                    MapGenSeed = mapData?.Info != null ? mapData.Info.MapGenSeed : 0,
+                    CountyToMarketHash = cachedCountyToMarketHash,
+                    RoadStateHash = cachedRoadStateHash
+                };
+
+                string metadataPath = Path.Combine(cacheDirectory, OverlayTextureCacheMetadataFileName);
+                File.WriteAllText(metadataPath, JsonUtility.ToJson(metadata, false));
+                Debug.Log($"MapOverlayManager: Saved overlay texture cache to {cacheDirectory}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"MapOverlayManager: Failed to save overlay texture cache ({cacheDirectory}): {ex.Message}");
+                return false;
+            }
+        }
+
+        private bool IsOverlayTextureCacheMetadataCompatible(OverlayTextureCacheMetadata metadata)
+        {
+            if (metadata == null)
+                return false;
+
+            if (metadata.Version != OverlayTextureCacheVersion)
+                return false;
+
+            if (metadata.GridWidth != gridWidth ||
+                metadata.GridHeight != gridHeight ||
+                metadata.BaseWidth != baseWidth ||
+                metadata.BaseHeight != baseHeight ||
+                metadata.ResolutionMultiplier != resolutionMultiplier)
+            {
+                return false;
+            }
+
+            if (mapData?.Info != null)
+            {
+                if (metadata.RootSeed > 0 && mapData.Info.RootSeed > 0 && metadata.RootSeed != mapData.Info.RootSeed)
+                    return false;
+                if (metadata.MapGenSeed > 0 && mapData.Info.MapGenSeed > 0 && metadata.MapGenSeed != mapData.Info.MapGenSeed)
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static Texture2D LoadTextureFromRaw(
+            string path,
+            int width,
+            int height,
+            TextureFormat format,
+            FilterMode filterMode,
+            TextureWrapMode wrapMode,
+            out byte[] rawBytes,
+            int anisoLevel = 1,
+            bool linear = false)
+        {
+            rawBytes = null;
+            if (!File.Exists(path))
+                return null;
+
+            Texture2D texture = null;
+            try
+            {
+                rawBytes = File.ReadAllBytes(path);
+                texture = new Texture2D(width, height, format, false, linear);
+                texture.LoadRawTextureData(rawBytes);
+                texture.filterMode = filterMode;
+                texture.wrapMode = wrapMode;
+                texture.anisoLevel = anisoLevel;
+                texture.Apply(false, false);
+                return texture;
+            }
+            catch
+            {
+                if (texture != null)
+                    DestroyTexture(texture);
+                rawBytes = null;
+                return null;
+            }
+        }
+
+        private static Texture2D LoadTextureFromRaw(
+            string path,
+            int width,
+            int height,
+            TextureFormat format,
+            FilterMode filterMode,
+            TextureWrapMode wrapMode,
+            int anisoLevel = 1,
+            bool linear = false)
+        {
+            return LoadTextureFromRaw(path, width, height, format, filterMode, wrapMode, out _, anisoLevel, linear);
+        }
+
+        private static void SaveTextureToRaw(string path, Texture2D texture)
+        {
+            if (texture == null)
+                throw new InvalidOperationException($"Cannot cache null texture: {path}");
+
+            byte[] raw = texture.GetRawTextureData<byte>().ToArray();
+            File.WriteAllBytes(path, raw);
         }
 
         /// <summary>
@@ -1356,29 +1765,33 @@ public class MapOverlayManager
             terrainMaterial.SetTexture(ProvinceBorderDistTexId, provinceBorderDistTexture);
             terrainMaterial.SetTexture(CountyBorderDistTexId, countyBorderDistTexture);
 
-            // Create market border dist texture (initially all-white = no borders, regenerated when economy is set)
-            marketBorderDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
-            marketBorderDistTexture.name = "MarketBorderDistTexture";
-            marketBorderDistTexture.filterMode = FilterMode.Bilinear;
-            marketBorderDistTexture.anisoLevel = 8;
-            marketBorderDistTexture.wrapMode = TextureWrapMode.Clamp;
-            var whitePixels = new Color[gridWidth * gridHeight];
-            for (int i = 0; i < whitePixels.Length; i++)
-                whitePixels[i] = Color.white;
-            marketBorderDistTexture.SetPixels(whitePixels);
-            marketBorderDistTexture.Apply();
+            // Create market border dist texture (initially all-white = no borders, regenerated when economy is set).
+            if (marketBorderDistTexture == null)
+            {
+                marketBorderDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+                marketBorderDistTexture.name = "MarketBorderDistTexture";
+                marketBorderDistTexture.filterMode = FilterMode.Bilinear;
+                marketBorderDistTexture.anisoLevel = 8;
+                marketBorderDistTexture.wrapMode = TextureWrapMode.Clamp;
+                var whitePixels = new byte[gridWidth * gridHeight];
+                for (int i = 0; i < whitePixels.Length; i++)
+                    whitePixels[i] = 255;
+                marketBorderDistTexture.LoadRawTextureData(whitePixels);
+                marketBorderDistTexture.Apply();
+            }
             terrainMaterial.SetTexture(MarketBorderDistTexId, marketBorderDistTexture);
 
-            // Create road mask texture (initially all-black = no roads, regenerated when road state is set)
-            roadDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
-            roadDistTexture.name = "RoadMaskTexture";
-            roadDistTexture.filterMode = FilterMode.Bilinear;
-            roadDistTexture.anisoLevel = 8;
-            roadDistTexture.wrapMode = TextureWrapMode.Clamp;
-            // R8 textures initialize to 0 (black = no roads), just apply
-            var roadEmptyPixels = new Color[gridWidth * gridHeight];
-            roadDistTexture.SetPixels(roadEmptyPixels);
-            roadDistTexture.Apply();
+            // Create road mask texture (initially all-black = no roads, regenerated when road state is set).
+            if (roadDistTexture == null)
+            {
+                roadDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+                roadDistTexture.name = "RoadMaskTexture";
+                roadDistTexture.filterMode = FilterMode.Bilinear;
+                roadDistTexture.anisoLevel = 8;
+                roadDistTexture.wrapMode = TextureWrapMode.Clamp;
+                // R8 textures initialize to 0 (black = no roads), just apply.
+                roadDistTexture.Apply();
+            }
             terrainMaterial.SetTexture(RoadMaskTexId, roadDistTexture);
 
             // Create cell-to-market texture (16384 cells max, updated when economy is set)
@@ -1442,12 +1855,28 @@ public class MapOverlayManager
             cellToMarketTexture.SetPixels(marketPixels);
             cellToMarketTexture.Apply();
 
-            // Regenerate market border distance texture now that zone assignments are known
-            RegenerateMarketBorderDistTexture(economy);
+            int countyToMarketHash = ComputeCountyToMarketHash(economy.CountyToMarket);
+            bool canReuseCachedMarketBorder =
+                marketBorderDistTexture != null &&
+                cachedCountyToMarketHash != 0 &&
+                cachedCountyToMarketHash == countyToMarketHash;
+
+            if (canReuseCachedMarketBorder)
+            {
+                Debug.Log("MapOverlayManager: Reused cached market border texture");
+            }
+            else
+            {
+                // Regenerate market border distance texture now that zone assignments are known.
+                RegenerateMarketBorderDistTexture(economy);
+                cachedCountyToMarketHash = countyToMarketHash;
+                overlayCacheDirty = true;
+            }
+
             if (currentMapMode == MapView.MapMode.Market)
                 RegenerateModeColorResolveTexture();
             if (currentMapMode != MapView.MapMode.Market)
-                PrewarmOverlayModeResolveCache(MapView.MapMode.Market);
+                pendingMarketModePrewarm = true;
 
             Debug.Log($"MapOverlayManager: Updated county-to-market texture ({economy.CountyToMarket.Count} counties mapped)");
         }
@@ -1560,13 +1989,7 @@ public class MapOverlayManager
 
             // Write to texture
             byte[] pixels = DistToBytes(dist);
-            var colorPixels = new Color[size];
-            for (int i = 0; i < size; i++)
-            {
-                float v = pixels[i] / 255f;
-                colorPixels[i] = new Color(v, v, v, 1f);
-            }
-            marketBorderDistTexture.SetPixels(colorPixels);
+            marketBorderDistTexture.LoadRawTextureData(pixels);
             marketBorderDistTexture.Apply();
 
             TextureDebugger.SaveTexture(marketBorderDistTexture, "market_border_dist");
@@ -1764,6 +2187,59 @@ public class MapOverlayManager
             return c;
         }
 
+        private static int ComputeCountyToMarketHash(Dictionary<int, int> countyToMarket)
+        {
+            if (countyToMarket == null || countyToMarket.Count == 0)
+                return 0;
+
+            unchecked
+            {
+                int hash = 17;
+                var entries = new List<KeyValuePair<int, int>>(countyToMarket);
+                entries.Sort((a, b) => a.Key.CompareTo(b.Key));
+                hash = hash * 31 + entries.Count;
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    var entry = entries[i];
+                    hash = hash * 31 + entry.Key;
+                    hash = hash * 31 + entry.Value;
+                }
+                return hash;
+            }
+        }
+
+        private static int ComputeRoadStateHash(RoadState roads)
+        {
+            if (roads == null)
+                return 0;
+
+            unchecked
+            {
+                int hash = 23;
+                hash = hash * 31 + roads.EdgeTraffic.Count;
+                hash = hash * 31 + BitConverter.SingleToInt32Bits(roads.PathThreshold);
+                hash = hash * 31 + BitConverter.SingleToInt32Bits(roads.RoadThreshold);
+
+                var entries = new List<KeyValuePair<(int, int), float>>(roads.EdgeTraffic);
+                entries.Sort((a, b) =>
+                {
+                    int cmp = a.Key.Item1.CompareTo(b.Key.Item1);
+                    if (cmp != 0) return cmp;
+                    return a.Key.Item2.CompareTo(b.Key.Item2);
+                });
+
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    var entry = entries[i];
+                    hash = hash * 31 + entry.Key.Item1;
+                    hash = hash * 31 + entry.Key.Item2;
+                    hash = hash * 31 + BitConverter.SingleToInt32Bits(entry.Value);
+                }
+
+                return hash;
+            }
+        }
+
         /// <summary>
         /// Set road state for shader-based road rendering.
         /// Stores reference and regenerates the road distance texture.
@@ -1771,10 +2247,25 @@ public class MapOverlayManager
         public void SetRoadState(RoadState roads)
         {
             roadState = roads;
-            RegenerateRoadDistTexture();
+            int roadHash = ComputeRoadStateHash(roads);
+            bool canReuseCachedRoadTexture =
+                roadDistTexture != null &&
+                cachedRoadStateHash != 0 &&
+                cachedRoadStateHash == roadHash;
+
+            if (canReuseCachedRoadTexture)
+            {
+                Debug.Log("MapOverlayManager: Reused cached road mask texture");
+            }
+            else
+            {
+                RegenerateRoadDistTexture();
+                cachedRoadStateHash = roadHash;
+                overlayCacheDirty = true;
+            }
 
             if (currentMapMode != MapView.MapMode.Market)
-                PrewarmOverlayModeResolveCache(MapView.MapMode.Market);
+                pendingMarketModePrewarm = true;
         }
 
         /// <summary>
@@ -1821,7 +2312,28 @@ public class MapOverlayManager
             if (styleChanged && roadState != null)
             {
                 RegenerateRoadDistTexture();
+                overlayCacheDirty = true;
             }
+        }
+
+        public void RunDeferredStartupWork()
+        {
+            if (pendingMarketModePrewarm && currentMapMode != MapView.MapMode.Market)
+            {
+                PrewarmOverlayModeResolveCache(MapView.MapMode.Market);
+            }
+
+            pendingMarketModePrewarm = false;
+            FlushOverlayTextureCacheIfDirty();
+        }
+
+        public void FlushOverlayTextureCacheIfDirty()
+        {
+            if (!overlayCacheDirty || string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
+                return;
+
+            if (TrySaveOverlayTextureCache(overlayTextureCacheDirectory))
+                overlayCacheDirty = false;
         }
 
         /// <summary>
@@ -1969,6 +2481,8 @@ public class MapOverlayManager
             if (terrainMaterial == null) return;
             bool modeChanged = currentMapMode != mode;
             currentMapMode = mode;
+            if (mode == MapView.MapMode.Market)
+                pendingMarketModePrewarm = false;
 
             int shaderMode;
             switch (mode)
@@ -2217,6 +2731,11 @@ public class MapOverlayManager
             if (!mapData.CellById.TryGetValue(cellId, out var cell))
                 return;
 
+            if (politicalIdsPixels == null && politicalIdsTexture != null)
+            {
+                politicalIdsPixels = politicalIdsTexture.GetPixels();
+            }
+
             if (newRealmId.HasValue)
                 cell.RealmId = newRealmId.Value;
             if (newProvinceId.HasValue)
@@ -2348,9 +2867,9 @@ public class MapOverlayManager
         private static void DestroyTexture(Texture2D texture)
         {
             if (Application.isPlaying)
-                Object.Destroy(texture);
+                UnityEngine.Object.Destroy(texture);
             else
-                Object.DestroyImmediate(texture);
+                UnityEngine.Object.DestroyImmediate(texture);
         }
     }
 }

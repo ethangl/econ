@@ -347,6 +347,10 @@
     background-color: rgb(40, 60, 80);
 }
 
+.startup-button-secondary {
+    margin-top: 8px;
+}
+
 .startup-button-disabled {
     background-color: rgb(40, 40, 45);
     border-color: rgb(60, 60, 65);
@@ -355,4 +359,12 @@
 
 .startup-button-disabled:hover {
     background-color: rgb(40, 40, 45);
+}
+
+.startup-status {
+    margin-top: 10px;
+    min-height: 16px;
+    font-size: 11px;
+    color: rgb(170, 170, 180);
+    -unity-text-align: middle-center;
 }

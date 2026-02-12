@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.IO;
 using UnityEngine;
 using EconSim.Core.Data;
 using EconSim.Core.Common;
@@ -46,10 +48,40 @@ namespace EconSim.Core
         /// True after the map has been loaded and simulation initialized.
         /// </summary>
         public static bool IsMapReady { get; private set; }
+        public static bool HasLastMapCache => File.Exists(GetLastMapPayloadPath());
 
         private ISimulation _simulation;
+        private Coroutine deferredStartupWorkRoutine;
 
         public static GameManager Instance { get; private set; }
+
+        private const int LastMapCacheVersion = 1;
+        private const string LastMapCacheFolderName = "last-map";
+        private const string LastMapPayloadFileName = "map_payload.json";
+        private const string LastMapTexturesFolderName = "textures";
+
+        [Serializable]
+        private sealed class LastMapGenerationSettings
+        {
+            public int RootSeed;
+            public int MapGenSeed;
+            public int PopGenSeed;
+            public int EconomySeed;
+            public int SimulationSeed;
+            public int CellCount;
+            public float AspectRatio;
+            public string Template;
+            public string ContractVersion;
+        }
+
+        [Serializable]
+        private sealed class LastMapCachePayload
+        {
+            public int Version;
+            public string SavedAtUtc;
+            public LastMapGenerationSettings Generation;
+            public MapData MapData;
+        }
 
         private void Awake()
         {
@@ -74,6 +106,7 @@ namespace EconSim.Core
         /// </summary>
         public void GenerateMap(MapGenConfig config = null)
         {
+            IsMapReady = false;
             Profiler.Reset();
             Profiler.Begin("Total Startup");
 
@@ -108,10 +141,42 @@ namespace EconSim.Core
             Profiler.End();
             LogMapGenSummary(result, MapData);
 
-            InitializeWithMapData(generationContext);
+            InitializeWithMapData(
+                generationContext,
+                GetLastMapTexturesDirectory(),
+                preferCachedOverlayTextures: false,
+                preferCachedSimulationBootstrap: false);
+            SaveLastMapCache(MapData, config, generationContext);
 
             Profiler.End();
             Profiler.LogResults();
+        }
+
+        public bool LoadLastMap()
+        {
+            IsMapReady = false;
+            Profiler.Reset();
+            Profiler.Begin("Load Cached Map");
+
+            if (!TryLoadLastMapCache(out MapData cachedMapData, out WorldGenerationContext generationContext, out string error))
+            {
+                Debug.LogWarning(error);
+                Profiler.End();
+                return false;
+            }
+
+            MapGenResult = null;
+            MapData = cachedMapData;
+            Debug.Log($"Loading cached map: {GetLastMapPayloadPath()}");
+            InitializeWithMapData(
+                generationContext,
+                GetLastMapTexturesDirectory(),
+                preferCachedOverlayTextures: true,
+                preferCachedSimulationBootstrap: true);
+
+            Profiler.End();
+            Profiler.LogResults();
+            return true;
         }
 
         static void LogMapGenSummary(MapGenResult result, MapData runtimeMap)
@@ -152,7 +217,11 @@ namespace EconSim.Core
             return sorted[lo] + (sorted[hi] - sorted[lo]) * t;
         }
 
-        private void InitializeWithMapData(WorldGenerationContext generationContext)
+        private void InitializeWithMapData(
+            WorldGenerationContext generationContext,
+            string overlayTextureCacheDirectory = null,
+            bool preferCachedOverlayTextures = false,
+            bool preferCachedSimulationBootstrap = false)
         {
             Debug.Log($"Map loaded: {MapData.Info.Name}");
             Debug.Log($"  Dimensions: {MapData.Info.Width}x{MapData.Info.Height}");
@@ -169,7 +238,7 @@ namespace EconSim.Core
             if (mapView != null)
             {
                 Profiler.Begin("MapView.Initialize");
-                mapView.Initialize(MapData);
+                mapView.Initialize(MapData, overlayTextureCacheDirectory, preferCachedOverlayTextures);
                 Profiler.End();
 
                 // Fit camera to land bounds
@@ -186,7 +255,11 @@ namespace EconSim.Core
 
             // Initialize simulation (auto-registers ProductionSystem + ConsumptionSystem)
             Profiler.Begin("Simulation Init");
-            _simulation = new SimulationRunner(MapData, generationContext);
+            _simulation = new SimulationRunner(
+                MapData,
+                generationContext,
+                GetLastMapCacheDirectory(),
+                preferCachedSimulationBootstrap);
             Profiler.End();
             _simulation.IsPaused = true;  // Start paused
 
@@ -203,6 +276,8 @@ namespace EconSim.Core
             // Mark map as ready and notify subscribers
             IsMapReady = true;
             OnMapReady?.Invoke();
+
+            ScheduleDeferredStartupWork(preferCachedOverlayTextures);
         }
 
 
@@ -297,6 +372,153 @@ namespace EconSim.Core
             sun.shadows = LightShadows.Soft;
 
             Debug.Log("Created directional light for terrain relief");
+        }
+
+        private static string GetLastMapCacheDirectory()
+        {
+            return Path.GetFullPath(Path.Combine(Application.dataPath, "..", "debug", LastMapCacheFolderName));
+        }
+
+        private static string GetLastMapPayloadPath()
+        {
+            return Path.Combine(GetLastMapCacheDirectory(), LastMapPayloadFileName);
+        }
+
+        private static string GetLastMapTexturesDirectory()
+        {
+            return Path.Combine(GetLastMapCacheDirectory(), LastMapTexturesFolderName);
+        }
+
+        private static void SaveLastMapCache(MapData mapData, MapGenConfig config, WorldGenerationContext generationContext)
+        {
+            if (mapData == null)
+                return;
+
+            try
+            {
+                Directory.CreateDirectory(GetLastMapCacheDirectory());
+
+                var payload = new LastMapCachePayload
+                {
+                    Version = LastMapCacheVersion,
+                    SavedAtUtc = DateTime.UtcNow.ToString("O"),
+                    Generation = new LastMapGenerationSettings
+                    {
+                        RootSeed = generationContext.RootSeed,
+                        MapGenSeed = generationContext.MapGenSeed,
+                        PopGenSeed = generationContext.PopGenSeed,
+                        EconomySeed = generationContext.EconomySeed,
+                        SimulationSeed = generationContext.SimulationSeed,
+                        CellCount = config != null ? config.CellCount : 0,
+                        AspectRatio = config != null ? config.AspectRatio : 0f,
+                        Template = config != null ? config.Template.ToString() : string.Empty,
+                        ContractVersion = generationContext.ContractVersion
+                    },
+                    MapData = mapData
+                };
+
+                string payloadJson = JsonUtility.ToJson(payload, false);
+                string payloadPath = GetLastMapPayloadPath();
+                File.WriteAllText(payloadPath, payloadJson);
+                Debug.Log($"Saved last map cache: {payloadPath}");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"Failed to save last map cache: {ex.Message}");
+            }
+        }
+
+        private static bool TryLoadLastMapCache(out MapData mapData, out WorldGenerationContext generationContext, out string error)
+        {
+            mapData = null;
+            generationContext = default;
+            error = null;
+
+            string payloadPath = GetLastMapPayloadPath();
+            if (!File.Exists(payloadPath))
+            {
+                error = $"No cached map exists at {payloadPath}";
+                return false;
+            }
+
+            try
+            {
+                string payloadJson = File.ReadAllText(payloadPath);
+                LastMapCachePayload payload = JsonUtility.FromJson<LastMapCachePayload>(payloadJson);
+                if (payload == null || payload.MapData == null)
+                {
+                    error = $"Cached map payload is invalid: {payloadPath}";
+                    return false;
+                }
+
+                mapData = payload.MapData;
+                mapData.BuildLookups();
+
+                int rootSeed = ResolveCachedRootSeed(payload, mapData);
+                generationContext = WorldGenerationContext.FromRootSeed(rootSeed);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = $"Failed to load cached map from {payloadPath}: {ex.Message}";
+                return false;
+            }
+        }
+
+        private static int ResolveCachedRootSeed(LastMapCachePayload payload, MapData mapData)
+        {
+            int rootSeed = 0;
+            if (payload?.Generation != null)
+                rootSeed = payload.Generation.RootSeed;
+
+            if (rootSeed <= 0 && mapData?.Info != null)
+            {
+                rootSeed = mapData.Info.RootSeed;
+                if (rootSeed <= 0)
+                {
+                    int.TryParse(mapData.Info.Seed, out rootSeed);
+                }
+            }
+
+            return rootSeed > 0 ? rootSeed : 1;
+        }
+
+        private void ScheduleDeferredStartupWork(bool validateCachedMap)
+        {
+            if (deferredStartupWorkRoutine != null)
+            {
+                StopCoroutine(deferredStartupWorkRoutine);
+            }
+
+            deferredStartupWorkRoutine = StartCoroutine(RunDeferredStartupWork(MapData, validateCachedMap));
+        }
+
+        private IEnumerator RunDeferredStartupWork(MapData loadedMap, bool validateCachedMap)
+        {
+            yield return null;
+
+            if (loadedMap == null || loadedMap != MapData)
+            {
+                deferredStartupWorkRoutine = null;
+                yield break;
+            }
+
+            mapView?.RunDeferredStartupWork();
+
+            if (validateCachedMap)
+            {
+                try
+                {
+                    loadedMap.AssertElevationInvariants();
+                    loadedMap.AssertWorldInvariants();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"Deferred cached map invariant check failed: {ex.Message}");
+                }
+            }
+
+            deferredStartupWorkRoutine = null;
         }
 
     }

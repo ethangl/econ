@@ -72,6 +72,7 @@ namespace EconSim.Renderer
         private Transform realmCapitalMarkerRoot;
         private Transform marketLocationMarkerRoot;
         private Material realmCapitalMarkerMaterial;
+        private bool marketLocationMarkersDirty = true;
 
         // Cell mesh data
         private List<Vector3> vertices = new List<Vector3>();
@@ -421,7 +422,10 @@ namespace EconSim.Renderer
             return closestCell;
         }
 
-        public void Initialize(MapData data)
+        public void Initialize(
+            MapData data,
+            string overlayTextureCacheDirectory = null,
+            bool preferCachedOverlayTextures = false)
         {
             mapData = data;
 
@@ -430,11 +434,12 @@ namespace EconSim.Renderer
             Profiler.End();
 
             Profiler.Begin("InitializeOverlays");
-            InitializeOverlays();
+            InitializeOverlays(overlayTextureCacheDirectory, preferCachedOverlayTextures);
             Profiler.End();
 
             BuildRealmCapitalMarkers();
-            BuildMarketLocationMarkers();
+            DestroyMarketLocationMarkers();
+            marketLocationMarkersDirty = true;
             UpdateModeMarkerVisibility();
 
             // Subscribe to cell clicks for shader selection
@@ -444,7 +449,7 @@ namespace EconSim.Renderer
             }
         }
 
-        private void InitializeOverlays()
+        private void InitializeOverlays(string overlayTextureCacheDirectory, bool preferCachedOverlayTextures)
         {
             if (!useShaderOverlays || mapData == null)
                 return;
@@ -459,7 +464,12 @@ namespace EconSim.Renderer
             if (mat == null)
                 return;
 
-            overlayManager = new MapOverlayManager(mapData, mat, overlayResolutionMultiplier);
+            overlayManager = new MapOverlayManager(
+                mapData,
+                mat,
+                overlayResolutionMultiplier,
+                overlayTextureCacheDirectory,
+                preferCachedOverlayTextures);
 
             // Height displacement follows grid-mesh mode.
             overlayManager.SetHeightDisplacementEnabled(useGridMesh);
@@ -908,6 +918,11 @@ namespace EconSim.Renderer
                     ClearDrillDownSelection();
                 }
 
+                if (mode == MapMode.Market)
+                {
+                    EnsureMarketLocationMarkersBuilt();
+                }
+
                 UpdateModeMarkerVisibility();
             }
         }
@@ -1074,14 +1089,31 @@ namespace EconSim.Renderer
 
         private void UpdateMarketLocationMarkersVisibility()
         {
+            bool isVisible = showMarketLocationMarkers && currentMode == MapMode.Market;
+            if (isVisible)
+            {
+                EnsureMarketLocationMarkersBuilt();
+            }
+
             if (marketLocationMarkerRoot == null)
                 return;
 
-            bool isVisible = showMarketLocationMarkers && currentMode == MapMode.Market;
             if (marketLocationMarkerRoot.gameObject.activeSelf != isVisible)
             {
                 marketLocationMarkerRoot.gameObject.SetActive(isVisible);
             }
+        }
+
+        private void EnsureMarketLocationMarkersBuilt()
+        {
+            if (!showMarketLocationMarkers || mapData == null || economyState?.Markets == null || economyState.Markets.Count == 0)
+                return;
+
+            if (!marketLocationMarkersDirty && marketLocationMarkerRoot != null)
+                return;
+
+            BuildMarketLocationMarkers();
+            marketLocationMarkersDirty = false;
         }
 
         private void UpdateModeMarkerVisibility()
@@ -1778,8 +1810,18 @@ namespace EconSim.Renderer
                 overlayManager.SetEconomyState(economy);
             }
 
-            BuildMarketLocationMarkers();
+            marketLocationMarkersDirty = true;
+            DestroyMarketLocationMarkers();
+            if (currentMode == MapMode.Market)
+            {
+                EnsureMarketLocationMarkersBuilt();
+            }
             UpdateModeMarkerVisibility();
+        }
+
+        public void RunDeferredStartupWork()
+        {
+            overlayManager?.RunDeferredStartupWork();
         }
 
         /// <summary>
@@ -1959,7 +2001,11 @@ namespace EconSim.Renderer
             {
                 GenerateMesh();
                 BuildRealmCapitalMarkers();
-                BuildMarketLocationMarkers();
+                marketLocationMarkersDirty = true;
+                if (currentMode == MapMode.Market)
+                {
+                    EnsureMarketLocationMarkersBuilt();
+                }
                 UpdateModeMarkerVisibility();
                 if (overlayManager != null)
                 {

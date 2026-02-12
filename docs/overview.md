@@ -1,5 +1,7 @@
 # Philosophy & Overview
 
+See also: [Startup Performance Notes](./STARTUP_PERFORMANCE.md)
+
 ## Goals
 
 **Primary goal:** Economic simulation. Geography is infrastructure, not the point.

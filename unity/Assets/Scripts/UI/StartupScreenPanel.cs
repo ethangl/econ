@@ -18,6 +18,7 @@ namespace EconSim.UI
 
         private VisualElement _overlay;
         private Button _generateButton;
+        private Button _loadLastMapButton;
         private Label _statusLabel;
         private DropdownField _templateDropdown;
         private IntegerField _seedField;
@@ -67,6 +68,7 @@ namespace EconSim.UI
             // Query elements
             _overlay = root.Q<VisualElement>("startup-overlay");
             _generateButton = root.Q<Button>("generate-button");
+            _loadLastMapButton = root.Q<Button>("load-last-map-button");
             _statusLabel = root.Q<Label>("startup-status");
             _templateDropdown = root.Q<DropdownField>("template-dropdown");
             _seedField = root.Q<IntegerField>("seed-field");
@@ -81,6 +83,8 @@ namespace EconSim.UI
 
             // Wire up buttons
             _generateButton?.RegisterCallback<ClickEvent>(evt => OnGenerateClicked());
+            _loadLastMapButton?.RegisterCallback<ClickEvent>(evt => OnLoadLastMapClicked());
+            RefreshLoadButtonState();
         }
 
         private void OnGenerateClicked()
@@ -112,12 +116,40 @@ namespace EconSim.UI
             {
                 SetStatus("Error: GameManager not found");
                 _isLoading = false;
-                _generateButton?.SetEnabled(true);
+                EnableButtons();
+            }
+        }
+
+        private void OnLoadLastMapClicked()
+        {
+            if (_isLoading) return;
+
+            _isLoading = true;
+            SetStatus("Loading cached map...");
+            DisableButtons();
+
+            var gameManager = EconSim.Core.GameManager.Instance;
+            if (gameManager != null)
+            {
+                bool loaded = gameManager.LoadLastMap();
+                if (!loaded)
+                {
+                    SetStatus("No cached map found yet.");
+                    _isLoading = false;
+                    EnableButtons();
+                }
+            }
+            else
+            {
+                SetStatus("Error: GameManager not found");
+                _isLoading = false;
+                EnableButtons();
             }
         }
 
         private void OnMapReady()
         {
+            _isLoading = false;
             Hide();
         }
 
@@ -142,6 +174,29 @@ namespace EconSim.UI
             if (_generateButton != null)
             {
                 _generateButton.SetEnabled(false);
+            }
+
+            if (_loadLastMapButton != null)
+            {
+                _loadLastMapButton.SetEnabled(false);
+            }
+        }
+
+        private void EnableButtons()
+        {
+            if (_generateButton != null)
+            {
+                _generateButton.SetEnabled(true);
+            }
+
+            RefreshLoadButtonState();
+        }
+
+        private void RefreshLoadButtonState()
+        {
+            if (_loadLastMapButton != null)
+            {
+                _loadLastMapButton.SetEnabled(EconSim.Core.GameManager.HasLastMapCache);
             }
         }
     }

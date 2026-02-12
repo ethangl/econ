@@ -8,7 +8,9 @@
             <ui:FloatField name="aspect-ratio-field" label="Aspect Ratio" value="1.5" class="startup-field" />
             <ui:VisualElement name="startup-buttons" class="startup-buttons">
                 <ui:Button name="generate-button" text="Generate New" class="startup-button" />
+                <ui:Button name="load-last-map-button" text="Load Last Map" class="startup-button startup-button-secondary" />
             </ui:VisualElement>
+            <ui:Label name="startup-status" class="startup-status" />
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

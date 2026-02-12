@@ -8,16 +8,18 @@ namespace EconSim.Renderer
     /// </summary>
     public static class TextureDebugger
     {
-        private static readonly string DebugFolder = Path.Combine(Application.dataPath, "..", "debug");
+        private static readonly string DefaultDebugFolder = Path.Combine(Application.dataPath, "..", "debug");
         public static bool Enabled = false;
+        public static string OutputDirectory { get; set; } = DefaultDebugFolder;
 
         public static void SaveTexture(Texture2D tex, string name)
         {
             if (!Enabled) return;
             if (tex == null) return;
 
-            Directory.CreateDirectory(DebugFolder);
-            string path = Path.Combine(DebugFolder, $"{name}.png");
+            string outputDirectory = string.IsNullOrWhiteSpace(OutputDirectory) ? DefaultDebugFolder : OutputDirectory;
+            Directory.CreateDirectory(outputDirectory);
+            string path = Path.Combine(outputDirectory, $"{name}.png");
 
             // Handle non-readable or float textures
             Texture2D readable = MakeReadable(tex);

@@ -43,6 +43,7 @@ namespace EconSim.Core.Simulation.Systems
 
         // Black market price floor (higher than legitimate markets)
         private const float BlackMarketMinPrice = 0.5f;
+        private const float TransportCacheMaxCost = 200f;
 
         // Cache transport costs from counties to markets (computed once per market)
         private Dictionary<int, Dictionary<int, float>> _transportCosts;
@@ -136,7 +137,21 @@ namespace EconSim.Core.Simulation.Systems
                 var costsToMarket = new Dictionary<int, float>();
                 _transportCosts[market.Id] = costsToMarket;
 
-                var reachable = state.Transport.FindReachable(market.LocationCellId, 200f);
+                // Prefer precomputed market-zone costs produced during market placement/bootstrap cache load.
+                // This avoids rerunning expensive reachability scans during system initialization.
+                if (market.ZoneCellCosts != null && market.ZoneCellCosts.Count > 0)
+                {
+                    foreach (var kvp in market.ZoneCellCosts)
+                    {
+                        if (kvp.Value <= TransportCacheMaxCost)
+                        {
+                            costsToMarket[kvp.Key] = kvp.Value;
+                        }
+                    }
+                    continue;
+                }
+
+                var reachable = state.Transport.FindReachable(market.LocationCellId, TransportCacheMaxCost);
                 foreach (var kvp in reachable)
                 {
                     costsToMarket[kvp.Key] = kvp.Value;
