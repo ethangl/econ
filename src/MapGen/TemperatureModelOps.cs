@@ -10,14 +10,14 @@ namespace MapGen.Core
         public static void Compute(ClimateField climate, ElevationField elevation, MapGenConfig config, WorldMetadata world)
         {
             var mesh = climate.Mesh;
-            for (int i = 0; i < mesh.CellCount; i++)
+            ParallelOps.For(0, mesh.CellCount, i =>
             {
                 float latitude = CellLatitude(mesh, i, world);
                 float seaLevelTemp = SeaLevelTemperature(latitude, config);
                 float elevationMeters = elevation[i] > 0f ? elevation[i] : 0f;
                 float lapseCorrection = -config.LapseRateCPerKm * elevationMeters / 1000f;
                 climate.TemperatureC[i] = seaLevelTemp + lapseCorrection;
-            }
+            });
         }
 
         public static float CellLatitude(CellMesh mesh, int cellIndex, WorldMetadata world)

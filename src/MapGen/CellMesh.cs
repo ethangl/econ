@@ -1,3 +1,6 @@
+using System;
+using System.Threading.Tasks;
+
 namespace MapGen.Core
 {
     /// <summary>
@@ -61,11 +64,11 @@ namespace MapGen.Core
             int n = CellCount;
             CellAreas = new float[n];
 
-            for (int c = 0; c < n; c++)
+            ParallelOps.For(0, n, c =>
             {
                 int[] verts = CellVertices[c];
                 if (verts == null || verts.Length < 3)
-                    continue;
+                    return;
 
                 float area = 0f;
                 int len = verts.Length;
@@ -76,7 +79,7 @@ namespace MapGen.Core
                     area += a.X * b.Y - b.X * a.Y;
                 }
                 CellAreas[c] = System.Math.Abs(area) * 0.5f;
-            }
+            });
         }
     }
 
@@ -116,5 +119,29 @@ namespace MapGen.Core
         public static float SqrDistance(Vec2 a, Vec2 b) => (a - b).SqrMagnitude;
 
         public override string ToString() => $"({X:F2}, {Y:F2})";
+    }
+
+    internal static class ParallelOps
+    {
+        const int MinParallelBatchSize = 4096;
+
+        public static void For(int fromInclusive, int toExclusive, Action<int> body)
+        {
+            if (body == null)
+                throw new ArgumentNullException(nameof(body));
+
+            int length = toExclusive - fromInclusive;
+            if (length <= 0)
+                return;
+
+            if (length < MinParallelBatchSize || Environment.ProcessorCount < 2)
+            {
+                for (int i = fromInclusive; i < toExclusive; i++)
+                    body(i);
+                return;
+            }
+
+            Parallel.For(fromInclusive, toExclusive, body);
+        }
     }
 }

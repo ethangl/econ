@@ -138,6 +138,13 @@ public class MapOverlayManager
         private int cachedRoadStateHash;
         private bool overlayCacheDirty;
         private bool pendingMarketModePrewarm;
+        private bool[] cellIsLandById;
+        private float[] cellHeight01ById;
+        private int[] cellRealmIdById;
+        private int[] cellProvinceIdById;
+        private int[] cellCountyIdById;
+        private int[] cellBiomeIdById;
+        private int[] cellSoilIdById;
 
         // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
         private const int ReliefBlurRadius = 4;
@@ -226,6 +233,28 @@ public class MapOverlayManager
             public int RoadStateHash;
         }
 
+        private readonly struct SpatialCellInfo
+        {
+            public readonly int CellId;
+            public readonly int X0;
+            public readonly int Y0;
+            public readonly int X1;
+            public readonly int Y1;
+            public readonly float Cx;
+            public readonly float Cy;
+
+            public SpatialCellInfo(int cellId, int x0, int y0, int x1, int y1, float cx, float cy)
+            {
+                CellId = cellId;
+                X0 = x0;
+                Y0 = y0;
+                X1 = x1;
+                Y1 = y1;
+                Cx = cx;
+                Cy = cy;
+            }
+        }
+
         /// <summary>
         /// Create overlay manager with specified resolution multiplier.
         /// </summary>
@@ -248,6 +277,7 @@ public class MapOverlayManager
             baseHeight = mapData.Info.Height;
             gridWidth = baseWidth * this.resolutionMultiplier;
             gridHeight = baseHeight * this.resolutionMultiplier;
+            BuildCellLookupCache();
 
             bool loadedSpatialGrid = false;
             if (preferCachedOverlayTextures && !string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
@@ -286,16 +316,8 @@ public class MapOverlayManager
                 GenerateHeightmapTexture();
                 Profiler.End();
 
-                Profiler.Begin("GenerateRealmBorderDistTexture");
-                GenerateRealmBorderDistTexture();
-                Profiler.End();
-
-                Profiler.Begin("GenerateProvinceBorderDistTexture");
-                GenerateProvinceBorderDistTexture();
-                Profiler.End();
-
-                Profiler.Begin("GenerateCountyBorderDistTexture");
-                GenerateCountyBorderDistTexture();
+                Profiler.Begin("GenerateAdministrativeBorderDistTextures");
+                GenerateAdministrativeBorderDistTextures();
                 Profiler.End();
             }
 
@@ -321,6 +343,45 @@ public class MapOverlayManager
             {
                 // Backfill spatial grid cache when loading an older texture cache that predates it.
                 TrySaveSpatialGridCache(overlayTextureCacheDirectory);
+            }
+        }
+
+        private void BuildCellLookupCache()
+        {
+            int maxCellId = -1;
+            for (int i = 0; i < mapData.Cells.Count; i++)
+            {
+                if (mapData.Cells[i].Id > maxCellId)
+                    maxCellId = mapData.Cells[i].Id;
+            }
+
+            int lookupSize = maxCellId + 1;
+            if (lookupSize <= 0)
+                lookupSize = 1;
+
+            cellIsLandById = new bool[lookupSize];
+            cellHeight01ById = new float[lookupSize];
+            cellRealmIdById = new int[lookupSize];
+            cellProvinceIdById = new int[lookupSize];
+            cellCountyIdById = new int[lookupSize];
+            cellBiomeIdById = new int[lookupSize];
+            cellSoilIdById = new int[lookupSize];
+
+            for (int i = 0; i < mapData.Cells.Count; i++)
+            {
+                var cell = mapData.Cells[i];
+                int cellId = cell.Id;
+                if (cellId < 0 || cellId >= lookupSize)
+                    continue;
+
+                cellIsLandById[cellId] = cell.IsLand;
+                float absoluteHeight = Elevation.GetAbsoluteHeight(cell, mapData.Info);
+                cellHeight01ById[cellId] = Elevation.NormalizeAbsolute01(absoluteHeight, mapData.Info);
+                cellRealmIdById[cellId] = cell.RealmId;
+                cellProvinceIdById[cellId] = cell.ProvinceId;
+                cellCountyIdById[cellId] = cell.CountyId;
+                cellBiomeIdById[cellId] = cell.BiomeId;
+                cellSoilIdById[cellId] = cell.SoilId;
             }
         }
 
@@ -680,20 +741,36 @@ public class MapOverlayManager
         /// </summary>
         private void BuildSpatialGridFromScratch()
         {
-            spatialGrid = new int[gridWidth * gridHeight];
-            var distanceSqGrid = new float[gridWidth * gridHeight];
+            int size = gridWidth * gridHeight;
+            spatialGrid = new int[size];
+            var distanceSqGrid = new float[size];
+            var warpX = new float[size];
+            var warpY = new float[size];
 
             // Initialize grids
-            Parallel.For(0, spatialGrid.Length, i =>
+            Parallel.For(0, size, i =>
             {
                 spatialGrid[i] = -1;
                 distanceSqGrid[i] = float.MaxValue;
             });
 
+            // Domain warp is deterministic per pixel; compute once and reuse.
+            Parallel.For(0, gridHeight, y =>
+            {
+                int row = y * gridWidth;
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = row + x;
+                    var (wx, wy) = DomainWarp.Warp(x, y);
+                    warpX[idx] = wx;
+                    warpY[idx] = wy;
+                }
+            });
+
             float scale = resolutionMultiplier;
 
             // PHASE 1: Fast Voronoi fill using cell centers (complete coverage, no gaps)
-            var cellInfos = new List<(int cellId, int x0, int y0, int x1, int y1, float cx, float cy)>();
+            var cellInfos = new List<SpatialCellInfo>(mapData.Cells.Count);
 
             foreach (var cell in mapData.Cells)
             {
@@ -724,33 +801,55 @@ public class MapOverlayManager
                 float cx = cell.Center.X * scale;
                 float cy = cell.Center.Y * scale;
 
-                cellInfos.Add((cell.Id, x0, y0, x1, y1, cx, cy));
+                cellInfos.Add(new SpatialCellInfo(cell.Id, x0, y0, x1, y1, cx, cy));
             }
 
-            var rowLocks = new object[gridHeight];
-            for (int i = 0; i < gridHeight; i++)
-                rowLocks[i] = new object();
+            // Partition by row stripes so each worker owns exclusive output rows (no locks).
+            const int stripeHeight = 32;
+            int stripeCount = (gridHeight + stripeHeight - 1) / stripeHeight;
+            var stripeCellIndices = new List<int>[stripeCount];
 
-            Parallel.ForEach(cellInfos, info =>
+            for (int i = 0; i < cellInfos.Count; i++)
             {
-                var (cellId, x0, y0, x1, y1, cx, cy) = info;
-
-                for (int y = y0; y <= y1; y++)
+                SpatialCellInfo info = cellInfos[i];
+                int stripeStart = info.Y0 / stripeHeight;
+                int stripeEnd = info.Y1 / stripeHeight;
+                for (int stripe = stripeStart; stripe <= stripeEnd; stripe++)
                 {
-                    lock (rowLocks[y])
+                    stripeCellIndices[stripe] ??= new List<int>(64);
+                    stripeCellIndices[stripe].Add(i);
+                }
+            }
+
+            Parallel.For(0, stripeCount, stripe =>
+            {
+                List<int> cellsInStripe = stripeCellIndices[stripe];
+                if (cellsInStripe == null || cellsInStripe.Count == 0)
+                    return;
+
+                int stripeY0 = stripe * stripeHeight;
+                int stripeY1 = Mathf.Min(gridHeight - 1, stripeY0 + stripeHeight - 1);
+
+                for (int i = 0; i < cellsInStripe.Count; i++)
+                {
+                    SpatialCellInfo info = cellInfos[cellsInStripe[i]];
+                    int y0 = info.Y0 > stripeY0 ? info.Y0 : stripeY0;
+                    int y1 = info.Y1 < stripeY1 ? info.Y1 : stripeY1;
+
+                    for (int y = y0; y <= y1; y++)
                     {
-                        for (int x = x0; x <= x1; x++)
+                        int row = y * gridWidth;
+                        for (int x = info.X0; x <= info.X1; x++)
                         {
-                            int gridIdx = y * gridWidth + x;
-                            var (wx, wy) = DomainWarp.Warp(x, y);
-                            float dx = wx - cx;
-                            float dy = wy - cy;
+                            int gridIdx = row + x;
+                            float dx = warpX[gridIdx] - info.Cx;
+                            float dy = warpY[gridIdx] - info.Cy;
                             float distSq = dx * dx + dy * dy;
 
                             if (distSq < distanceSqGrid[gridIdx])
                             {
                                 distanceSqGrid[gridIdx] = distSq;
-                                spatialGrid[gridIdx] = cellId;
+                                spatialGrid[gridIdx] = info.CellId;
                             }
                         }
                     }
@@ -790,17 +889,17 @@ public class MapOverlayManager
                     Color political;
                     Color geography;
 
-                    if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
+                    if (cellId >= 0 && cellId < cellIsLandById.Length)
                     {
-                        political.r = cell.RealmId / 65535f;
-                        political.g = cell.ProvinceId / 65535f;
-                        political.b = cell.CountyId / 65535f;
+                        political.r = cellRealmIdById[cellId] / 65535f;
+                        political.g = cellProvinceIdById[cellId] / 65535f;
+                        political.b = cellCountyIdById[cellId] / 65535f;
                         political.a = 0f;
 
-                        geography.r = cell.BiomeId / 65535f;
-                        geography.g = cell.SoilId / 65535f;
+                        geography.r = cellBiomeIdById[cellId] / 65535f;
+                        geography.g = cellSoilIdById[cellId] / 65535f;
                         geography.b = 0f;
-                        geography.a = cell.IsLand ? 0f : 1f;
+                        geography.a = cellIsLandById[cellId] ? 0f : 1f;
                     }
                     else
                     {
@@ -843,12 +942,10 @@ public class MapOverlayManager
                     int cellId = spatialGrid[idx];
 
                     float height = 0f;
-                    if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
+                    if (cellId >= 0 && cellId < cellIsLandById.Length)
                     {
-                        // Normalize world-anchored absolute height to 0-1 via canonical elevation helpers.
-                        float absoluteHeight = Elevation.GetAbsoluteHeight(cell, mapData.Info);
-                        height = Elevation.NormalizeAbsolute01(absoluteHeight, mapData.Info);
-                        isLand[idx] = cell.IsLand;
+                        height = cellHeight01ById[cellId];
+                        isLand[idx] = cellIsLandById[cellId];
                     }
 
                     baseHeightData[idx] = height;
@@ -1093,15 +1190,7 @@ public class MapOverlayManager
             riverMaskTexture.wrapMode = TextureWrapMode.Clamp;
 
             riverMaskPixels = GenerateRiverMaskPixels();
-            var pixels = riverMaskPixels;
-
-            var colorPixels = new Color[pixels.Length];
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                float v = pixels[i] / 255f;
-                colorPixels[i] = new Color(v, v, v, 1f);
-            }
-            riverMaskTexture.SetPixels(colorPixels);
+            riverMaskTexture.LoadRawTextureData(riverMaskPixels);
             riverMaskTexture.Apply();
 
             TextureDebugger.SaveTexture(riverMaskTexture, "river_mask");
@@ -1327,213 +1416,38 @@ public class MapOverlayManager
             return pixels;
         }
 
-        /// <summary>
-        /// Generate realm border distance texture using a chamfer distance transform.
-        /// Stores the Euclidean distance (in texels) from each land pixel to the nearest
-        /// realm boundary, capped at 255. Bilinear filtering gives smooth borders at any zoom.
-        /// </summary>
-        private void GenerateRealmBorderDistTexture()
+        private readonly struct AdministrativeBorderDistPixels
         {
-            realmBorderDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
-            realmBorderDistTexture.name = "RealmBorderDistTexture";
-            realmBorderDistTexture.filterMode = FilterMode.Bilinear;
-            realmBorderDistTexture.anisoLevel = 8;
-            realmBorderDistTexture.wrapMode = TextureWrapMode.Clamp;
+            public readonly byte[] Realm;
+            public readonly byte[] Province;
+            public readonly byte[] County;
 
-            var pixels = GenerateRealmBorderDistPixels();
-
-            var colorPixels = new Color[pixels.Length];
-            for (int i = 0; i < pixels.Length; i++)
+            public AdministrativeBorderDistPixels(byte[] realm, byte[] province, byte[] county)
             {
-                float v = pixels[i] / 255f;
-                colorPixels[i] = new Color(v, v, v, 1f);
+                Realm = realm;
+                Province = province;
+                County = county;
             }
-            realmBorderDistTexture.SetPixels(colorPixels);
-            realmBorderDistTexture.Apply();
-
-            TextureDebugger.SaveTexture(realmBorderDistTexture, "realm_border_dist");
-            Debug.Log($"MapOverlayManager: Generated realm border distance texture {gridWidth}x{gridHeight}");
-        }
-
-        private byte[] GenerateRealmBorderDistPixels()
-        {
-            int size = gridWidth * gridHeight;
-
-            int[] realmGrid = new int[size];
-            bool[] isLand = new bool[size];
-
-            for (int i = 0; i < size; i++)
-            {
-                int cellId = spatialGrid[i];
-                if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell) && cell.IsLand)
-                {
-                    realmGrid[i] = cell.RealmId;
-                    isLand[i] = true;
-                }
-                else
-                {
-                    realmGrid[i] = -1;
-                    isLand[i] = false;
-                }
-            }
-
-            float[] dist = new float[size];
-            for (int i = 0; i < size; i++)
-                dist[i] = 255f;
-
-            // Seed: land pixels adjacent to a different realm's land pixel
-            for (int y = 0; y < gridHeight; y++)
-            {
-                for (int x = 0; x < gridWidth; x++)
-                {
-                    int idx = y * gridWidth + x;
-                    if (!isLand[idx]) continue;
-
-                    int realm = realmGrid[idx];
-                    bool isBoundary = false;
-
-                    for (int dy = -1; dy <= 1 && !isBoundary; dy++)
-                    {
-                        for (int dx = -1; dx <= 1 && !isBoundary; dx++)
-                        {
-                            if (dx == 0 && dy == 0) continue;
-                            int nx = x + dx, ny = y + dy;
-                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
-                            int nIdx = ny * gridWidth + nx;
-                            if (isLand[nIdx] && realmGrid[nIdx] != realm)
-                                isBoundary = true;
-                        }
-                    }
-
-                    if (isBoundary)
-                        dist[idx] = 0f;
-                }
-            }
-
-            RunChamferTransform(dist, isLand);
-            return DistToBytes(dist);
         }
 
         /// <summary>
-        /// Generate province border distance texture using a chamfer distance transform.
-        /// Stores the Euclidean distance (in texels) from each land pixel to the nearest
-        /// province boundary (same realm, different province), capped at 255.
+        /// Generate realm/province/county border distance textures together so we can
+        /// reuse a single land + boundary classification pass.
         /// </summary>
-        private void GenerateProvinceBorderDistTexture()
+        private void GenerateAdministrativeBorderDistTextures()
         {
-            provinceBorderDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
-            provinceBorderDistTexture.name = "ProvinceBorderDistTexture";
-            provinceBorderDistTexture.filterMode = FilterMode.Bilinear;
-            provinceBorderDistTexture.anisoLevel = 8;
-            provinceBorderDistTexture.wrapMode = TextureWrapMode.Clamp;
+            Profiler.Begin("GenerateAdministrativeBorderDistPixels");
+            AdministrativeBorderDistPixels pixels = GenerateAdministrativeBorderDistPixels();
+            Profiler.End();
 
-            var pixels = GenerateProvinceBorderDistPixels();
+            realmBorderDistTexture = CreateBorderDistTexture("RealmBorderDistTexture", pixels.Realm, "realm_border_dist");
+            provinceBorderDistTexture = CreateBorderDistTexture("ProvinceBorderDistTexture", pixels.Province, "province_border_dist");
+            countyBorderDistTexture = CreateBorderDistTexture("CountyBorderDistTexture", pixels.County, "county_border_dist");
 
-            var colorPixels = new Color[pixels.Length];
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                float v = pixels[i] / 255f;
-                colorPixels[i] = new Color(v, v, v, 1f);
-            }
-            provinceBorderDistTexture.SetPixels(colorPixels);
-            provinceBorderDistTexture.Apply();
-
-            TextureDebugger.SaveTexture(provinceBorderDistTexture, "province_border_dist");
-            Debug.Log($"MapOverlayManager: Generated province border distance texture {gridWidth}x{gridHeight}");
+            Debug.Log($"MapOverlayManager: Generated administrative border distance textures {gridWidth}x{gridHeight}");
         }
 
-        private byte[] GenerateProvinceBorderDistPixels()
-        {
-            int size = gridWidth * gridHeight;
-
-            int[] realmGrid = new int[size];
-            int[] provinceGrid = new int[size];
-            bool[] isLand = new bool[size];
-
-            for (int i = 0; i < size; i++)
-            {
-                int cellId = spatialGrid[i];
-                if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell) && cell.IsLand)
-                {
-                    realmGrid[i] = cell.RealmId;
-                    provinceGrid[i] = cell.ProvinceId;
-                    isLand[i] = true;
-                }
-                else
-                {
-                    realmGrid[i] = -1;
-                    provinceGrid[i] = -1;
-                    isLand[i] = false;
-                }
-            }
-
-            float[] dist = new float[size];
-            for (int i = 0; i < size; i++)
-                dist[i] = 255f;
-
-            // Seed: land pixels adjacent to land pixel with same realm, different province
-            for (int y = 0; y < gridHeight; y++)
-            {
-                for (int x = 0; x < gridWidth; x++)
-                {
-                    int idx = y * gridWidth + x;
-                    if (!isLand[idx]) continue;
-
-                    int realm = realmGrid[idx];
-                    int province = provinceGrid[idx];
-                    bool isBoundary = false;
-
-                    for (int dy = -1; dy <= 1 && !isBoundary; dy++)
-                    {
-                        for (int dx = -1; dx <= 1 && !isBoundary; dx++)
-                        {
-                            if (dx == 0 && dy == 0) continue;
-                            int nx = x + dx, ny = y + dy;
-                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
-                            int nIdx = ny * gridWidth + nx;
-                            if (isLand[nIdx] && realmGrid[nIdx] == realm && provinceGrid[nIdx] != province)
-                                isBoundary = true;
-                        }
-                    }
-
-                    if (isBoundary)
-                        dist[idx] = 0f;
-                }
-            }
-
-            RunChamferTransform(dist, isLand);
-            return DistToBytes(dist);
-        }
-
-        /// <summary>
-        /// Generate county border distance texture using a chamfer distance transform.
-        /// Stores the Euclidean distance (in texels) from each land pixel to the nearest
-        /// county boundary (same province, different county), capped at 255.
-        /// </summary>
-        private void GenerateCountyBorderDistTexture()
-        {
-            countyBorderDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
-            countyBorderDistTexture.name = "CountyBorderDistTexture";
-            countyBorderDistTexture.filterMode = FilterMode.Bilinear;
-            countyBorderDistTexture.anisoLevel = 8;
-            countyBorderDistTexture.wrapMode = TextureWrapMode.Clamp;
-
-            var pixels = GenerateCountyBorderDistPixels();
-
-            var colorPixels = new Color[pixels.Length];
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                float v = pixels[i] / 255f;
-                colorPixels[i] = new Color(v, v, v, 1f);
-            }
-            countyBorderDistTexture.SetPixels(colorPixels);
-            countyBorderDistTexture.Apply();
-
-            TextureDebugger.SaveTexture(countyBorderDistTexture, "county_border_dist");
-            Debug.Log($"MapOverlayManager: Generated county border distance texture {gridWidth}x{gridHeight}");
-        }
-
-        private byte[] GenerateCountyBorderDistPixels()
+        private AdministrativeBorderDistPixels GenerateAdministrativeBorderDistPixels()
         {
             int size = gridWidth * gridHeight;
 
@@ -1545,11 +1459,11 @@ public class MapOverlayManager
             for (int i = 0; i < size; i++)
             {
                 int cellId = spatialGrid[i];
-                if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell) && cell.IsLand)
+                if (cellId >= 0 && cellId < cellIsLandById.Length && cellIsLandById[cellId])
                 {
-                    realmGrid[i] = cell.RealmId;
-                    provinceGrid[i] = cell.ProvinceId;
-                    countyGrid[i] = cell.CountyId;
+                    realmGrid[i] = cellRealmIdById[cellId];
+                    provinceGrid[i] = cellProvinceIdById[cellId];
+                    countyGrid[i] = cellCountyIdById[cellId];
                     isLand[i] = true;
                 }
                 else
@@ -1561,43 +1475,101 @@ public class MapOverlayManager
                 }
             }
 
-            float[] dist = new float[size];
-            for (int i = 0; i < size; i++)
-                dist[i] = 255f;
+            float[] realmDist = new float[size];
+            float[] provinceDist = new float[size];
+            float[] countyDist = new float[size];
+            Array.Fill(realmDist, 255f);
+            Array.Fill(provinceDist, 255f);
+            Array.Fill(countyDist, 255f);
 
-            // Seed: land pixels adjacent to land pixel with same province, different county
-            for (int y = 0; y < gridHeight; y++)
+            // Single seed scan for all administrative boundary classes.
+            Parallel.For(0, gridHeight, y =>
             {
+                int row = y * gridWidth;
                 for (int x = 0; x < gridWidth; x++)
                 {
-                    int idx = y * gridWidth + x;
-                    if (!isLand[idx]) continue;
+                    int idx = row + x;
+                    if (!isLand[idx])
+                        continue;
 
                     int realm = realmGrid[idx];
                     int province = provinceGrid[idx];
                     int county = countyGrid[idx];
-                    bool isBoundary = false;
 
-                    for (int dy = -1; dy <= 1 && !isBoundary; dy++)
+                    bool realmBoundary = false;
+                    bool provinceBoundary = false;
+                    bool countyBoundary = false;
+
+                    for (int dy = -1; dy <= 1 && !(realmBoundary && provinceBoundary && countyBoundary); dy++)
                     {
-                        for (int dx = -1; dx <= 1 && !isBoundary; dx++)
+                        for (int dx = -1; dx <= 1 && !(realmBoundary && provinceBoundary && countyBoundary); dx++)
                         {
-                            if (dx == 0 && dy == 0) continue;
-                            int nx = x + dx, ny = y + dy;
-                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
+                            if (dx == 0 && dy == 0)
+                                continue;
+
+                            int nx = x + dx;
+                            int ny = y + dy;
+                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight)
+                                continue;
+
                             int nIdx = ny * gridWidth + nx;
-                            if (isLand[nIdx] && realmGrid[nIdx] == realm && provinceGrid[nIdx] == province && countyGrid[nIdx] != county)
-                                isBoundary = true;
+                            if (!isLand[nIdx])
+                                continue;
+
+                            int nRealm = realmGrid[nIdx];
+                            if (!realmBoundary && nRealm != realm)
+                            {
+                                realmBoundary = true;
+                                continue;
+                            }
+
+                            int nProvince = provinceGrid[nIdx];
+                            if (!provinceBoundary && nRealm == realm && nProvince != province)
+                            {
+                                provinceBoundary = true;
+                                continue;
+                            }
+
+                            if (!countyBoundary && nRealm == realm && nProvince == province && countyGrid[nIdx] != county)
+                            {
+                                countyBoundary = true;
+                            }
                         }
                     }
 
-                    if (isBoundary)
-                        dist[idx] = 0f;
+                    if (realmBoundary)
+                        realmDist[idx] = 0f;
+                    if (provinceBoundary)
+                        provinceDist[idx] = 0f;
+                    if (countyBoundary)
+                        countyDist[idx] = 0f;
                 }
-            }
+            });
 
-            RunChamferTransform(dist, isLand);
-            return DistToBytes(dist);
+            Profiler.Begin("RunAdministrativeBorderChamferTransforms");
+            Task realmTask = Task.Run(() => RunChamferTransform(realmDist, isLand));
+            Task provinceTask = Task.Run(() => RunChamferTransform(provinceDist, isLand));
+            Task countyTask = Task.Run(() => RunChamferTransform(countyDist, isLand));
+            Task.WaitAll(realmTask, provinceTask, countyTask);
+            Profiler.End();
+
+            return new AdministrativeBorderDistPixels(
+                DistToBytes(realmDist),
+                DistToBytes(provinceDist),
+                DistToBytes(countyDist));
+        }
+
+        private Texture2D CreateBorderDistTexture(string textureName, byte[] pixels, string debugName)
+        {
+            var texture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+            texture.name = textureName;
+            texture.filterMode = FilterMode.Bilinear;
+            texture.anisoLevel = 8;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.LoadRawTextureData(pixels);
+            texture.Apply();
+            TextureDebugger.SaveTexture(texture, debugName);
+            return texture;
         }
 
         /// <summary>
@@ -2742,6 +2714,16 @@ public class MapOverlayManager
                 cell.ProvinceId = newProvinceId.Value;
             if (newCountyId.HasValue)
                 cell.CountyId = newCountyId.Value;
+
+            if (cellId >= 0 && cellId < cellRealmIdById.Length)
+            {
+                if (newRealmId.HasValue)
+                    cellRealmIdById[cellId] = newRealmId.Value;
+                if (newProvinceId.HasValue)
+                    cellProvinceIdById[cellId] = newProvinceId.Value;
+                if (newCountyId.HasValue)
+                    cellCountyIdById[cellId] = newCountyId.Value;
+            }
 
             bool needsUpdate = false;
             float scale = resolutionMultiplier;
