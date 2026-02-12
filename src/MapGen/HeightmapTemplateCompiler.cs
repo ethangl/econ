@@ -6,14 +6,14 @@ using System.Text;
 namespace MapGen.Core
 {
     /// <summary>
-    /// V2 template adapter that ports V1 DSL templates into meter-annotated V2 scripts.
+    /// Template adapter that ports legacy DSL templates into meter-annotated scripts.
     /// </summary>
-    public static class HeightmapTemplatesV2
+    public static class HeightmapTemplateCompiler
     {
         static readonly IReadOnlyDictionary<HeightmapTemplateType, HeightmapTemplateTuningProfile> TunedProfiles
             = new Dictionary<HeightmapTemplateType, HeightmapTemplateTuningProfile>
             {
-                // Set after focused V2-vs-V1 drift sweeps.
+                // Set after focused baseline-vs-candidate drift sweeps.
                 [HeightmapTemplateType.Continents] = new HeightmapTemplateTuningProfile
                 {
                     TerrainMagnitudeScale = 0.95f,
@@ -102,7 +102,7 @@ namespace MapGen.Core
                 },
             };
 
-        public static string GetTemplate(HeightmapTemplateType template, MapGenV2Config config)
+        public static string GetTemplate(HeightmapTemplateType template, MapGenConfig config)
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
 
@@ -167,7 +167,7 @@ namespace MapGen.Core
             }
         }
 
-        static string ConvertLine(string line, MapGenV2Config config)
+        static string ConvertLine(string line, MapGenConfig config)
         {
             string[] parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 0)
@@ -201,7 +201,7 @@ namespace MapGen.Core
             }
         }
 
-        public static HeightmapTemplateTuningProfile ResolveTuningProfile(HeightmapTemplateType template, MapGenV2Config config)
+        public static HeightmapTemplateTuningProfile ResolveTuningProfile(HeightmapTemplateType template, MapGenConfig config)
         {
             if (config != null && config.TemplateTuningOverride != null)
                 return config.TemplateTuningOverride;
@@ -309,7 +309,7 @@ namespace MapGen.Core
             return FormatFloat(value * scale);
         }
 
-        static string ConvertRangeSelector(string token, MapGenV2Config config)
+        static string ConvertRangeSelector(string token, MapGenConfig config)
         {
             string t = token.Trim().ToLowerInvariant();
             if (t == "land" || t == "water" || t == "all")
@@ -333,7 +333,7 @@ namespace MapGen.Core
             return FormatMeters(minMeters) + "-" + FormatMeters(maxMeters);
         }
 
-        static string ConvertLegacyDeltaRangeToMeters(string token, MapGenV2Config config)
+        static string ConvertLegacyDeltaRangeToMeters(string token, MapGenConfig config)
         {
             if (!TryParseRange(token, out string minRaw, out string maxRaw))
             {
@@ -355,13 +355,13 @@ namespace MapGen.Core
             return FormatMeters(minMeters) + "-" + FormatMeters(maxMeters);
         }
 
-        static float LegacyDeltaToMeters(float legacyDelta, MapGenV2Config config)
+        static float LegacyDeltaToMeters(float legacyDelta, MapGenConfig config)
         {
             float unit = (config.MaxElevationMeters + config.MaxSeaDepthMeters) / 100f;
             return legacyDelta * unit;
         }
 
-        static float LegacyAbsoluteToSignedMeters(float legacyAbsolute, MapGenV2Config config)
+        static float LegacyAbsoluteToSignedMeters(float legacyAbsolute, MapGenConfig config)
         {
             if (legacyAbsolute >= 20f)
             {

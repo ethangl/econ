@@ -67,13 +67,4 @@ namespace MapGen.Core
             return (float)land / CellCount;
         }
     }
-
-    [System.Obsolete("Use ElevationField.")]
-    public class ElevationFieldV2 : ElevationField
-    {
-        public ElevationFieldV2(CellMesh mesh, float maxSeaDepthMeters, float maxElevationMeters)
-            : base(mesh, maxSeaDepthMeters, maxElevationMeters)
-        {
-        }
-    }
 }

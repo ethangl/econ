@@ -29,12 +29,13 @@ namespace MapGen.Core
         public int Seed;
         public HeightmapTemplateType Template;
         public int CellCount;
-        public MapGenComparisonMetrics V1;
-        public MapGenComparisonMetrics V2;
+        public MapGenComparisonMetrics Baseline;
+        public MapGenComparisonMetrics Candidate;
+
     }
 
     /// <summary>
-    /// Side-by-side V1/V2 comparison runner and report generator.
+    /// Side-by-side baseline/candidate comparison runner and report generator.
     /// </summary>
     public static class MapGenComparison
     {
@@ -55,9 +56,6 @@ namespace MapGen.Core
             };
         }
 
-        [Obsolete("Use CreateConfig.")]
-        public static MapGenConfig CreateV2Config(MapGenConfig config) => CreateConfig(config);
-
         public static MapGenComparisonCase Compare(MapGenConfig config)
         {
             return Compare(config, null);
@@ -67,18 +65,18 @@ namespace MapGen.Core
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
 
-            MapGenResult v1 = MapGenPipeline.Generate(config);
+            MapGenResult baseline = MapGenPipeline.Generate(config);
             MapGenConfig candidateConfig = CreateConfig(config);
             candidateConfig.TemplateTuningOverride = tuningOverride;
-            MapGenResult v2 = MapGenPipeline.Generate(candidateConfig);
+            MapGenResult candidate = MapGenPipeline.Generate(candidateConfig);
 
             return new MapGenComparisonCase
             {
                 Seed = config.Seed,
                 Template = config.Template,
                 CellCount = config.CellCount,
-                V1 = ComputeMetrics(v1),
-                V2 = ComputeMetrics(v2)
+                Baseline = ComputeMetrics(baseline),
+                Candidate = ComputeMetrics(candidate)
             };
         }
 
@@ -98,7 +96,7 @@ namespace MapGen.Core
             if (cases == null) throw new ArgumentNullException(nameof(cases));
 
             var sb = new StringBuilder();
-            sb.AppendLine("# MapGen V1 vs V2 Comparison");
+            sb.AppendLine("# MapGen Baseline vs Candidate Comparison");
             sb.AppendLine();
             sb.AppendLine("Columns: land/water ratio, elevation percentiles (signed meters), river metrics, biome coverage (land+lake cells), political counts.");
             sb.AppendLine();
@@ -107,14 +105,14 @@ namespace MapGen.Core
             {
                 MapGenComparisonCase c = cases[i];
                 sb.AppendLine($"Case {i + 1}: seed={c.Seed}, template={c.Template}, requestedCells={c.CellCount}");
-                sb.AppendLine($"  V1 land={Fmt(c.V1.LandRatio)} water={Fmt(c.V1.WaterRatio)} edgeLand={Fmt(c.V1.EdgeLandRatio)} coast={Fmt(c.V1.CoastRatio)} elev[p10,p50,p90]=[{Fmt(c.V1.ElevationP10Meters)}, {Fmt(c.V1.ElevationP50Meters)}, {Fmt(c.V1.ElevationP90Meters)}] m");
-                sb.AppendLine($"  V2 land={Fmt(c.V2.LandRatio)} water={Fmt(c.V2.WaterRatio)} edgeLand={Fmt(c.V2.EdgeLandRatio)} coast={Fmt(c.V2.CoastRatio)} elev[p10,p50,p90]=[{Fmt(c.V2.ElevationP10Meters)}, {Fmt(c.V2.ElevationP50Meters)}, {Fmt(c.V2.ElevationP90Meters)}] m");
-                sb.AppendLine($"  Delta land={Fmt(c.V2.LandRatio - c.V1.LandRatio)} edgeLand={Fmt(c.V2.EdgeLandRatio - c.V1.EdgeLandRatio)} coast={Fmt(c.V2.CoastRatio - c.V1.CoastRatio)} riverCount={c.V2.RiverCount - c.V1.RiverCount} riverCoverage={Fmt(c.V2.RiverCoverage - c.V1.RiverCoverage)}");
-                sb.AppendLine($"  V1 rivers={c.V1.RiverCount}, coverage={Fmt(c.V1.RiverCoverage)} realms/provinces/counties={c.V1.RealmCount}/{c.V1.ProvinceCount}/{c.V1.CountyCount}");
-                sb.AppendLine($"  V2 rivers={c.V2.RiverCount}, coverage={Fmt(c.V2.RiverCoverage)} realms/provinces/counties={c.V2.RealmCount}/{c.V2.ProvinceCount}/{c.V2.CountyCount}");
-                sb.AppendLine($"  Biome overlap={Fmt(BiomeOverlap(c.V1.BiomeCounts, c.V2.BiomeCounts))}");
-                sb.AppendLine($"  Biome drift(top)={BuildBiomeDriftSummary(c.V1.BiomeCounts, c.V2.BiomeCounts, 4)}");
-                sb.AppendLine($"  Biome mix(top)={BuildBiomeMixSummary(c.V1.BiomeCounts, c.V2.BiomeCounts, 6)}");
+                sb.AppendLine($"  Baseline land={Fmt(c.Baseline.LandRatio)} water={Fmt(c.Baseline.WaterRatio)} edgeLand={Fmt(c.Baseline.EdgeLandRatio)} coast={Fmt(c.Baseline.CoastRatio)} elev[p10,p50,p90]=[{Fmt(c.Baseline.ElevationP10Meters)}, {Fmt(c.Baseline.ElevationP50Meters)}, {Fmt(c.Baseline.ElevationP90Meters)}] m");
+                sb.AppendLine($"  Candidate land={Fmt(c.Candidate.LandRatio)} water={Fmt(c.Candidate.WaterRatio)} edgeLand={Fmt(c.Candidate.EdgeLandRatio)} coast={Fmt(c.Candidate.CoastRatio)} elev[p10,p50,p90]=[{Fmt(c.Candidate.ElevationP10Meters)}, {Fmt(c.Candidate.ElevationP50Meters)}, {Fmt(c.Candidate.ElevationP90Meters)}] m");
+                sb.AppendLine($"  Delta land={Fmt(c.Candidate.LandRatio - c.Baseline.LandRatio)} edgeLand={Fmt(c.Candidate.EdgeLandRatio - c.Baseline.EdgeLandRatio)} coast={Fmt(c.Candidate.CoastRatio - c.Baseline.CoastRatio)} riverCount={c.Candidate.RiverCount - c.Baseline.RiverCount} riverCoverage={Fmt(c.Candidate.RiverCoverage - c.Baseline.RiverCoverage)}");
+                sb.AppendLine($"  Baseline rivers={c.Baseline.RiverCount}, coverage={Fmt(c.Baseline.RiverCoverage)} realms/provinces/counties={c.Baseline.RealmCount}/{c.Baseline.ProvinceCount}/{c.Baseline.CountyCount}");
+                sb.AppendLine($"  Candidate rivers={c.Candidate.RiverCount}, coverage={Fmt(c.Candidate.RiverCoverage)} realms/provinces/counties={c.Candidate.RealmCount}/{c.Candidate.ProvinceCount}/{c.Candidate.CountyCount}");
+                sb.AppendLine($"  Biome overlap={Fmt(BiomeOverlap(c.Baseline.BiomeCounts, c.Candidate.BiomeCounts))}");
+                sb.AppendLine($"  Biome drift(top)={BuildBiomeDriftSummary(c.Baseline.BiomeCounts, c.Candidate.BiomeCounts, 4)}");
+                sb.AppendLine($"  Biome mix(top)={BuildBiomeMixSummary(c.Baseline.BiomeCounts, c.Candidate.BiomeCounts, 6)}");
                 sb.AppendLine();
             }
 

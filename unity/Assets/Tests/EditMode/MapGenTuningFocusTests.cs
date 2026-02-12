@@ -9,8 +9,8 @@ using UnityEngine;
 namespace EconSim.Tests
 {
     [TestFixture]
-    [Category("MapGenV2")]
-    public class MapGenV2TuningFocusTests
+    [Category("MapGen")]
+    public class MapGenTuningFocusTests
     {
         static readonly FocusCase[] SmokeFocusCases =
         {
@@ -29,33 +29,33 @@ namespace EconSim.Tests
         };
 
         [Test]
-        public void FocusTemplates_V2VsV1_DriftReport_Smoke5k()
+        public void FocusTemplates_BaselineVsCandidate_DriftReport_Smoke5k()
         {
             RunFocusDrift(
                 SmokeFocusCases,
-                reportFileName: "mapgen_v2_tuning_focus_report_smoke_5k.txt",
+                reportFileName: "mapgen_tuning_focus_report_smoke_5k.txt",
                 enforceGuardrails: false);
         }
 
         [Test]
         [Explicit("Representative target-scale focus report for retuning (100k cells).")]
-        [Category("MapGenV2TuningOffline")]
-        public void FocusTemplates_V2VsV1_DriftReport_Target100k()
+        [Category("MapGenTuningOffline")]
+        public void FocusTemplates_BaselineVsCandidate_DriftReport_Target100k()
         {
             RunFocusDrift(
                 TargetScaleFocusCases,
-                reportFileName: "mapgen_v2_tuning_focus_report_target_100k.txt",
+                reportFileName: "mapgen_tuning_focus_report_target_100k.txt",
                 enforceGuardrails: false);
         }
 
         [Test]
         [Explicit("Enable after retuning to enforce target-scale drift guardrails.")]
-        [Category("MapGenV2TuningOffline")]
-        public void FocusTemplates_V2VsV1_DriftStaysWithinTuningBands_Target100k()
+        [Category("MapGenTuningOffline")]
+        public void FocusTemplates_BaselineVsCandidate_DriftStaysWithinTuningBands_Target100k()
         {
             RunFocusDrift(
                 TargetScaleFocusCases,
-                reportFileName: "mapgen_v2_tuning_focus_report_target_100k_guardrails.txt",
+                reportFileName: "mapgen_tuning_focus_report_target_100k_guardrails.txt",
                 enforceGuardrails: true);
         }
 
@@ -82,28 +82,28 @@ namespace EconSim.Tests
             Directory.CreateDirectory(debugDir);
             string reportPath = Path.Combine(debugDir, reportFileName);
             File.WriteAllText(reportPath, report);
-            TestContext.WriteLine($"MapGen V2 tuning report written: {reportPath}");
+            TestContext.WriteLine($"MapGen tuning report written: {reportPath}");
             TestContext.WriteLine(report);
 
             var failures = new List<string>();
             for (int i = 0; i < results.Count; i++)
             {
                 MapGenComparisonCase c = results[i];
-                float deltaLand = Math.Abs(c.V2.LandRatio - c.V1.LandRatio);
-                float deltaEdgeLand = Math.Abs(c.V2.EdgeLandRatio - c.V1.EdgeLandRatio);
-                float deltaCoast = Math.Abs(c.V2.CoastRatio - c.V1.CoastRatio);
-                int deltaRealmCount = Math.Abs(c.V2.RealmCount - c.V1.RealmCount);
-                int deltaProvinceCount = Math.Abs(c.V2.ProvinceCount - c.V1.ProvinceCount);
-                int deltaCountyCount = Math.Abs(c.V2.CountyCount - c.V1.CountyCount);
-                float biomeOverlap = ComputeBiomeOverlap(c.V1.BiomeCounts, c.V2.BiomeCounts);
-                int maxAbsBiomeDrift = ComputeMaxAbsBiomeDrift(c.V1.BiomeCounts, c.V2.BiomeCounts);
-                int floodplainDrift = Math.Abs(BiomeDelta(c.V1.BiomeCounts, c.V2.BiomeCounts, BiomeId.Floodplain));
-                int wetlandDrift = Math.Abs(BiomeDelta(c.V1.BiomeCounts, c.V2.BiomeCounts, BiomeId.Wetland));
-                int temperateForestDrift = Math.Abs(BiomeDelta(c.V1.BiomeCounts, c.V2.BiomeCounts, BiomeId.TemperateForest));
-                int mountainShrubDrift = Math.Abs(BiomeDelta(c.V1.BiomeCounts, c.V2.BiomeCounts, BiomeId.MountainShrub));
-                int coastalMarshDrift = Math.Abs(BiomeDelta(c.V1.BiomeCounts, c.V2.BiomeCounts, BiomeId.CoastalMarsh));
+                float deltaLand = Math.Abs(c.Candidate.LandRatio - c.Baseline.LandRatio);
+                float deltaEdgeLand = Math.Abs(c.Candidate.EdgeLandRatio - c.Baseline.EdgeLandRatio);
+                float deltaCoast = Math.Abs(c.Candidate.CoastRatio - c.Baseline.CoastRatio);
+                int deltaRealmCount = Math.Abs(c.Candidate.RealmCount - c.Baseline.RealmCount);
+                int deltaProvinceCount = Math.Abs(c.Candidate.ProvinceCount - c.Baseline.ProvinceCount);
+                int deltaCountyCount = Math.Abs(c.Candidate.CountyCount - c.Baseline.CountyCount);
+                float biomeOverlap = ComputeBiomeOverlap(c.Baseline.BiomeCounts, c.Candidate.BiomeCounts);
+                int maxAbsBiomeDrift = ComputeMaxAbsBiomeDrift(c.Baseline.BiomeCounts, c.Candidate.BiomeCounts);
+                int floodplainDrift = Math.Abs(BiomeDelta(c.Baseline.BiomeCounts, c.Candidate.BiomeCounts, BiomeId.Floodplain));
+                int wetlandDrift = Math.Abs(BiomeDelta(c.Baseline.BiomeCounts, c.Candidate.BiomeCounts, BiomeId.Wetland));
+                int temperateForestDrift = Math.Abs(BiomeDelta(c.Baseline.BiomeCounts, c.Candidate.BiomeCounts, BiomeId.TemperateForest));
+                int mountainShrubDrift = Math.Abs(BiomeDelta(c.Baseline.BiomeCounts, c.Candidate.BiomeCounts, BiomeId.MountainShrub));
+                int coastalMarshDrift = Math.Abs(BiomeDelta(c.Baseline.BiomeCounts, c.Candidate.BiomeCounts, BiomeId.CoastalMarsh));
 
-                // Focus guardrails (post-retuning): keep V2 tightly aligned with V1 for visual tuning templates.
+                // Focus guardrails (post-retuning): keep candidate tightly aligned with baseline for visual tuning templates.
                 if (deltaLand > 0.10f)
                     failures.Add($"{c.Template} seed={c.Seed}: |land ratio drift|={deltaLand:0.000} > 0.100");
                 if (deltaEdgeLand > 0.10f)
@@ -170,7 +170,7 @@ namespace EconSim.Tests
             if (failures.Count > 0)
             {
                 var sb = new StringBuilder();
-                sb.AppendLine("Focused V2 tuning drift exceeded guardrails:");
+                sb.AppendLine("Focused mapgen tuning drift exceeded guardrails:");
                 for (int i = 0; i < failures.Count; i++)
                     sb.AppendLine($"- {failures[i]}");
                 sb.AppendLine();

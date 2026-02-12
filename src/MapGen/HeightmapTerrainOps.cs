@@ -4,9 +4,9 @@ using System.Collections.Generic;
 namespace MapGen.Core
 {
     /// <summary>
-    /// V2 heightmap operations in signed meters relative to sea level.
+    /// Heightmap operations in signed meters relative to sea level.
     /// </summary>
-    public static class HeightmapOpsV2
+    public static class HeightmapTerrainOps
     {
         static float GetBlobPower(int cellCount)
         {

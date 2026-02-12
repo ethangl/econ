@@ -6,13 +6,13 @@ using UnityEngine;
 namespace EconSim.Tests
 {
     [TestFixture]
-    [Category("MapGenV2")]
-    public class GameManagerV2DefaultRegressionTests
+    [Category("MapGen")]
+    public class GameManagerDefaultRegressionTests
     {
         [Test]
-        public void GenerateMap_DefaultsToV2_AndStaysWithinSmokeBand()
+        public void GenerateMap_DefaultsToMapGen_AndStaysWithinSmokeBand()
         {
-            var gameObject = new GameObject("GameManagerV2DefaultRegressionTests");
+            var gameObject = new GameObject("GameManagerDefaultRegressionTests");
             var manager = gameObject.AddComponent<GameManager>();
             manager.GenerationMode = MapGenerationMode.Default;
 
@@ -36,19 +36,19 @@ namespace EconSim.Tests
                 manager.MapData.AssertElevationInvariants();
                 manager.MapData.AssertWorldInvariants();
 
-                float v2LandRatio = manager.MapGenResult.Elevation.LandRatio();
+                float mapGenLandRatio = manager.MapGenResult.Elevation.LandRatio();
                 float runtimeLandRatio = manager.MapData.Cells.Count > 0
                     ? manager.MapData.Info.LandCells / (float)manager.MapData.Cells.Count
                     : 0f;
                 int riverCount = manager.MapGenResult.Rivers.Rivers.Length;
                 float p50 = Percentile(manager.MapGenResult.Elevation.ElevationMetersSigned, 0.50f);
 
-                Assert.That(v2LandRatio, Is.InRange(0.30f, 0.82f), "V2 land ratio drifted outside expected broad band.");
+                Assert.That(mapGenLandRatio, Is.InRange(0.30f, 0.82f), "MapGen land ratio drifted outside expected broad band.");
                 Assert.That(runtimeLandRatio, Is.InRange(0.30f, 0.82f), "Runtime land ratio drifted outside expected broad band.");
-                Assert.That(Mathf.Abs(runtimeLandRatio - v2LandRatio), Is.LessThanOrEqualTo(0.08f),
-                    "Runtime conversion drifted too far from V2 land ratio.");
-                Assert.That(riverCount, Is.InRange(5, 250), "V2 river count drifted outside expected broad band.");
-                Assert.That(p50, Is.InRange(-500f, 1800f), "V2 p50 elevation drifted outside expected broad band.");
+                Assert.That(Mathf.Abs(runtimeLandRatio - mapGenLandRatio), Is.LessThanOrEqualTo(0.08f),
+                    "Runtime conversion drifted too far from MapGen land ratio.");
+                Assert.That(riverCount, Is.InRange(5, 250), "MapGen river count drifted outside expected broad band.");
+                Assert.That(p50, Is.InRange(-500f, 1800f), "MapGen p50 elevation drifted outside expected broad band.");
             }
             finally
             {
@@ -63,9 +63,9 @@ namespace EconSim.Tests
         }
 
         [Test]
-        public void GenerateMap_ForceV2_UsesV2Path()
+        public void GenerateMap_DefaultMode_UsesMapGenPath()
         {
-            var gameObject = new GameObject("GameManagerForceV2Tests");
+            var gameObject = new GameObject("GameManagerDefaultModeTests");
             var manager = gameObject.AddComponent<GameManager>();
             manager.GenerationMode = MapGenerationMode.Default;
 
@@ -89,10 +89,10 @@ namespace EconSim.Tests
                 manager.MapData.AssertElevationInvariants();
                 manager.MapData.AssertWorldInvariants();
 
-                float v2LandRatio = manager.MapGenResult.Elevation.LandRatio();
+                float mapGenLandRatio = manager.MapGenResult.Elevation.LandRatio();
                 int riverCount = manager.MapGenResult.Rivers.Rivers.Length;
-                Assert.That(v2LandRatio, Is.InRange(0.30f, 0.82f), "ForceV2 land ratio drifted outside expected broad band.");
-                Assert.That(riverCount, Is.InRange(5, 250), "ForceV2 river count drifted outside expected broad band.");
+                Assert.That(mapGenLandRatio, Is.InRange(0.30f, 0.82f), "MapGen land ratio drifted outside expected broad band.");
+                Assert.That(riverCount, Is.InRange(5, 250), "MapGen river count drifted outside expected broad band.");
             }
             finally
             {

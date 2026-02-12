@@ -23,12 +23,4 @@ namespace MapGen.Core
             PrecipitationMmYear = new float[mesh.CellCount];
         }
     }
-
-    [System.Obsolete("Use ClimateField.")]
-    public class ClimateFieldV2 : ClimateField
-    {
-        public ClimateFieldV2(CellMesh mesh) : base(mesh)
-        {
-        }
-    }
 }

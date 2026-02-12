@@ -4,11 +4,11 @@ using System.Globalization;
 namespace MapGen.Core
 {
     /// <summary>
-    /// DSL parser for MapGen V2 terrain templates.
+    /// DSL parser for map terrain templates.
     /// Elevation magnitudes are specified in meters (suffix: m).
     /// Coordinates are percentages (0..100) for template authoring convenience.
     /// </summary>
-    public static class HeightmapDslV2
+    public static class HeightmapDsl
     {
         public static void Execute(ElevationField field, string script, int seed, HeightmapDslDiagnostics diagnostics = null)
         {
@@ -108,7 +108,7 @@ namespace MapGen.Core
                     ExecuteInvert(field, parts, rng);
                     return new OpTrace(op);
                 default:
-                    throw new ArgumentException($"Unknown V2 heightmap operation: {op}");
+                    throw new ArgumentException($"Unknown heightmap operation: {op}");
             }
         }
 
@@ -146,7 +146,7 @@ namespace MapGen.Core
 
                 if (positive)
                 {
-                    placed = HeightmapOpsV2.Hill(
+                    placed = HeightmapTerrainOps.Hill(
                         field,
                         x,
                         y,
@@ -161,7 +161,7 @@ namespace MapGen.Core
                 }
                 else
                 {
-                    placed = HeightmapOpsV2.Pit(
+                    placed = HeightmapTerrainOps.Pit(
                         field,
                         x,
                         y,
@@ -225,7 +225,7 @@ namespace MapGen.Core
                     int limit = 0;
                     while (limit < 50)
                     {
-                        int startCell = HeightmapOpsV2.FindNearestCell(field.Mesh, x1 * mapW, y1 * mapH);
+                        int startCell = HeightmapTerrainOps.FindNearestCell(field.Mesh, x1 * mapW, y1 * mapH);
                         if (startCell >= 0 && field.IsLand(startCell)) break;
                         x1 = RandInRange(xMin, xMax, rng);
                         y1 = RandInRange(yMin, yMax, rng);
@@ -239,9 +239,9 @@ namespace MapGen.Core
                 trace.AddEnd(x2 * 100f, y2 * 100f);
 
                 if (positive)
-                    HeightmapOpsV2.Range(field, x1, y1, x2, y2, heightMeters, rng);
+                    HeightmapTerrainOps.Range(field, x1, y1, x2, y2, heightMeters, rng);
                 else
-                    HeightmapOpsV2.Trough(field, x1, y1, x2, y2, heightMeters, rng);
+                    HeightmapTerrainOps.Trough(field, x1, y1, x2, y2, heightMeters, rng);
             }
 
             return trace;
@@ -253,7 +253,7 @@ namespace MapGen.Core
                 throw new ArgumentException("Mask operation requires: fraction.");
 
             float fraction = ParseFloat(parts[1]);
-            HeightmapOpsV2.Mask(field, fraction);
+            HeightmapTerrainOps.Mask(field, fraction);
         }
 
         static void ExecuteStrait(ElevationField field, string[] parts, Random rng)
@@ -264,7 +264,7 @@ namespace MapGen.Core
             int width = ParseCountRange(parts[1], rng);
             string dirStr = parts[2].ToLowerInvariant();
             int direction = (dirStr == "vertical" || dirStr == "1") ? 1 : 0;
-            HeightmapOpsV2.Strait(field, width, direction, rng);
+            HeightmapTerrainOps.Strait(field, width, direction, rng);
         }
 
         static void ExecuteAdd(ElevationField field, string[] parts)
@@ -277,7 +277,7 @@ namespace MapGen.Core
                 ? ParseHeightRange(parts[2], field)
                 : (-field.MaxSeaDepthMeters, field.MaxElevationMeters);
 
-            HeightmapOpsV2.Add(field, deltaMeters, minH, maxH);
+            HeightmapTerrainOps.Add(field, deltaMeters, minH, maxH);
         }
 
         static void ExecuteMultiply(ElevationField field, string[] parts)
@@ -290,7 +290,7 @@ namespace MapGen.Core
                 ? ParseHeightRange(parts[2], field)
                 : (-field.MaxSeaDepthMeters, field.MaxElevationMeters);
 
-            HeightmapOpsV2.Multiply(field, factor, minH, maxH);
+            HeightmapTerrainOps.Multiply(field, factor, minH, maxH);
         }
 
         static void ExecuteSmooth(ElevationField field, string[] parts)
@@ -299,7 +299,7 @@ namespace MapGen.Core
             if (parts.Length >= 2)
                 passes = (int)Math.Round(ParseFloat(parts[1]), MidpointRounding.AwayFromZero);
 
-            HeightmapOpsV2.Smooth(field, passes);
+            HeightmapTerrainOps.Smooth(field, passes);
         }
 
         static void ExecuteInvert(ElevationField field, string[] parts, Random rng)
@@ -326,7 +326,7 @@ namespace MapGen.Core
             }
 
             if (rng.NextDouble() < probability)
-                HeightmapOpsV2.Invert(field, axis);
+                HeightmapTerrainOps.Invert(field, axis);
         }
 
         static int ParseCountRange(string token, Random rng)

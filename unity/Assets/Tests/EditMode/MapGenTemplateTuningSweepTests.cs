@@ -9,8 +9,8 @@ using UnityEngine;
 namespace EconSim.Tests
 {
     [TestFixture]
-    [Category("MapGenV2Tuning")]
-    public class MapGenV2TemplateTuningSweepTests
+    [Category("MapGenTuning")]
+    public class MapGenTemplateTuningSweepTests
     {
         readonly FocusCase[] _focusCases =
         {
@@ -22,11 +22,11 @@ namespace EconSim.Tests
 
         [Test]
         [Explicit("Offline 100k tuning sweep. Not for regular/CI runs.")]
-        [Category("MapGenV2TuningOffline")]
+        [Category("MapGenTuningOffline")]
         public void SweepFocusedTemplates_EmitBestProfiles()
         {
             var summary = new StringBuilder();
-            summary.AppendLine("# V2 Focused Template Tuning Sweep");
+            summary.AppendLine("# MapGen Focused Template Tuning Sweep");
             summary.AppendLine();
             summary.AppendLine("Objective score = 5*|edgeLand drift| + 3*|land drift| + 2*|coast drift|");
             summary.AppendLine();
@@ -51,8 +51,8 @@ namespace EconSim.Tests
 
             string debugDir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "debug"));
             Directory.CreateDirectory(debugDir);
-            string txtPath = Path.Combine(debugDir, "mapgen_v2_focus_tuning_sweep_summary_100k.txt");
-            string csvPath = Path.Combine(debugDir, "mapgen_v2_focus_tuning_sweep_candidates_100k.csv");
+            string txtPath = Path.Combine(debugDir, "mapgen_focus_tuning_sweep_summary_100k.txt");
+            string csvPath = Path.Combine(debugDir, "mapgen_focus_tuning_sweep_candidates_100k.csv");
             File.WriteAllText(txtPath, summary.ToString());
             File.WriteAllText(csvPath, csv.ToString());
 
@@ -118,7 +118,7 @@ namespace EconSim.Tests
                                 return default;
                             }
 
-                            var v2Metrics = Metrics.FromV2(v2);
+                            var v2Metrics = Metrics.FromMapGen(v2);
 
                             float deltaLand = v2Metrics.LandRatio - baselineMetrics.LandRatio;
                             float deltaEdge = v2Metrics.EdgeLandRatio - baselineMetrics.EdgeLandRatio;
@@ -148,8 +148,8 @@ namespace EconSim.Tests
             Assert.That(hasBest, Is.True, $"No sweep candidate was evaluated for {focus.Template}");
 
             MapGenConfig defaultConfig = MapGenComparison.CreateConfig(config);
-            MapGenResult defaultV2 = MapGenPipeline.Generate(defaultConfig);
-            var defaultMetrics = Metrics.FromV2(defaultV2);
+            MapGenResult defaultMapGen = MapGenPipeline.Generate(defaultConfig);
+            var defaultMetrics = Metrics.FromMapGen(defaultMapGen);
             best.DefaultDeltaLand = defaultMetrics.LandRatio - baselineMetrics.LandRatio;
             best.DefaultDeltaEdgeLand = defaultMetrics.EdgeLandRatio - baselineMetrics.EdgeLandRatio;
             best.DefaultDeltaCoast = defaultMetrics.CoastRatio - baselineMetrics.CoastRatio;
@@ -238,7 +238,7 @@ namespace EconSim.Tests
                 };
             }
 
-            public static Metrics FromV2(MapGenResult result)
+            public static Metrics FromMapGen(MapGenResult result)
             {
                 int n = result.Mesh.CellCount;
                 int land = 0;

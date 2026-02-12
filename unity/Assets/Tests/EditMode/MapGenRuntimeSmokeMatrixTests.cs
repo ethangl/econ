@@ -7,8 +7,8 @@ using NUnit.Framework;
 namespace EconSim.Tests
 {
     [TestFixture]
-    [Category("MapGenV2")]
-    public class MapGenV2RuntimeSmokeMatrixTests
+    [Category("MapGen")]
+    public class MapGenRuntimeSmokeMatrixTests
     {
         readonly SmokeCase[] _cases =
         {
@@ -57,11 +57,11 @@ namespace EconSim.Tests
 
                 string label = $"{c.Template} seed={c.Seed} cells={c.CellCount}";
                 Assert.That(landRatio, Is.InRange(c.LandRatioMin, c.LandRatioMax),
-                    $"{label}: V2 land ratio out of band.");
+                    $"{label}: MapGen land ratio out of band.");
                 Assert.That(runtimeLandRatio, Is.InRange(c.LandRatioMin, c.LandRatioMax),
                     $"{label}: runtime land ratio out of band.");
                 Assert.That(Math.Abs(runtimeLandRatio - landRatio), Is.LessThanOrEqualTo(0.08f),
-                    $"{label}: runtime/V2 land ratio drift too high.");
+                    $"{label}: runtime/mapgen land ratio drift too high.");
 
                 Assert.That(riverCount, Is.InRange(c.RiverCountMin, c.RiverCountMax),
                     $"{label}: river count out of band.");

@@ -5,8 +5,8 @@ using NUnit.Framework;
 namespace EconSim.Tests
 {
     [TestFixture]
-    [Category("MapGenV2")]
-    public class MapGenV2BiomePoliticalMetricsTests
+    [Category("MapGen")]
+    public class MapGenBiomePoliticalMetricsTests
     {
         [Test]
         public void BiomesAndPolitics_StayWithinBroadSanityBands()

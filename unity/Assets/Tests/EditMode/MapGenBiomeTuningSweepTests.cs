@@ -8,8 +8,8 @@ using UnityEngine;
 namespace EconSim.Tests
 {
     [TestFixture]
-    [Category("MapGenV2Tuning")]
-    public class MapGenV2BiomeTuningSweepTests
+    [Category("MapGenTuning")]
+    public class MapGenBiomeTuningSweepTests
     {
         [Test]
         public void SweepHighIslandBiomeProfile_EmitBestCandidate()
@@ -25,8 +25,8 @@ namespace EconSim.Tests
             };
 
             MapGenComparisonCase baseline = MapGenComparison.Compare(config);
-            int[] baselineBiome = baseline.V1.BiomeCounts;
-            HeightmapTemplateTuningProfile defaultProfile = HeightmapTemplatesV2.ResolveTuningProfile(
+            int[] baselineBiome = baseline.Baseline.BiomeCounts;
+            HeightmapTemplateTuningProfile defaultProfile = HeightmapTemplateCompiler.ResolveTuningProfile(
                 config.Template,
                 MapGenComparison.CreateConfig(config));
             if (defaultProfile == null)
@@ -62,7 +62,7 @@ namespace EconSim.Tests
                                 profile.BiomeWetlandFluxThresholdScale = wetlandFluxCandidates[wi];
                                 profile.BiomeWetlandMaxSlopeScale = wetlandMaxSlopeCandidates[mi];
 
-                                int[] candidateBiome = GenerateV2BiomeCounts(config, profile);
+                                int[] candidateBiome = GenerateBiomeCounts(config, profile);
                                 SweepResult candidate = ScoreCandidate(baselineBiome, candidateBiome, profile);
 
                                 csv.AppendLine(
@@ -81,10 +81,10 @@ namespace EconSim.Tests
 
             Assert.That(hasBest, Is.True, "No biome sweep candidates were evaluated.");
 
-            SweepResult current = ScoreCandidate(baselineBiome, GenerateV2BiomeCounts(config, defaultProfile), defaultProfile);
+            SweepResult current = ScoreCandidate(baselineBiome, GenerateBiomeCounts(config, defaultProfile), defaultProfile);
 
             var summary = new StringBuilder();
-            summary.AppendLine("# V2 HighIsland Biome Tuning Sweep");
+            summary.AppendLine("# MapGen HighIsland Biome Tuning Sweep");
             summary.AppendLine();
             summary.AppendLine("Objective score = 5*(1-overlap) + 2*|floodplain norm drift| + 2*|wetland norm drift| + 1.5*temperate-forest deficit + 1.0*|coastal-marsh norm drift|");
             summary.AppendLine();
@@ -100,8 +100,8 @@ namespace EconSim.Tests
 
             string debugDir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "debug"));
             Directory.CreateDirectory(debugDir);
-            string txtPath = Path.Combine(debugDir, "mapgen_v2_highisland_biome_tuning_sweep_summary.txt");
-            string csvPath = Path.Combine(debugDir, "mapgen_v2_highisland_biome_tuning_sweep_candidates.csv");
+            string txtPath = Path.Combine(debugDir, "mapgen_highisland_biome_tuning_sweep_summary.txt");
+            string csvPath = Path.Combine(debugDir, "mapgen_highisland_biome_tuning_sweep_candidates.csv");
             File.WriteAllText(txtPath, summary.ToString());
             File.WriteAllText(csvPath, csv.ToString());
 
@@ -147,7 +147,7 @@ namespace EconSim.Tests
             };
         }
 
-        static int[] GenerateV2BiomeCounts(MapGenConfig config, HeightmapTemplateTuningProfile profile)
+        static int[] GenerateBiomeCounts(MapGenConfig config, HeightmapTemplateTuningProfile profile)
         {
             MapGenConfig v2Config = MapGenComparison.CreateConfig(config);
             v2Config.TemplateTuningOverride = profile;

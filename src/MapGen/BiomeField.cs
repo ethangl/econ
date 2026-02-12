@@ -1,7 +1,7 @@
 namespace MapGen.Core
 {
     /// <summary>
-    /// Per-cell biome, suitability, population, and geography outputs for V2 pipeline.
+    /// Per-cell biome, suitability, population, and geography outputs.
     /// </summary>
     public class BiomeField
     {
@@ -49,14 +49,6 @@ namespace MapGen.Core
             DebugAlluvialCandidate = new bool[n];
             DebugLithosolCandidate = new bool[n];
             DebugWetlandCandidate = new bool[n];
-        }
-    }
-
-    [System.Obsolete("Use BiomeField.")]
-    public class BiomeFieldV2 : BiomeField
-    {
-        public BiomeFieldV2(CellMesh mesh) : base(mesh)
-        {
         }
     }
 }

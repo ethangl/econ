@@ -4,16 +4,16 @@ using System.Collections.Generic;
 namespace MapGen.Core
 {
     /// <summary>
-    /// Biome/suitability/population/geography stage for V2.
+    /// Biome/suitability/population/geography stage.
     /// </summary>
-    public static class BiomeOpsV2
+    public static class BiomeGenerationOps
     {
         public static void Compute(
             BiomeField biome,
             ElevationField elevation,
             ClimateField climate,
             RiverField rivers,
-            MapGenV2Config config)
+            MapGenConfig config)
         {
             ComputeLakeCells(biome, elevation, rivers);
             ComputeWaterFeatures(biome, elevation);
@@ -239,11 +239,11 @@ namespace MapGen.Core
             ElevationField elevation,
             ClimateField climate,
             RiverField rivers,
-            MapGenV2Config config)
+            MapGenConfig config)
         {
             bool[] cellHasRiver = ComputeCellHasRiver(biome.Mesh, rivers, config.EffectiveRiverTraceThreshold);
             float[] cellFlux = ComputeCellFluxFromVertices(biome.Mesh, rivers);
-            HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(config.Template, config);
+            HeightmapTemplateTuningProfile profile = HeightmapTemplateCompiler.ResolveTuningProfile(config.Template, config);
             float coastSaltScale = profile != null ? profile.BiomeCoastSaltScale : 1f;
             float salineThresholdScale = profile != null ? profile.BiomeSalineThresholdScale : 1f;
             float slopeScale = profile != null ? profile.BiomeSlopeScale : 1f;

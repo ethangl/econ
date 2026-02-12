@@ -5,8 +5,8 @@ using NUnit.Framework;
 namespace EconSim.Tests
 {
     [TestFixture]
-    [Category("MapGenV2")]
-    public class MapGenV2ClimateRiverMetricsTests
+    [Category("MapGen")]
+    public class MapGenClimateRiverMetricsTests
     {
         [Test]
         public void ClimateAndRivers_StayWithinBroadSanityBands()
@@ -61,7 +61,7 @@ namespace EconSim.Tests
                 float effectiveTraceThreshold = config.EffectiveRiverTraceThreshold;
                 for (int i = 0; i < riverCount; i++)
                 {
-                    RiverV2 river = result.Rivers.Rivers[i];
+                    RiverPath river = result.Rivers.Rivers[i];
                     Assert.That(river.Vertices, Is.Not.Null, $"River path missing for {template} river {river.Id}");
                     Assert.That(river.Vertices.Length, Is.GreaterThanOrEqualTo(effectiveMinVertices),
                         $"River shorter than minimum for {template} river {river.Id}");

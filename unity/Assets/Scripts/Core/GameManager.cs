@@ -13,11 +13,7 @@ namespace EconSim.Core
 {
     public enum MapGenerationMode
     {
-        Default = 0,
-        [Obsolete("Use MapGenerationMode.Default.")]
-        V2Default = Default,
-        [Obsolete("Use MapGenerationMode.Default.")]
-        ForceV2 = Default
+        Default = 0
     }
 
     /// <summary>

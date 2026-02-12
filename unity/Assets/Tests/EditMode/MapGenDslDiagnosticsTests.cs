@@ -9,8 +9,8 @@ using UnityEngine;
 namespace EconSim.Tests
 {
     [TestFixture]
-    [Category("MapGenV2")]
-    public class MapGenV2DslDiagnosticsTests
+    [Category("MapGen")]
+    public class MapGenDslDiagnosticsTests
     {
         [Test]
         public void PlacementOps_StayInsideRequestedDslBounds()
@@ -27,7 +27,7 @@ trough 6 400m 60-65 35-45
 ";
 
             var diagnostics = new HeightmapDslDiagnostics();
-            HeightmapDslV2.Execute(field, script, seed: 1234, diagnostics);
+            HeightmapDsl.Execute(field, script, seed: 1234, diagnostics);
 
             HeightmapDslOpMetrics hill = FindOp(diagnostics, "hill");
             HeightmapDslOpMetrics pit = FindOp(diagnostics, "pit");
@@ -54,16 +54,16 @@ trough 6 400m 60-65 35-45
             };
 
             ElevationField field = CreateField(config.MeshSeed, config.CellCount, config.AspectRatio, config.CellSizeKm, config.MaxSeaDepthMeters, config.MaxElevationMeters);
-            string script = HeightmapTemplatesV2.GetTemplate(config.Template, config);
+            string script = HeightmapTemplateCompiler.GetTemplate(config.Template, config);
             var diagnostics = new HeightmapDslDiagnostics();
-            HeightmapDslV2.Execute(field, script, config.ElevationSeed, diagnostics);
+            HeightmapDsl.Execute(field, script, config.ElevationSeed, diagnostics);
 
             Assert.That(diagnostics.Operations.Count, Is.GreaterThan(0), "Expected at least one recorded DSL operation.");
 
             bool sawChangingOp = false;
             bool sawHillOp = false;
             var report = new StringBuilder();
-            report.AppendLine("# DSL V2 Operation Diagnostics");
+            report.AppendLine("# DSL MapGen Operation Diagnostics");
 
             for (int i = 0; i < diagnostics.Operations.Count; i++)
             {
@@ -96,14 +96,14 @@ trough 6 400m 60-65 35-45
 
             string debugDir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "debug"));
             Directory.CreateDirectory(debugDir);
-            string reportPath = Path.Combine(debugDir, "mapgen_v2_dsl_op_diagnostics.txt");
+            string reportPath = Path.Combine(debugDir, "mapgen_dsl_op_diagnostics.txt");
             File.WriteAllText(reportPath, report.ToString());
             TestContext.WriteLine($"DSL diagnostics report written: {reportPath}");
         }
 
         [Test]
         [Explicit("Offline diagnostics for Archipelago op-level drift at 100k target scale.")]
-        [Category("MapGenV2TuningOffline")]
+        [Category("MapGenTuningOffline")]
         public void Archipelago100k_EmitOperationImpactReport()
         {
             var config = new MapGenConfig
@@ -121,15 +121,15 @@ trough 6 400m 60-65 35-45
                 config.MaxSeaDepthMeters,
                 config.MaxElevationMeters);
 
-            string script = HeightmapTemplatesV2.GetTemplate(config.Template, config);
+            string script = HeightmapTemplateCompiler.GetTemplate(config.Template, config);
             var diagnostics = new HeightmapDslDiagnostics();
-            HeightmapDslV2.Execute(field, script, config.ElevationSeed, diagnostics);
+            HeightmapDsl.Execute(field, script, config.ElevationSeed, diagnostics);
 
             Assert.That(diagnostics.Operations.Count, Is.GreaterThan(0), "Expected op diagnostics for Archipelago script.");
 
             var byOperation = new Dictionary<string, (float landDeltaSum, float edgeDeltaSum, int count)>(StringComparer.OrdinalIgnoreCase);
             var report = new StringBuilder();
-            report.AppendLine("# Archipelago V2 DSL Op Impact @ 100k");
+            report.AppendLine("# Archipelago MapGen DSL Op Impact @ 100k");
             report.AppendLine($"seed={config.Seed} template={config.Template} cellCount={config.CellCount}");
             report.AppendLine();
             report.AppendLine("line op        deltaLand deltaEdge changed meanAbs(m) maxRaise(m) maxLower(m) placements raw");
@@ -161,7 +161,7 @@ trough 6 400m 60-65 35-45
 
             string debugDir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "debug"));
             Directory.CreateDirectory(debugDir);
-            string reportPath = Path.Combine(debugDir, "mapgen_v2_archipelago_op_impact_100k.txt");
+            string reportPath = Path.Combine(debugDir, "mapgen_archipelago_op_impact_100k.txt");
             File.WriteAllText(reportPath, report.ToString());
             TestContext.WriteLine($"Archipelago op diagnostics report written: {reportPath}");
             TestContext.WriteLine(report.ToString());

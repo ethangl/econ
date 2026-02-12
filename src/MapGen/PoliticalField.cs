@@ -1,7 +1,7 @@
 namespace MapGen.Core
 {
     /// <summary>
-    /// Per-cell political hierarchy for V2 (0 = unassigned/water).
+    /// Per-cell political hierarchy (0 = unassigned/water).
     /// </summary>
     public class PoliticalField
     {
@@ -37,14 +37,6 @@ namespace MapGen.Core
 
             Capitals = System.Array.Empty<int>();
             CountySeats = System.Array.Empty<int>();
-        }
-    }
-
-    [System.Obsolete("Use PoliticalField.")]
-    public class PoliticalFieldV2 : PoliticalField
-    {
-        public PoliticalFieldV2(CellMesh mesh) : base(mesh)
-        {
         }
     }
 }

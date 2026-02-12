@@ -3,12 +3,11 @@ using System;
 namespace MapGen.Core
 {
     /// <summary>
-    /// MapGen V2 pipeline scaffolding.
-    /// Generates mesh + V2 elevation field + world metadata.
+    /// Canonical world-unit map pipeline implementation.
     /// </summary>
-    public static class MapGenPipelineV2
+    public static class MapGenPipelineCore
     {
-        public static MapGenV2Result Generate(MapGenV2Config config)
+        public static MapGenResult Generate(MapGenConfig config)
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
             config.Validate();
@@ -19,16 +18,16 @@ namespace MapGen.Core
             GenerateElevationFromDsl(elevation, config);
             EnsureNonDegenerateLandWater(elevation);
             var climate = new ClimateField(mesh);
-            TemperatureOpsV2.Compute(climate, elevation, config, world);
-            PrecipitationOpsV2.Compute(climate, elevation, config, world);
+            TemperatureModelOps.Compute(climate, elevation, config, world);
+            PrecipitationModelOps.Compute(climate, elevation, config, world);
             var rivers = new RiverField(mesh);
-            FlowOpsV2.Compute(rivers, elevation, climate, config);
+            RiverFlowOps.Compute(rivers, elevation, climate, config);
             var biomes = new BiomeField(mesh);
-            BiomeOpsV2.Compute(biomes, elevation, climate, rivers, config);
+            BiomeGenerationOps.Compute(biomes, elevation, climate, rivers, config);
             var political = new PoliticalField(mesh);
-            PoliticalOpsV2.Compute(political, biomes, elevation, config);
+            PoliticalGenerationOps.Compute(political, biomes, elevation, config);
 
-            return new MapGenV2Result
+            return new MapGenResult
             {
                 Mesh = mesh,
                 Elevation = elevation,
@@ -40,7 +39,7 @@ namespace MapGen.Core
             };
         }
 
-        static CellMesh GenerateMesh(MapGenV2Config config)
+        static CellMesh GenerateMesh(MapGenConfig config)
         {
             float cellAreaKm2 = config.CellSizeKm * config.CellSizeKm;
             float mapAreaKm2 = config.CellCount * cellAreaKm2;
@@ -59,20 +58,20 @@ namespace MapGen.Core
             return mesh;
         }
 
-        static void GenerateElevationFromDsl(ElevationField elevation, MapGenV2Config config)
+        static void GenerateElevationFromDsl(ElevationField elevation, MapGenConfig config)
         {
-            string script = HeightmapTemplatesV2.GetTemplate(config.Template, config);
+            string script = HeightmapTemplateCompiler.GetTemplate(config.Template, config);
             if (string.IsNullOrWhiteSpace(script))
-                throw new InvalidOperationException($"No V2 template found for {config.Template}.");
+                throw new InvalidOperationException($"No map template found for {config.Template}.");
 
-            HeightmapDslV2.Execute(elevation, script, config.ElevationSeed);
+            HeightmapDsl.Execute(elevation, script, config.ElevationSeed);
             ConstrainLandRatioBand(elevation, config.Template);
             elevation.ClampAll();
         }
 
         static void ConstrainLandRatioBand(ElevationField elevation, HeightmapTemplateType template)
         {
-            var (minLand, maxLand) = HeightmapTemplatesV2.GetLandRatioBand(template);
+            var (minLand, maxLand) = HeightmapTemplateCompiler.GetLandRatioBand(template);
             for (int iter = 0; iter < 3; iter++)
             {
                 float current = elevation.LandRatio();
@@ -149,7 +148,7 @@ namespace MapGen.Core
             elevation[maxIndex] = 0.1f * elevation.MaxElevationMeters;
         }
 
-        static WorldMetadata BuildWorldMetadata(MapGenV2Config config, CellMesh mesh)
+        static WorldMetadata BuildWorldMetadata(MapGenConfig config, CellMesh mesh)
         {
             float latitudeNorth = config.LatitudeSouth + mesh.Height / 111f;
 

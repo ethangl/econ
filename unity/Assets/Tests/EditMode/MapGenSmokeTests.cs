@@ -4,11 +4,11 @@ using NUnit.Framework;
 namespace EconSim.Tests
 {
     [TestFixture]
-    [Category("MapGenV2")]
-    public class MapGenV2SmokeTests
+    [Category("MapGen")]
+    public class MapGenSmokeTests
     {
         [Test]
-        public void PipelineV2_IsDeterministic_AndProducesSignedElevationDomain()
+        public void Pipeline_IsDeterministic_AndProducesSignedElevationDomain()
         {
             var config = new MapGenConfig
             {
@@ -40,8 +40,8 @@ namespace EconSim.Tests
             Assert.That(runA.Elevation.CellCount, Is.EqualTo(runA.Mesh.CellCount));
 
             var (land, water) = runA.Elevation.CountLandWater();
-            Assert.That(land, Is.GreaterThan(0), "V2 terrain should include land.");
-            Assert.That(water, Is.GreaterThan(0), "V2 terrain should include water.");
+            Assert.That(land, Is.GreaterThan(0), "MapGen terrain should include land.");
+            Assert.That(water, Is.GreaterThan(0), "MapGen terrain should include water.");
 
             Assert.That(runA.World.SeaLevelHeight, Is.EqualTo(0f).Within(0.0001f));
             Assert.That(runA.World.MinHeight, Is.EqualTo(-config.MaxSeaDepthMeters).Within(0.0001f));
@@ -56,7 +56,7 @@ namespace EconSim.Tests
                 Assert.That(float.IsNaN(a), Is.False);
                 Assert.That(float.IsInfinity(a), Is.False);
                 Assert.That(a, Is.InRange(-config.MaxSeaDepthMeters, config.MaxElevationMeters));
-                Assert.That(a, Is.EqualTo(b).Within(0.0001f), $"V2 pipeline must be deterministic at cell {i}.");
+                Assert.That(a, Is.EqualTo(b).Within(0.0001f), $"MapGen pipeline must be deterministic at cell {i}.");
             }
 
             Assert.That(runA.Climate.TemperatureC.Length, Is.EqualTo(runB.Climate.TemperatureC.Length));

@@ -3,11 +3,11 @@ using System;
 namespace MapGen.Core
 {
     /// <summary>
-    /// Temperature model for V2: latitude baseline with elevation lapse-rate correction.
+    /// Temperature model: latitude baseline with elevation lapse-rate correction.
     /// </summary>
-    public static class TemperatureOpsV2
+    public static class TemperatureModelOps
     {
-        public static void Compute(ClimateField climate, ElevationField elevation, MapGenV2Config config, WorldMetadata world)
+        public static void Compute(ClimateField climate, ElevationField elevation, MapGenConfig config, WorldMetadata world)
         {
             var mesh = climate.Mesh;
             for (int i = 0; i < mesh.CellCount; i++)
@@ -26,7 +26,7 @@ namespace MapGen.Core
             return world.LatitudeSouth + t * (world.LatitudeNorth - world.LatitudeSouth);
         }
 
-        public static float SeaLevelTemperature(float latitude, MapGenV2Config config)
+        public static float SeaLevelTemperature(float latitude, MapGenConfig config)
         {
             float absLat = Math.Abs(latitude);
 

@@ -3,10 +3,10 @@ using System;
 namespace MapGen.Core
 {
     /// <summary>
-    /// Configuration for MapGen V2 world-unit generation.
+    /// Configuration for world-unit map generation.
     /// Elevation values are signed meters relative to sea level.
     /// </summary>
-    public class MapGenV2Config
+    public class MapGenConfig
     {
         public int Seed = 12345;
         public int CellCount = 10000;
@@ -48,7 +48,7 @@ namespace MapGen.Core
         {
             get
             {
-                HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(Template, this);
+                HeightmapTemplateTuningProfile profile = HeightmapTemplateCompiler.ResolveTuningProfile(Template, this);
                 float scale = profile != null ? profile.RiverThresholdScale : 1f;
                 if (scale <= 0f) scale = 1f;
                 return RiverThreshold * scale * RiverResolutionScale();
@@ -59,7 +59,7 @@ namespace MapGen.Core
         {
             get
             {
-                HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(Template, this);
+                HeightmapTemplateTuningProfile profile = HeightmapTemplateCompiler.ResolveTuningProfile(Template, this);
                 float scale = profile != null ? profile.RiverTraceThresholdScale : 1f;
                 if (scale <= 0f) scale = 1f;
                 return RiverTraceThreshold * scale * RiverResolutionScale();
@@ -70,7 +70,7 @@ namespace MapGen.Core
         {
             get
             {
-                HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(Template, this);
+                HeightmapTemplateTuningProfile profile = HeightmapTemplateCompiler.ResolveTuningProfile(Template, this);
                 float scale = profile != null ? profile.RiverMinVerticesScale : 1f;
                 if (scale <= 0f) scale = 1f;
                 int effective = (int)Math.Round(MinRiverVertices * scale, MidpointRounding.AwayFromZero);

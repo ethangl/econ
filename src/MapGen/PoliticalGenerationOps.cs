@@ -4,15 +4,15 @@ using System.Collections.Generic;
 namespace MapGen.Core
 {
     /// <summary>
-    /// Political assignment for V2: landmasses -> realms -> provinces -> counties.
+    /// Political assignment: landmasses -> realms -> provinces -> counties.
     /// </summary>
-    public static class PoliticalOpsV2
+    public static class PoliticalGenerationOps
     {
         public static void Compute(
             PoliticalField political,
             BiomeField biomes,
             ElevationField elevation,
-            MapGenV2Config config)
+            MapGenConfig config)
         {
             DetectLandmasses(political, biomes, elevation);
             AssignRealms(political, biomes, elevation, config);
@@ -69,7 +69,7 @@ namespace MapGen.Core
             pol.LandmassCount = nextLandmassId - 1;
         }
 
-        static void AssignRealms(PoliticalField pol, BiomeField biomes, ElevationField elevation, MapGenV2Config config)
+        static void AssignRealms(PoliticalField pol, BiomeField biomes, ElevationField elevation, MapGenConfig config)
         {
             var mesh = pol.Mesh;
             var landCells = CollectLandCells(elevation, biomes);
@@ -80,7 +80,7 @@ namespace MapGen.Core
                 return;
             }
 
-            HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(config.Template, config);
+            HeightmapTemplateTuningProfile profile = HeightmapTemplateCompiler.ResolveTuningProfile(config.Template, config);
             float realmScale = profile != null ? profile.RealmTargetScale : 1f;
             if (realmScale <= 0f) realmScale = 1f;
 
@@ -103,10 +103,10 @@ namespace MapGen.Core
                 scoreBias: c => 1f + biomes.Suitability[c] * 0.01f);
         }
 
-        static void AssignProvinces(PoliticalField pol, BiomeField biomes, ElevationField elevation, MapGenV2Config config)
+        static void AssignProvinces(PoliticalField pol, BiomeField biomes, ElevationField elevation, MapGenConfig config)
         {
             var mesh = pol.Mesh;
-            HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(config.Template, config);
+            HeightmapTemplateTuningProfile profile = HeightmapTemplateCompiler.ResolveTuningProfile(config.Template, config);
             float provinceScale = profile != null ? profile.ProvinceTargetScale : 1f;
             if (provinceScale <= 0f) provinceScale = 1f;
             var provinceIds = new int[mesh.CellCount];
@@ -159,10 +159,10 @@ namespace MapGen.Core
             pol.ProvinceCount = nextProvince - 1;
         }
 
-        static void AssignCounties(PoliticalField pol, BiomeField biomes, ElevationField elevation, MapGenV2Config config)
+        static void AssignCounties(PoliticalField pol, BiomeField biomes, ElevationField elevation, MapGenConfig config)
         {
             var mesh = pol.Mesh;
-            HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(config.Template, config);
+            HeightmapTemplateTuningProfile profile = HeightmapTemplateCompiler.ResolveTuningProfile(config.Template, config);
             float countyScale = profile != null ? profile.CountyTargetScale : 1f;
             if (countyScale <= 0f) countyScale = 1f;
             var countyIds = new int[mesh.CellCount];

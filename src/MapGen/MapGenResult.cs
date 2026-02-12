@@ -1,9 +1,9 @@
 namespace MapGen.Core
 {
     /// <summary>
-    /// Minimal MapGen V2 output for phase-A scaffolding.
+    /// Map generation output for the world-unit pipeline.
     /// </summary>
-    public class MapGenV2Result
+    public class MapGenResult
     {
         public CellMesh Mesh;
         public ElevationField Elevation;
@@ -12,5 +12,8 @@ namespace MapGen.Core
         public BiomeField Biomes;
         public PoliticalField Political;
         public WorldMetadata World;
+
+        // Legacy alias kept for call sites that still read `result.Heights`.
+        public ElevationField Heights => Elevation;
     }
 }

@@ -7,8 +7,8 @@ using NUnit.Framework;
 namespace EconSim.Tests
 {
     [TestFixture]
-    [Category("MapGenV2")]
-    public class MapGenV2ComparisonTests
+    [Category("MapGen")]
+    public class MapGenComparisonTests
     {
         [Test]
         public void ComparisonRunner_ProducesFiniteMetricsAndReport()
@@ -26,21 +26,21 @@ namespace EconSim.Tests
             MapGenComparisonCase result = MapGenComparison.Compare(config);
 
             Assert.That(result.CellCount, Is.EqualTo(config.CellCount));
-            Assert.That(result.V1.LandRatio, Is.GreaterThan(0f).And.LessThan(1f));
-            Assert.That(result.V2.LandRatio, Is.GreaterThan(0f).And.LessThan(1f));
-            Assert.That(float.IsNaN(result.V1.ElevationP50Meters) || float.IsInfinity(result.V1.ElevationP50Meters), Is.False);
-            Assert.That(float.IsNaN(result.V2.ElevationP50Meters) || float.IsInfinity(result.V2.ElevationP50Meters), Is.False);
-            Assert.That(result.V1.BiomeCounts, Is.Not.Null);
-            Assert.That(result.V2.BiomeCounts, Is.Not.Null);
+            Assert.That(result.Baseline.LandRatio, Is.GreaterThan(0f).And.LessThan(1f));
+            Assert.That(result.Candidate.LandRatio, Is.GreaterThan(0f).And.LessThan(1f));
+            Assert.That(float.IsNaN(result.Baseline.ElevationP50Meters) || float.IsInfinity(result.Baseline.ElevationP50Meters), Is.False);
+            Assert.That(float.IsNaN(result.Candidate.ElevationP50Meters) || float.IsInfinity(result.Candidate.ElevationP50Meters), Is.False);
+            Assert.That(result.Baseline.BiomeCounts, Is.Not.Null);
+            Assert.That(result.Candidate.BiomeCounts, Is.Not.Null);
 
             string report = MapGenComparison.BuildReport(new List<MapGenComparisonCase> { result });
-            Assert.That(report, Does.Contain("MapGen V1 vs V2 Comparison"));
+            Assert.That(report, Does.Contain("MapGen Baseline vs Candidate Comparison"));
             Assert.That(report, Does.Contain("Biome overlap="));
             Assert.That(report, Does.Contain("rivers="));
         }
 
         [Test]
-        public void Adapter_CanConvertV2Result_IntoRuntimeMapData()
+        public void Adapter_CanConvertMapGenResult_IntoRuntimeMapData()
         {
             var config = new MapGenConfig
             {

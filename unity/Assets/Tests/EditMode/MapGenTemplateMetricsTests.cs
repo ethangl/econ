@@ -5,8 +5,8 @@ using NUnit.Framework;
 namespace EconSim.Tests
 {
     [TestFixture]
-    [Category("MapGenV2")]
-    public class MapGenV2TemplateMetricsTests
+    [Category("MapGen")]
+    public class MapGenTemplateMetricsTests
     {
         [Test]
         public void TemplatePort_EmitsMeterAnnotatedScripts()
@@ -15,7 +15,7 @@ namespace EconSim.Tests
 
             foreach (HeightmapTemplateType template in Enum.GetValues(typeof(HeightmapTemplateType)))
             {
-                string script = HeightmapTemplatesV2.GetTemplate(template, config);
+                string script = HeightmapTemplateCompiler.GetTemplate(template, config);
                 Assert.That(string.IsNullOrWhiteSpace(script), Is.False, $"Template script missing: {template}");
 
                 string[] lines = script.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
@@ -48,7 +48,7 @@ namespace EconSim.Tests
         }
 
         [Test]
-        public void PipelineV2_TemplateMetrics_StayWithinBroadBands()
+        public void Pipeline_TemplateMetrics_StayWithinBroadBands()
         {
             foreach (HeightmapTemplateType template in Enum.GetValues(typeof(HeightmapTemplateType)))
             {
@@ -66,7 +66,7 @@ namespace EconSim.Tests
                 Assert.That(result.Mesh, Is.Not.Null);
                 Assert.That(result.Elevation, Is.Not.Null);
 
-                var (landMin, landMax) = HeightmapTemplatesV2.GetLandRatioBand(template);
+                var (landMin, landMax) = HeightmapTemplateCompiler.GetLandRatioBand(template);
                 float landRatio = result.Elevation.LandRatio();
                 Assert.That(landRatio, Is.GreaterThanOrEqualTo(landMin).And.LessThanOrEqualTo(landMax),
                     $"Land ratio out of broad band for {template}: {landRatio:0.000} expected [{landMin:0.000}, {landMax:0.000}]");

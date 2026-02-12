@@ -9,8 +9,8 @@ using UnityEngine;
 namespace EconSim.Tests
 {
     [TestFixture]
-    [Category("MapGenV2Tuning")]
-    public class MapGenV2RiverTuningSweepTests
+    [Category("MapGenTuning")]
+    public class MapGenRiverTuningSweepTests
     {
         static readonly float[] FullThresholdCandidates = { 0.35f, 0.50f, 0.75f, 0.90f, 1.00f, 1.10f, 1.25f };
         static readonly float[] FullTraceCandidates = { 0.20f, 0.35f, 0.50f, 0.65f, 0.75f, 0.90f, 1.00f };
@@ -36,13 +36,13 @@ namespace EconSim.Tests
                 SmokeTraceCandidates,
                 SmokeMinVerticesCandidates,
                 defaultVsBestTolerance: -1f,
-                summaryName: "mapgen_v2_focus_river_tuning_sweep_summary.txt",
-                csvName: "mapgen_v2_focus_river_tuning_sweep_candidates.csv");
+                summaryName: "mapgen_focus_river_tuning_sweep_summary.txt",
+                csvName: "mapgen_focus_river_tuning_sweep_candidates.csv");
         }
 
         [Test]
         [Explicit("Long-running offline river sweep for manual retuning sessions.")]
-        [Category("MapGenV2TuningOffline")]
+        [Category("MapGenTuningOffline")]
         public void SweepFocusedTemplates_RiverDriftProfiles_OfflineFull()
         {
             RunSweep(
@@ -50,8 +50,8 @@ namespace EconSim.Tests
                 FullTraceCandidates,
                 FullMinVerticesCandidates,
                 defaultVsBestTolerance: 0.03f,
-                summaryName: "mapgen_v2_focus_river_tuning_sweep_summary_full.txt",
-                csvName: "mapgen_v2_focus_river_tuning_sweep_candidates_full.csv");
+                summaryName: "mapgen_focus_river_tuning_sweep_summary_full.txt",
+                csvName: "mapgen_focus_river_tuning_sweep_candidates_full.csv");
         }
 
         void RunSweep(
@@ -64,7 +64,7 @@ namespace EconSim.Tests
         {
             var summary = new StringBuilder();
             var failures = new List<string>();
-            summary.AppendLine("# V2 Focused River Tuning Sweep");
+            summary.AppendLine("# MapGen Focused River Tuning Sweep");
             summary.AppendLine();
             summary.AppendLine("Objective score = 6*|riverCount drift|/max(1,V1 count) + 4*|riverCoverage drift|");
             summary.AppendLine();
@@ -136,7 +136,7 @@ namespace EconSim.Tests
             };
 
             MapGenComparisonCase baseline = MapGenComparison.Compare(config);
-            HeightmapTemplateTuningProfile baseProfile = HeightmapTemplatesV2.ResolveTuningProfile(
+            HeightmapTemplateTuningProfile baseProfile = HeightmapTemplateCompiler.ResolveTuningProfile(
                 focus.Template,
                 MapGenComparison.CreateConfig(config));
             if (baseProfile == null)
@@ -169,9 +169,9 @@ namespace EconSim.Tests
                             return default;
                         }
 
-                        int deltaCount = result.V2.RiverCount - result.V1.RiverCount;
-                        float deltaCountNorm = Math.Abs(deltaCount) / Math.Max(1f, result.V1.RiverCount);
-                        float deltaCoverage = result.V2.RiverCoverage - result.V1.RiverCoverage;
+                        int deltaCount = result.Candidate.RiverCount - result.Baseline.RiverCount;
+                        float deltaCountNorm = Math.Abs(deltaCount) / Math.Max(1f, result.Baseline.RiverCount);
+                        float deltaCoverage = result.Candidate.RiverCoverage - result.Baseline.RiverCoverage;
                         float score = Score(deltaCountNorm, deltaCoverage);
 
                         int effectiveMinVertices = Math.Max(
@@ -179,7 +179,7 @@ namespace EconSim.Tests
                             (int)Math.Round(config.MinRiverVertices * profile.RiverMinVerticesScale, MidpointRounding.AwayFromZero));
 
                         csv.AppendLine(
-                            $"{focus.Template},{focus.Seed},{profile.RiverThresholdScale:0.00},{profile.RiverTraceThresholdScale:0.00},{profile.RiverMinVerticesScale:0.00},{effectiveMinVertices},{score:0.000},{deltaCount},{deltaCountNorm:0.000},{deltaCoverage:0.000},{result.V1.RiverCount},{result.V2.RiverCount},{result.V1.RiverCoverage:0.000},{result.V2.RiverCoverage:0.000}");
+                            $"{focus.Template},{focus.Seed},{profile.RiverThresholdScale:0.00},{profile.RiverTraceThresholdScale:0.00},{profile.RiverMinVerticesScale:0.00},{effectiveMinVertices},{score:0.000},{deltaCount},{deltaCountNorm:0.000},{deltaCoverage:0.000},{result.Baseline.RiverCount},{result.Candidate.RiverCount},{result.Baseline.RiverCoverage:0.000},{result.Candidate.RiverCoverage:0.000}");
 
                         if (!hasBest || score < best.Score)
                         {
@@ -199,9 +199,9 @@ namespace EconSim.Tests
             }
 
             Assert.That(hasBest, Is.True, $"No river sweep candidate was evaluated for {focus.Template}");
-            int defaultDeltaCount = baseline.V2.RiverCount - baseline.V1.RiverCount;
-            float defaultDeltaCountNorm = Math.Abs(defaultDeltaCount) / Math.Max(1f, baseline.V1.RiverCount);
-            float defaultDeltaCoverage = baseline.V2.RiverCoverage - baseline.V1.RiverCoverage;
+            int defaultDeltaCount = baseline.Candidate.RiverCount - baseline.Baseline.RiverCount;
+            float defaultDeltaCountNorm = Math.Abs(defaultDeltaCount) / Math.Max(1f, baseline.Baseline.RiverCount);
+            float defaultDeltaCoverage = baseline.Candidate.RiverCoverage - baseline.Baseline.RiverCoverage;
             best.DefaultDeltaRiverCount = defaultDeltaCount;
             best.DefaultDeltaRiverCountNorm = defaultDeltaCountNorm;
             best.DefaultDeltaRiverCoverage = defaultDeltaCoverage;

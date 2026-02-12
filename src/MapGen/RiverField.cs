@@ -21,7 +21,7 @@ namespace MapGen.Core
         public float[] EdgeFlux;
 
         /// <summary>Extracted river polylines.</summary>
-        public RiverV2[] Rivers;
+        public RiverPath[] Rivers;
 
         public CellMesh Mesh { get; }
         public int VertexCount => Mesh.VertexCount;
@@ -37,7 +37,7 @@ namespace MapGen.Core
             VertexFlux = new float[vCount];
             FlowTarget = new int[vCount];
             EdgeFlux = new float[mesh.EdgeCount];
-            Rivers = System.Array.Empty<RiverV2>();
+            Rivers = System.Array.Empty<RiverPath>();
 
             for (int i = 0; i < FlowTarget.Length; i++)
                 FlowTarget[i] = -1;
@@ -55,16 +55,7 @@ namespace MapGen.Core
             return VertexElevationMeters[vertex] <= 0f;
         }
     }
-
-    [System.Obsolete("Use RiverField.")]
-    public class RiverFieldV2 : RiverField
-    {
-        public RiverFieldV2(CellMesh mesh) : base(mesh)
-        {
-        }
-    }
-
-    public struct RiverV2
+    public struct RiverPath
     {
         public int Id;
         public int[] Vertices;

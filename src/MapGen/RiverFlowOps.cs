@@ -3,15 +3,15 @@ using System.Collections.Generic;
 namespace MapGen.Core
 {
     /// <summary>
-    /// River generation for V2 based on signed-meter elevation and V2 climate fields.
+    /// River generation based on signed-meter elevation and climate fields.
     /// </summary>
-    public static class FlowOpsV2
+    public static class RiverFlowOps
     {
         public static void Compute(
             RiverField data,
             ElevationField elevation,
             ClimateField climate,
-            MapGenV2Config config)
+            MapGenConfig config)
         {
             InterpolateVertexData(data, elevation, climate, config);
             var vertexPairToEdge = BuildVertexPairToEdge(data.Mesh);
@@ -49,7 +49,7 @@ namespace MapGen.Core
             RiverField data,
             ElevationField elevation,
             ClimateField climate,
-            MapGenV2Config config)
+            MapGenConfig config)
         {
             var mesh = data.Mesh;
             float fluxScale = config.MaxAnnualPrecipitationMm / 100f;
@@ -301,7 +301,7 @@ namespace MapGen.Core
 
             mouths.Sort((a, b) => data.VertexFlux[b].CompareTo(data.VertexFlux[a]));
 
-            var rivers = new List<RiverV2>();
+            var rivers = new List<RiverPath>();
             int nextId = 1;
 
             foreach (int mouth in mouths)
@@ -317,7 +317,7 @@ namespace MapGen.Core
                     vertexRiver,
                     traceThreshold);
 
-                rivers.Add(new RiverV2
+                rivers.Add(new RiverPath
                 {
                     Id = nextId,
                     Vertices = verts,
@@ -366,7 +366,7 @@ namespace MapGen.Core
                             worklist.Enqueue(v);
                     }
 
-                    rivers.Add(new RiverV2
+                    rivers.Add(new RiverPath
                     {
                         Id = nextId,
                         Vertices = verts,

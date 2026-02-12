@@ -43,14 +43,4 @@ namespace MapGen.Core
         public float? EndYMinPercent;
         public float? EndYMaxPercent;
     }
-
-    [System.Obsolete("Use HeightmapDslDiagnostics.")]
-    public sealed class HeightmapDslV2Diagnostics : HeightmapDslDiagnostics
-    {
-    }
-
-    [System.Obsolete("Use HeightmapDslOpMetrics.")]
-    public sealed class HeightmapDslV2OpMetrics : HeightmapDslOpMetrics
-    {
-    }
 }
