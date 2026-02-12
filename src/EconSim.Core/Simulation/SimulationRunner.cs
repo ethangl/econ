@@ -36,6 +36,11 @@ namespace EconSim.Core.Simulation
         {
         }
 
+        public SimulationRunner(MapData mapData, WorldGenerationContext generationContext)
+            : this(mapData, generationContext.EconomySeed)
+        {
+        }
+
         public SimulationRunner(MapData mapData, int? economySeed)
         {
             _mapData = mapData;

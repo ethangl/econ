@@ -26,6 +26,14 @@ namespace EconSim.Core.Economy
         }
 
         /// <summary>
+        /// Fully initialize economy from map data using a world-generation context.
+        /// </summary>
+        public static EconomyState Initialize(MapData mapData, WorldGenerationContext generationContext)
+        {
+            return Initialize(mapData, generationContext.EconomySeed);
+        }
+
+        /// <summary>
         /// Fully initialize economy from map data using an optional explicit seed.
         /// </summary>
         public static EconomyState Initialize(MapData mapData, int? explicitSeed)
