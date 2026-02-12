@@ -39,6 +39,7 @@ namespace MapGen.Core
         public float RiverThreshold = 240f;
         public float RiverTraceThreshold = 12f;
         public int MinRiverVertices = 12;
+        const float RiverTuningReferenceCellCount = 5000f;
 
         // Optional per-template tuning override used by analysis/sweeps.
         public HeightmapTemplateTuningProfile TemplateTuningOverride;
@@ -50,7 +51,7 @@ namespace MapGen.Core
                 HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(Template, this);
                 float scale = profile != null ? profile.RiverThresholdScale : 1f;
                 if (scale <= 0f) scale = 1f;
-                return RiverThreshold * scale;
+                return RiverThreshold * scale * RiverResolutionScale();
             }
         }
 
@@ -61,7 +62,7 @@ namespace MapGen.Core
                 HeightmapTemplateTuningProfile profile = HeightmapTemplatesV2.ResolveTuningProfile(Template, this);
                 float scale = profile != null ? profile.RiverTraceThresholdScale : 1f;
                 if (scale <= 0f) scale = 1f;
-                return RiverTraceThreshold * scale;
+                return RiverTraceThreshold * scale * RiverResolutionScale();
             }
         }
 
@@ -75,6 +76,18 @@ namespace MapGen.Core
                 int effective = (int)Math.Round(MinRiverVertices * scale, MidpointRounding.AwayFromZero);
                 return Math.Max(1, effective);
             }
+        }
+
+        float RiverResolutionScale()
+        {
+            if (CellCount <= 0)
+                return 1f;
+
+            float ratio = CellCount / RiverTuningReferenceCellCount;
+            if (ratio <= 1f)
+                return 1f;
+
+            return (float)Math.Sqrt(ratio);
         }
 
         // Sub-seed constants (golden-ratio hashing for decorrelation).

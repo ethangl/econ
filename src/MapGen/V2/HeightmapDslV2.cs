@@ -36,7 +36,6 @@ namespace MapGen.Core
                 }
 
                 OpTrace trace = ExecuteLine(field, line, rng);
-                TruncateToLegacyIntegerSteps(field);
                 field.ClampAll();
 
                 if (diagnostics != null)
@@ -600,43 +599,6 @@ namespace MapGen.Core
 
             min = a;
             max = b;
-        }
-
-        static void TruncateToLegacyIntegerSteps(ElevationFieldV2 field)
-        {
-            float maxElevation = Math.Max(1e-6f, field.MaxElevationMeters);
-            float maxSeaDepth = Math.Max(1e-6f, field.MaxSeaDepthMeters);
-
-            for (int i = 0; i < field.CellCount; i++)
-            {
-                float signed = field[i];
-                float legacy;
-
-                if (signed >= 0f)
-                {
-                    legacy = 20f + (signed / maxElevation) * 80f;
-                }
-                else
-                {
-                    legacy = 20f - ((-signed / maxSeaDepth) * 20f);
-                }
-
-                int truncated = (int)legacy;
-                if (truncated < 0) truncated = 0;
-                if (truncated > 100) truncated = 100;
-
-                float quantized;
-                if (truncated >= 20)
-                {
-                    quantized = ((truncated - 20f) / 80f) * maxElevation;
-                }
-                else
-                {
-                    quantized = -((20f - truncated) / 20f) * maxSeaDepth;
-                }
-
-                field[i] = quantized;
-            }
         }
 
         sealed class OpTrace

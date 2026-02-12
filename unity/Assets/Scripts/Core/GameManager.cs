@@ -90,6 +90,11 @@ namespace EconSim.Core
             if (runV2)
             {
                 MapGenV2Config v2Config = ToMapGenV2Config(config);
+                Debug.Log(
+                    $"MapGen V2 config: cells={v2Config.CellCount}, template={v2Config.Template}, " +
+                    $"riverThreshold={v2Config.EffectiveRiverThreshold:0.0}, " +
+                    $"riverTrace={v2Config.EffectiveRiverTraceThreshold:0.0}, " +
+                    $"minRiverVertices={v2Config.EffectiveMinRiverVertices}");
 
                 Profiler.Begin("MapGen V2 Pipeline");
                 var v2Result = MapGenPipelineV2.Generate(v2Config);
