@@ -19,6 +19,15 @@ namespace EconSim.Core.Import
         /// </summary>
         public static MapData Convert(MapGenResult result)
         {
+            return Convert(result, null);
+        }
+
+        /// <summary>
+        /// Convert a MapGenResult into a fully populated MapData ready for simulation.
+        /// Optionally stamps world-generation contract metadata onto MapInfo.
+        /// </summary>
+        public static MapData Convert(MapGenResult result, WorldGenerationContext? generationContext)
+        {
             if (result == null)
                 throw new ArgumentNullException(nameof(result));
 
@@ -159,6 +168,17 @@ namespace EconSim.Core.Import
             mapData.BuildLookups();
             mapData.AssertElevationInvariants();
             mapData.AssertWorldInvariants();
+
+            if (generationContext.HasValue)
+            {
+                var context = generationContext.Value;
+                mapData.Info.Seed = context.RootSeed.ToString();
+                mapData.Info.RootSeed = context.RootSeed;
+                mapData.Info.MapGenSeed = context.MapGenSeed;
+                mapData.Info.PopGenSeed = context.PopGenSeed;
+                mapData.Info.EconomySeed = context.EconomySeed;
+                mapData.Info.SimulationSeed = context.SimulationSeed;
+            }
 
             return mapData;
         }

@@ -22,8 +22,24 @@ namespace EconSim.Core.Economy
         /// </summary>
         public static EconomyState Initialize(MapData mapData)
         {
-            // Use map seed when available for deterministic economy initialization.
-            _random = new Random(ResolveInitializationSeed(mapData));
+            return Initialize(mapData, null);
+        }
+
+        /// <summary>
+        /// Fully initialize economy from map data using a world-generation context.
+        /// </summary>
+        public static EconomyState Initialize(MapData mapData, WorldGenerationContext generationContext)
+        {
+            return Initialize(mapData, generationContext.EconomySeed);
+        }
+
+        /// <summary>
+        /// Fully initialize economy from map data using an optional explicit seed.
+        /// </summary>
+        public static EconomyState Initialize(MapData mapData, int? explicitSeed)
+        {
+            // Use explicit economy seed when provided, otherwise derive from map metadata.
+            _random = new Random(ResolveInitializationSeed(mapData, explicitSeed));
 
             var economy = new EconomyState();
 
@@ -43,11 +59,23 @@ namespace EconSim.Core.Economy
             return economy;
         }
 
-        private static int ResolveInitializationSeed(MapData mapData)
+        private static int ResolveInitializationSeed(MapData mapData, int? explicitSeed)
         {
-            if (mapData?.Info?.Seed != null && int.TryParse(mapData.Info.Seed, out int parsed))
+            if (explicitSeed.HasValue)
             {
-                return parsed;
+                return explicitSeed.Value;
+            }
+
+            if (mapData?.Info != null)
+            {
+                if (mapData.Info.EconomySeed > 0)
+                    return mapData.Info.EconomySeed;
+
+                if (mapData.Info.RootSeed > 0)
+                    return WorldSeeds.FromRoot(mapData.Info.RootSeed).EconomySeed;
+
+                if (!string.IsNullOrWhiteSpace(mapData.Info.Seed) && int.TryParse(mapData.Info.Seed, out int parsed))
+                    return WorldSeeds.FromRoot(parsed).EconomySeed;
             }
             return 42;
         }

@@ -77,14 +77,22 @@ namespace EconSim.Core
             Profiler.Reset();
             Profiler.Begin("Total Startup");
 
-            config ??= new MapGenConfig
+            if (config == null)
             {
-                CellCount = 60000,
-                Seed = UnityEngine.Random.Range(1, int.MaxValue)
-            };
+                config = new MapGenConfig
+                {
+                    CellCount = 60000,
+                    Seed = UnityEngine.Random.Range(1, int.MaxValue)
+                };
+            }
+
+            WorldGenerationContext generationContext = WorldGenerationContext.FromRootSeed(config.Seed);
+            config.Seed = generationContext.MapGenSeed;
 
             Debug.Log(
-                $"MapGen config: cells={config.CellCount}, template={config.Template}, " +
+                $"MapGen config: contract={generationContext.ContractVersion}, " +
+                $"rootSeed={generationContext.RootSeed}, mapGenSeed={generationContext.MapGenSeed}, " +
+                $"economySeed={generationContext.EconomySeed}, cells={config.CellCount}, template={config.Template}, " +
                 $"riverThreshold={config.EffectiveRiverThreshold:0.0}, " +
                 $"riverTrace={config.EffectiveRiverTraceThreshold:0.0}, " +
                 $"minRiverVertices={config.EffectiveMinRiverVertices}");
@@ -96,14 +104,11 @@ namespace EconSim.Core
             MapGenResult = result;
 
             Profiler.Begin("MapGenAdapter Convert");
-            MapData = MapGenAdapter.Convert(result);
+            MapData = MapGenAdapter.Convert(result, generationContext);
             Profiler.End();
             LogMapGenSummary(result, MapData);
 
-            // Update info with seed
-            MapData.Info.Seed = config.Seed.ToString();
-
-            InitializeWithMapData();
+            InitializeWithMapData(generationContext);
 
             Profiler.End();
             Profiler.LogResults();
@@ -147,7 +152,7 @@ namespace EconSim.Core
             return sorted[lo] + (sorted[hi] - sorted[lo]) * t;
         }
 
-        private void InitializeWithMapData()
+        private void InitializeWithMapData(WorldGenerationContext generationContext)
         {
             Debug.Log($"Map loaded: {MapData.Info.Name}");
             Debug.Log($"  Dimensions: {MapData.Info.Width}x{MapData.Info.Height}");
@@ -181,7 +186,7 @@ namespace EconSim.Core
 
             // Initialize simulation (auto-registers ProductionSystem + ConsumptionSystem)
             Profiler.Begin("Simulation Init");
-            _simulation = new SimulationRunner(MapData);
+            _simulation = new SimulationRunner(MapData, generationContext);
             Profiler.End();
             _simulation.IsPaused = true;  // Start paused
 

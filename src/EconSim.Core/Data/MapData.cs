@@ -151,6 +151,11 @@ namespace EconSim.Core.Data
         public int Width;
         public int Height;
         public string Seed;
+        public int RootSeed;
+        public int MapGenSeed;
+        public int PopGenSeed;
+        public int EconomySeed;
+        public int SimulationSeed;
         public int TotalCells;
         public int LandCells;
         public WorldInfo World;
