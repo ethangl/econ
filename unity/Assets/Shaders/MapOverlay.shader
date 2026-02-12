@@ -4,8 +4,13 @@ Shader "EconSim/MapOverlay"
     {
         // Heightmap for terrain (Phase 6)
         _HeightmapTex ("Heightmap", 2D) = "gray" {}
-        _HeightScale ("Height Scale", Float) = 3
-        _SeaLevel ("Sea Level", Float) = 0.2
+        _ReliefNormalTex ("Relief Normal", 2D) = "bump" {}
+        _ReliefNormalStrength ("Relief Normal Strength", Range(0, 1)) = 0.75
+        _ReliefShadeStrength ("Relief Shade Strength", Range(0, 1)) = 0.28
+        _ReliefAmbient ("Relief Ambient", Range(0, 1)) = 0.65
+        _ReliefLightDir ("Relief Light Direction", Vector) = (0.4, 0.85, 0.3, 0)
+        _HeightScale ("Height Scale", Float) = 0.2
+        _SeaLevel ("Sea Level (Normalized)", Float) = 0.2
         _UseHeightDisplacement ("Use Height Displacement", Int) = 0
 
         // River mask (Phase 8) - knocks out rivers from land, showing water underneath
@@ -130,7 +135,12 @@ Shader "EconSim/MapOverlay"
             };
 
             sampler2D _HeightmapTex;
+            sampler2D _ReliefNormalTex;
             float4 _HeightmapTex_TexelSize;  // (1/width, 1/height, width, height)
+            float _ReliefNormalStrength;
+            float _ReliefShadeStrength;
+            float _ReliefAmbient;
+            float4 _ReliefLightDir;
             float _HeightScale;
             float _SeaLevel;
             int _UseHeightDisplacement;
@@ -338,10 +348,11 @@ Shader "EconSim/MapOverlay"
                 }
 
                 float3 afterWater = lerp(afterMapMode, waterColor, waterAlpha);
+                float3 relitColor = ApplyReliefShading(afterWater, uv, isWater);
 
                 // ---- Layer 4: Selection / hover (operates on composited color) ----
 
-                float3 finalColor = afterWater;
+                float3 finalColor = relitColor;
 
                 // Selection region test (for dimming non-selected areas)
                 bool isInSelection = false;

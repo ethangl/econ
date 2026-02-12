@@ -143,6 +143,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _ReliefNormalTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _RiverMaskTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -182,15 +186,15 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _GradientCenterOpacity: 0.596
+    - _GradientCenterOpacity: 0.273
     - _GradientEdgeDarkening: 0.493
     - _GradientRadius: 5
     - _HalftoneScale: 0.15
-    - _HeightScale: 3
+    - _HeightScale: 0.2
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.0017973876
+    - _HoverIntensity: 2.2878426e-10
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
@@ -214,18 +218,21 @@ Material:
     - _ProvinceBorderWidth: 0.1
     - _RealmBorderDarkening: 0.75
     - _RealmBorderWidth: 0.25
+    - _ReliefAmbient: 0.333
+    - _ReliefNormalStrength: 0.5
+    - _ReliefShadeStrength: 0.333
     - _RiverDarken: 0.5
     - _RiverDepth: 0.2
     - _RoadWidth: 0.045
-    - _SeaLevel: 0.2
+    - _SeaLevel: 0
     - _SelectedCellId: -1
     - _SelectedCountyId: -1
     - _SelectedMarketId: -1
     - _SelectedProvinceId: -1
     - _SelectedRealmId: -1
     - _SelectionBorderWidth: 3
-    - _SelectionDesaturation: 7e-45
-    - _SelectionDimming: 0.99999976
+    - _SelectionDesaturation: 0
+    - _SelectionDimming: 1
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
     - _ShimmerIntensity: 0.08
@@ -236,11 +243,11 @@ Material:
     - _ShowProvinceBorders: 0
     - _ShowRealmBorders: 0
     - _SmoothnessTextureChannel: 0
-    - _SoilHeightFloor: 0.04
+    - _SoilHeightFloor: 0.054
     - _SpecularHighlights: 1
     - _SrcBlend: 1
     - _UVSec: 0
-    - _UseHeightDisplacement: 0
+    - _UseHeightDisplacement: 1
     - _UseModeColorResolve: 0
     - _WaterDeepAlpha: 0.95
     - _WaterDepthRange: 0.25
@@ -256,6 +263,7 @@ Material:
     - _MarketBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
     - _ProvinceBorderColor: {r: 0, g: 0, b: 0, a: 0.87058824}
     - _RealmBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
+    - _ReliefLightDir: {r: 0.4, g: 0.85, b: 0.3, a: 0}
     - _SelectionBorderColor: {r: 1, g: 0.9, b: 0.1999999, a: 0}
     - _SoilColor0: {r: 0.9647059, g: 0.9470588, b: 0.92941177, a: 1}
     - _SoilColor1: {r: 1, g: 0.90849674, b: 0.78039217, a: 1}

@@ -32,7 +32,8 @@ public class MapOverlayManager
             RiverMask = 12,
             Heightmap = 13,
             RoadMask = 14,
-            ModeColorResolve = 15
+            ModeColorResolve = 15,
+            ReliefNormal = 16
         }
 
         // Shader property IDs (cached for performance)
@@ -42,6 +43,7 @@ public class MapOverlayManager
         private static readonly int ModeColorResolveTexId = Shader.PropertyToID("_ModeColorResolve");
         private static readonly int UseModeColorResolveId = Shader.PropertyToID("_UseModeColorResolve");
         private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
+        private static readonly int ReliefNormalTexId = Shader.PropertyToID("_ReliefNormalTex");
         private static readonly int RiverMaskTexId = Shader.PropertyToID("_RiverMaskTex");
         private static readonly int RealmPaletteTexId = Shader.PropertyToID("_RealmPaletteTex");
         private static readonly int MarketPaletteTexId = Shader.PropertyToID("_MarketPaletteTex");
@@ -116,6 +118,7 @@ public class MapOverlayManager
         public Texture2D CellDataTexture => politicalIdsTexture;
         private Texture2D cellToMarketTexture;  // R16: CellId -> MarketId mapping (dynamic)
         private Texture2D heightmapTexture;     // RFloat: smoothed height values
+        private Texture2D reliefNormalTexture;  // RGBA32: normal map derived from visual height
         private Texture2D riverMaskTexture;     // R8: river mask (1 = river, 0 = not river)
         private Texture2D realmPaletteTexture;  // 256x1: realm colors
         private Texture2D marketPaletteTexture; // 256x1: market colors
@@ -127,6 +130,17 @@ public class MapOverlayManager
         private Texture2D marketBorderDistTexture;   // R8: distance to nearest market zone boundary (texels, dynamic)
         private Texture2D roadDistTexture;             // R8: distance to nearest road centerline (texels, dynamic)
         private Texture2D modeColorResolveTexture;     // RGBA32: resolved per-mode color overlay
+        private byte[] riverMaskPixels;                // Cached to drive relief synthesis near rivers.
+
+        // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
+        private const int ReliefBlurRadius = 4;
+        private const float ReliefBlurCrossClassWeight = 0.25f;
+        private const float ReliefErosionRadiusTexels = 7f;
+        private const float ReliefErosionStrength = 0.012f;
+        private const float ReliefLandMinAboveSea = 0.001f;
+        private const int ReliefNormalPreBlurPasses = 1;
+        private const float ReliefNormalDerivativeScale = 0.12f;
+        private static readonly float[] ReliefGaussianKernel = { 1f, 8f, 28f, 56f, 70f, 56f, 28f, 8f, 1f };
 
         // Road state (cached for regeneration)
         private RoadState roadState;
@@ -201,12 +215,12 @@ public class MapOverlayManager
             GenerateDataTextures();
             Profiler.End();
 
-            Profiler.Begin("GenerateHeightmapTexture");
-            GenerateHeightmapTexture();
-            Profiler.End();
-
             Profiler.Begin("GenerateRiverMaskTexture");
             GenerateRiverMaskTexture();
+            Profiler.End();
+
+            Profiler.Begin("GenerateHeightmapTexture");
+            GenerateHeightmapTexture();
             Profiler.End();
 
             Profiler.Begin("GenerateRealmBorderDistTexture");
@@ -400,15 +414,15 @@ public class MapOverlayManager
         }
 
         /// <summary>
-        /// Generate heightmap texture from cell height data.
-        /// Used for water depth coloring. 3D height displacement is currently disabled.
-        /// Water detection for other modes uses the water flag in the data texture.
+        /// Generate a visual heightmap from cell height data with deterministic relief synthesis.
+        /// This is render-only (water shading, displacement, and normal derivation), not gameplay elevation.
         /// Parallelized for performance.
         /// </summary>
         private void GenerateHeightmapTexture()
         {
-            // Sample absolute heights from spatial grid (Y-up matches texture row order, no flip needed)
-            float[] heightData = new float[gridWidth * gridHeight];
+            // Sample absolute heights from spatial grid (Y-up matches texture row order, no flip needed).
+            float[] baseHeightData = new float[gridWidth * gridHeight];
+            bool[] isLand = new bool[gridWidth * gridHeight];
 
             Parallel.For(0, gridHeight, y =>
             {
@@ -425,11 +439,31 @@ public class MapOverlayManager
                         // Normalize world-anchored absolute height to 0-1 via canonical elevation helpers.
                         float absoluteHeight = Elevation.GetAbsoluteHeight(cell, mapData.Info);
                         height = Elevation.NormalizeAbsolute01(absoluteHeight, mapData.Info);
+                        isLand[idx] = cell.IsLand;
                     }
 
-                    heightData[idx] = height;
+                    baseHeightData[idx] = height;
                 }
             });
+
+            float seaLevel01 = Elevation.NormalizeAbsolute01(Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
+            float[] riverDistance = BuildRiverDistanceField(isLand);
+            float[] heightData = ApplyLandAwareGaussianBlur(baseHeightData, isLand);
+            ApplyRiverBankErosion(heightData, isLand, riverDistance, seaLevel01);
+
+            Parallel.For(0, heightData.Length, i =>
+            {
+                if (!isLand[i])
+                {
+                    // Keep water heights untouched so depth shading stays grounded in gameplay height.
+                    heightData[i] = baseHeightData[i];
+                    return;
+                }
+
+                heightData[i] = Mathf.Clamp(heightData[i], seaLevel01 + ReliefLandMinAboveSea, 1f);
+            });
+
+            GenerateReliefNormalTexture(heightData, isLand);
 
             // Create texture
             heightmapTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RFloat, false);
@@ -439,7 +473,203 @@ public class MapOverlayManager
             heightmapTexture.SetPixelData(heightData, 0);
             heightmapTexture.Apply();
 
-            Debug.Log($"MapOverlayManager: Generated heightmap {gridWidth}x{gridHeight}");
+            Debug.Log($"MapOverlayManager: Generated heightmap {gridWidth}x{gridHeight} with relief synthesis");
+        }
+
+        private void GenerateReliefNormalTexture(float[] heightData, bool[] isLand)
+        {
+            int size = gridWidth * gridHeight;
+            var normalPixels = new Color[size];
+
+            float[] normalSource = (float[])heightData.Clone();
+            for (int i = 0; i < ReliefNormalPreBlurPasses; i++)
+                normalSource = ApplyLandAwareGaussianBlur(normalSource, isLand);
+
+            float scaleX = gridWidth > 1 ? (gridWidth - 1) * ReliefNormalDerivativeScale : 1f;
+            float scaleY = gridHeight > 1 ? (gridHeight - 1) * ReliefNormalDerivativeScale : 1f;
+
+            Parallel.For(0, gridHeight, y =>
+            {
+                int row = y * gridWidth;
+
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = row + x;
+                    if (!isLand[idx])
+                    {
+                        normalPixels[idx] = new Color(0.5f, 1f, 0.5f, 1f);
+                        continue;
+                    }
+
+                    float center = normalSource[idx];
+
+                    float h00 = SampleNormalHeight(normalSource, isLand, x - 1, y - 1, center);
+                    float h10 = SampleNormalHeight(normalSource, isLand, x, y - 1, center);
+                    float h20 = SampleNormalHeight(normalSource, isLand, x + 1, y - 1, center);
+                    float h01 = SampleNormalHeight(normalSource, isLand, x - 1, y, center);
+                    float h21 = SampleNormalHeight(normalSource, isLand, x + 1, y, center);
+                    float h02 = SampleNormalHeight(normalSource, isLand, x - 1, y + 1, center);
+                    float h12 = SampleNormalHeight(normalSource, isLand, x, y + 1, center);
+                    float h22 = SampleNormalHeight(normalSource, isLand, x + 1, y + 1, center);
+
+                    // Sobel gradient gives smoother normals than raw central differences.
+                    float gx = (h20 + 2f * h21 + h22) - (h00 + 2f * h01 + h02);
+                    float gy = (h02 + 2f * h12 + h22) - (h00 + 2f * h10 + h20);
+                    float ddx = gx * 0.125f * scaleX;
+                    float ddy = gy * 0.125f * scaleY;
+
+                    Vector3 normal = new Vector3(-ddx, 1f, -ddy).normalized;
+                    normalPixels[idx] = new Color(
+                        normal.x * 0.5f + 0.5f,
+                        normal.y * 0.5f + 0.5f,
+                        normal.z * 0.5f + 0.5f,
+                        1f);
+                }
+            });
+
+            reliefNormalTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RGBA32, false, true);
+            reliefNormalTexture.name = "ReliefNormalTexture";
+            reliefNormalTexture.filterMode = FilterMode.Bilinear;
+            reliefNormalTexture.wrapMode = TextureWrapMode.Clamp;
+            reliefNormalTexture.SetPixels(normalPixels);
+            reliefNormalTexture.Apply();
+
+            TextureDebugger.SaveTexture(reliefNormalTexture, "relief_normal");
+            Debug.Log($"MapOverlayManager: Generated relief normal map {gridWidth}x{gridHeight}");
+        }
+
+        private float SampleNormalHeight(float[] source, bool[] isLand, int x, int y, float fallback)
+        {
+            int cx = Mathf.Clamp(x, 0, gridWidth - 1);
+            int cy = Mathf.Clamp(y, 0, gridHeight - 1);
+            int idx = cy * gridWidth + cx;
+            return isLand[idx] ? source[idx] : fallback;
+        }
+
+        private float[] ApplyLandAwareGaussianBlur(float[] source, bool[] isLand)
+        {
+            int size = source.Length;
+            var horizontal = new float[size];
+            var output = new float[size];
+
+            Parallel.For(0, gridHeight, y =>
+            {
+                int row = y * gridWidth;
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = row + x;
+                    if (!isLand[idx])
+                    {
+                        horizontal[idx] = source[idx];
+                        continue;
+                    }
+
+                    float sum = 0f;
+                    float weightSum = 0f;
+                    for (int k = -ReliefBlurRadius; k <= ReliefBlurRadius; k++)
+                    {
+                        int sx = Mathf.Clamp(x + k, 0, gridWidth - 1);
+                        int sampleIdx = row + sx;
+
+                        float w = ReliefGaussianKernel[k + ReliefBlurRadius];
+                        if (isLand[sampleIdx] != isLand[idx])
+                            w *= ReliefBlurCrossClassWeight;
+
+                        sum += source[sampleIdx] * w;
+                        weightSum += w;
+                    }
+
+                    horizontal[idx] = weightSum > 0f ? sum / weightSum : source[idx];
+                }
+            });
+
+            Parallel.For(0, gridHeight, y =>
+            {
+                int row = y * gridWidth;
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = row + x;
+                    if (!isLand[idx])
+                    {
+                        output[idx] = source[idx];
+                        continue;
+                    }
+
+                    float sum = 0f;
+                    float weightSum = 0f;
+                    for (int k = -ReliefBlurRadius; k <= ReliefBlurRadius; k++)
+                    {
+                        int sy = Mathf.Clamp(y + k, 0, gridHeight - 1);
+                        int sampleIdx = sy * gridWidth + x;
+
+                        float w = ReliefGaussianKernel[k + ReliefBlurRadius];
+                        if (isLand[sampleIdx] != isLand[idx])
+                            w *= ReliefBlurCrossClassWeight;
+
+                        sum += horizontal[sampleIdx] * w;
+                        weightSum += w;
+                    }
+
+                    output[idx] = weightSum > 0f ? sum / weightSum : source[idx];
+                }
+            });
+
+            return output;
+        }
+
+        private void ApplyRiverBankErosion(float[] heightData, bool[] isLand, float[] riverDistance, float seaLevel01)
+        {
+            if (riverDistance == null || riverDistance.Length != heightData.Length)
+                return;
+
+            float minLandHeight = seaLevel01 + ReliefLandMinAboveSea;
+            Parallel.For(0, gridHeight, y =>
+            {
+                int row = y * gridWidth;
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = row + x;
+                    if (!isLand[idx])
+                        continue;
+
+                    float distance = riverDistance[idx];
+                    if (distance >= ReliefErosionRadiusTexels)
+                        continue;
+
+                    float t = 1f - Mathf.Clamp01(distance / ReliefErosionRadiusTexels);
+                    float carve = t * t * ReliefErosionStrength;
+                    heightData[idx] = Mathf.Max(minLandHeight, heightData[idx] - carve);
+                }
+            });
+        }
+
+        private float[] BuildRiverDistanceField(bool[] isLand)
+        {
+            if (riverMaskPixels == null || riverMaskPixels.Length != isLand.Length)
+                return null;
+
+            int size = isLand.Length;
+            var dist = new float[size];
+            bool hasRiver = false;
+
+            for (int i = 0; i < size; i++)
+            {
+                if (!isLand[i])
+                {
+                    dist[i] = 255f;
+                    continue;
+                }
+
+                bool isRiver = riverMaskPixels[i] >= 8;
+                dist[i] = isRiver ? 0f : 255f;
+                hasRiver |= isRiver;
+            }
+
+            if (!hasRiver)
+                return null;
+
+            RunChamferTransform(dist, isLand);
+            return dist;
         }
 
         /// <summary>
@@ -453,7 +683,8 @@ public class MapOverlayManager
             riverMaskTexture.filterMode = FilterMode.Bilinear;
             riverMaskTexture.wrapMode = TextureWrapMode.Clamp;
 
-            var pixels = GenerateRiverMaskPixels();
+            riverMaskPixels = GenerateRiverMaskPixels();
+            var pixels = riverMaskPixels;
 
             var colorPixels = new Color[pixels.Length];
             for (int i = 0; i < pixels.Length; i++)
@@ -1115,6 +1346,7 @@ public class MapOverlayManager
             terrainMaterial.SetTexture(GeographyBaseTexId, geographyBaseTexture);
             terrainMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
             terrainMaterial.SetTexture(HeightmapTexId, heightmapTexture);
+            terrainMaterial.SetTexture(ReliefNormalTexId, reliefNormalTexture);
             terrainMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
             terrainMaterial.SetTexture(RealmPaletteTexId, realmPaletteTexture);
             terrainMaterial.SetTexture(MarketPaletteTexId, marketPaletteTexture);
@@ -2065,6 +2297,7 @@ public class MapOverlayManager
             AddTextureForDestroy(texturesToDestroy, politicalIdsTexture);
             AddTextureForDestroy(texturesToDestroy, geographyBaseTexture);
             AddTextureForDestroy(texturesToDestroy, heightmapTexture);
+            AddTextureForDestroy(texturesToDestroy, reliefNormalTexture);
             AddTextureForDestroy(texturesToDestroy, riverMaskTexture);
             AddTextureForDestroy(texturesToDestroy, realmPaletteTexture);
             AddTextureForDestroy(texturesToDestroy, marketPaletteTexture);
@@ -2090,6 +2323,7 @@ public class MapOverlayManager
             politicalIdsTexture = null;
             geographyBaseTexture = null;
             heightmapTexture = null;
+            reliefNormalTexture = null;
             riverMaskTexture = null;
             realmPaletteTexture = null;
             marketPaletteTexture = null;
@@ -2102,6 +2336,7 @@ public class MapOverlayManager
             marketBorderDistTexture = null;
             roadDistTexture = null;
             modeColorResolveTexture = null;
+            riverMaskPixels = null;
         }
 
         private static void AddTextureForDestroy(HashSet<Texture2D> set, Texture2D texture)

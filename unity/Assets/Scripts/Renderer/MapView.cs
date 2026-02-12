@@ -34,7 +34,7 @@ namespace EconSim.Renderer
         // Non-serialized during development - see CLAUDE.md
         private bool useGridMesh = true;
         private int gridDivisor = 1;  // 1 = full source resolution, 2 = half, etc.
-        private float gridHeightScale = 3f;
+        private float gridHeightScale = 0.2f;
 
         [Header("Selection")]
         [SerializeField] private UnityEngine.Camera selectionCamera;
@@ -445,8 +445,10 @@ namespace EconSim.Renderer
 
             overlayManager = new MapOverlayManager(mapData, mat, overlayResolutionMultiplier);
 
-            // Height displacement is disabled (elevation is now shown via biome-elevation tinting)
-            overlayManager.SetHeightDisplacementEnabled(false);
+            // Height displacement follows grid-mesh mode.
+            overlayManager.SetHeightDisplacementEnabled(useGridMesh);
+            overlayManager.SetHeightScale(gridHeightScale);
+            overlayManager.SetSeaLevel(Elevation.ResolveSeaLevel(mapData.Info));
 
             // Sync shader mode with current map mode
             overlayManager.SetMapMode(currentMode);
