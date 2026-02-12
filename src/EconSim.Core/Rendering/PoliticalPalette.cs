@@ -67,69 +67,16 @@ namespace EconSim.Core.Rendering
                 float h = (float)realmIndex / validRealmCount;
 
                 // Hash-based variance for S and V
-                float s = BaseSaturation + (HashToFloat(realm.Id + 3000) - 0.5f) * 2f * RealmSatVariance;
-                float v = BaseValue + (HashToFloat(realm.Id + 4000) - 0.5f) * 2f * RealmValVariance;
+                float s = BaseSaturation + (ColorMath.HashToUnitFloat(realm.Id + 3000) - 0.5f) * 2f * RealmSatVariance;
+                float v = BaseValue + (ColorMath.HashToUnitFloat(realm.Id + 4000) - 0.5f) * 2f * RealmValVariance;
 
                 // Clamp to valid ranges
                 s = Math.Max(MinSaturation, Math.Min(MaxSaturation, s));
                 v = Math.Max(MinValue, Math.Min(MaxValue, v));
 
-                realmColors[realm.Id] = HsvToColor32(h, s, v);
+                realmColors[realm.Id] = ColorMath.HsvToColor32(h, s, v);
                 realmIndex++;
             }
-        }
-
-        /// <summary>
-        /// Simple hash function returning 0-1 for deterministic "randomness".
-        /// </summary>
-        private static float HashToFloat(int value)
-        {
-            uint h = (uint)value;
-            h ^= h >> 16;
-            h *= 0x85ebca6b;
-            h ^= h >> 13;
-            h *= 0xc2b2ae35;
-            h ^= h >> 16;
-            return (h & 0x7FFFFFFF) / (float)0x7FFFFFFF;
-        }
-
-        /// <summary>
-        /// Convert HSV (0-1 range) to Color32.
-        /// </summary>
-        private static Color32 HsvToColor32(float h, float s, float v)
-        {
-            float r, g, b;
-
-            if (s <= 0)
-            {
-                r = g = b = v;
-            }
-            else
-            {
-                float hh = h * 6f;
-                int i = (int)hh;
-                float ff = hh - i;
-                float p = v * (1f - s);
-                float q = v * (1f - (s * ff));
-                float t = v * (1f - (s * (1f - ff)));
-
-                switch (i)
-                {
-                    case 0: r = v; g = t; b = p; break;
-                    case 1: r = q; g = v; b = p; break;
-                    case 2: r = p; g = v; b = t; break;
-                    case 3: r = p; g = q; b = v; break;
-                    case 4: r = t; g = p; b = v; break;
-                    default: r = v; g = p; b = q; break;
-                }
-            }
-
-            return new Color32(
-                (byte)(r * 255),
-                (byte)(g * 255),
-                (byte)(b * 255),
-                255
-            );
         }
     }
 }
