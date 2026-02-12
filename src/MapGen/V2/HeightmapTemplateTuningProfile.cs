@@ -53,6 +53,15 @@ namespace MapGen.Core
         // Scales alluvial->wetland max-slope threshold used for biome split.
         public float BiomeWetlandMaxSlopeScale = 1f;
 
+        // Scales the temperature upper bound used to classify podzol soils.
+        public float BiomePodzolTempMaxScale = 1f;
+
+        // Scales the precipitation threshold used to classify podzol soils.
+        public float BiomePodzolPrecipThresholdScale = 1f;
+
+        // Scales the precipitation threshold used for woodland vs grassland split.
+        public float BiomeWoodlandPrecipThresholdScale = 1f;
+
         public bool IsIdentity() =>
             TerrainMagnitudeScale == 1f
             && AddMagnitudeScale == 1f
@@ -70,7 +79,10 @@ namespace MapGen.Core
             && BiomeAlluvialFluxThresholdScale == 1f
             && BiomeAlluvialMaxSlopeScale == 1f
             && BiomeWetlandFluxThresholdScale == 1f
-            && BiomeWetlandMaxSlopeScale == 1f;
+            && BiomeWetlandMaxSlopeScale == 1f
+            && BiomePodzolTempMaxScale == 1f
+            && BiomePodzolPrecipThresholdScale == 1f
+            && BiomeWoodlandPrecipThresholdScale == 1f;
 
         public HeightmapTemplateTuningProfile Clone() =>
             new HeightmapTemplateTuningProfile
@@ -91,7 +103,10 @@ namespace MapGen.Core
                 BiomeAlluvialFluxThresholdScale = BiomeAlluvialFluxThresholdScale,
                 BiomeAlluvialMaxSlopeScale = BiomeAlluvialMaxSlopeScale,
                 BiomeWetlandFluxThresholdScale = BiomeWetlandFluxThresholdScale,
-                BiomeWetlandMaxSlopeScale = BiomeWetlandMaxSlopeScale
+                BiomeWetlandMaxSlopeScale = BiomeWetlandMaxSlopeScale,
+                BiomePodzolTempMaxScale = BiomePodzolTempMaxScale,
+                BiomePodzolPrecipThresholdScale = BiomePodzolPrecipThresholdScale,
+                BiomeWoodlandPrecipThresholdScale = BiomeWoodlandPrecipThresholdScale
             };
     }
 }

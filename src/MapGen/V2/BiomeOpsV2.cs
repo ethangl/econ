@@ -251,6 +251,9 @@ namespace MapGen.Core
             float alluvialMaxSlopeScale = profile != null ? profile.BiomeAlluvialMaxSlopeScale : 1f;
             float wetlandFluxThresholdScale = profile != null ? profile.BiomeWetlandFluxThresholdScale : 1f;
             float wetlandMaxSlopeScale = profile != null ? profile.BiomeWetlandMaxSlopeScale : 1f;
+            float podzolTempMaxScale = profile != null ? profile.BiomePodzolTempMaxScale : 1f;
+            float podzolPrecipThresholdScale = profile != null ? profile.BiomePodzolPrecipThresholdScale : 1f;
+            float woodlandPrecipThresholdScale = profile != null ? profile.BiomeWoodlandPrecipThresholdScale : 1f;
             if (coastSaltScale <= 0f) coastSaltScale = 1f;
             if (salineThresholdScale <= 0f) salineThresholdScale = 1f;
             if (slopeScale <= 0f) slopeScale = 1f;
@@ -258,6 +261,9 @@ namespace MapGen.Core
             if (alluvialMaxSlopeScale <= 0f) alluvialMaxSlopeScale = 1f;
             if (wetlandFluxThresholdScale <= 0f) wetlandFluxThresholdScale = 1f;
             if (wetlandMaxSlopeScale <= 0f) wetlandMaxSlopeScale = 1f;
+            if (podzolTempMaxScale <= 0f) podzolTempMaxScale = 1f;
+            if (podzolPrecipThresholdScale <= 0f) podzolPrecipThresholdScale = 1f;
+            if (woodlandPrecipThresholdScale <= 0f) woodlandPrecipThresholdScale = 1f;
             int n = biome.CellCount;
 
             for (int i = 0; i < n; i++)
@@ -292,10 +298,16 @@ namespace MapGen.Core
                 float slope = biome.Slope[i];
                 float slopeForSoil = Clamp01(slope * slopeScale);
                 float flux = cellFlux[i];
-                float alluvialFluxThreshold = config.EffectiveRiverThreshold * alluvialFluxThresholdScale;
+                // Keep soil/biome alluvial classification stable across mesh resolution.
+                // River extraction thresholds scale with resolution, but biome flux bands should
+                // remain anchored to world-scale behavior.
+                float alluvialFluxThreshold = config.RiverThreshold * alluvialFluxThresholdScale;
                 float alluvialMaxSlope = 0.15f * alluvialMaxSlopeScale;
                 float wetlandFluxThreshold = 200f * wetlandFluxThresholdScale;
                 float wetlandMaxSlope = 0.10f * wetlandMaxSlopeScale;
+                float podzolTempMax = 20f * podzolTempMaxScale;
+                float podzolPrecipThreshold = 30f * podzolPrecipThresholdScale;
+                float woodlandPrecipThreshold = 45f * woodlandPrecipThresholdScale;
                 float saltSignal = coastSaltProxy * coastSaltScale;
                 float salineThreshold = 0.3f * salineThresholdScale;
                 bool isPermafrost = temp < -5f;
@@ -318,7 +330,9 @@ namespace MapGen.Core
                     alluvialFluxThreshold,
                     alluvialMaxSlope,
                     coastSaltScale,
-                    salineThresholdScale);
+                    salineThresholdScale,
+                    podzolTempMax,
+                    podzolPrecipThreshold);
 
                 BiomeId id = BiomeFromPseudoSoil(
                     soil,
@@ -328,7 +342,8 @@ namespace MapGen.Core
                     slopeForSoil,
                     flux,
                     wetlandFluxThreshold,
-                    wetlandMaxSlope);
+                    wetlandMaxSlope,
+                    woodlandPrecipThreshold);
                 bool wetlandCandidate = soil == SoilType.Alluvial
                     && flux > wetlandFluxThreshold
                     && slopeForSoil < wetlandMaxSlope;
@@ -429,7 +444,9 @@ namespace MapGen.Core
             float alluvialFluxThreshold,
             float alluvialMaxSlope,
             float coastSaltScale,
-            float salineThresholdScale)
+            float salineThresholdScale,
+            float podzolTempMax,
+            float podzolPrecipThreshold)
         {
             float saltSignal = coastSaltProxy * coastSaltScale;
             float salineThreshold = 0.3f * salineThresholdScale;
@@ -445,7 +462,7 @@ namespace MapGen.Core
                 return SoilType.Aridisol;
             if (tempC > 20f && precipPct > 60f)
                 return SoilType.Laterite;
-            if (tempC < 20f && precipPct > 30f)
+            if (tempC < podzolTempMax && precipPct > podzolPrecipThreshold)
                 return SoilType.Podzol;
             return SoilType.Chernozem;
         }
@@ -458,7 +475,8 @@ namespace MapGen.Core
             float slope,
             float cellFlux,
             float wetlandFluxThreshold,
-            float wetlandMaxSlope)
+            float wetlandMaxSlope,
+            float woodlandPrecipThreshold)
         {
             switch (soil)
             {
@@ -481,7 +499,7 @@ namespace MapGen.Core
                 case SoilType.Podzol:
                     return tempC < 5f ? BiomeId.BorealForest : BiomeId.TemperateForest;
                 default:
-                    return precipPct > 45f ? BiomeId.Woodland : BiomeId.Grassland;
+                    return precipPct > woodlandPrecipThreshold ? BiomeId.Woodland : BiomeId.Grassland;
             }
         }
 

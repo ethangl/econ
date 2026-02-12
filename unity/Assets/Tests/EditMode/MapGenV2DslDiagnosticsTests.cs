@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using MapGen.Core;
@@ -98,6 +99,72 @@ trough 6 400m 60-65 35-45
             string reportPath = Path.Combine(debugDir, "mapgen_v2_dsl_op_diagnostics.txt");
             File.WriteAllText(reportPath, report.ToString());
             TestContext.WriteLine($"DSL diagnostics report written: {reportPath}");
+        }
+
+        [Test]
+        [Explicit("Offline diagnostics for Archipelago op-level drift at 100k target scale.")]
+        [Category("MapGenV2TuningOffline")]
+        public void Archipelago100k_EmitOperationImpactReport()
+        {
+            var config = new MapGenV2Config
+            {
+                Seed = 4404,
+                CellCount = 100000,
+                Template = HeightmapTemplateType.Archipelago
+            };
+
+            ElevationFieldV2 field = CreateField(
+                config.MeshSeed,
+                config.CellCount,
+                config.AspectRatio,
+                config.CellSizeKm,
+                config.MaxSeaDepthMeters,
+                config.MaxElevationMeters);
+
+            string script = HeightmapTemplatesV2.GetTemplate(config.Template, config);
+            var diagnostics = new HeightmapDslV2Diagnostics();
+            HeightmapDslV2.Execute(field, script, config.ElevationSeed, diagnostics);
+
+            Assert.That(diagnostics.Operations.Count, Is.GreaterThan(0), "Expected op diagnostics for Archipelago script.");
+
+            var byOperation = new Dictionary<string, (float landDeltaSum, float edgeDeltaSum, int count)>(StringComparer.OrdinalIgnoreCase);
+            var report = new StringBuilder();
+            report.AppendLine("# Archipelago V2 DSL Op Impact @ 100k");
+            report.AppendLine($"seed={config.Seed} template={config.Template} cellCount={config.CellCount}");
+            report.AppendLine();
+            report.AppendLine("line op        deltaLand deltaEdge changed meanAbs(m) maxRaise(m) maxLower(m) placements raw");
+
+            for (int i = 0; i < diagnostics.Operations.Count; i++)
+            {
+                HeightmapDslV2OpMetrics m = diagnostics.Operations[i];
+                float deltaLand = m.AfterLandRatio - m.BeforeLandRatio;
+                float deltaEdge = m.AfterEdgeLandRatio - m.BeforeEdgeLandRatio;
+                report.AppendLine(
+                    $"{m.LineNumber,2} {m.Operation,-9} {deltaLand:+0.000;-0.000;0.000} {deltaEdge:+0.000;-0.000;0.000} " +
+                    $"{m.ChangedCellRatio:0.000} {m.MeanAbsDeltaMeters,7:0.0} {m.MaxRaiseMeters,7:0.0} {m.MaxLowerMeters,7:0.0} {m.PlacementCount,3}  {m.RawLine}");
+
+                if (!byOperation.TryGetValue(m.Operation, out (float landDeltaSum, float edgeDeltaSum, int count) agg))
+                    agg = (0f, 0f, 0);
+                agg.landDeltaSum += deltaLand;
+                agg.edgeDeltaSum += deltaEdge;
+                agg.count += 1;
+                byOperation[m.Operation] = agg;
+            }
+
+            report.AppendLine();
+            report.AppendLine("## Totals By Operation");
+            foreach (KeyValuePair<string, (float landDeltaSum, float edgeDeltaSum, int count)> kv in byOperation)
+            {
+                report.AppendLine(
+                    $"{kv.Key,-10} count={kv.Value.count,2} landSum={kv.Value.landDeltaSum:+0.000;-0.000;0.000} edgeSum={kv.Value.edgeDeltaSum:+0.000;-0.000;0.000}");
+            }
+
+            string debugDir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "debug"));
+            Directory.CreateDirectory(debugDir);
+            string reportPath = Path.Combine(debugDir, "mapgen_v2_archipelago_op_impact_100k.txt");
+            File.WriteAllText(reportPath, report.ToString());
+            TestContext.WriteLine($"Archipelago op diagnostics report written: {reportPath}");
+            TestContext.WriteLine(report.ToString());
         }
 
         static void AssertPlacementWithinRequested(HeightmapDslV2OpMetrics m, string label)
