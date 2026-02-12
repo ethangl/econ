@@ -2,18 +2,18 @@ using System.Collections.Generic;
 
 namespace MapGen.Core
 {
-    public sealed class HeightmapDslV2Diagnostics
+    public class HeightmapDslDiagnostics
     {
-        readonly List<HeightmapDslV2OpMetrics> _operations = new List<HeightmapDslV2OpMetrics>();
-        public IReadOnlyList<HeightmapDslV2OpMetrics> Operations => _operations;
+        readonly List<HeightmapDslOpMetrics> _operations = new List<HeightmapDslOpMetrics>();
+        public IReadOnlyList<HeightmapDslOpMetrics> Operations => _operations;
 
-        internal void Add(HeightmapDslV2OpMetrics metrics)
+        internal void Add(HeightmapDslOpMetrics metrics)
         {
             _operations.Add(metrics);
         }
     }
 
-    public sealed class HeightmapDslV2OpMetrics
+    public class HeightmapDslOpMetrics
     {
         public int LineNumber;
         public string Operation;
@@ -42,5 +42,15 @@ namespace MapGen.Core
         public float? EndXMaxPercent;
         public float? EndYMinPercent;
         public float? EndYMaxPercent;
+    }
+
+    [System.Obsolete("Use HeightmapDslDiagnostics.")]
+    public sealed class HeightmapDslV2Diagnostics : HeightmapDslDiagnostics
+    {
+    }
+
+    [System.Obsolete("Use HeightmapDslOpMetrics.")]
+    public sealed class HeightmapDslV2OpMetrics : HeightmapDslOpMetrics
+    {
     }
 }

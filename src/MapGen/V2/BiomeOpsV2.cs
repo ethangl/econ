@@ -9,10 +9,10 @@ namespace MapGen.Core
     public static class BiomeOpsV2
     {
         public static void Compute(
-            BiomeFieldV2 biome,
-            ElevationFieldV2 elevation,
-            ClimateFieldV2 climate,
-            RiverFieldV2 rivers,
+            BiomeField biome,
+            ElevationField elevation,
+            ClimateField climate,
+            RiverField rivers,
             MapGenV2Config config)
         {
             ComputeLakeCells(biome, elevation, rivers);
@@ -23,7 +23,7 @@ namespace MapGen.Core
             ComputePopulation(biome, elevation);
         }
 
-        static void ComputeLakeCells(BiomeFieldV2 biome, ElevationFieldV2 elevation, RiverFieldV2 rivers)
+        static void ComputeLakeCells(BiomeField biome, ElevationField elevation, RiverField rivers)
         {
             var mesh = biome.Mesh;
             for (int i = 0; i < mesh.CellCount; i++)
@@ -53,7 +53,7 @@ namespace MapGen.Core
             }
         }
 
-        static void ComputeWaterFeatures(BiomeFieldV2 biome, ElevationFieldV2 elevation)
+        static void ComputeWaterFeatures(BiomeField biome, ElevationField elevation)
         {
             var mesh = biome.Mesh;
             int n = mesh.CellCount;
@@ -117,7 +117,7 @@ namespace MapGen.Core
             biome.Features = features.ToArray();
         }
 
-        static void ComputeCoastDistance(BiomeFieldV2 biome, ElevationFieldV2 elevation)
+        static void ComputeCoastDistance(BiomeField biome, ElevationField elevation)
         {
             var mesh = biome.Mesh;
             int n = mesh.CellCount;
@@ -212,7 +212,7 @@ namespace MapGen.Core
             }
         }
 
-        static void ComputeSlope(BiomeFieldV2 biome, ElevationFieldV2 elevation)
+        static void ComputeSlope(BiomeField biome, ElevationField elevation)
         {
             var mesh = biome.Mesh;
             int n = mesh.CellCount;
@@ -235,10 +235,10 @@ namespace MapGen.Core
         }
 
         static void AssignBiomesAndSuitability(
-            BiomeFieldV2 biome,
-            ElevationFieldV2 elevation,
-            ClimateFieldV2 climate,
-            RiverFieldV2 rivers,
+            BiomeField biome,
+            ElevationField elevation,
+            ClimateField climate,
+            RiverField rivers,
             MapGenV2Config config)
         {
             bool[] cellHasRiver = ComputeCellHasRiver(biome.Mesh, rivers, config.EffectiveRiverTraceThreshold);
@@ -373,7 +373,7 @@ namespace MapGen.Core
             }
         }
 
-        static void ComputePopulation(BiomeFieldV2 biome, ElevationFieldV2 elevation)
+        static void ComputePopulation(BiomeField biome, ElevationField elevation)
         {
             var mesh = biome.Mesh;
             bool hasAreas = mesh.CellAreas != null && mesh.CellAreas.Length == mesh.CellCount;
@@ -392,7 +392,7 @@ namespace MapGen.Core
             }
         }
 
-        static bool[] ComputeCellHasRiver(CellMesh mesh, RiverFieldV2 rivers, float riverTraceThreshold)
+        static bool[] ComputeCellHasRiver(CellMesh mesh, RiverField rivers, float riverTraceThreshold)
         {
             var hasRiver = new bool[mesh.CellCount];
             for (int e = 0; e < mesh.EdgeCount; e++)
@@ -410,7 +410,7 @@ namespace MapGen.Core
             return hasRiver;
         }
 
-        static float[] ComputeCellFluxFromVertices(CellMesh mesh, RiverFieldV2 rivers)
+        static float[] ComputeCellFluxFromVertices(CellMesh mesh, RiverField rivers)
         {
             var cellFlux = new float[mesh.CellCount];
             for (int i = 0; i < mesh.CellCount; i++)

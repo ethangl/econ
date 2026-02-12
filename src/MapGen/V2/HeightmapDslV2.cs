@@ -10,7 +10,7 @@ namespace MapGen.Core
     /// </summary>
     public static class HeightmapDslV2
     {
-        public static void Execute(ElevationFieldV2 field, string script, int seed, HeightmapDslV2Diagnostics diagnostics = null)
+        public static void Execute(ElevationField field, string script, int seed, HeightmapDslDiagnostics diagnostics = null)
         {
             if (field == null) throw new ArgumentNullException(nameof(field));
             if (script == null) throw new ArgumentNullException(nameof(script));
@@ -41,7 +41,7 @@ namespace MapGen.Core
                 if (diagnostics != null)
                 {
                     ComputeDeltaStats(before, field, out float changedRatio, out float meanAbsDelta, out float maxRaise, out float maxLower);
-                    diagnostics.Add(new HeightmapDslV2OpMetrics
+                    diagnostics.Add(new HeightmapDslOpMetrics
                     {
                         LineNumber = logicalLine,
                         Operation = trace.Operation,
@@ -72,7 +72,7 @@ namespace MapGen.Core
             }
         }
 
-        static OpTrace ExecuteLine(ElevationFieldV2 field, string line, Random rng)
+        static OpTrace ExecuteLine(ElevationField field, string line, Random rng)
         {
             string[] parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 0)
@@ -112,7 +112,7 @@ namespace MapGen.Core
             }
         }
 
-        static OpTrace ExecuteBlob(ElevationFieldV2 field, string[] parts, bool positive, Random rng, string operation)
+        static OpTrace ExecuteBlob(ElevationField field, string[] parts, bool positive, Random rng, string operation)
         {
             if (parts.Length < 5)
                 throw new ArgumentException("Blob operation requires: count height_m x% y%.");
@@ -185,7 +185,7 @@ namespace MapGen.Core
             return trace;
         }
 
-        static OpTrace ExecuteLinear(ElevationFieldV2 field, string[] parts, bool positive, Random rng, string operation)
+        static OpTrace ExecuteLinear(ElevationField field, string[] parts, bool positive, Random rng, string operation)
         {
             if (parts.Length < 5)
                 throw new ArgumentException("Linear operation requires: count height_m x% y%.");
@@ -247,7 +247,7 @@ namespace MapGen.Core
             return trace;
         }
 
-        static void ExecuteMask(ElevationFieldV2 field, string[] parts)
+        static void ExecuteMask(ElevationField field, string[] parts)
         {
             if (parts.Length < 2)
                 throw new ArgumentException("Mask operation requires: fraction.");
@@ -256,7 +256,7 @@ namespace MapGen.Core
             HeightmapOpsV2.Mask(field, fraction);
         }
 
-        static void ExecuteStrait(ElevationFieldV2 field, string[] parts, Random rng)
+        static void ExecuteStrait(ElevationField field, string[] parts, Random rng)
         {
             if (parts.Length < 3)
                 throw new ArgumentException("Strait operation requires: width direction.");
@@ -267,7 +267,7 @@ namespace MapGen.Core
             HeightmapOpsV2.Strait(field, width, direction, rng);
         }
 
-        static void ExecuteAdd(ElevationFieldV2 field, string[] parts)
+        static void ExecuteAdd(ElevationField field, string[] parts)
         {
             if (parts.Length < 2)
                 throw new ArgumentException("Add operation requires: delta_m [range].");
@@ -280,7 +280,7 @@ namespace MapGen.Core
             HeightmapOpsV2.Add(field, deltaMeters, minH, maxH);
         }
 
-        static void ExecuteMultiply(ElevationFieldV2 field, string[] parts)
+        static void ExecuteMultiply(ElevationField field, string[] parts)
         {
             if (parts.Length < 2)
                 throw new ArgumentException("Multiply operation requires: factor [range].");
@@ -293,7 +293,7 @@ namespace MapGen.Core
             HeightmapOpsV2.Multiply(field, factor, minH, maxH);
         }
 
-        static void ExecuteSmooth(ElevationFieldV2 field, string[] parts)
+        static void ExecuteSmooth(ElevationField field, string[] parts)
         {
             int passes = 1;
             if (parts.Length >= 2)
@@ -302,7 +302,7 @@ namespace MapGen.Core
             HeightmapOpsV2.Smooth(field, passes);
         }
 
-        static void ExecuteInvert(ElevationFieldV2 field, string[] parts, Random rng)
+        static void ExecuteInvert(ElevationField field, string[] parts, Random rng)
         {
             float probability = 0.5f;
             int axis = 2;
@@ -399,7 +399,7 @@ namespace MapGen.Core
             return ParseFloat(t);
         }
 
-        static (float min, float max) ParseHeightRange(string token, ElevationFieldV2 field)
+        static (float min, float max) ParseHeightRange(string token, ElevationField field)
         {
             string t = token.Trim().ToLowerInvariant();
             switch (t)
@@ -463,7 +463,7 @@ namespace MapGen.Core
             return min + (float)rng.NextDouble() * (max - min);
         }
 
-        static float ComputeEdgeLandRatio(ElevationFieldV2 field)
+        static float ComputeEdgeLandRatio(ElevationField field)
         {
             float edgeMarginX = field.Mesh.Width * 0.12f;
             float edgeMarginY = field.Mesh.Height * 0.12f;
@@ -491,7 +491,7 @@ namespace MapGen.Core
 
         static void ComputeDeltaStats(
             float[] before,
-            ElevationFieldV2 field,
+            ElevationField field,
             out float changedRatio,
             out float meanAbsDelta,
             out float maxRaise,

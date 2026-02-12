@@ -8,9 +8,9 @@ namespace MapGen.Core
     public static class FlowOpsV2
     {
         public static void Compute(
-            RiverFieldV2 data,
-            ElevationFieldV2 elevation,
-            ClimateFieldV2 climate,
+            RiverField data,
+            ElevationField elevation,
+            ClimateField climate,
             MapGenV2Config config)
         {
             InterpolateVertexData(data, elevation, climate, config);
@@ -46,9 +46,9 @@ namespace MapGen.Core
         }
 
         static void InterpolateVertexData(
-            RiverFieldV2 data,
-            ElevationFieldV2 elevation,
-            ClimateFieldV2 climate,
+            RiverField data,
+            ElevationField elevation,
+            ClimateField climate,
             MapGenV2Config config)
         {
             var mesh = data.Mesh;
@@ -89,7 +89,7 @@ namespace MapGen.Core
             }
         }
 
-        static void DepressionFill(RiverFieldV2 data)
+        static void DepressionFill(RiverField data)
         {
             var mesh = data.Mesh;
             int n = mesh.VertexCount;
@@ -186,7 +186,7 @@ namespace MapGen.Core
             }
         }
 
-        static void FlowAccumulate(RiverFieldV2 data)
+        static void FlowAccumulate(RiverField data)
         {
             var mesh = data.Mesh;
             int n = mesh.VertexCount;
@@ -240,7 +240,7 @@ namespace MapGen.Core
             }
         }
 
-        static void AssignEdgeFlux(RiverFieldV2 data, Dictionary<long, int> vertexPairToEdge)
+        static void AssignEdgeFlux(RiverField data, Dictionary<long, int> vertexPairToEdge)
         {
             for (int v = 0; v < data.VertexCount; v++)
             {
@@ -258,7 +258,7 @@ namespace MapGen.Core
         }
 
         static void ExtractRivers(
-            RiverFieldV2 data,
+            RiverField data,
             Dictionary<long, int> vertexPairToEdge,
             float threshold,
             float traceThreshold,
@@ -387,7 +387,7 @@ namespace MapGen.Core
         static (int[] vertices, int sourceVertex) TraceUpstream(
             int startVertex,
             int riverId,
-            RiverFieldV2 data,
+            RiverField data,
             List<int>[] inflow,
             int[] vertexRiver,
             float threshold)

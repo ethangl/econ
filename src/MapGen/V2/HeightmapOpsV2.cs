@@ -42,7 +42,7 @@ namespace MapGen.Core
             return 0.93f;
         }
 
-        static float ShapeUnitMeters(ElevationFieldV2 field)
+        static float ShapeUnitMeters(ElevationField field)
         {
             float unit = (field.MaxElevationMeters + field.MaxSeaDepthMeters) / 100f;
             if (unit <= 0f || float.IsNaN(unit) || float.IsInfinity(unit))
@@ -50,12 +50,12 @@ namespace MapGen.Core
             return unit;
         }
 
-        static float ToShapeUnits(ElevationFieldV2 field, float meters) => Math.Abs(meters) / ShapeUnitMeters(field);
+        static float ToShapeUnits(ElevationField field, float meters) => Math.Abs(meters) / ShapeUnitMeters(field);
 
-        static float FromShapeUnits(ElevationFieldV2 field, float units) => units * ShapeUnitMeters(field);
+        static float FromShapeUnits(ElevationField field, float units) => units * ShapeUnitMeters(field);
 
         public static bool Hill(
-            ElevationFieldV2 field,
+            ElevationField field,
             float seedX,
             float seedY,
             float heightMeters,
@@ -126,7 +126,7 @@ namespace MapGen.Core
         }
 
         public static bool Pit(
-            ElevationFieldV2 field,
+            ElevationField field,
             float seedX,
             float seedY,
             float depthMeters,
@@ -193,7 +193,7 @@ namespace MapGen.Core
             return true;
         }
 
-        public static void Range(ElevationFieldV2 field, float x1, float y1, float x2, float y2, float heightMeters, Random rng)
+        public static void Range(ElevationField field, float x1, float y1, float x2, float y2, float heightMeters, Random rng)
         {
             int cellCount = field.CellCount;
             if (cellCount == 0)
@@ -302,7 +302,7 @@ namespace MapGen.Core
             }
         }
 
-        public static void Trough(ElevationFieldV2 field, float x1, float y1, float x2, float y2, float depthMeters, Random rng)
+        public static void Trough(ElevationField field, float x1, float y1, float x2, float y2, float depthMeters, Random rng)
         {
             int cellCount = field.CellCount;
             if (cellCount == 0)
@@ -411,7 +411,7 @@ namespace MapGen.Core
             }
         }
 
-        public static void Mask(ElevationFieldV2 field, float fraction)
+        public static void Mask(ElevationField field, float fraction)
         {
             float fr = Math.Abs(fraction);
             if (fr < 1f) fr = 1f;
@@ -432,7 +432,7 @@ namespace MapGen.Core
             }
         }
 
-        public static void Add(ElevationFieldV2 field, float valueMeters, float minHeightMeters, float maxHeightMeters)
+        public static void Add(ElevationField field, float valueMeters, float minHeightMeters, float maxHeightMeters)
         {
             bool isLandRange = Math.Abs(minHeightMeters) < 0.0001f && maxHeightMeters > 0f;
 
@@ -450,7 +450,7 @@ namespace MapGen.Core
             }
         }
 
-        public static void Multiply(ElevationFieldV2 field, float factor, float minHeightMeters, float maxHeightMeters)
+        public static void Multiply(ElevationField field, float factor, float minHeightMeters, float maxHeightMeters)
         {
             bool isLandRange = Math.Abs(minHeightMeters) < 0.0001f && maxHeightMeters > 0f;
 
@@ -467,7 +467,7 @@ namespace MapGen.Core
             }
         }
 
-        public static void Smooth(ElevationFieldV2 field, int fr)
+        public static void Smooth(ElevationField field, int fr)
         {
             if (fr < 1)
                 fr = 1;
@@ -497,7 +497,7 @@ namespace MapGen.Core
             field.ClampAll();
         }
 
-        public static void Strait(ElevationFieldV2 field, int desiredWidth, int direction, Random rng)
+        public static void Strait(ElevationField field, int desiredWidth, int direction, Random rng)
         {
             int cellCount = field.CellCount;
             if (cellCount == 0 || desiredWidth < 1)
@@ -591,7 +591,7 @@ namespace MapGen.Core
             }
         }
 
-        public static void Invert(ElevationFieldV2 field, int axis)
+        public static void Invert(ElevationField field, int axis)
         {
             float width = field.Mesh.Width;
             float height = field.Mesh.Height;

@@ -138,7 +138,7 @@ namespace EconSim.Tests
             MapGenComparisonCase baseline = MapGenComparison.Compare(config);
             HeightmapTemplateTuningProfile baseProfile = HeightmapTemplatesV2.ResolveTuningProfile(
                 focus.Template,
-                MapGenComparison.CreateV2Config(config));
+                MapGenComparison.CreateConfig(config));
             if (baseProfile == null)
                 baseProfile = new HeightmapTemplateTuningProfile();
 

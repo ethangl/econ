@@ -15,7 +15,7 @@ namespace MapGen.Core
         const float PermafrostDamping = 0.1f;
         const float OrographicScale = 0.25f;
 
-        public static void Compute(ClimateFieldV2 climate, ElevationFieldV2 elevation, MapGenV2Config config, WorldMetadata world)
+        public static void Compute(ClimateField climate, ElevationField elevation, MapGenV2Config config, WorldMetadata world)
         {
             var mesh = climate.Mesh;
             int n = mesh.CellCount;
@@ -56,7 +56,7 @@ namespace MapGen.Core
             }
         }
 
-        static float[] SweepBand(CellMesh mesh, ElevationFieldV2 elevation, ClimateFieldV2 climate, Vec2 windDir, MapGenV2Config config)
+        static float[] SweepBand(CellMesh mesh, ElevationField elevation, ClimateField climate, Vec2 windDir, MapGenV2Config config)
         {
             int n = mesh.CellCount;
             float[] humidity = new float[n];

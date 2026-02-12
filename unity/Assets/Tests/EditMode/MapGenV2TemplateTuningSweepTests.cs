@@ -102,12 +102,12 @@ namespace EconSim.Tests
                                 LandMultiplyFactorScale = landMultiplyCandidates[li]
                             };
 
-                            MapGenV2Result v2;
+                            MapGenResult v2;
                             try
                             {
-                                MapGenV2Config v2Config = MapGenComparison.CreateV2Config(config);
+                                MapGenConfig v2Config = MapGenComparison.CreateConfig(config);
                                 v2Config.TemplateTuningOverride = profile;
-                                v2 = MapGenPipelineV2.Generate(v2Config);
+                                v2 = MapGenPipeline.Generate(v2Config);
                             }
                             catch (Exception ex)
                             {
@@ -147,8 +147,8 @@ namespace EconSim.Tests
 
             Assert.That(hasBest, Is.True, $"No sweep candidate was evaluated for {focus.Template}");
 
-            MapGenV2Config defaultConfig = MapGenComparison.CreateV2Config(config);
-            MapGenV2Result defaultV2 = MapGenPipelineV2.Generate(defaultConfig);
+            MapGenConfig defaultConfig = MapGenComparison.CreateConfig(config);
+            MapGenResult defaultV2 = MapGenPipeline.Generate(defaultConfig);
             var defaultMetrics = Metrics.FromV2(defaultV2);
             best.DefaultDeltaLand = defaultMetrics.LandRatio - baselineMetrics.LandRatio;
             best.DefaultDeltaEdgeLand = defaultMetrics.EdgeLandRatio - baselineMetrics.EdgeLandRatio;
@@ -238,7 +238,7 @@ namespace EconSim.Tests
                 };
             }
 
-            public static Metrics FromV2(MapGenV2Result result)
+            public static Metrics FromV2(MapGenResult result)
             {
                 int n = result.Mesh.CellCount;
                 int land = 0;

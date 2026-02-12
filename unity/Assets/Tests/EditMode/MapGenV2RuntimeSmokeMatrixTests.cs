@@ -24,7 +24,7 @@ namespace EconSim.Tests
         {
             foreach (SmokeCase c in _cases)
             {
-                var config = new MapGenV2Config
+                var config = new MapGenConfig
                 {
                     Seed = c.Seed,
                     CellCount = c.CellCount,
@@ -34,7 +34,7 @@ namespace EconSim.Tests
                     MinRiverVertices = 8
                 };
 
-                MapGenV2Result result = MapGenPipelineV2.Generate(config);
+                MapGenResult result = MapGenPipeline.Generate(config);
                 MapData runtimeMap = MapGenAdapter.Convert(result);
 
                 runtimeMap.AssertElevationInvariants();

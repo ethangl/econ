@@ -10,7 +10,7 @@ namespace EconSim.Tests
         [Test]
         public void PipelineV2_IsDeterministic_AndProducesSignedElevationDomain()
         {
-            var config = new MapGenV2Config
+            var config = new MapGenConfig
             {
                 Seed = 424242,
                 CellCount = 3000,
@@ -22,8 +22,8 @@ namespace EconSim.Tests
                 MaxSeaDepthMeters = 1500f
             };
 
-            MapGenV2Result runA = MapGenPipelineV2.Generate(config);
-            MapGenV2Result runB = MapGenPipelineV2.Generate(config);
+            MapGenResult runA = MapGenPipeline.Generate(config);
+            MapGenResult runB = MapGenPipeline.Generate(config);
 
             Assert.That(runA, Is.Not.Null);
             Assert.That(runA.Mesh, Is.Not.Null);

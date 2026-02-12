@@ -38,10 +38,10 @@ namespace MapGen.Core
     /// </summary>
     public static class MapGenComparison
     {
-        public static MapGenV2Config CreateV2Config(MapGenConfig config)
+        public static MapGenConfig CreateConfig(MapGenConfig config)
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
-            return new MapGenV2Config
+            return new MapGenConfig
             {
                 Seed = config.Seed,
                 CellCount = config.CellCount,
@@ -55,6 +55,9 @@ namespace MapGen.Core
             };
         }
 
+        [Obsolete("Use CreateConfig.")]
+        public static MapGenConfig CreateV2Config(MapGenConfig config) => CreateConfig(config);
+
         public static MapGenComparisonCase Compare(MapGenConfig config)
         {
             return Compare(config, null);
@@ -65,9 +68,9 @@ namespace MapGen.Core
             if (config == null) throw new ArgumentNullException(nameof(config));
 
             MapGenResult v1 = MapGenPipeline.Generate(config);
-            MapGenV2Config v2Config = CreateV2Config(config);
-            v2Config.TemplateTuningOverride = tuningOverride;
-            MapGenV2Result v2 = MapGenPipelineV2.Generate(v2Config);
+            MapGenConfig candidateConfig = CreateConfig(config);
+            candidateConfig.TemplateTuningOverride = tuningOverride;
+            MapGenResult v2 = MapGenPipeline.Generate(candidateConfig);
 
             return new MapGenComparisonCase
             {
@@ -132,69 +135,6 @@ namespace MapGen.Core
 
             for (int i = 0; i < n; i++)
             {
-                bool isLand = !result.Heights.IsWater(i) && !result.Biomes.IsLakeCell[i];
-                if (isLand) land++;
-
-                Vec2 center = result.Mesh.CellCenters[i];
-                bool isEdge = center.X <= edgeMarginX || center.X >= result.Mesh.Width - edgeMarginX
-                    || center.Y <= edgeMarginY || center.Y >= result.Mesh.Height - edgeMarginY;
-                if (isEdge)
-                {
-                    edgeCells++;
-                    if (isLand) edgeLand++;
-                }
-
-                signed[i] = LegacyAbsoluteToSignedMeters(result.Heights.Heights[i], result.World);
-
-                bool includeBiome = !result.Heights.IsWater(i) || result.Biomes.IsLakeCell[i];
-                if (includeBiome)
-                {
-                    int biome = (int)result.Biomes.Biome[i];
-                    if (biome >= 0 && biome < biomeCounts.Length)
-                        biomeCounts[biome]++;
-                }
-            }
-
-            int riverVertices = 0;
-            for (int i = 0; i < result.Rivers.Rivers.Length; i++)
-                riverVertices += result.Rivers.Rivers[i].Vertices.Length;
-
-            float landRatio = n > 0 ? land / (float)n : 0f;
-            float edgeLandRatio = edgeCells > 0 ? edgeLand / (float)edgeCells : 0f;
-            float coastRatio = ComputeCoastRatio(result.Mesh, c => !result.Heights.IsWater(c) && !result.Biomes.IsLakeCell[c]);
-
-            return new MapGenComparisonMetrics
-            {
-                LandRatio = landRatio,
-                WaterRatio = 1f - landRatio,
-                EdgeLandRatio = edgeLandRatio,
-                CoastRatio = coastRatio,
-                ElevationP10Meters = Percentile(signed, 0.10f),
-                ElevationP50Meters = Percentile(signed, 0.50f),
-                ElevationP90Meters = Percentile(signed, 0.90f),
-                RiverCount = result.Rivers.Rivers.Length,
-                RiverCoverage = result.Mesh.VertexCount > 0 ? riverVertices / (float)result.Mesh.VertexCount : 0f,
-                RealmCount = result.Political.RealmCount,
-                ProvinceCount = result.Political.ProvinceCount,
-                CountyCount = result.Political.CountyCount,
-                BiomeCounts = biomeCounts
-            };
-        }
-
-        static MapGenComparisonMetrics ComputeMetrics(MapGenV2Result result)
-        {
-            int n = result.Mesh.CellCount;
-            int land = 0;
-            int edgeCells = 0;
-            int edgeLand = 0;
-            var signed = new float[n];
-            int biomeCount = Enum.GetValues(typeof(BiomeId)).Length;
-            var biomeCounts = new int[biomeCount];
-            float edgeMarginX = result.Mesh.Width * 0.12f;
-            float edgeMarginY = result.Mesh.Height * 0.12f;
-
-            for (int i = 0; i < n; i++)
-            {
                 bool isLand = result.Elevation.IsLand(i) && !result.Biomes.IsLakeCell[i];
                 if (isLand) land++;
 
@@ -242,19 +182,6 @@ namespace MapGen.Core
                 CountyCount = result.Political.CountyCount,
                 BiomeCounts = biomeCounts
             };
-        }
-
-        static float LegacyAbsoluteToSignedMeters(float absoluteHeight, WorldMetadata world)
-        {
-            float sea = world.SeaLevelHeight;
-            if (absoluteHeight >= sea)
-            {
-                float landRange = Math.Max(1f, 100f - sea);
-                return ((absoluteHeight - sea) / landRange) * world.MaxElevationMeters;
-            }
-
-            float waterRange = Math.Max(1f, sea - 0f);
-            return -((sea - absoluteHeight) / waterRange) * world.MaxSeaDepthMeters;
         }
 
         static float ComputeCoastRatio(CellMesh mesh, Func<int, bool> isLand)

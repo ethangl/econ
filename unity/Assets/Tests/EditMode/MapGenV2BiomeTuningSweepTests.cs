@@ -28,7 +28,7 @@ namespace EconSim.Tests
             int[] baselineBiome = baseline.V1.BiomeCounts;
             HeightmapTemplateTuningProfile defaultProfile = HeightmapTemplatesV2.ResolveTuningProfile(
                 config.Template,
-                MapGenComparison.CreateV2Config(config));
+                MapGenComparison.CreateConfig(config));
             if (defaultProfile == null)
                 defaultProfile = new HeightmapTemplateTuningProfile();
 
@@ -149,9 +149,9 @@ namespace EconSim.Tests
 
         static int[] GenerateV2BiomeCounts(MapGenConfig config, HeightmapTemplateTuningProfile profile)
         {
-            MapGenV2Config v2Config = MapGenComparison.CreateV2Config(config);
+            MapGenConfig v2Config = MapGenComparison.CreateConfig(config);
             v2Config.TemplateTuningOverride = profile;
-            MapGenV2Result result = MapGenPipelineV2.Generate(v2Config);
+            MapGenResult result = MapGenPipeline.Generate(v2Config);
 
             int biomeCount = Enum.GetValues(typeof(BiomeId)).Length;
             var counts = new int[biomeCount];

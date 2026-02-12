@@ -3,9 +3,10 @@ namespace MapGen.Core
     /// <summary>
     /// Per-cell signed elevation values in meters relative to sea level (0m).
     /// </summary>
-    public class ElevationFieldV2
+    public class ElevationField
     {
         public float[] ElevationMetersSigned;
+        public float[] Heights => ElevationMetersSigned;
 
         public CellMesh Mesh { get; }
         public int CellCount => Mesh.CellCount;
@@ -14,7 +15,7 @@ namespace MapGen.Core
         public float MaxElevationMeters { get; }
         public float MaxSeaDepthMeters { get; }
 
-        public ElevationFieldV2(CellMesh mesh, float maxSeaDepthMeters, float maxElevationMeters)
+        public ElevationField(CellMesh mesh, float maxSeaDepthMeters, float maxElevationMeters)
         {
             Mesh = mesh;
             MaxSeaDepthMeters = maxSeaDepthMeters;
@@ -64,6 +65,15 @@ namespace MapGen.Core
 
             var (land, _) = CountLandWater();
             return (float)land / CellCount;
+        }
+    }
+
+    [System.Obsolete("Use ElevationField.")]
+    public class ElevationFieldV2 : ElevationField
+    {
+        public ElevationFieldV2(CellMesh mesh, float maxSeaDepthMeters, float maxElevationMeters)
+            : base(mesh, maxSeaDepthMeters, maxElevationMeters)
+        {
         }
     }
 }

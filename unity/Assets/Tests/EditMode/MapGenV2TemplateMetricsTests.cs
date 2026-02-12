@@ -11,7 +11,7 @@ namespace EconSim.Tests
         [Test]
         public void TemplatePort_EmitsMeterAnnotatedScripts()
         {
-            var config = new MapGenV2Config();
+            var config = new MapGenConfig();
 
             foreach (HeightmapTemplateType template in Enum.GetValues(typeof(HeightmapTemplateType)))
             {
@@ -52,7 +52,7 @@ namespace EconSim.Tests
         {
             foreach (HeightmapTemplateType template in Enum.GetValues(typeof(HeightmapTemplateType)))
             {
-                var config = new MapGenV2Config
+                var config = new MapGenConfig
                 {
                     Seed = 1337,
                     CellCount = 4000,
@@ -61,7 +61,7 @@ namespace EconSim.Tests
                     MaxSeaDepthMeters = 1250f
                 };
 
-                MapGenV2Result result = MapGenPipelineV2.Generate(config);
+                MapGenResult result = MapGenPipeline.Generate(config);
                 Assert.That(result, Is.Not.Null);
                 Assert.That(result.Mesh, Is.Not.Null);
                 Assert.That(result.Elevation, Is.Not.Null);
@@ -110,7 +110,7 @@ namespace EconSim.Tests
             return sorted[lo] + (sorted[hi] - sorted[lo]) * t;
         }
 
-        static float ComputeCoastRatio(CellMesh mesh, ElevationFieldV2 elevation)
+        static float ComputeCoastRatio(CellMesh mesh, ElevationField elevation)
         {
             int candidateEdges = 0;
             int coastEdges = 0;

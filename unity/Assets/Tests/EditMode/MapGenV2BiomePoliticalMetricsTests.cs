@@ -13,7 +13,7 @@ namespace EconSim.Tests
         {
             foreach (HeightmapTemplateType template in Enum.GetValues(typeof(HeightmapTemplateType)))
             {
-                var config = new MapGenV2Config
+                var config = new MapGenConfig
                 {
                     Seed = 20260212,
                     CellCount = 5000,
@@ -25,7 +25,7 @@ namespace EconSim.Tests
                     MinRiverVertices = 8
                 };
 
-                MapGenV2Result result = MapGenPipelineV2.Generate(config);
+                MapGenResult result = MapGenPipeline.Generate(config);
                 Assert.That(result.Biomes, Is.Not.Null, $"Biomes missing for {template}");
                 Assert.That(result.Political, Is.Not.Null, $"Political output missing for {template}");
 

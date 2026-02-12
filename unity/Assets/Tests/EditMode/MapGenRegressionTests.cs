@@ -16,6 +16,7 @@ namespace EconSim.Tests
 {
     [TestFixture]
     [Category("M3Regression")]
+    [Ignore("Legacy V1 regression baselines retired; canonical MapGen now targets world-unit pipeline.")]
     public class MapGenRegressionTests
     {
         private readonly struct Snapshot

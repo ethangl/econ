@@ -6,11 +6,11 @@ namespace MapGen.Core
     public class MapGenV2Result
     {
         public CellMesh Mesh;
-        public ElevationFieldV2 Elevation;
-        public ClimateFieldV2 Climate;
-        public RiverFieldV2 Rivers;
-        public BiomeFieldV2 Biomes;
-        public PoliticalFieldV2 Political;
+        public ElevationField Elevation;
+        public ClimateField Climate;
+        public RiverField Rivers;
+        public BiomeField Biomes;
+        public PoliticalField Political;
         public WorldMetadata World;
     }
 }

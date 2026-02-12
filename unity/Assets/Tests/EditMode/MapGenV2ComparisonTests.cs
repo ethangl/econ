@@ -42,7 +42,7 @@ namespace EconSim.Tests
         [Test]
         public void Adapter_CanConvertV2Result_IntoRuntimeMapData()
         {
-            var config = new MapGenV2Config
+            var config = new MapGenConfig
             {
                 Seed = 987654,
                 CellCount = 3500,
@@ -52,7 +52,7 @@ namespace EconSim.Tests
                 MinRiverVertices = 8
             };
 
-            MapGenV2Result result = MapGenPipelineV2.Generate(config);
+            MapGenResult result = MapGenPipeline.Generate(config);
             MapData data = MapGenAdapter.Convert(result);
 
             Assert.That(data, Is.Not.Null);

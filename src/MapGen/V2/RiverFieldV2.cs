@@ -1,6 +1,6 @@
 namespace MapGen.Core
 {
-    public class RiverFieldV2
+    public class RiverField
     {
         /// <summary>Per-vertex interpolated signed elevation in meters.</summary>
         public float[] VertexElevationMeters;
@@ -27,7 +27,7 @@ namespace MapGen.Core
         public int VertexCount => Mesh.VertexCount;
         public int EdgeCount => Mesh.EdgeCount;
 
-        public RiverFieldV2(CellMesh mesh)
+        public RiverField(CellMesh mesh)
         {
             Mesh = mesh;
             int vCount = mesh.VertexCount;
@@ -53,6 +53,14 @@ namespace MapGen.Core
         public bool IsOcean(int vertex)
         {
             return VertexElevationMeters[vertex] <= 0f;
+        }
+    }
+
+    [System.Obsolete("Use RiverField.")]
+    public class RiverFieldV2 : RiverField
+    {
+        public RiverFieldV2(CellMesh mesh) : base(mesh)
+        {
         }
     }
 

@@ -15,7 +15,7 @@ namespace EconSim.Tests
         [Test]
         public void PlacementOps_StayInsideRequestedDslBounds()
         {
-            ElevationFieldV2 field = CreateField(seed: 501, cellCount: 2500, aspectRatio: 16f / 9f);
+            ElevationField field = CreateField(seed: 501, cellCount: 2500, aspectRatio: 16f / 9f);
             for (int i = 0; i < field.CellCount; i++)
                 field[i] = field.MaxElevationMeters * 0.95f;
 
@@ -26,13 +26,13 @@ range 6 700m 25-35 45-55
 trough 6 400m 60-65 35-45
 ";
 
-            var diagnostics = new HeightmapDslV2Diagnostics();
+            var diagnostics = new HeightmapDslDiagnostics();
             HeightmapDslV2.Execute(field, script, seed: 1234, diagnostics);
 
-            HeightmapDslV2OpMetrics hill = FindOp(diagnostics, "hill");
-            HeightmapDslV2OpMetrics pit = FindOp(diagnostics, "pit");
-            HeightmapDslV2OpMetrics range = FindOp(diagnostics, "range");
-            HeightmapDslV2OpMetrics trough = FindOp(diagnostics, "trough");
+            HeightmapDslOpMetrics hill = FindOp(diagnostics, "hill");
+            HeightmapDslOpMetrics pit = FindOp(diagnostics, "pit");
+            HeightmapDslOpMetrics range = FindOp(diagnostics, "range");
+            HeightmapDslOpMetrics trough = FindOp(diagnostics, "trough");
 
             AssertPlacementWithinRequested(hill, "hill");
             AssertPlacementWithinRequested(pit, "pit");
@@ -46,16 +46,16 @@ trough 6 400m 60-65 35-45
         [Test]
         public void Diagnostics_EmitPerOperationImpactMetrics()
         {
-            var config = new MapGenV2Config
+            var config = new MapGenConfig
             {
                 Seed = 2202,
                 CellCount = 4000,
                 Template = HeightmapTemplateType.Continents
             };
 
-            ElevationFieldV2 field = CreateField(config.MeshSeed, config.CellCount, config.AspectRatio, config.CellSizeKm, config.MaxSeaDepthMeters, config.MaxElevationMeters);
+            ElevationField field = CreateField(config.MeshSeed, config.CellCount, config.AspectRatio, config.CellSizeKm, config.MaxSeaDepthMeters, config.MaxElevationMeters);
             string script = HeightmapTemplatesV2.GetTemplate(config.Template, config);
-            var diagnostics = new HeightmapDslV2Diagnostics();
+            var diagnostics = new HeightmapDslDiagnostics();
             HeightmapDslV2.Execute(field, script, config.ElevationSeed, diagnostics);
 
             Assert.That(diagnostics.Operations.Count, Is.GreaterThan(0), "Expected at least one recorded DSL operation.");
@@ -67,7 +67,7 @@ trough 6 400m 60-65 35-45
 
             for (int i = 0; i < diagnostics.Operations.Count; i++)
             {
-                HeightmapDslV2OpMetrics m = diagnostics.Operations[i];
+                HeightmapDslOpMetrics m = diagnostics.Operations[i];
                 AssertFinite(m.BeforeLandRatio, $"{m.Operation} before-land");
                 AssertFinite(m.AfterLandRatio, $"{m.Operation} after-land");
                 AssertFinite(m.BeforeEdgeLandRatio, $"{m.Operation} before-edge");
@@ -106,14 +106,14 @@ trough 6 400m 60-65 35-45
         [Category("MapGenV2TuningOffline")]
         public void Archipelago100k_EmitOperationImpactReport()
         {
-            var config = new MapGenV2Config
+            var config = new MapGenConfig
             {
                 Seed = 4404,
                 CellCount = 100000,
                 Template = HeightmapTemplateType.Archipelago
             };
 
-            ElevationFieldV2 field = CreateField(
+            ElevationField field = CreateField(
                 config.MeshSeed,
                 config.CellCount,
                 config.AspectRatio,
@@ -122,7 +122,7 @@ trough 6 400m 60-65 35-45
                 config.MaxElevationMeters);
 
             string script = HeightmapTemplatesV2.GetTemplate(config.Template, config);
-            var diagnostics = new HeightmapDslV2Diagnostics();
+            var diagnostics = new HeightmapDslDiagnostics();
             HeightmapDslV2.Execute(field, script, config.ElevationSeed, diagnostics);
 
             Assert.That(diagnostics.Operations.Count, Is.GreaterThan(0), "Expected op diagnostics for Archipelago script.");
@@ -136,7 +136,7 @@ trough 6 400m 60-65 35-45
 
             for (int i = 0; i < diagnostics.Operations.Count; i++)
             {
-                HeightmapDslV2OpMetrics m = diagnostics.Operations[i];
+                HeightmapDslOpMetrics m = diagnostics.Operations[i];
                 float deltaLand = m.AfterLandRatio - m.BeforeLandRatio;
                 float deltaEdge = m.AfterEdgeLandRatio - m.BeforeEdgeLandRatio;
                 report.AppendLine(
@@ -167,7 +167,7 @@ trough 6 400m 60-65 35-45
             TestContext.WriteLine(report.ToString());
         }
 
-        static void AssertPlacementWithinRequested(HeightmapDslV2OpMetrics m, string label)
+        static void AssertPlacementWithinRequested(HeightmapDslOpMetrics m, string label)
         {
             Assert.That(m.PlacementCount, Is.GreaterThan(0), $"{label}: expected at least one placement.");
             Assert.That(m.RequestedXMinPercent.HasValue && m.RequestedXMaxPercent.HasValue, Is.True, $"{label}: missing requested x-range.");
@@ -182,7 +182,7 @@ trough 6 400m 60-65 35-45
             Assert.That(m.SeedYMaxPercent.Value, Is.LessThanOrEqualTo(m.RequestedYMaxPercent.Value + eps), $"{label}: seed y-max escaped requested range.");
         }
 
-        static void AssertEndpointWithinRequested(HeightmapDslV2OpMetrics m, string label)
+        static void AssertEndpointWithinRequested(HeightmapDslOpMetrics m, string label)
         {
             Assert.That(m.EndXMinPercent.HasValue && m.EndXMaxPercent.HasValue, Is.True, $"{label}: missing accepted endpoint x-range.");
             Assert.That(m.EndYMinPercent.HasValue && m.EndYMaxPercent.HasValue, Is.True, $"{label}: missing accepted endpoint y-range.");
@@ -194,11 +194,11 @@ trough 6 400m 60-65 35-45
             Assert.That(m.EndYMaxPercent.Value, Is.LessThanOrEqualTo(m.RequestedYMaxPercent.Value + eps), $"{label}: endpoint y-max escaped requested range.");
         }
 
-        static HeightmapDslV2OpMetrics FindOp(HeightmapDslV2Diagnostics diagnostics, string operation)
+        static HeightmapDslOpMetrics FindOp(HeightmapDslDiagnostics diagnostics, string operation)
         {
             for (int i = 0; i < diagnostics.Operations.Count; i++)
             {
-                HeightmapDslV2OpMetrics op = diagnostics.Operations[i];
+                HeightmapDslOpMetrics op = diagnostics.Operations[i];
                 if (string.Equals(op.Operation, operation, StringComparison.Ordinal))
                     return op;
             }
@@ -212,7 +212,7 @@ trough 6 400m 60-65 35-45
             Assert.That(float.IsNaN(value) || float.IsInfinity(value), Is.False, $"Invalid metric for {label}.");
         }
 
-        static ElevationFieldV2 CreateField(
+        static ElevationField CreateField(
             int seed,
             int cellCount,
             float aspectRatio,
@@ -229,7 +229,7 @@ trough 6 400m 60-65 35-45
             Vec2[] boundaryPoints = PointGenerator.BoundaryPoints(mapWidthKm, mapHeightKm, spacing);
             CellMesh mesh = VoronoiBuilder.Build(mapWidthKm, mapHeightKm, gridPoints, boundaryPoints);
             mesh.ComputeAreas();
-            return new ElevationFieldV2(mesh, maxSeaDepthMeters, maxElevationMeters);
+            return new ElevationField(mesh, maxSeaDepthMeters, maxElevationMeters);
         }
     }
 }

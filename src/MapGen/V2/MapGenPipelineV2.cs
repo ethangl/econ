@@ -15,17 +15,17 @@ namespace MapGen.Core
 
             CellMesh mesh = GenerateMesh(config);
             WorldMetadata world = BuildWorldMetadata(config, mesh);
-            var elevation = new ElevationFieldV2(mesh, config.MaxSeaDepthMeters, config.MaxElevationMeters);
+            var elevation = new ElevationField(mesh, config.MaxSeaDepthMeters, config.MaxElevationMeters);
             GenerateElevationFromDsl(elevation, config);
             EnsureNonDegenerateLandWater(elevation);
-            var climate = new ClimateFieldV2(mesh);
+            var climate = new ClimateField(mesh);
             TemperatureOpsV2.Compute(climate, elevation, config, world);
             PrecipitationOpsV2.Compute(climate, elevation, config, world);
-            var rivers = new RiverFieldV2(mesh);
+            var rivers = new RiverField(mesh);
             FlowOpsV2.Compute(rivers, elevation, climate, config);
-            var biomes = new BiomeFieldV2(mesh);
+            var biomes = new BiomeField(mesh);
             BiomeOpsV2.Compute(biomes, elevation, climate, rivers, config);
-            var political = new PoliticalFieldV2(mesh);
+            var political = new PoliticalField(mesh);
             PoliticalOpsV2.Compute(political, biomes, elevation, config);
 
             return new MapGenV2Result
@@ -59,7 +59,7 @@ namespace MapGen.Core
             return mesh;
         }
 
-        static void GenerateElevationFromDsl(ElevationFieldV2 elevation, MapGenV2Config config)
+        static void GenerateElevationFromDsl(ElevationField elevation, MapGenV2Config config)
         {
             string script = HeightmapTemplatesV2.GetTemplate(config.Template, config);
             if (string.IsNullOrWhiteSpace(script))
@@ -70,7 +70,7 @@ namespace MapGen.Core
             elevation.ClampAll();
         }
 
-        static void ConstrainLandRatioBand(ElevationFieldV2 elevation, HeightmapTemplateType template)
+        static void ConstrainLandRatioBand(ElevationField elevation, HeightmapTemplateType template)
         {
             var (minLand, maxLand) = HeightmapTemplatesV2.GetLandRatioBand(template);
             for (int iter = 0; iter < 3; iter++)
@@ -118,7 +118,7 @@ namespace MapGen.Core
             return -cutoff;
         }
 
-        static void EnsureNonDegenerateLandWater(ElevationFieldV2 elevation)
+        static void EnsureNonDegenerateLandWater(ElevationField elevation)
         {
             var (land, water) = elevation.CountLandWater();
             if (land > 0 && water > 0)

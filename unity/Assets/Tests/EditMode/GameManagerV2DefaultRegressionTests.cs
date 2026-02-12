@@ -14,7 +14,7 @@ namespace EconSim.Tests
         {
             var gameObject = new GameObject("GameManagerV2DefaultRegressionTests");
             var manager = gameObject.AddComponent<GameManager>();
-            manager.GenerationMode = MapGenerationMode.V2Default;
+            manager.GenerationMode = MapGenerationMode.Default;
 
             var config = new MapGenConfig
             {
@@ -30,19 +30,18 @@ namespace EconSim.Tests
             {
                 manager.GenerateMap(config);
 
-                Assert.That(manager.MapGenV2Result, Is.Not.Null, "V2 result should be set by default.");
-                Assert.That(manager.MapGenResult, Is.Null, "V1 result should remain null when V2 is default.");
+                Assert.That(manager.MapGenResult, Is.Not.Null, "MapGen result should be set by default.");
                 Assert.That(manager.MapData, Is.Not.Null, "Runtime MapData should be generated.");
 
                 manager.MapData.AssertElevationInvariants();
                 manager.MapData.AssertWorldInvariants();
 
-                float v2LandRatio = manager.MapGenV2Result.Elevation.LandRatio();
+                float v2LandRatio = manager.MapGenResult.Elevation.LandRatio();
                 float runtimeLandRatio = manager.MapData.Cells.Count > 0
                     ? manager.MapData.Info.LandCells / (float)manager.MapData.Cells.Count
                     : 0f;
-                int riverCount = manager.MapGenV2Result.Rivers.Rivers.Length;
-                float p50 = Percentile(manager.MapGenV2Result.Elevation.ElevationMetersSigned, 0.50f);
+                int riverCount = manager.MapGenResult.Rivers.Rivers.Length;
+                float p50 = Percentile(manager.MapGenResult.Elevation.ElevationMetersSigned, 0.50f);
 
                 Assert.That(v2LandRatio, Is.InRange(0.30f, 0.82f), "V2 land ratio drifted outside expected broad band.");
                 Assert.That(runtimeLandRatio, Is.InRange(0.30f, 0.82f), "Runtime land ratio drifted outside expected broad band.");
@@ -68,7 +67,7 @@ namespace EconSim.Tests
         {
             var gameObject = new GameObject("GameManagerForceV2Tests");
             var manager = gameObject.AddComponent<GameManager>();
-            manager.GenerationMode = MapGenerationMode.ForceV2;
+            manager.GenerationMode = MapGenerationMode.Default;
 
             var config = new MapGenConfig
             {
@@ -84,15 +83,14 @@ namespace EconSim.Tests
             {
                 manager.GenerateMap(config);
 
-                Assert.That(manager.MapGenV2Result, Is.Not.Null, "V2 result should be populated when ForceV2 is selected.");
-                Assert.That(manager.MapGenResult, Is.Null, "V1 result should remain null when ForceV2 is selected.");
+                Assert.That(manager.MapGenResult, Is.Not.Null, "MapGen result should be populated.");
                 Assert.That(manager.MapData, Is.Not.Null, "Runtime MapData should still be generated.");
 
                 manager.MapData.AssertElevationInvariants();
                 manager.MapData.AssertWorldInvariants();
 
-                float v2LandRatio = manager.MapGenV2Result.Elevation.LandRatio();
-                int riverCount = manager.MapGenV2Result.Rivers.Rivers.Length;
+                float v2LandRatio = manager.MapGenResult.Elevation.LandRatio();
+                int riverCount = manager.MapGenResult.Rivers.Rivers.Length;
                 Assert.That(v2LandRatio, Is.InRange(0.30f, 0.82f), "ForceV2 land ratio drifted outside expected broad band.");
                 Assert.That(riverCount, Is.InRange(5, 250), "ForceV2 river count drifted outside expected broad band.");
             }

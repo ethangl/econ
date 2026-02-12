@@ -7,7 +7,7 @@ namespace MapGen.Core
     /// </summary>
     public static class TemperatureOpsV2
     {
-        public static void Compute(ClimateFieldV2 climate, ElevationFieldV2 elevation, MapGenV2Config config, WorldMetadata world)
+        public static void Compute(ClimateField climate, ElevationField elevation, MapGenV2Config config, WorldMetadata world)
         {
             var mesh = climate.Mesh;
             for (int i = 0; i < mesh.CellCount; i++)
