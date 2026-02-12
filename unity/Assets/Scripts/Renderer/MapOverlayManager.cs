@@ -136,6 +136,8 @@ public class MapOverlayManager
         private string overlayTextureCacheDirectory;
         private int cachedCountyToMarketHash;
         private int cachedRoadStateHash;
+        private bool overlayCacheDirty;
+        private bool pendingMarketModePrewarm;
 
         // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
         private const int ReliefBlurRadius = 4;
@@ -527,12 +529,12 @@ public class MapOverlayManager
             }
         }
 
-        private void TrySaveOverlayTextureCache(string cacheDirectory)
+        private bool TrySaveOverlayTextureCache(string cacheDirectory)
         {
             try
             {
                 if (string.IsNullOrWhiteSpace(cacheDirectory))
-                    return;
+                    return false;
 
                 Directory.CreateDirectory(cacheDirectory);
                 TrySaveSpatialGridCache(cacheDirectory);
@@ -567,10 +569,12 @@ public class MapOverlayManager
                 string metadataPath = Path.Combine(cacheDirectory, OverlayTextureCacheMetadataFileName);
                 File.WriteAllText(metadataPath, JsonUtility.ToJson(metadata, false));
                 Debug.Log($"MapOverlayManager: Saved overlay texture cache to {cacheDirectory}");
+                return true;
             }
             catch (Exception ex)
             {
                 Debug.LogWarning($"MapOverlayManager: Failed to save overlay texture cache ({cacheDirectory}): {ex.Message}");
+                return false;
             }
         }
 
@@ -1866,12 +1870,13 @@ public class MapOverlayManager
                 // Regenerate market border distance texture now that zone assignments are known.
                 RegenerateMarketBorderDistTexture(economy);
                 cachedCountyToMarketHash = countyToMarketHash;
+                overlayCacheDirty = true;
             }
 
             if (currentMapMode == MapView.MapMode.Market)
                 RegenerateModeColorResolveTexture();
             if (currentMapMode != MapView.MapMode.Market)
-                PrewarmOverlayModeResolveCache(MapView.MapMode.Market);
+                pendingMarketModePrewarm = true;
 
             Debug.Log($"MapOverlayManager: Updated county-to-market texture ({economy.CountyToMarket.Count} counties mapped)");
         }
@@ -2256,15 +2261,11 @@ public class MapOverlayManager
             {
                 RegenerateRoadDistTexture();
                 cachedRoadStateHash = roadHash;
+                overlayCacheDirty = true;
             }
 
             if (currentMapMode != MapView.MapMode.Market)
-                PrewarmOverlayModeResolveCache(MapView.MapMode.Market);
-
-            if (!string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
-            {
-                TrySaveOverlayTextureCache(overlayTextureCacheDirectory);
-            }
+                pendingMarketModePrewarm = true;
         }
 
         /// <summary>
@@ -2311,7 +2312,28 @@ public class MapOverlayManager
             if (styleChanged && roadState != null)
             {
                 RegenerateRoadDistTexture();
+                overlayCacheDirty = true;
             }
+        }
+
+        public void RunDeferredStartupWork()
+        {
+            if (pendingMarketModePrewarm && currentMapMode != MapView.MapMode.Market)
+            {
+                PrewarmOverlayModeResolveCache(MapView.MapMode.Market);
+            }
+
+            pendingMarketModePrewarm = false;
+            FlushOverlayTextureCacheIfDirty();
+        }
+
+        public void FlushOverlayTextureCacheIfDirty()
+        {
+            if (!overlayCacheDirty || string.IsNullOrWhiteSpace(overlayTextureCacheDirectory))
+                return;
+
+            if (TrySaveOverlayTextureCache(overlayTextureCacheDirectory))
+                overlayCacheDirty = false;
         }
 
         /// <summary>
@@ -2459,6 +2481,8 @@ public class MapOverlayManager
             if (terrainMaterial == null) return;
             bool modeChanged = currentMapMode != mode;
             currentMapMode = mode;
+            if (mode == MapView.MapMode.Market)
+                pendingMarketModePrewarm = false;
 
             int shaderMode;
             switch (mode)

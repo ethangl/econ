@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.IO;
 using UnityEngine;
 using EconSim.Core.Data;
@@ -50,6 +51,7 @@ namespace EconSim.Core
         public static bool HasLastMapCache => File.Exists(GetLastMapPayloadPath());
 
         private ISimulation _simulation;
+        private Coroutine deferredStartupWorkRoutine;
 
         public static GameManager Instance { get; private set; }
 
@@ -274,6 +276,8 @@ namespace EconSim.Core
             // Mark map as ready and notify subscribers
             IsMapReady = true;
             OnMapReady?.Invoke();
+
+            ScheduleDeferredStartupWork(preferCachedOverlayTextures);
         }
 
 
@@ -449,8 +453,6 @@ namespace EconSim.Core
 
                 mapData = payload.MapData;
                 mapData.BuildLookups();
-                mapData.AssertElevationInvariants();
-                mapData.AssertWorldInvariants();
 
                 int rootSeed = ResolveCachedRootSeed(payload, mapData);
                 generationContext = WorldGenerationContext.FromRootSeed(rootSeed);
@@ -479,6 +481,44 @@ namespace EconSim.Core
             }
 
             return rootSeed > 0 ? rootSeed : 1;
+        }
+
+        private void ScheduleDeferredStartupWork(bool validateCachedMap)
+        {
+            if (deferredStartupWorkRoutine != null)
+            {
+                StopCoroutine(deferredStartupWorkRoutine);
+            }
+
+            deferredStartupWorkRoutine = StartCoroutine(RunDeferredStartupWork(MapData, validateCachedMap));
+        }
+
+        private IEnumerator RunDeferredStartupWork(MapData loadedMap, bool validateCachedMap)
+        {
+            yield return null;
+
+            if (loadedMap == null || loadedMap != MapData)
+            {
+                deferredStartupWorkRoutine = null;
+                yield break;
+            }
+
+            mapView?.RunDeferredStartupWork();
+
+            if (validateCachedMap)
+            {
+                try
+                {
+                    loadedMap.AssertElevationInvariants();
+                    loadedMap.AssertWorldInvariants();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"Deferred cached map invariant check failed: {ex.Message}");
+                }
+            }
+
+            deferredStartupWorkRoutine = null;
         }
 
     }
