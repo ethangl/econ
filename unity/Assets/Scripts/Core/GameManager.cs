@@ -77,14 +77,21 @@ namespace EconSim.Core
             Profiler.Reset();
             Profiler.Begin("Total Startup");
 
-            config ??= new MapGenConfig
+            if (config == null)
             {
-                CellCount = 60000,
-                Seed = UnityEngine.Random.Range(1, int.MaxValue)
-            };
+                config = new MapGenConfig
+                {
+                    CellCount = 60000,
+                    Seed = UnityEngine.Random.Range(1, int.MaxValue)
+                };
+            }
+
+            WorldSeeds seeds = WorldSeeds.FromRoot(config.Seed);
+            config.Seed = seeds.MapGenSeed;
 
             Debug.Log(
-                $"MapGen config: cells={config.CellCount}, template={config.Template}, " +
+                $"MapGen config: rootSeed={seeds.RootSeed}, mapGenSeed={seeds.MapGenSeed}, " +
+                $"economySeed={seeds.EconomySeed}, cells={config.CellCount}, template={config.Template}, " +
                 $"riverThreshold={config.EffectiveRiverThreshold:0.0}, " +
                 $"riverTrace={config.EffectiveRiverTraceThreshold:0.0}, " +
                 $"minRiverVertices={config.EffectiveMinRiverVertices}");
@@ -100,10 +107,15 @@ namespace EconSim.Core
             Profiler.End();
             LogMapGenSummary(result, MapData);
 
-            // Update info with seed
-            MapData.Info.Seed = config.Seed.ToString();
+            // Persist root + derived seeds for deterministic downstream systems.
+            MapData.Info.Seed = seeds.RootSeed.ToString();
+            MapData.Info.RootSeed = seeds.RootSeed;
+            MapData.Info.MapGenSeed = seeds.MapGenSeed;
+            MapData.Info.PopGenSeed = seeds.PopGenSeed;
+            MapData.Info.EconomySeed = seeds.EconomySeed;
+            MapData.Info.SimulationSeed = seeds.SimulationSeed;
 
-            InitializeWithMapData();
+            InitializeWithMapData(seeds);
 
             Profiler.End();
             Profiler.LogResults();
@@ -147,7 +159,7 @@ namespace EconSim.Core
             return sorted[lo] + (sorted[hi] - sorted[lo]) * t;
         }
 
-        private void InitializeWithMapData()
+        private void InitializeWithMapData(WorldSeeds seeds)
         {
             Debug.Log($"Map loaded: {MapData.Info.Name}");
             Debug.Log($"  Dimensions: {MapData.Info.Width}x{MapData.Info.Height}");
@@ -181,7 +193,7 @@ namespace EconSim.Core
 
             // Initialize simulation (auto-registers ProductionSystem + ConsumptionSystem)
             Profiler.Begin("Simulation Init");
-            _simulation = new SimulationRunner(MapData);
+            _simulation = new SimulationRunner(MapData, seeds.EconomySeed);
             Profiler.End();
             _simulation.IsPaused = true;  // Start paused
 

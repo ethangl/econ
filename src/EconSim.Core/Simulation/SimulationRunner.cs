@@ -32,6 +32,11 @@ namespace EconSim.Core.Simulation
         }
 
         public SimulationRunner(MapData mapData)
+            : this(mapData, null)
+        {
+        }
+
+        public SimulationRunner(MapData mapData, int? economySeed)
         {
             _mapData = mapData;
             _state = new SimulationState();
@@ -40,7 +45,7 @@ namespace EconSim.Core.Simulation
 
             // Initialize economy
             Profiler.Begin("EconomyInitializer");
-            _state.Economy = EconomyInitializer.Initialize(mapData);
+            _state.Economy = EconomyInitializer.Initialize(mapData, economySeed);
             Profiler.End();
 
             // Initialize transport graph
