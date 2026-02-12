@@ -1,8 +1,7 @@
 namespace MapGen.Core
 {
     /// <summary>
-    /// Predefined heightmap templates ported from Azgaar's Fantasy Map Generator.
-    /// Each template is a DSL script that produces a characteristic map style.
+    /// Predefined canonical terrain templates expressed in meter-based DSL tokens.
     /// </summary>
     public static class HeightmapTemplates
     {
@@ -11,28 +10,28 @@ namespace MapGen.Core
         /// Good for: Small island nations, tropical settings.
         /// </summary>
         public const string Volcano = @"
-Hill 1 90-100 44-56 40-60
-Multiply 0.8 50-100
-Range 1.5 30-55 45-55 40-60
+Hill 1 5625m-6250m 44-56 40-60
+Multiply 0.8 1875m-5000m
+Range 1.5 1875m-3437.5m 45-55 40-60
 Smooth 3
-Hill 1.5 35-45 25-30 20-75
-Hill 1 35-55 75-80 25-75
-Hill 0.5 20-25 10-15 20-25
+Hill 1.5 2187.5m-2812.5m 25-30 20-75
+Hill 1 2187.5m-3437.5m 75-80 25-75
+Hill 0.5 1250m-1562.5m 10-15 20-25
 Mask 3
 ";
 
         public const string LowIsland = @"
-Hill 1 90-99 60-80 45-55
-Hill 1-2 20-30 10-30 10-90
+Hill 1 5625m-6187.5m 60-80 45-55
+Hill 1-2 1250m-1875m 10-30 10-90
 Smooth 2
-Hill 6-7 25-35 20-70 30-70
-Range 1 40-50 45-55 45-55
-Trough 2-3 20-30 15-85 20-30
-Trough 2-3 20-30 15-85 70-80
-Hill 1.5 10-15 5-15 20-80
-Hill 1 10-15 85-95 70-80
-Pit 5-7 15-25 15-85 20-80
-Multiply 0.4 20-100
+Hill 6-7 1562.5m-2187.5m 20-70 30-70
+Range 1 2500m-3125m 45-55 45-55
+Trough 2-3 1250m-1875m 15-85 20-30
+Trough 2-3 1250m-1875m 15-85 70-80
+Hill 1.5 625m-937.5m 5-15 20-80
+Hill 1 625m-937.5m 85-95 70-80
+Pit 5-7 937.5m-1562.5m 15-85 20-80
+Multiply 0.4 0m-5000m
 Mask 4
 ";
 
@@ -41,13 +40,13 @@ Mask 4
         /// Good for: Naval campaigns, exploration settings.
         /// </summary>
         public const string Archipelago = @"
-Add 11 all
-Range 2-3 40-60 20-80 20-80
-Hill 5 15-20 10-90 30-70
-Hill 2 10-15 10-30 20-80
-Hill 2 10-15 60-90 20-80
+Add 687.5m all
+Range 2-3 2500m-3750m 20-80 20-80
+Hill 5 937.5m-1250m 10-90 30-70
+Hill 2 625m-937.5m 10-30 20-80
+Hill 2 625m-937.5m 60-90 20-80
 Smooth 3
-Trough 10 20-30 5-95 5-95
+Trough 10 1250m-1875m 5-95 5-95
 Strait 2 vertical
 Strait 2 horizontal
 ";
@@ -57,20 +56,20 @@ Strait 2 horizontal
         /// Good for: Epic campaigns, diverse terrain.
         /// </summary>
         public const string Continents = @"
-Hill 1 80-85 60-80 40-60
-Hill 1 80-85 20-30 40-60
-Hill 6-7 15-30 25-75 15-85
+Hill 1 5000m-5312.5m 60-80 40-60
+Hill 1 5000m-5312.5m 20-30 40-60
+Hill 6-7 937.5m-1875m 25-75 15-85
 Multiply 0.6 land
-Hill 8-10 5-10 15-85 20-80
-Range 1-2 30-60 5-15 25-75
-Range 1-2 30-60 80-95 25-75
-Range 0-3 30-60 80-90 20-80
+Hill 8-10 312.5m-625m 15-85 20-80
+Range 1-2 1875m-3750m 5-15 25-75
+Range 1-2 1875m-3750m 80-95 25-75
+Range 0-3 1875m-3750m 80-90 20-80
 Strait 2 vertical
 Strait 1 vertical
 Smooth 3
-Trough 3-4 15-20 15-85 20-80
-Trough 3-4 5-10 45-55 45-55
-Pit 3-4 10-20 15-85 20-80
+Trough 3-4 937.5m-1250m 15-85 20-80
+Trough 3-4 312.5m-625m 45-55 45-55
+Pit 3-4 625m-1250m 15-85 20-80
 Mask 4
 ";
 
@@ -79,33 +78,33 @@ Mask 4
         /// Good for: Early world settings, land-focused campaigns.
         /// </summary>
         public const string Pangea = @"
-Hill 1-2 25-40 15-50 0-10
-Hill 1-2 5-40 50-85 0-10
-Hill 1-2 25-40 50-85 90-100
-Hill 1-2 5-40 15-50 90-100
-Hill 8-12 20-40 20-80 48-52
+Hill 1-2 1562.5m-2500m 15-50 0-10
+Hill 1-2 312.5m-2500m 50-85 0-10
+Hill 1-2 1562.5m-2500m 50-85 90-100
+Hill 1-2 312.5m-2500m 15-50 90-100
+Hill 8-12 1250m-2500m 20-80 48-52
 Smooth 2
 Multiply 0.7 land
-Trough 3-4 25-35 5-95 10-20
-Trough 3-4 25-35 5-95 80-90
-Range 5-6 30-40 10-90 35-65
+Trough 3-4 1562.5m-2187.5m 5-95 10-20
+Trough 3-4 1562.5m-2187.5m 5-95 80-90
+Range 5-6 1875m-2500m 10-90 35-65
 ";
 
         public const string HighIsland = @"
-Hill 1 90-100 65-75 47-53
-Add 7 all
-Hill 5-6 20-30 25-55 45-55
-Range 1 40-50 45-55 45-55
+Hill 1 5625m-6250m 65-75 47-53
+Add 437.5m all
+Hill 5-6 1250m-1875m 25-55 45-55
+Range 1 2500m-3125m 45-55 45-55
 Multiply 0.8 land
 Mask 3
 Smooth 2
-Trough 2-3 20-30 20-30 20-30
-Trough 2-3 20-30 60-80 70-80
-Hill 1 10-15 60-60 50-50
-Hill 1.5 13-16 15-20 20-75
-Range 1.5 30-40 15-85 30-40
-Range 1.5 30-40 15-85 60-70
-Pit 3-5 10-30 15-85 20-80
+Trough 2-3 1250m-1875m 20-30 20-30
+Trough 2-3 1250m-1875m 60-80 70-80
+Hill 1 625m-937.5m 60-60 50-50
+Hill 1.5 812.5m-1000m 15-20 20-75
+Range 1.5 1875m-2500m 15-85 30-40
+Range 1.5 1875m-2500m 15-85 60-70
+Pit 3-5 625m-1875m 15-85 20-80
 ";
 
         /// <summary>
@@ -113,12 +112,12 @@ Pit 3-5 10-30 15-85 20-80
         /// Good for: Tropical paradise, isolated settings.
         /// </summary>
         public const string Atoll = @"
-Hill 1 75-80 50-60 45-55
-Hill 1.5 30-50 25-75 30-70
-Hill .5 30-50 25-35 30-70
+Hill 1 4687.5m-5000m 50-60 45-55
+Hill 1.5 1875m-3125m 25-75 30-70
+Hill .5 1875m-3125m 25-35 30-70
 Smooth 1
-Multiply 0.2 25-100
-Hill 0.5 10-20 50-55 48-52
+Multiply 0.2 312.5m-5000m
+Hill 0.5 625m-1250m 50-55 48-52
 ";
 
         /// <summary>
@@ -126,13 +125,13 @@ Hill 0.5 10-20 50-55 48-52
         /// Good for: Coastal kingdoms, maritime settings.
         /// </summary>
         public const string Peninsula = @"
-Range 2-3 20-35 40-50 0-15
-Add 5 all
-Hill 1 90-100 10-90 0-5
-Add 13 all
-Hill 3-4 3-5 5-95 80-100
-Hill 1-2 3-5 5-95 40-60
-Trough 5-6 10-25 5-95 5-95
+Range 2-3 1250m-2187.5m 40-50 0-15
+Add 312.5m all
+Hill 1 5625m-6250m 10-90 0-5
+Add 812.5m all
+Hill 3-4 187.5m-312.5m 5-95 80-100
+Hill 1-2 187.5m-312.5m 5-95 40-60
+Trough 5-6 625m-1562.5m 5-95 5-95
 Smooth 3
 Invert 0.4 both
 ";
@@ -142,70 +141,70 @@ Invert 0.4 both
         /// Good for: Ancient world settings, trade-focused campaigns.
         /// </summary>
         public const string Mediterranean = @"
-Range 4-6 30-80 0-100 0-10
-Range 4-6 30-80 0-100 90-100
-Hill 6-8 30-50 10-90 0-5
-Hill 6-8 30-50 10-90 95-100
+Range 4-6 1875m-5000m 0-100 0-10
+Range 4-6 1875m-5000m 0-100 90-100
+Hill 6-8 1875m-3125m 10-90 0-5
+Hill 6-8 1875m-3125m 10-90 95-100
 Multiply 0.9 land
 Mask -2
 Smooth 1
-Hill 2-3 30-70 0-5 20-80
-Hill 2-3 30-70 95-100 20-80
-Trough 3-6 40-50 0-100 0-10
-Trough 3-6 40-50 0-100 90-100
+Hill 2-3 1875m-4375m 0-5 20-80
+Hill 2-3 1875m-4375m 95-100 20-80
+Trough 3-6 2500m-3125m 0-100 0-10
+Trough 3-6 2500m-3125m 0-100 90-100
 ";
 
         public const string Isthmus = @"
-Hill 5-10 15-30 0-30 0-20
-Hill 5-10 15-30 10-50 20-40
-Hill 5-10 15-30 30-70 40-60
-Hill 5-10 15-30 50-90 60-80
-Hill 5-10 15-30 70-100 80-100
+Hill 5-10 937.5m-1875m 0-30 0-20
+Hill 5-10 937.5m-1875m 10-50 20-40
+Hill 5-10 937.5m-1875m 30-70 40-60
+Hill 5-10 937.5m-1875m 50-90 60-80
+Hill 5-10 937.5m-1875m 70-100 80-100
 Smooth 2
-Trough 4-8 15-30 0-30 0-20
-Trough 4-8 15-30 10-50 20-40
-Trough 4-8 15-30 30-70 40-60
-Trough 4-8 15-30 50-90 60-80
-Trough 4-8 15-30 70-100 80-100
+Trough 4-8 937.5m-1875m 0-30 0-20
+Trough 4-8 937.5m-1875m 10-50 20-40
+Trough 4-8 937.5m-1875m 30-70 40-60
+Trough 4-8 937.5m-1875m 50-90 60-80
+Trough 4-8 937.5m-1875m 70-100 80-100
 Invert 0.25 x
 ";
 
         public const string Shattered = @"
-Hill 8 35-40 15-85 30-70
-Trough 10-20 40-50 5-95 5-95
-Range 5-7 30-40 10-90 20-80
-Pit 12-20 30-40 15-85 20-80
+Hill 8 2187.5m-2500m 15-85 30-70
+Trough 10-20 2500m-3125m 5-95 5-95
+Range 5-7 1875m-2500m 10-90 20-80
+Pit 12-20 1875m-2500m 15-85 20-80
 ";
 
         public const string Taklamakan = @"
-Hill 1-3 20-30 30-70 30-70
-Hill 2-4 60-85 0-5 0-100
-Hill 2-4 60-85 95-100 0-100
-Hill 3-4 60-85 20-80 0-5
-Hill 3-4 60-85 20-80 95-100
+Hill 1-3 1250m-1875m 30-70 30-70
+Hill 2-4 3750m-5312.5m 0-5 0-100
+Hill 2-4 3750m-5312.5m 95-100 0-100
+Hill 3-4 3750m-5312.5m 20-80 0-5
+Hill 3-4 3750m-5312.5m 20-80 95-100
 Smooth 3
 ";
 
         public const string OldWorld = @"
-Range 3 70 15-85 20-80
-Hill 2-3 50-70 15-45 20-80
-Hill 2-3 50-70 65-85 20-80
-Hill 4-6 20-25 15-85 20-80
+Range 3 4375m 15-85 20-80
+Hill 2-3 3125m-4375m 15-45 20-80
+Hill 2-3 3125m-4375m 65-85 20-80
+Hill 4-6 1250m-1562.5m 15-85 20-80
 Multiply 0.5 land
 Smooth 2
-Range 3-4 20-50 15-35 20-45
-Range 2-4 20-50 65-85 45-80
+Range 3-4 1250m-3125m 15-35 20-45
+Range 2-4 1250m-3125m 65-85 45-80
 Strait 3-7 vertical
-Trough 6-8 20-50 15-85 45-65
-Pit 5-6 20-30 10-90 10-90
+Trough 6-8 1250m-3125m 15-85 45-65
+Pit 5-6 1250m-1875m 10-90 10-90
 ";
 
         public const string Fractious = @"
-Hill 12-15 50-80 5-95 5-95
+Hill 12-15 3125m-5000m 5-95 5-95
 Mask -1.5
 Mask 3
-Add -20 30-100
-Range 6-8 40-50 5-95 10-90
+Add -1250m 625m-5000m
+Range 6-8 2500m-3125m 5-95 10-90
 ";
 
         /// <summary>
@@ -232,6 +231,11 @@ Range 6-8 40-50 5-95 10-90
                 case "fractious": return Fractious;
                 default: return null;
             }
+        }
+
+        public static string GetTemplate(HeightmapTemplateType template)
+        {
+            return GetTemplate(template.ToString());
         }
 
         /// <summary>

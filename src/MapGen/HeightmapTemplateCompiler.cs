@@ -6,7 +6,7 @@ using System.Text;
 namespace MapGen.Core
 {
     /// <summary>
-    /// Template adapter that ports legacy DSL templates into meter-annotated scripts.
+    /// Resolves canonical meter-based terrain templates and applies tuning overlays.
     /// </summary>
     public static class HeightmapTemplateCompiler
     {
@@ -106,29 +106,9 @@ namespace MapGen.Core
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
 
-            string v1 = HeightmapTemplates.GetTemplate(template.ToString());
-            if (string.IsNullOrWhiteSpace(v1))
+            string script = HeightmapTemplates.GetTemplate(template);
+            if (string.IsNullOrWhiteSpace(script))
                 return null;
-
-            var output = new StringBuilder();
-            string[] lines = v1.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (string raw in lines)
-            {
-                string line = raw.Trim();
-                if (line.Length == 0)
-                    continue;
-
-                if (line.StartsWith("#", StringComparison.Ordinal))
-                {
-                    output.AppendLine(line);
-                    continue;
-                }
-
-                string converted = ConvertLine(line, config);
-                output.AppendLine(converted);
-            }
-
-            string script = output.ToString();
             HeightmapTemplateTuningProfile profile = ResolveTuningProfile(template, config);
             if (profile == null || profile.IsIdentity())
                 return script;
@@ -164,40 +144,6 @@ namespace MapGen.Core
                     return (0.20f, 0.86f);
                 default:
                     return (0.15f, 0.85f);
-            }
-        }
-
-        static string ConvertLine(string line, MapGenConfig config)
-        {
-            string[] parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0)
-                return line;
-
-            string op = parts[0].ToLowerInvariant();
-            switch (op)
-            {
-                case "hill":
-                case "pit":
-                case "range":
-                case "trough":
-                    if (parts.Length >= 3)
-                        parts[2] = ConvertLegacyDeltaRangeToMeters(parts[2], config);
-                    return Join(parts);
-
-                case "add":
-                    if (parts.Length >= 2)
-                        parts[1] = ConvertLegacyDeltaRangeToMeters(parts[1], config);
-                    if (parts.Length >= 3)
-                        parts[2] = ConvertRangeSelector(parts[2], config);
-                    return Join(parts);
-
-                case "multiply":
-                    if (parts.Length >= 3)
-                        parts[2] = ConvertRangeSelector(parts[2], config);
-                    return Join(parts);
-
-                default:
-                    return line;
             }
         }
 
@@ -307,70 +253,6 @@ namespace MapGen.Core
 
             float value = ParseFloat(token);
             return FormatFloat(value * scale);
-        }
-
-        static string ConvertRangeSelector(string token, MapGenConfig config)
-        {
-            string t = token.Trim().ToLowerInvariant();
-            if (t == "land" || t == "water" || t == "all")
-                return t;
-
-            if (!TryParseRange(t, out string minRaw, out string maxRaw))
-                return token;
-
-            float minLegacy = ParseFloat(minRaw);
-            float maxLegacy = ParseFloat(maxRaw);
-
-            float minMeters = LegacyAbsoluteToSignedMeters(minLegacy, config);
-            float maxMeters = LegacyAbsoluteToSignedMeters(maxLegacy, config);
-            if (maxMeters < minMeters)
-            {
-                float swap = minMeters;
-                minMeters = maxMeters;
-                maxMeters = swap;
-            }
-
-            return FormatMeters(minMeters) + "-" + FormatMeters(maxMeters);
-        }
-
-        static string ConvertLegacyDeltaRangeToMeters(string token, MapGenConfig config)
-        {
-            if (!TryParseRange(token, out string minRaw, out string maxRaw))
-            {
-                float value = ParseFloat(token);
-                return FormatMeters(LegacyDeltaToMeters(value, config));
-            }
-
-            float min = ParseFloat(minRaw);
-            float max = ParseFloat(maxRaw);
-            float minMeters = LegacyDeltaToMeters(min, config);
-            float maxMeters = LegacyDeltaToMeters(max, config);
-            if (maxMeters < minMeters)
-            {
-                float swap = minMeters;
-                minMeters = maxMeters;
-                maxMeters = swap;
-            }
-
-            return FormatMeters(minMeters) + "-" + FormatMeters(maxMeters);
-        }
-
-        static float LegacyDeltaToMeters(float legacyDelta, MapGenConfig config)
-        {
-            float unit = (config.MaxElevationMeters + config.MaxSeaDepthMeters) / 100f;
-            return legacyDelta * unit;
-        }
-
-        static float LegacyAbsoluteToSignedMeters(float legacyAbsolute, MapGenConfig config)
-        {
-            if (legacyAbsolute >= 20f)
-            {
-                float t = (legacyAbsolute - 20f) / 80f;
-                return t * config.MaxElevationMeters;
-            }
-
-            float belowSea = (20f - legacyAbsolute) / 20f;
-            return -belowSea * config.MaxSeaDepthMeters;
         }
 
         static string FormatMeters(float value)
