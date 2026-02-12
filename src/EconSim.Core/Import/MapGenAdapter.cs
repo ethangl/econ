@@ -243,7 +243,7 @@ namespace EconSim.Core.Import
             }
 
             var riverList = ConvertRivers(rivers, mesh);
-            PoliticalData political = ToLegacyPolitical(mesh, politicalV2);
+            PoliticalData political = ToPoliticalData(mesh, politicalV2);
             var burgs = BuildBurgs(cells, political);
             var realms = BuildRealms(cells, political);
             var provinces = BuildProvinces(cells, political);
@@ -460,9 +460,9 @@ namespace EconSim.Core.Import
 
         #endregion
 
-        static PoliticalData ToLegacyPolitical(CellMesh mesh, PoliticalFieldV2 source)
+        static PoliticalData ToPoliticalData(CellMesh mesh, PoliticalFieldV2 source)
         {
-            var legacy = new PoliticalData(mesh)
+            var data = new PoliticalData(mesh)
             {
                 RealmCount = source.RealmCount,
                 ProvinceCount = source.ProvinceCount,
@@ -472,16 +472,16 @@ namespace EconSim.Core.Import
                 CountySeats = source.CountySeats ?? Array.Empty<int>()
             };
 
-            if (source.LandmassId != null && source.LandmassId.Length == legacy.LandmassId.Length)
-                Array.Copy(source.LandmassId, legacy.LandmassId, source.LandmassId.Length);
-            if (source.RealmId != null && source.RealmId.Length == legacy.RealmId.Length)
-                Array.Copy(source.RealmId, legacy.RealmId, source.RealmId.Length);
-            if (source.ProvinceId != null && source.ProvinceId.Length == legacy.ProvinceId.Length)
-                Array.Copy(source.ProvinceId, legacy.ProvinceId, source.ProvinceId.Length);
-            if (source.CountyId != null && source.CountyId.Length == legacy.CountyId.Length)
-                Array.Copy(source.CountyId, legacy.CountyId, source.CountyId.Length);
+            if (source.LandmassId != null && source.LandmassId.Length == data.LandmassId.Length)
+                Array.Copy(source.LandmassId, data.LandmassId, source.LandmassId.Length);
+            if (source.RealmId != null && source.RealmId.Length == data.RealmId.Length)
+                Array.Copy(source.RealmId, data.RealmId, source.RealmId.Length);
+            if (source.ProvinceId != null && source.ProvinceId.Length == data.ProvinceId.Length)
+                Array.Copy(source.ProvinceId, data.ProvinceId, source.ProvinceId.Length);
+            if (source.CountyId != null && source.CountyId.Length == data.CountyId.Length)
+                Array.Copy(source.CountyId, data.CountyId, source.CountyId.Length);
 
-            return legacy;
+            return data;
         }
 
         #region Burgs

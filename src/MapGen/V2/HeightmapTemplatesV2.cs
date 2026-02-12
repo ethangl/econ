@@ -83,7 +83,7 @@ namespace MapGen.Core
                 [HeightmapTemplateType.Archipelago] = new HeightmapTemplateTuningProfile
                 {
                     TerrainMagnitudeScale = 0.65f,
-                    AddMagnitudeScale = 0.30f,
+                    AddMagnitudeScale = 1.40f,
                     MaskScale = 0.90f,
                     LandMultiplyFactorScale = 1f,
                     RiverThresholdScale = 1.15f,

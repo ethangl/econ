@@ -185,7 +185,7 @@ namespace EconSim.Core.Data
         public List<int> NeighborIds;   // Adjacent cell IDs
 
         // Terrain
-        public float SeaRelativeElevation; // Canonical elevation (sea level = 0)
+        public float SeaRelativeElevation; // Canonical signed elevation meters (sea level = 0)
         public bool HasSeaRelativeElevation; // Must be true for runtime-generated maps
         public int BiomeId;
         public int SoilId;             // MapGen.Core.SoilType ordinal (0-7)
@@ -342,11 +342,6 @@ namespace EconSim.Core.Data
     /// </summary>
     public static class Elevation
     {
-        public const float LegacyMinHeight = 0f;
-        public const float LegacySeaLevel = 20f;
-        public const float LegacyMaxHeight = 100f;
-        public const float LegacyLandRange = LegacyMaxHeight - LegacySeaLevel;
-
         public static float ResolveSeaLevel(MapInfo info)
         {
             WorldInfo world = RequireWorldInfo(info, "ResolveSeaLevel");
@@ -427,35 +422,12 @@ namespace EconSim.Core.Data
             }
         }
 
-        /// <summary>
-        /// Legacy fallback: validate against static 0..100 range.
-        /// </summary>
-        public static void AssertAbsoluteHeightInRange(float absoluteHeight, string context)
-        {
-            ValidateFinite(absoluteHeight, $"{context} absolute elevation");
-            if (absoluteHeight < LegacyMinHeight || absoluteHeight > LegacyMaxHeight)
-            {
-                throw new InvalidOperationException(
-                    $"Absolute elevation {absoluteHeight} is out of range [{LegacyMinHeight}, {LegacyMaxHeight}] for {context}.");
-            }
-        }
-
         public static float NormalizeAbsolute01(float absoluteHeight, MapInfo info)
         {
             AssertAbsoluteHeightInRange(absoluteHeight, info, "NormalizeAbsolute01 input");
             float min = ResolveMinHeight(info);
             float span = ResolveWorldSpan(info);
             return (absoluteHeight - min) / span;
-        }
-
-        /// <summary>
-        /// Legacy fallback: normalize in static 0..100 domain.
-        /// </summary>
-        public static float NormalizeAbsolute01(float absoluteHeight)
-        {
-            AssertAbsoluteHeightInRange(absoluteHeight, "NormalizeAbsolute01 input");
-            float clamped = Math.Max(LegacyMinHeight, Math.Min(LegacyMaxHeight, absoluteHeight));
-            return clamped / LegacyMaxHeight;
         }
 
         public static float SeaRelativeFromAbsolute(float absoluteHeight, float seaLevel)
@@ -544,7 +516,7 @@ namespace EconSim.Core.Data
         }
 
         /// <summary>
-        /// Convert absolute map height (0..100) to meters above sea level (clamped to [0, maxElevation]).
+        /// Convert absolute world height to meters above sea level (clamped to [0, maxElevation]).
         /// </summary>
         public static float AbsoluteToMetersAboveSeaLevel(float absoluteHeight, MapInfo info)
         {
@@ -552,7 +524,7 @@ namespace EconSim.Core.Data
         }
 
         /// <summary>
-        /// Convert meters above sea level to absolute map height (0..100).
+        /// Convert meters above sea level to absolute world height.
         /// </summary>
         public static float MetersAboveSeaLevelToAbsolute(float metersAboveSeaLevel, MapInfo info)
         {
@@ -561,7 +533,7 @@ namespace EconSim.Core.Data
         }
 
         /// <summary>
-        /// Canonical sea-relative height is signed meters (sea=0m).
+        /// Compatibility alias: canonical sea-relative height is already signed meters (sea=0m).
         /// </summary>
         public static float SeaRelativeToSignedMeters(float seaRelativeHeight, MapInfo info)
         {
@@ -570,7 +542,7 @@ namespace EconSim.Core.Data
         }
 
         /// <summary>
-        /// Convert signed meters relative to sea level back to sea-relative legacy units.
+        /// Canonical signed meters already use sea-relative semantics.
         /// </summary>
         public static float SignedMetersToSeaRelative(float signedMeters, MapInfo info)
         {

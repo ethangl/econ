@@ -14,13 +14,15 @@ namespace EconSim.Tests
     {
         readonly FocusCase[] _focusCases =
         {
-            new FocusCase(2202, HeightmapTemplateType.Continents, 5000),
-            new FocusCase(1101, HeightmapTemplateType.LowIsland, 5000),
-            new FocusCase(3303, HeightmapTemplateType.HighIsland, 5000),
-            new FocusCase(4404, HeightmapTemplateType.Archipelago, 5000),
+            new FocusCase(2202, HeightmapTemplateType.Continents, 100000),
+            new FocusCase(1101, HeightmapTemplateType.LowIsland, 100000),
+            new FocusCase(3303, HeightmapTemplateType.HighIsland, 100000),
+            new FocusCase(4404, HeightmapTemplateType.Archipelago, 100000),
         };
 
         [Test]
+        [Explicit("Offline 100k tuning sweep. Not for regular/CI runs.")]
+        [Category("MapGenV2TuningOffline")]
         public void SweepFocusedTemplates_EmitBestProfiles()
         {
             var summary = new StringBuilder();
@@ -49,8 +51,8 @@ namespace EconSim.Tests
 
             string debugDir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "debug"));
             Directory.CreateDirectory(debugDir);
-            string txtPath = Path.Combine(debugDir, "mapgen_v2_focus_tuning_sweep_summary.txt");
-            string csvPath = Path.Combine(debugDir, "mapgen_v2_focus_tuning_sweep_candidates.csv");
+            string txtPath = Path.Combine(debugDir, "mapgen_v2_focus_tuning_sweep_summary_100k.txt");
+            string csvPath = Path.Combine(debugDir, "mapgen_v2_focus_tuning_sweep_candidates_100k.csv");
             File.WriteAllText(txtPath, summary.ToString());
             File.WriteAllText(csvPath, csv.ToString());
 

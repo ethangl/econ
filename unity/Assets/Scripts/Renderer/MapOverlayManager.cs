@@ -107,12 +107,11 @@ public class MapOverlayManager
         private int baseHeight;
 
         // Data textures
-        private Texture2D cellDataTexture;      // Legacy compatibility alias bound to Political IDs.
         private Texture2D politicalIdsTexture;  // RGBAFloat: RealmId, ProvinceId, CountyId, reserved
         private Texture2D geographyBaseTexture; // RGBAFloat: BiomeId, SoilId, reserved, WaterFlag
 
         /// <summary>
-        /// Public accessor kept for legacy call sites.
+        /// Compatibility accessor for callers expecting a single cell-data texture.
         /// </summary>
         public Texture2D CellDataTexture => politicalIdsTexture;
         private Texture2D cellToMarketTexture;  // R16: CellId -> MarketId mapping (dynamic)
@@ -1114,8 +1113,7 @@ public class MapOverlayManager
 
             terrainMaterial.SetTexture(PoliticalIdsTexId, politicalIdsTexture);
             terrainMaterial.SetTexture(GeographyBaseTexId, geographyBaseTexture);
-            cellDataTexture = politicalIdsTexture;
-            terrainMaterial.SetTexture(CellDataTexId, cellDataTexture);
+            terrainMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
             terrainMaterial.SetTexture(HeightmapTexId, heightmapTexture);
             terrainMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
             terrainMaterial.SetTexture(RealmPaletteTexId, realmPaletteTexture);
@@ -2066,7 +2064,6 @@ public class MapOverlayManager
             var texturesToDestroy = new HashSet<Texture2D>();
             AddTextureForDestroy(texturesToDestroy, politicalIdsTexture);
             AddTextureForDestroy(texturesToDestroy, geographyBaseTexture);
-            AddTextureForDestroy(texturesToDestroy, cellDataTexture);
             AddTextureForDestroy(texturesToDestroy, heightmapTexture);
             AddTextureForDestroy(texturesToDestroy, riverMaskTexture);
             AddTextureForDestroy(texturesToDestroy, realmPaletteTexture);
@@ -2092,7 +2089,6 @@ public class MapOverlayManager
 
             politicalIdsTexture = null;
             geographyBaseTexture = null;
-            cellDataTexture = null;
             heightmapTexture = null;
             riverMaskTexture = null;
             realmPaletteTexture = null;

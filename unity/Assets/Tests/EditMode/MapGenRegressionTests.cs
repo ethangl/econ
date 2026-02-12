@@ -866,7 +866,7 @@ namespace EconSim.Tests
         }
 
         [Test]
-        public void OverlayHeightTexture_UsesCanonicalElevationInsteadOfLegacyHeightField()
+        public void OverlayHeightTexture_UsesCanonicalElevationInsteadOfRawHeightField()
         {
             var config = new MapGenConfig
             {
@@ -1022,7 +1022,7 @@ namespace EconSim.Tests
             }
 
             Assert.That(violations, Is.Empty,
-                "Legacy cell.Height field usage is forbidden. Use Elevation.GetAbsoluteHeight/GetSeaRelativeHeight.\n" +
+                "Direct cell.Height field usage is forbidden. Use Elevation.GetAbsoluteHeight/GetSeaRelativeHeight.\n" +
                 string.Join("\n", violations));
         }
 
