@@ -14,8 +14,7 @@ namespace EconSim.Core
     public enum MapGenerationMode
     {
         V2Default = 0,
-        ForceV1 = 1,
-        ForceV2 = 2
+        ForceV2 = 1
     }
 
     /// <summary>
@@ -86,43 +85,24 @@ namespace EconSim.Core
                 Seed = UnityEngine.Random.Range(1, int.MaxValue)
             };
 
-            bool runV2 = ShouldRunV2(generationMode);
-            if (runV2)
-            {
-                MapGenV2Config v2Config = ToMapGenV2Config(config);
-                Debug.Log(
-                    $"MapGen V2 config: cells={v2Config.CellCount}, template={v2Config.Template}, " +
-                    $"riverThreshold={v2Config.EffectiveRiverThreshold:0.0}, " +
-                    $"riverTrace={v2Config.EffectiveRiverTraceThreshold:0.0}, " +
-                    $"minRiverVertices={v2Config.EffectiveMinRiverVertices}");
+            MapGenV2Config v2Config = ToMapGenV2Config(config);
+            Debug.Log(
+                $"MapGen V2 config: cells={v2Config.CellCount}, template={v2Config.Template}, " +
+                $"riverThreshold={v2Config.EffectiveRiverThreshold:0.0}, " +
+                $"riverTrace={v2Config.EffectiveRiverTraceThreshold:0.0}, " +
+                $"minRiverVertices={v2Config.EffectiveMinRiverVertices}");
 
-                Profiler.Begin("MapGen V2 Pipeline");
-                var v2Result = MapGenPipelineV2.Generate(v2Config);
-                Profiler.End();
+            Profiler.Begin("MapGen V2 Pipeline");
+            var v2Result = MapGenPipelineV2.Generate(v2Config);
+            Profiler.End();
 
-                MapGenV2Result = v2Result;
-                MapGenResult = null;
+            MapGenV2Result = v2Result;
+            MapGenResult = null;
 
-                Profiler.Begin("MapGenAdapter Convert V2");
-                MapData = MapGenAdapter.Convert(v2Result);
-                Profiler.End();
-                LogMapGenV2Summary(v2Result, MapData);
-            }
-            else
-            {
-                // Temporary V1 escape hatch while V2 is primary runtime generation path.
-                // Keep this branch until V2 stabilization is considered complete.
-                Profiler.Begin("MapGen Pipeline");
-                var result = MapGenPipeline.Generate(config);
-                Profiler.End();
-
-                MapGenResult = result;
-                MapGenV2Result = null;
-
-                Profiler.Begin("MapGenAdapter Convert");
-                MapData = MapGenAdapter.Convert(result);
-                Profiler.End();
-            }
+            Profiler.Begin("MapGenAdapter Convert V2");
+            MapData = MapGenAdapter.Convert(v2Result);
+            Profiler.End();
+            LogMapGenV2Summary(v2Result, MapData);
 
             // Update info with seed
             MapData.Info.Seed = config.Seed.ToString();
@@ -131,22 +111,6 @@ namespace EconSim.Core
 
             Profiler.End();
             Profiler.LogResults();
-        }
-
-        static bool ShouldRunV2(MapGenerationMode mode)
-        {
-            switch (mode)
-            {
-                case MapGenerationMode.V2Default:
-                    return true;
-                case MapGenerationMode.ForceV2:
-                    return true;
-                case MapGenerationMode.ForceV1:
-                    return false;
-                default:
-                    Debug.LogWarning($"Unknown generation mode '{mode}', defaulting to V2.");
-                    return true;
-            }
         }
 
         private static MapGenV2Config ToMapGenV2Config(MapGenConfig config)

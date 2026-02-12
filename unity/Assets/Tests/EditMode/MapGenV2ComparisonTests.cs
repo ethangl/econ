@@ -58,9 +58,9 @@ namespace EconSim.Tests
             Assert.That(data, Is.Not.Null);
             Assert.That(data.Cells.Count, Is.GreaterThan(0));
             Assert.That(data.Info.World, Is.Not.Null);
-            Assert.That(data.Info.World.SeaLevelHeight, Is.EqualTo(20f).Within(0.0001f));
-            Assert.That(data.Info.World.MinHeight, Is.EqualTo(Elevation.LegacyMinHeight).Within(0.0001f));
-            Assert.That(data.Info.World.MaxHeight, Is.EqualTo(Elevation.LegacyMaxHeight).Within(0.0001f));
+            Assert.That(data.Info.World.SeaLevelHeight, Is.EqualTo(result.World.SeaLevelHeight).Within(0.0001f));
+            Assert.That(data.Info.World.MinHeight, Is.EqualTo(result.World.MinHeight).Within(0.0001f));
+            Assert.That(data.Info.World.MaxHeight, Is.EqualTo(result.World.MaxHeight).Within(0.0001f));
             data.AssertElevationInvariants();
             data.AssertWorldInvariants();
         }

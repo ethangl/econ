@@ -14,8 +14,6 @@ namespace EconSim.Core.Import
     /// </summary>
     public static class MapGenAdapter
     {
-        const float RuntimeSeaLevelAbsolute = 20f;
-
         /// <summary>
         /// Convert a MapGenResult into a fully populated MapData ready for simulation.
         /// </summary>
@@ -33,8 +31,8 @@ namespace EconSim.Core.Import
             // MapGen uses Y-up (Y=0 south), same as Unity's texture convention.
             // Pass coordinates through directly — no flip needed.
             int cellCount = mesh.CellCount;
-            float seaLevel = world.SeaLevelHeight;
-            Elevation.AssertAbsoluteHeightInRange(seaLevel, "MapGenAdapter sea level");
+            if (world.MinHeight >= world.SeaLevelHeight || world.SeaLevelHeight >= world.MaxHeight)
+                throw new InvalidOperationException("MapGenAdapter source world anchors must satisfy MinHeight < SeaLevelHeight < MaxHeight.");
 
             // Build cells
             var cells = new List<Cell>(cellCount);
@@ -46,17 +44,26 @@ namespace EconSim.Core.Import
                 {
                     throw new InvalidOperationException($"MapGen returned non-finite height for cell {i}: {sourceHeight}");
                 }
+                if (sourceHeight < world.MinHeight || sourceHeight > world.MaxHeight)
+                {
+                    throw new InvalidOperationException(
+                        $"MapGen returned height out of world range for cell {i}: {sourceHeight} not in [{world.MinHeight}, {world.MaxHeight}]");
+                }
 
-                int absoluteHeight = (int)Math.Round(sourceHeight);
-                Elevation.AssertAbsoluteHeightInRange(absoluteHeight, $"MapGenAdapter source cell {i}");
-                float seaRelativeElevation = Elevation.SeaRelativeFromAbsolute(absoluteHeight, seaLevel);
+                float signedMeters = SourceAbsoluteToSignedMeters(
+                    sourceHeight,
+                    world.MinHeight,
+                    world.SeaLevelHeight,
+                    world.MaxHeight,
+                    world.MaxElevationMeters,
+                    world.MaxSeaDepthMeters);
                 var cell = new Cell
                 {
                     Id = i,
                     Center = ToECVec2(center),
                     VertexIndices = new List<int>(mesh.CellVertices[i]),
                     NeighborIds = new List<int>(mesh.CellNeighbors[i]),
-                    SeaRelativeElevation = seaRelativeElevation,
+                    SeaRelativeElevation = signedMeters,
                     HasSeaRelativeElevation = true,
                     BiomeId = (int)biomes.Biome[i],
                     SoilId = (int)biomes.Soil[i],
@@ -137,9 +144,9 @@ namespace EconSim.Core.Import
                     MapAreaKm2 = world.MapAreaKm2,
                     LatitudeSouth = world.LatitudeSouth,
                     LatitudeNorth = world.LatitudeNorth,
-                    MinHeight = world.MinHeight,
-                    SeaLevelHeight = world.SeaLevelHeight,
-                    MaxHeight = world.MaxHeight,
+                    MinHeight = -world.MaxSeaDepthMeters,
+                    SeaLevelHeight = 0f,
+                    MaxHeight = world.MaxElevationMeters,
                     MaxElevationMeters = world.MaxElevationMeters,
                     MaxSeaDepthMeters = world.MaxSeaDepthMeters
                 }
@@ -167,7 +174,7 @@ namespace EconSim.Core.Import
         }
 
         /// <summary>
-        /// Convert a MapGen V2 result into MapData using runtime-compatible absolute height anchors.
+        /// Convert a MapGen V2 result into MapData using canonical signed-meter elevation.
         /// </summary>
         public static MapData Convert(MapGenV2Result result)
         {
@@ -181,23 +188,17 @@ namespace EconSim.Core.Import
                 throw new InvalidOperationException("MapGenV2Result.World metadata is required.");
 
             int cellCount = mesh.CellCount;
-            float seaLevel = RuntimeSeaLevelAbsolute;
-            Elevation.AssertAbsoluteHeightInRange(seaLevel, "MapGenAdapter V2 sea level");
-
             var cells = new List<Cell>(cellCount);
             for (int i = 0; i < cellCount; i++)
             {
                 float signedMeters = elevation.ElevationMetersSigned[i];
                 if (float.IsNaN(signedMeters) || float.IsInfinity(signedMeters))
                     throw new InvalidOperationException($"MapGenV2 returned non-finite elevation for cell {i}: {signedMeters}");
-
-                float seaRelativeElevation = SignedMetersToLegacySeaRelative(
-                    signedMeters,
-                    world.MaxElevationMeters,
-                    world.MaxSeaDepthMeters,
-                    seaLevel);
-                float absoluteHeight = Elevation.AbsoluteFromSeaRelative(seaRelativeElevation, seaLevel);
-                Elevation.AssertAbsoluteHeightInRange(absoluteHeight, $"MapGenAdapter V2 source cell {i}");
+                if (signedMeters < -world.MaxSeaDepthMeters || signedMeters > world.MaxElevationMeters)
+                {
+                    throw new InvalidOperationException(
+                        $"MapGenV2 returned signed elevation out of configured range for cell {i}: {signedMeters} not in [-{world.MaxSeaDepthMeters}, {world.MaxElevationMeters}]");
+                }
 
                 var cell = new Cell
                 {
@@ -205,7 +206,7 @@ namespace EconSim.Core.Import
                     Center = ToECVec2(mesh.CellCenters[i]),
                     VertexIndices = new List<int>(mesh.CellVertices[i]),
                     NeighborIds = new List<int>(mesh.CellNeighbors[i]),
-                    SeaRelativeElevation = seaRelativeElevation,
+                    SeaRelativeElevation = signedMeters,
                     HasSeaRelativeElevation = true,
                     BiomeId = (int)biomes.Biome[i],
                     SoilId = 0,
@@ -269,9 +270,9 @@ namespace EconSim.Core.Import
                     MapAreaKm2 = world.MapAreaKm2,
                     LatitudeSouth = world.LatitudeSouth,
                     LatitudeNorth = world.LatitudeNorth,
-                    MinHeight = Elevation.LegacyMinHeight,
-                    SeaLevelHeight = seaLevel,
-                    MaxHeight = Elevation.LegacyMaxHeight,
+                    MinHeight = world.MinHeight,
+                    SeaLevelHeight = world.SeaLevelHeight,
+                    MaxHeight = world.MaxHeight,
                     MaxElevationMeters = world.MaxElevationMeters,
                     MaxSeaDepthMeters = world.MaxSeaDepthMeters
                 }
@@ -298,26 +299,28 @@ namespace EconSim.Core.Import
             return mapData;
         }
 
-        static float SignedMetersToLegacySeaRelative(
-            float signedMeters,
+        static float SourceAbsoluteToSignedMeters(
+            float absoluteHeight,
+            float minHeight,
+            float seaLevelHeight,
+            float maxHeight,
             float maxElevationMeters,
-            float maxSeaDepthMeters,
-            float seaLevelAbsolute)
+            float maxSeaDepthMeters)
         {
             if (maxElevationMeters <= 0f) maxElevationMeters = 1f;
             if (maxSeaDepthMeters <= 0f) maxSeaDepthMeters = 1f;
 
-            float landRange = Math.Max(1f, Elevation.LegacyMaxHeight - seaLevelAbsolute);
-            float waterRange = Math.Max(1f, seaLevelAbsolute - Elevation.LegacyMinHeight);
+            float landRange = Math.Max(1e-5f, maxHeight - seaLevelHeight);
+            float waterRange = Math.Max(1e-5f, seaLevelHeight - minHeight);
 
-            if (signedMeters >= 0f)
+            if (absoluteHeight >= seaLevelHeight)
             {
-                float normalized = Math.Min(1f, signedMeters / maxElevationMeters);
-                return normalized * landRange;
+                float normalized = (absoluteHeight - seaLevelHeight) / landRange;
+                return normalized * maxElevationMeters;
             }
 
-            float depthNormalized = Math.Min(1f, -signedMeters / maxSeaDepthMeters);
-            return -depthNormalized * waterRange;
+            float depthNormalized = (seaLevelHeight - absoluteHeight) / waterRange;
+            return -depthNormalized * maxSeaDepthMeters;
         }
 
         static ECVec2 ToECVec2(MGVec2 v) => new ECVec2(v.X, v.Y);

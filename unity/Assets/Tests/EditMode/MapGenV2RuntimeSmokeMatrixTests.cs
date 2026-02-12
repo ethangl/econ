@@ -71,7 +71,7 @@ namespace EconSim.Tests
                 Assert.That(p50Meters, Is.InRange(c.P50MinMeters, c.P50MaxMeters),
                     $"{label}: p50 signed elevation out of band.");
 
-                Assert.That(runtimeMap.Info.World.SeaLevelHeight, Is.EqualTo(20f).Within(0.0001f),
+                Assert.That(runtimeMap.Info.World.SeaLevelHeight, Is.EqualTo(result.World.SeaLevelHeight).Within(0.0001f),
                     $"{label}: runtime sea level anchor changed.");
                 Assert.That(runtimeMap.Info.LandCells, Is.EqualTo(runtimeLandCells),
                     $"{label}: MapInfo land cell count mismatch.");

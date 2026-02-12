@@ -64,48 +64,6 @@ namespace EconSim.Tests
         }
 
         [Test]
-        public void GenerateMap_ForceV1_UsesLegacyEscapeHatch()
-        {
-            var gameObject = new GameObject("GameManagerV1EscapeHatchTests");
-            var manager = gameObject.AddComponent<GameManager>();
-            manager.GenerationMode = MapGenerationMode.ForceV1;
-
-            var config = new MapGenConfig
-            {
-                Seed = 98765,
-                CellCount = 5000,
-                Template = HeightmapTemplateType.Continents,
-                RiverThreshold = 180f,
-                RiverTraceThreshold = 10f,
-                MinRiverVertices = 8
-            };
-
-            try
-            {
-                manager.GenerateMap(config);
-
-                Assert.That(manager.MapGenResult, Is.Not.Null, "V1 result should be populated when ForceV1 is selected.");
-                Assert.That(manager.MapGenV2Result, Is.Null, "V2 result should remain null when ForceV1 is selected.");
-                Assert.That(manager.MapData, Is.Not.Null, "Runtime MapData should still be generated.");
-
-                manager.MapData.AssertElevationInvariants();
-                manager.MapData.AssertWorldInvariants();
-                Assert.That(manager.MapData.Info.World.SeaLevelHeight, Is.EqualTo(20f).Within(0.0001f),
-                    "V1 runtime anchor changed unexpectedly.");
-            }
-            finally
-            {
-                Object.DestroyImmediate(gameObject);
-
-                foreach (var light in Object.FindObjectsByType<Light>(FindObjectsSortMode.None))
-                {
-                    if (light != null && light.type == LightType.Directional && light.gameObject.name == "Sun")
-                        Object.DestroyImmediate(light.gameObject);
-                }
-            }
-        }
-
-        [Test]
         public void GenerateMap_ForceV2_UsesV2Path()
         {
             var gameObject = new GameObject("GameManagerForceV2Tests");
