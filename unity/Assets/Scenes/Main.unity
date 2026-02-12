@@ -462,10 +462,6 @@ MonoBehaviour:
   terrainMaterial: {fileID: 0}
   renderLandOnly: 0
   overlayResolutionMultiplier: 6
-  pathOpacity: 0.75
-  pathDashLength: 1.8
-  pathGapLength: 2.4
-  pathWidth: 0.8
   selectionCamera: {fileID: 0}
   mapCameraController: {fileID: 1070810156}
   selectionDimmingTarget: 0.25
@@ -575,6 +571,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: EconSim::EconSim.Core.GameManager
   mapView: {fileID: 2039203591}
   mapCamera: {fileID: 1070810156}
+  useMapGenV2: 1
 --- !u!4 &2084237326
 Transform:
   m_ObjectHideFlags: 0

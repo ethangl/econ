@@ -11,10 +11,11 @@ namespace EconSim.Core.Economy
     public static class EconomyInitializer
     {
         private static Random _random = new Random(42); // Re-seeded per initialization
-        // Legacy absolute thresholds retained as calibration anchors while logic runs in meters above sea level.
-        private const float LegacyElevation40Absolute = 40f;
-        private const float LegacyElevation45Absolute = 45f;
-        private const float LegacyElevation50Absolute = 50f;
+        // Calibrated mountain-resource thresholds as fractions of max above-sea elevation.
+        // Derived from legacy anchors 40/45/50 in [20..100] => 0.25 / 0.3125 / 0.375.
+        private const float Elevation40FractionAboveSea = 0.25f;
+        private const float Elevation45FractionAboveSea = 0.3125f;
+        private const float Elevation50FractionAboveSea = 0.375f;
 
         /// <summary>
         /// Fully initialize economy from map data.
@@ -66,9 +67,9 @@ namespace EconSim.Core.Economy
 
             SimLog.Log("Economy", $"Biomes available: {string.Join(", ", biomeNames.Values)}");
 
-            float elevation40Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, LegacyElevation40Absolute);
-            float elevation45Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, LegacyElevation45Absolute);
-            float elevation50Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, LegacyElevation50Absolute);
+            float elevation40Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, Elevation40FractionAboveSea);
+            float elevation45Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, Elevation45FractionAboveSea);
+            float elevation50Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, Elevation50FractionAboveSea);
 
             // Debug: log elevation distribution for mining resources.
             int cellsAbove40 = 0, cellsAbove45 = 0, cellsAbove50 = 0;
@@ -333,8 +334,8 @@ namespace EconSim.Core.Economy
                 biomeNames[biome.Id] = biome.Name;
             }
 
-            float elevation45Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, LegacyElevation45Absolute);
-            float elevation50Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, LegacyElevation50Absolute);
+            float elevation45Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, Elevation45FractionAboveSea);
+            float elevation50Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, Elevation50FractionAboveSea);
 
             foreach (var cell in mapData.Cells)
             {
@@ -413,9 +414,14 @@ namespace EconSim.Core.Economy
             return -1;
         }
 
-        private static float ResolveThresholdMetersAboveSeaLevel(MapInfo info, float legacyAbsoluteThreshold)
+        private static float ResolveThresholdMetersAboveSeaLevel(MapInfo info, float aboveSeaFraction)
         {
-            return Elevation.AbsoluteToMetersAboveSeaLevel(legacyAbsoluteThreshold, info);
+            if (aboveSeaFraction <= 0f)
+                return 0f;
+            if (aboveSeaFraction >= 1f)
+                return Elevation.ResolveMaxElevationMeters(info);
+
+            return aboveSeaFraction * Elevation.ResolveMaxElevationMeters(info);
         }
     }
 }

@@ -107,12 +107,11 @@ public class MapOverlayManager
         private int baseHeight;
 
         // Data textures
-        private Texture2D cellDataTexture;      // Legacy compatibility alias bound to Political IDs.
         private Texture2D politicalIdsTexture;  // RGBAFloat: RealmId, ProvinceId, CountyId, reserved
         private Texture2D geographyBaseTexture; // RGBAFloat: BiomeId, SoilId, reserved, WaterFlag
 
         /// <summary>
-        /// Public accessor kept for legacy call sites.
+        /// Compatibility accessor for callers expecting a single cell-data texture.
         /// </summary>
         public Texture2D CellDataTexture => politicalIdsTexture;
         private Texture2D cellToMarketTexture;  // R16: CellId -> MarketId mapping (dynamic)
@@ -423,9 +422,9 @@ public class MapOverlayManager
                     float height = 0f;
                     if (cellId >= 0 && mapData.CellById.TryGetValue(cellId, out var cell))
                     {
-                        // Normalize absolute height to 0-1 via canonical elevation helpers.
+                        // Normalize world-anchored absolute height to 0-1 via canonical elevation helpers.
                         float absoluteHeight = Elevation.GetAbsoluteHeight(cell, mapData.Info);
-                        height = Elevation.NormalizeAbsolute01(absoluteHeight);
+                        height = Elevation.NormalizeAbsolute01(absoluteHeight, mapData.Info);
                     }
 
                     heightData[idx] = height;
@@ -1114,8 +1113,7 @@ public class MapOverlayManager
 
             terrainMaterial.SetTexture(PoliticalIdsTexId, politicalIdsTexture);
             terrainMaterial.SetTexture(GeographyBaseTexId, geographyBaseTexture);
-            cellDataTexture = politicalIdsTexture;
-            terrainMaterial.SetTexture(CellDataTexId, cellDataTexture);
+            terrainMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
             terrainMaterial.SetTexture(HeightmapTexId, heightmapTexture);
             terrainMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
             terrainMaterial.SetTexture(RealmPaletteTexId, realmPaletteTexture);
@@ -1161,7 +1159,7 @@ public class MapOverlayManager
             cellToMarketTexture.SetPixels(emptyMarkets);
             cellToMarketTexture.Apply();
             terrainMaterial.SetTexture(CellToMarketTexId, cellToMarketTexture);
-            terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(Elevation.ResolveSeaLevel(mapData.Info)));
+            terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(Elevation.ResolveSeaLevel(mapData.Info), mapData.Info));
 
             // Water layer properties are set via shader defaults + material Inspector
             // (not overwritten here so Inspector tweaks persist)
@@ -1807,12 +1805,12 @@ public class MapOverlayManager
         }
 
         /// <summary>
-        /// Set sea-level threshold in absolute map units (0..100) for water detection.
+        /// Set sea-level threshold in world absolute height units for water detection.
         /// </summary>
         public void SetSeaLevel(float seaLevelAbsoluteHeight)
         {
             if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(seaLevelAbsoluteHeight));
+            terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(seaLevelAbsoluteHeight, mapData.Info));
         }
 
         /// <summary>
@@ -2066,7 +2064,6 @@ public class MapOverlayManager
             var texturesToDestroy = new HashSet<Texture2D>();
             AddTextureForDestroy(texturesToDestroy, politicalIdsTexture);
             AddTextureForDestroy(texturesToDestroy, geographyBaseTexture);
-            AddTextureForDestroy(texturesToDestroy, cellDataTexture);
             AddTextureForDestroy(texturesToDestroy, heightmapTexture);
             AddTextureForDestroy(texturesToDestroy, riverMaskTexture);
             AddTextureForDestroy(texturesToDestroy, realmPaletteTexture);
@@ -2092,7 +2089,6 @@ public class MapOverlayManager
 
             politicalIdsTexture = null;
             geographyBaseTexture = null;
-            cellDataTexture = null;
             heightmapTexture = null;
             riverMaskTexture = null;
             realmPaletteTexture = null;

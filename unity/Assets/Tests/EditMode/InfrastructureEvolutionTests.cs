@@ -52,7 +52,7 @@ namespace EconSim.Tests
                         cellSizeKm: 2.5f,
                         mapWidthKm: 10f,
                         mapHeightKm: 10f,
-                        seaLevel: 20f,
+                        seaLevel: 0f,
                         maxElevationMeters: 8000f,
                         maxSeaDepthMeters: 2000f)
                 },
@@ -62,7 +62,7 @@ namespace EconSim.Tests
                     {
                         Id = 1,
                         IsLand = true,
-                        SeaRelativeElevation = 49f,
+                        SeaRelativeElevation = 4900f,
                         HasSeaRelativeElevation = true,
                         BiomeId = 1,
                         NeighborIds = new List<int>(),
@@ -72,7 +72,7 @@ namespace EconSim.Tests
                     {
                         Id = 2,
                         IsLand = true,
-                        SeaRelativeElevation = 80f,
+                        SeaRelativeElevation = 8000f,
                         HasSeaRelativeElevation = true,
                         BiomeId = 1,
                         NeighborIds = new List<int>(),
@@ -114,7 +114,7 @@ namespace EconSim.Tests
                         cellSizeKm: 2.5f,
                         mapWidthKm: 10f,
                         mapHeightKm: 10f,
-                        seaLevel: 20f,
+                        seaLevel: 0f,
                         maxElevationMeters: 8000f,
                         maxSeaDepthMeters: 2000f)
                 },
@@ -124,7 +124,7 @@ namespace EconSim.Tests
                     {
                         Id = 1,
                         IsLand = true,
-                        SeaRelativeElevation = 20f,
+                        SeaRelativeElevation = 2000f,
                         HasSeaRelativeElevation = true,
                         BiomeId = 1,
                         CountyId = 10,
@@ -135,7 +135,7 @@ namespace EconSim.Tests
                     {
                         Id = 2,
                         IsLand = true,
-                        SeaRelativeElevation = 60f,
+                        SeaRelativeElevation = 6000f,
                         HasSeaRelativeElevation = true,
                         BiomeId = 1,
                         CountyId = 20,
@@ -193,7 +193,6 @@ namespace EconSim.Tests
             {
                 Info = new MapInfo
                 {
-                    World = CreateWorldInfo(cellSizeKm: 2.5f, mapWidthKm: 10f, mapHeightKm: 10f)
                 }
             };
             Assert.Throws<InvalidOperationException>(() => MarketPlacer.ResolveMarketZoneMaxTransportCost(mapData));
@@ -313,7 +312,7 @@ namespace EconSim.Tests
             float cellSizeKm,
             float mapWidthKm,
             float mapHeightKm,
-            float seaLevel = 20f,
+            float seaLevel = 0f,
             float maxElevationMeters = 5000f,
             float maxSeaDepthMeters = 1250f)
         {
@@ -325,9 +324,9 @@ namespace EconSim.Tests
                 MapAreaKm2 = mapWidthKm * mapHeightKm,
                 LatitudeSouth = 30f,
                 LatitudeNorth = 31f,
-                MinHeight = Elevation.LegacyMinHeight,
+                MinHeight = -maxSeaDepthMeters,
                 SeaLevelHeight = seaLevel,
-                MaxHeight = Elevation.LegacyMaxHeight,
+                MaxHeight = maxElevationMeters,
                 MaxElevationMeters = maxElevationMeters,
                 MaxSeaDepthMeters = maxSeaDepthMeters
             };

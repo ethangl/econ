@@ -578,7 +578,7 @@ namespace EconSim.Tests
             new Regex(@"\b(?:[A-Za-z_][A-Za-z0-9_]*\.Info|[A-Za-z_][A-Za-z0-9_]*Info|info|Info)\.World\.SeaLevelHeight\b", RegexOptions.Compiled);
 
         private static MapInfo CreateStrictMapInfo(
-            float seaLevel = 20f,
+            float seaLevel = 0f,
             float cellSizeKm = 2.5f,
             float mapWidthKm = 100f,
             float mapHeightKm = 100f,
@@ -598,7 +598,7 @@ namespace EconSim.Tests
         }
 
         private static WorldInfo CreateStrictWorldInfo(
-            float seaLevel = 20f,
+            float seaLevel = 0f,
             float cellSizeKm = 2.5f,
             float mapWidthKm = 100f,
             float mapHeightKm = 100f,
@@ -613,9 +613,9 @@ namespace EconSim.Tests
                 MapAreaKm2 = mapWidthKm * mapHeightKm,
                 LatitudeSouth = 30f,
                 LatitudeNorth = 31f,
-                MinHeight = Elevation.LegacyMinHeight,
+                MinHeight = -maxSeaDepthMeters,
                 SeaLevelHeight = seaLevel,
-                MaxHeight = Elevation.LegacyMaxHeight,
+                MaxHeight = maxElevationMeters,
                 MaxElevationMeters = maxElevationMeters,
                 MaxSeaDepthMeters = maxSeaDepthMeters
             };
@@ -624,8 +624,8 @@ namespace EconSim.Tests
         [Test]
         public void ElevationHelpers_SupportCanonicalRoundTrip()
         {
-            const float seaLevel = 20f;
-            const float absolute = 42.75f;
+            const float seaLevel = 0f;
+            const float absolute = 22.75f;
 
             float seaRelative = Elevation.SeaRelativeFromAbsolute(absolute, seaLevel);
             float roundTrip = Elevation.AbsoluteFromSeaRelative(seaRelative, seaLevel);
@@ -640,7 +640,7 @@ namespace EconSim.Tests
             };
 
             Assert.That(Elevation.GetSeaRelativeHeight(canonicalCell, info), Is.EqualTo(22.75f).Within(0.0001f));
-            Assert.That(Elevation.GetAbsoluteHeight(canonicalCell, info), Is.EqualTo(42.75f).Within(0.0001f));
+            Assert.That(Elevation.GetAbsoluteHeight(canonicalCell, info), Is.EqualTo(22.75f).Within(0.0001f));
 
         }
 
@@ -656,9 +656,9 @@ namespace EconSim.Tests
             Assert.That(Elevation.AbsoluteToMetersAboveSeaLevel(seaAbsolute, info), Is.EqualTo(0f).Within(0.0001f));
             Assert.That(Elevation.MetersAboveSeaLevelToAbsolute(0f, info), Is.EqualTo(seaAbsolute).Within(0.0001f));
 
-            float peakMetersAboveSeaLevel = Elevation.AbsoluteToMetersAboveSeaLevel(Elevation.LegacyMaxHeight, info);
+            float peakMetersAboveSeaLevel = Elevation.AbsoluteToMetersAboveSeaLevel(info.World.MaxHeight, info);
             Assert.That(peakMetersAboveSeaLevel, Is.EqualTo(6000f).Within(0.0001f));
-            Assert.That(Elevation.MetersAboveSeaLevelToAbsolute(6000f, info), Is.EqualTo(Elevation.LegacyMaxHeight).Within(0.0001f));
+            Assert.That(Elevation.MetersAboveSeaLevelToAbsolute(6000f, info), Is.EqualTo(info.World.MaxHeight).Within(0.0001f));
 
             float signedUp = Elevation.SeaRelativeToSignedMeters(40f, info);
             float roundTripUp = Elevation.SignedMetersToSeaRelative(signedUp, info);
@@ -679,7 +679,7 @@ namespace EconSim.Tests
 
             var canonicalCell = new Cell
             {
-                SeaRelativeElevation = 40f,
+                SeaRelativeElevation = 3000f,
                 HasSeaRelativeElevation = true
             };
             Assert.That(Elevation.GetMetersAboveSeaLevel(canonicalCell, info), Is.EqualTo(3000f).Within(0.0001f));
@@ -687,7 +687,7 @@ namespace EconSim.Tests
 
             var belowSeaCell = new Cell
             {
-                SeaRelativeElevation = -10f,
+                SeaRelativeElevation = -750f,
                 HasSeaRelativeElevation = true
             };
             Assert.That(Elevation.GetMetersAboveSeaLevel(belowSeaCell, info), Is.EqualTo(0f).Within(0.0001f));
@@ -704,7 +704,7 @@ namespace EconSim.Tests
 
             var landCell = new Cell
             {
-                SeaRelativeElevation = 40f,
+                SeaRelativeElevation = 3000f,
                 HasSeaRelativeElevation = true
             };
             Assert.That(Elevation.GetNormalizedSignedHeight(landCell, info), Is.EqualTo(0.5f).Within(0.0001f));
@@ -712,7 +712,7 @@ namespace EconSim.Tests
 
             var midDepthCell = new Cell
             {
-                SeaRelativeElevation = -10f,
+                SeaRelativeElevation = -750f,
                 HasSeaRelativeElevation = true
             };
             Assert.That(Elevation.GetNormalizedSignedHeight(midDepthCell, info), Is.EqualTo(-0.125f).Within(0.0001f));
@@ -720,7 +720,7 @@ namespace EconSim.Tests
 
             var maxDepthCell = new Cell
             {
-                SeaRelativeElevation = -20f,
+                SeaRelativeElevation = -1500f,
                 HasSeaRelativeElevation = true
             };
             Assert.That(Elevation.GetNormalizedSignedHeight(maxDepthCell, info), Is.EqualTo(-0.25f).Within(0.0001f));
@@ -731,12 +731,12 @@ namespace EconSim.Tests
         public void ElevationHelpers_RejectOutOfRangeAbsoluteValues()
         {
             var info = CreateStrictMapInfo();
-            Assert.Throws<InvalidOperationException>(() => Elevation.NormalizeAbsolute01(101f));
+            Assert.Throws<InvalidOperationException>(() => Elevation.NormalizeAbsolute01(info.World.MaxHeight + 1f, info));
 
             var canonicalCell = new Cell
             {
                 Id = 1001,
-                SeaRelativeElevation = 90f, // absolute = 110 with sea level 20
+                SeaRelativeElevation = 6000f,
                 HasSeaRelativeElevation = true
             };
 
@@ -755,7 +755,7 @@ namespace EconSim.Tests
             {
                 World = new WorldInfo
                 {
-                    SeaLevelHeight = 0f
+                    SeaLevelHeight = float.NaN
                 }
             };
             Assert.Throws<InvalidOperationException>(() => Elevation.ResolveSeaLevel(invalidSeaLevel));
@@ -866,7 +866,7 @@ namespace EconSim.Tests
         }
 
         [Test]
-        public void OverlayHeightTexture_UsesCanonicalElevationInsteadOfLegacyHeightField()
+        public void OverlayHeightTexture_UsesCanonicalElevationInsteadOfRawHeightField()
         {
             var config = new MapGenConfig
             {
@@ -881,11 +881,12 @@ namespace EconSim.Tests
 
             // Force a known canonical value to verify texture sampling uses canonical conversion.
             var targetCell = mapData.Cells[0];
-            targetCell.SeaRelativeElevation = 25f; // absolute ~= 45 with default sea level 20
+            targetCell.SeaRelativeElevation = 1250f;
             targetCell.HasSeaRelativeElevation = true;
 
             float expectedNormalizedHeight = Elevation.NormalizeAbsolute01(
-                Elevation.GetAbsoluteHeight(targetCell, mapData.Info));
+                Elevation.GetAbsoluteHeight(targetCell, mapData.Info),
+                mapData.Info);
 
             var shader = Shader.Find("EconSim/MapOverlay");
             Assert.That(shader, Is.Not.Null, "Shader EconSim/MapOverlay not found");
@@ -951,13 +952,16 @@ namespace EconSim.Tests
 
             try
             {
-                overlayManager.SetSeaLevel(20f);
-                Assert.That(material.GetFloat("_SeaLevel"), Is.EqualTo(0.2f).Within(0.0001f),
-                    "SetSeaLevel(20) should normalize to shader value 0.2.");
+                float seaLevel = Elevation.ResolveSeaLevel(mapData.Info);
+                float seaExpected = Elevation.NormalizeAbsolute01(seaLevel, mapData.Info);
+                overlayManager.SetSeaLevel(seaLevel);
+                Assert.That(material.GetFloat("_SeaLevel"), Is.EqualTo(seaExpected).Within(0.0001f),
+                    "SetSeaLevel should normalize world sea-level anchor for shader use.");
 
-                overlayManager.SetSeaLevel(100f);
+                float maxHeight = mapData.Info.World.MaxHeight;
+                overlayManager.SetSeaLevel(maxHeight);
                 Assert.That(material.GetFloat("_SeaLevel"), Is.EqualTo(1.0f).Within(0.0001f),
-                    "SetSeaLevel(100) should normalize to shader value 1.0.");
+                    "SetSeaLevel(maxHeight) should normalize to shader value 1.0.");
             }
             finally
             {
@@ -1018,7 +1022,7 @@ namespace EconSim.Tests
             }
 
             Assert.That(violations, Is.Empty,
-                "Legacy cell.Height field usage is forbidden. Use Elevation.GetAbsoluteHeight/GetSeaRelativeHeight.\n" +
+                "Direct cell.Height field usage is forbidden. Use Elevation.GetAbsoluteHeight/GetSeaRelativeHeight.\n" +
                 string.Join("\n", violations));
         }
 

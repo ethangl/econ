@@ -31,8 +31,8 @@ namespace EconSim.Core.Import
             // MapGen uses Y-up (Y=0 south), same as Unity's texture convention.
             // Pass coordinates through directly — no flip needed.
             int cellCount = mesh.CellCount;
-            float seaLevel = world.SeaLevelHeight;
-            Elevation.AssertAbsoluteHeightInRange(seaLevel, "MapGenAdapter sea level");
+            if (world.MinHeight >= world.SeaLevelHeight || world.SeaLevelHeight >= world.MaxHeight)
+                throw new InvalidOperationException("MapGenAdapter source world anchors must satisfy MinHeight < SeaLevelHeight < MaxHeight.");
 
             // Build cells
             var cells = new List<Cell>(cellCount);
@@ -44,17 +44,26 @@ namespace EconSim.Core.Import
                 {
                     throw new InvalidOperationException($"MapGen returned non-finite height for cell {i}: {sourceHeight}");
                 }
+                if (sourceHeight < world.MinHeight || sourceHeight > world.MaxHeight)
+                {
+                    throw new InvalidOperationException(
+                        $"MapGen returned height out of world range for cell {i}: {sourceHeight} not in [{world.MinHeight}, {world.MaxHeight}]");
+                }
 
-                int absoluteHeight = (int)Math.Round(sourceHeight);
-                Elevation.AssertAbsoluteHeightInRange(absoluteHeight, $"MapGenAdapter source cell {i}");
-                float seaRelativeElevation = Elevation.SeaRelativeFromAbsolute(absoluteHeight, seaLevel);
+                float signedMeters = SourceAbsoluteToSignedMeters(
+                    sourceHeight,
+                    world.MinHeight,
+                    world.SeaLevelHeight,
+                    world.MaxHeight,
+                    world.MaxElevationMeters,
+                    world.MaxSeaDepthMeters);
                 var cell = new Cell
                 {
                     Id = i,
                     Center = ToECVec2(center),
                     VertexIndices = new List<int>(mesh.CellVertices[i]),
                     NeighborIds = new List<int>(mesh.CellNeighbors[i]),
-                    SeaRelativeElevation = seaRelativeElevation,
+                    SeaRelativeElevation = signedMeters,
                     HasSeaRelativeElevation = true,
                     BiomeId = (int)biomes.Biome[i],
                     SoilId = (int)biomes.Soil[i],
@@ -135,6 +144,132 @@ namespace EconSim.Core.Import
                     MapAreaKm2 = world.MapAreaKm2,
                     LatitudeSouth = world.LatitudeSouth,
                     LatitudeNorth = world.LatitudeNorth,
+                    MinHeight = -world.MaxSeaDepthMeters,
+                    SeaLevelHeight = 0f,
+                    MaxHeight = world.MaxElevationMeters,
+                    MaxElevationMeters = world.MaxElevationMeters,
+                    MaxSeaDepthMeters = world.MaxSeaDepthMeters
+                }
+            };
+
+            var mapData = new MapData
+            {
+                Info = info,
+                Cells = cells,
+                Vertices = vertices,
+                Realms = realms,
+                Provinces = provinces,
+                Rivers = riverList,
+                Biomes = biomeDefs,
+                Burgs = burgs,
+                Features = features,
+                Counties = counties
+            };
+
+            mapData.BuildLookups();
+            mapData.AssertElevationInvariants();
+            mapData.AssertWorldInvariants();
+
+            return mapData;
+        }
+
+        /// <summary>
+        /// Convert a MapGen V2 result into MapData using canonical signed-meter elevation.
+        /// </summary>
+        public static MapData Convert(MapGenV2Result result)
+        {
+            var mesh = result.Mesh;
+            var elevation = result.Elevation;
+            var biomes = result.Biomes;
+            var rivers = result.Rivers;
+            var politicalV2 = result.Political;
+            var world = result.World;
+            if (world == null)
+                throw new InvalidOperationException("MapGenV2Result.World metadata is required.");
+
+            int cellCount = mesh.CellCount;
+            var cells = new List<Cell>(cellCount);
+            for (int i = 0; i < cellCount; i++)
+            {
+                float signedMeters = elevation.ElevationMetersSigned[i];
+                if (float.IsNaN(signedMeters) || float.IsInfinity(signedMeters))
+                    throw new InvalidOperationException($"MapGenV2 returned non-finite elevation for cell {i}: {signedMeters}");
+                if (signedMeters < -world.MaxSeaDepthMeters || signedMeters > world.MaxElevationMeters)
+                {
+                    throw new InvalidOperationException(
+                        $"MapGenV2 returned signed elevation out of configured range for cell {i}: {signedMeters} not in [-{world.MaxSeaDepthMeters}, {world.MaxElevationMeters}]");
+                }
+
+                var cell = new Cell
+                {
+                    Id = i,
+                    Center = ToECVec2(mesh.CellCenters[i]),
+                    VertexIndices = new List<int>(mesh.CellVertices[i]),
+                    NeighborIds = new List<int>(mesh.CellNeighbors[i]),
+                    SeaRelativeElevation = signedMeters,
+                    HasSeaRelativeElevation = true,
+                    BiomeId = (int)biomes.Biome[i],
+                    SoilId = 0,
+                    IsLand = elevation.IsLand(i) && !biomes.IsLakeCell[i],
+                    RealmId = politicalV2.RealmId[i],
+                    ProvinceId = politicalV2.ProvinceId[i],
+                    CountyId = politicalV2.CountyId[i],
+                    Population = biomes.Population[i]
+                };
+
+                cells.Add(cell);
+            }
+
+            var vertices = new List<ECVec2>(mesh.VertexCount);
+            for (int v = 0; v < mesh.VertexCount; v++)
+                vertices.Add(ToECVec2(mesh.Vertices[v]));
+
+            for (int i = 0; i < cellCount; i++)
+            {
+                cells[i].CoastDistance = biomes.CoastDistance[i];
+                cells[i].FeatureId = biomes.FeatureId[i];
+            }
+
+            var features = new List<Feature>();
+            foreach (var wf in biomes.Features)
+            {
+                features.Add(new Feature
+                {
+                    Id = wf.Id,
+                    Type = wf.Type == MapGen.Core.WaterFeatureType.Lake ? "lake" : "ocean",
+                    IsBorder = wf.TouchesBorder,
+                    CellCount = wf.CellCount
+                });
+            }
+
+            var riverList = ConvertRivers(rivers, mesh);
+            PoliticalData political = ToPoliticalData(mesh, politicalV2);
+            var burgs = BuildBurgs(cells, political);
+            var realms = BuildRealms(cells, political);
+            var provinces = BuildProvinces(cells, political);
+            var counties = BuildCounties(cells, political, null);
+            var biomeDefs = BuildBiomeDefinitions();
+
+            int landCells = 0;
+            foreach (var c in cells)
+                if (c.IsLand) landCells++;
+
+            var info = new MapInfo
+            {
+                Name = "Generated Map",
+                Width = (int)Math.Round(mesh.Width),
+                Height = (int)Math.Round(mesh.Height),
+                Seed = "",
+                TotalCells = cellCount,
+                LandCells = landCells,
+                World = new WorldInfo
+                {
+                    CellSizeKm = world.CellSizeKm,
+                    MapWidthKm = world.MapWidthKm,
+                    MapHeightKm = world.MapHeightKm,
+                    MapAreaKm2 = world.MapAreaKm2,
+                    LatitudeSouth = world.LatitudeSouth,
+                    LatitudeNorth = world.LatitudeNorth,
                     MinHeight = world.MinHeight,
                     SeaLevelHeight = world.SeaLevelHeight,
                     MaxHeight = world.MaxHeight,
@@ -162,6 +297,30 @@ namespace EconSim.Core.Import
             mapData.AssertWorldInvariants();
 
             return mapData;
+        }
+
+        static float SourceAbsoluteToSignedMeters(
+            float absoluteHeight,
+            float minHeight,
+            float seaLevelHeight,
+            float maxHeight,
+            float maxElevationMeters,
+            float maxSeaDepthMeters)
+        {
+            if (maxElevationMeters <= 0f) maxElevationMeters = 1f;
+            if (maxSeaDepthMeters <= 0f) maxSeaDepthMeters = 1f;
+
+            float landRange = Math.Max(1e-5f, maxHeight - seaLevelHeight);
+            float waterRange = Math.Max(1e-5f, seaLevelHeight - minHeight);
+
+            if (absoluteHeight >= seaLevelHeight)
+            {
+                float normalized = (absoluteHeight - seaLevelHeight) / landRange;
+                return normalized * maxElevationMeters;
+            }
+
+            float depthNormalized = (seaLevelHeight - absoluteHeight) / waterRange;
+            return -depthNormalized * maxSeaDepthMeters;
         }
 
         static ECVec2 ToECVec2(MGVec2 v) => new ECVec2(v.X, v.Y);
@@ -236,7 +395,94 @@ namespace EconSim.Core.Import
             return rivers;
         }
 
+        static List<ECRiver> ConvertRivers(RiverFieldV2 riverData, CellMesh mesh)
+        {
+            var rivers = new List<ECRiver>();
+
+            for (int r = 0; r < riverData.Rivers.Length; r++)
+            {
+                ref var mgRiver = ref riverData.Rivers[r];
+                if (mgRiver.Vertices.Length < 2) continue;
+
+                var points = new List<ECVec2>(mgRiver.Vertices.Length + 1);
+                for (int vi = mgRiver.Vertices.Length - 1; vi >= 0; vi--)
+                {
+                    int vertIdx = mgRiver.Vertices[vi];
+                    if (vertIdx < 0 || vertIdx >= mesh.VertexCount) continue;
+                    points.Add(ToECVec2(mesh.Vertices[vertIdx]));
+                }
+
+                if (points.Count < 2) continue;
+
+                int sourceVert = mgRiver.SourceVertex;
+                int[] sourceNeighbors = mesh.VertexNeighbors[sourceVert];
+                if (sourceNeighbors != null)
+                {
+                    for (int i = 0; i < sourceNeighbors.Length; i++)
+                    {
+                        int nb = sourceNeighbors[i];
+                        if (nb >= 0 && nb < mesh.VertexCount && riverData.IsLake(nb))
+                        {
+                            points.Insert(0, ToECVec2(mesh.Vertices[nb]));
+                            break;
+                        }
+                    }
+                }
+
+                int mouthVert = mgRiver.MouthVertex;
+                if (mouthVert != mgRiver.Vertices[0])
+                {
+                    points.Add(ToECVec2(mesh.Vertices[mouthVert]));
+                }
+
+                int flowTarget = riverData.FlowTarget[mouthVert];
+                if (flowTarget >= 0 && flowTarget < mesh.VertexCount && riverData.IsOcean(flowTarget))
+                {
+                    points.Add(ToECVec2(mesh.Vertices[flowTarget]));
+                }
+
+                int riverId = r + 1;
+                rivers.Add(new ECRiver
+                {
+                    Id = riverId,
+                    Name = $"River {riverId}",
+                    Type = "River",
+                    Points = points,
+                    CellPath = new List<int>(),
+                    Width = Math.Min(5f, Math.Max(0.5f, (float)Math.Log(mgRiver.Discharge + 1) * 0.4f)),
+                    Discharge = (int)mgRiver.Discharge,
+                    Length = points.Count,
+                });
+            }
+
+            return rivers;
+        }
+
         #endregion
+
+        static PoliticalData ToPoliticalData(CellMesh mesh, PoliticalFieldV2 source)
+        {
+            var data = new PoliticalData(mesh)
+            {
+                RealmCount = source.RealmCount,
+                ProvinceCount = source.ProvinceCount,
+                CountyCount = source.CountyCount,
+                LandmassCount = source.LandmassCount,
+                Capitals = source.Capitals ?? Array.Empty<int>(),
+                CountySeats = source.CountySeats ?? Array.Empty<int>()
+            };
+
+            if (source.LandmassId != null && source.LandmassId.Length == data.LandmassId.Length)
+                Array.Copy(source.LandmassId, data.LandmassId, source.LandmassId.Length);
+            if (source.RealmId != null && source.RealmId.Length == data.RealmId.Length)
+                Array.Copy(source.RealmId, data.RealmId, source.RealmId.Length);
+            if (source.ProvinceId != null && source.ProvinceId.Length == data.ProvinceId.Length)
+                Array.Copy(source.ProvinceId, data.ProvinceId, source.ProvinceId.Length);
+            if (source.CountyId != null && source.CountyId.Length == data.CountyId.Length)
+                Array.Copy(source.CountyId, data.CountyId, source.CountyId.Length);
+
+            return data;
+        }
 
         #region Burgs
 

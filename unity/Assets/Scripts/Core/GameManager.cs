@@ -11,6 +11,12 @@ using Profiler = EconSim.Core.Common.StartupProfiler;
 
 namespace EconSim.Core
 {
+    public enum MapGenerationMode
+    {
+        V2Default = 0,
+        ForceV2 = 1
+    }
+
     /// <summary>
     /// Main entry point. Generates map and wires together simulation and rendering.
     /// </summary>
@@ -19,10 +25,18 @@ namespace EconSim.Core
         [Header("References")]
         [SerializeField] private MapView mapView;
         [SerializeField] private MapCamera mapCamera;
+        [Header("Generation")]
+        [SerializeField] private MapGenerationMode generationMode = MapGenerationMode.V2Default;
 
         public MapData MapData { get; private set; }
         public MapGenResult MapGenResult { get; private set; }
+        public MapGenV2Result MapGenV2Result { get; private set; }
         public ISimulation Simulation => _simulation;
+        public MapGenerationMode GenerationMode
+        {
+            get => generationMode;
+            set => generationMode = value;
+        }
 
         /// <summary>
         /// Fired when the map has finished loading and the simulation is ready.
@@ -71,15 +85,24 @@ namespace EconSim.Core
                 Seed = UnityEngine.Random.Range(1, int.MaxValue)
             };
 
-            Profiler.Begin("MapGen Pipeline");
-            var result = MapGenPipeline.Generate(config);
+            MapGenV2Config v2Config = ToMapGenV2Config(config);
+            Debug.Log(
+                $"MapGen V2 config: cells={v2Config.CellCount}, template={v2Config.Template}, " +
+                $"riverThreshold={v2Config.EffectiveRiverThreshold:0.0}, " +
+                $"riverTrace={v2Config.EffectiveRiverTraceThreshold:0.0}, " +
+                $"minRiverVertices={v2Config.EffectiveMinRiverVertices}");
+
+            Profiler.Begin("MapGen V2 Pipeline");
+            var v2Result = MapGenPipelineV2.Generate(v2Config);
             Profiler.End();
 
-            MapGenResult = result;
+            MapGenV2Result = v2Result;
+            MapGenResult = null;
 
-            Profiler.Begin("MapGenAdapter Convert");
-            MapData = MapGenAdapter.Convert(result);
+            Profiler.Begin("MapGenAdapter Convert V2");
+            MapData = MapGenAdapter.Convert(v2Result);
             Profiler.End();
+            LogMapGenV2Summary(v2Result, MapData);
 
             // Update info with seed
             MapData.Info.Seed = config.Seed.ToString();
@@ -88,6 +111,60 @@ namespace EconSim.Core
 
             Profiler.End();
             Profiler.LogResults();
+        }
+
+        private static MapGenV2Config ToMapGenV2Config(MapGenConfig config)
+        {
+            return new MapGenV2Config
+            {
+                Seed = config.Seed,
+                CellCount = config.CellCount,
+                AspectRatio = config.AspectRatio,
+                CellSizeKm = config.CellSizeKm,
+                Template = config.Template,
+                LatitudeSouth = config.LatitudeSouth,
+                RiverThreshold = config.RiverThreshold,
+                RiverTraceThreshold = config.RiverTraceThreshold,
+                MinRiverVertices = config.MinRiverVertices
+            };
+        }
+
+        static void LogMapGenV2Summary(MapGenV2Result result, MapData runtimeMap)
+        {
+            if (result?.Elevation == null || result.Rivers == null)
+                return;
+
+            float landRatio = result.Elevation.LandRatio();
+            int riverCount = result.Rivers.Rivers != null ? result.Rivers.Rivers.Length : 0;
+            float p50Meters = Percentile(result.Elevation.ElevationMetersSigned, 0.5f);
+
+            float runtimeLandRatio = 0f;
+            if (runtimeMap?.Cells != null && runtimeMap.Cells.Count > 0)
+                runtimeLandRatio = runtimeMap.Info.LandCells / (float)runtimeMap.Cells.Count;
+
+            Debug.Log(
+                $"MapGen V2 summary: land={landRatio:0.000}, runtimeLand={runtimeLandRatio:0.000}, rivers={riverCount}, elevP50={p50Meters:0.0}m");
+        }
+
+        static float Percentile(float[] values, float q)
+        {
+            if (values == null || values.Length == 0)
+                return 0f;
+
+            var sorted = (float[])values.Clone();
+            Array.Sort(sorted);
+
+            if (q <= 0f) return sorted[0];
+            if (q >= 1f) return sorted[sorted.Length - 1];
+
+            float index = q * (sorted.Length - 1);
+            int lo = (int)Mathf.Floor(index);
+            int hi = (int)Mathf.Ceil(index);
+            if (lo == hi)
+                return sorted[lo];
+
+            float t = index - lo;
+            return sorted[lo] + (sorted[hi] - sorted[lo]) * t;
         }
 
         private void InitializeWithMapData()

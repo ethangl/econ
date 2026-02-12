@@ -63,7 +63,7 @@ namespace EconSim.Core.Transport
 
         // Impassable threshold (cells with cost >= this are blocked)
         private const float ImpassableThreshold = 100f;
-        private const float LegacyMountainStartAbsolute = 70f;
+        private const float MountainStartAboveSeaFraction = 0.625f; // Legacy 70 in [20..100] => 62.5% of land elevation span.
         private const float MinMountainRangeMeters = 1f;
 
         private readonly float _mountainStartMetersAboveSeaLevel;
@@ -75,7 +75,8 @@ namespace EconSim.Core.Transport
             _mapData = mapData;
             _maxCacheSize = maxCacheSize;
             _pathCache = new Dictionary<(int, int), PathResult>();
-            _mountainStartMetersAboveSeaLevel = Elevation.AbsoluteToMetersAboveSeaLevel(LegacyMountainStartAbsolute, mapData.Info);
+            _mountainStartMetersAboveSeaLevel =
+                Elevation.ResolveMaxElevationMeters(mapData.Info) * MountainStartAboveSeaFraction;
             _mountainRangeMeters = Math.Max(
                 MinMountainRangeMeters,
                 Elevation.ResolveMaxElevationMeters(mapData.Info) - _mountainStartMetersAboveSeaLevel);
@@ -122,7 +123,6 @@ namespace EconSim.Core.Transport
             }
 
             // Height modifier: higher = harder (mountains).
-            // Keep legacy behavior (absolute > 70) calibrated against world-unit meters above sea level.
             float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, _mapData.Info);
             if (elevationMetersAboveSeaLevel > _mountainStartMetersAboveSeaLevel)
             {

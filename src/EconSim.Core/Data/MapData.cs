@@ -90,7 +90,7 @@ namespace EconSim.Core.Data
                 }
 
                 float absoluteHeight = Elevation.GetAbsoluteHeight(cell, Info);
-                Elevation.AssertAbsoluteHeightInRange(absoluteHeight, $"cell {cell.Id}");
+                Elevation.AssertAbsoluteHeightInRange(absoluteHeight, Info, $"cell {cell.Id}");
             }
         }
 
@@ -128,8 +128,19 @@ namespace EconSim.Core.Data
             }
             if (world.MinHeight >= world.SeaLevelHeight || world.SeaLevelHeight >= world.MaxHeight)
                 throw new InvalidOperationException("World height anchors must satisfy MinHeight < SeaLevelHeight < MaxHeight.");
-            if (world.MinHeight < Elevation.LegacyMinHeight || world.MaxHeight > Elevation.LegacyMaxHeight)
-                throw new InvalidOperationException("World height anchors must remain within legacy absolute range [0, 100].");
+
+            float landRange = world.MaxHeight - world.SeaLevelHeight;
+            float waterRange = world.SeaLevelHeight - world.MinHeight;
+            if (Math.Abs(landRange - world.MaxElevationMeters) > 0.001f)
+            {
+                throw new InvalidOperationException(
+                    $"World.MaxHeight-SeaLevelHeight must equal MaxElevationMeters. Got landRange={landRange}, maxElevation={world.MaxElevationMeters}.");
+            }
+            if (Math.Abs(waterRange - world.MaxSeaDepthMeters) > 0.001f)
+            {
+                throw new InvalidOperationException(
+                    $"World.SeaLevelHeight-MinHeight must equal MaxSeaDepthMeters. Got waterRange={waterRange}, maxSeaDepth={world.MaxSeaDepthMeters}.");
+            }
         }
     }
 
@@ -174,7 +185,7 @@ namespace EconSim.Core.Data
         public List<int> NeighborIds;   // Adjacent cell IDs
 
         // Terrain
-        public float SeaRelativeElevation; // Canonical elevation (sea level = 0)
+        public float SeaRelativeElevation; // Canonical signed elevation meters (sea level = 0)
         public bool HasSeaRelativeElevation; // Must be true for runtime-generated maps
         public int BiomeId;
         public int SoilId;             // MapGen.Core.SoilType ordinal (0-7)
@@ -327,32 +338,109 @@ namespace EconSim.Core.Data
     }
 
     /// <summary>
-    /// Elevation conversion helpers for canonical sea-relative and legacy absolute values.
+    /// Elevation helpers for canonical signed meters (sea level = 0) and world-height anchors.
     /// </summary>
     public static class Elevation
     {
-        public const float LegacyMinHeight = 0f;
-        public const float LegacyMaxHeight = 100f;
-
         public static float ResolveSeaLevel(MapInfo info)
         {
             WorldInfo world = RequireWorldInfo(info, "ResolveSeaLevel");
             float seaLevel = world.SeaLevelHeight;
-            if (float.IsNaN(seaLevel) || float.IsInfinity(seaLevel) ||
-                seaLevel <= LegacyMinHeight || seaLevel >= LegacyMaxHeight)
-                throw new InvalidOperationException($"World.SeaLevelHeight must be within ({LegacyMinHeight}, {LegacyMaxHeight}), got {seaLevel}.");
+            if (float.IsNaN(seaLevel) || float.IsInfinity(seaLevel))
+                throw new InvalidOperationException($"World.SeaLevelHeight must be finite, got {seaLevel}.");
 
             return seaLevel;
         }
 
+        public static float ResolveMinHeight(MapInfo info)
+        {
+            WorldInfo world = RequireWorldInfo(info, "ResolveMinHeight");
+            if (float.IsNaN(world.MinHeight) || float.IsInfinity(world.MinHeight))
+                throw new InvalidOperationException($"World.MinHeight must be finite, got {world.MinHeight}.");
+            return world.MinHeight;
+        }
+
+        public static float ResolveMaxHeight(MapInfo info)
+        {
+            WorldInfo world = RequireWorldInfo(info, "ResolveMaxHeight");
+            if (float.IsNaN(world.MaxHeight) || float.IsInfinity(world.MaxHeight))
+                throw new InvalidOperationException($"World.MaxHeight must be finite, got {world.MaxHeight}.");
+            return world.MaxHeight;
+        }
+
+        static void ValidateFinite(float value, string context)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value))
+                throw new InvalidOperationException($"{context} must be finite, got {value}.");
+        }
+
+        static float ResolveWorldSpan(MapInfo info)
+        {
+            float min = ResolveMinHeight(info);
+            float max = ResolveMaxHeight(info);
+            if (max <= min)
+                throw new InvalidOperationException($"World height anchors must satisfy MinHeight < MaxHeight, got [{min}, {max}].");
+            return max - min;
+        }
+
+        public static float AbsoluteToSignedMeters(float absoluteHeight, MapInfo info)
+        {
+            AssertAbsoluteHeightInRange(absoluteHeight, info, "AbsoluteToSignedMeters input");
+            return absoluteHeight - ResolveSeaLevel(info);
+        }
+
+        public static float SignedMetersToAbsolute(float signedMeters, MapInfo info)
+        {
+            ValidateFinite(signedMeters, "SignedMetersToAbsolute input");
+            float absolute = ResolveSeaLevel(info) + signedMeters;
+            AssertAbsoluteHeightInRange(absolute, info, "SignedMetersToAbsolute output");
+            return absolute;
+        }
+
+        public static void AssertSignedMetersInRange(float signedMeters, MapInfo info, string context)
+        {
+            ValidateFinite(signedMeters, $"{context} signed elevation");
+            float maxElevationMeters = ResolveMaxElevationMeters(info);
+            float maxSeaDepthMeters = ResolveMaxSeaDepthMeters(info);
+            const float tolerance = 0.001f;
+            if (signedMeters < -maxSeaDepthMeters - tolerance || signedMeters > maxElevationMeters + tolerance)
+            {
+                throw new InvalidOperationException(
+                    $"Signed elevation {signedMeters} is out of configured range [-{maxSeaDepthMeters}, {maxElevationMeters}] for {context}.");
+            }
+        }
+
+        public static void AssertAbsoluteHeightInRange(float absoluteHeight, MapInfo info, string context)
+        {
+            ValidateFinite(absoluteHeight, $"{context} absolute elevation");
+            float min = ResolveMinHeight(info);
+            float max = ResolveMaxHeight(info);
+            if (absoluteHeight < min || absoluteHeight > max)
+            {
+                throw new InvalidOperationException(
+                    $"Absolute elevation {absoluteHeight} is out of world range [{min}, {max}] for {context}.");
+            }
+        }
+
+        public static float NormalizeAbsolute01(float absoluteHeight, MapInfo info)
+        {
+            AssertAbsoluteHeightInRange(absoluteHeight, info, "NormalizeAbsolute01 input");
+            float min = ResolveMinHeight(info);
+            float span = ResolveWorldSpan(info);
+            return (absoluteHeight - min) / span;
+        }
+
         public static float SeaRelativeFromAbsolute(float absoluteHeight, float seaLevel)
         {
-            AssertAbsoluteHeightInRange(absoluteHeight, "SeaRelativeFromAbsolute input");
+            ValidateFinite(absoluteHeight, "SeaRelativeFromAbsolute absoluteHeight");
+            ValidateFinite(seaLevel, "SeaRelativeFromAbsolute seaLevel");
             return absoluteHeight - seaLevel;
         }
 
         public static float AbsoluteFromSeaRelative(float seaRelativeHeight, float seaLevel)
         {
+            ValidateFinite(seaRelativeHeight, "AbsoluteFromSeaRelative seaRelativeHeight");
+            ValidateFinite(seaLevel, "AbsoluteFromSeaRelative seaLevel");
             return seaRelativeHeight + seaLevel;
         }
 
@@ -363,8 +451,7 @@ namespace EconSim.Core.Data
             if (!cell.HasSeaRelativeElevation)
                 throw new InvalidOperationException($"Cell {cell.Id} is missing canonical SeaRelativeElevation.");
 
-            float absolute = AbsoluteFromSeaRelative(cell.SeaRelativeElevation, ResolveSeaLevel(info));
-            AssertAbsoluteHeightInRange(absolute, $"cell {cell.Id} (canonical)");
+            AssertSignedMetersInRange(cell.SeaRelativeElevation, info, $"cell {cell.Id} (canonical)");
             return cell.SeaRelativeElevation;
         }
 
@@ -375,16 +462,8 @@ namespace EconSim.Core.Data
             if (!cell.HasSeaRelativeElevation)
                 throw new InvalidOperationException($"Cell {cell.Id} is missing canonical SeaRelativeElevation.");
 
-            float absolute = AbsoluteFromSeaRelative(cell.SeaRelativeElevation, ResolveSeaLevel(info));
-            AssertAbsoluteHeightInRange(absolute, $"cell {cell.Id} (canonical)");
+            float absolute = SignedMetersToAbsolute(GetSeaRelativeHeight(cell, info), info);
             return absolute;
-        }
-
-        public static float NormalizeAbsolute01(float absoluteHeight)
-        {
-            AssertAbsoluteHeightInRange(absoluteHeight, "NormalizeAbsolute01 input");
-            float clamped = Math.Max(LegacyMinHeight, Math.Min(LegacyMaxHeight, absoluteHeight));
-            return clamped / LegacyMaxHeight;
         }
 
         /// <summary>
@@ -392,7 +471,7 @@ namespace EconSim.Core.Data
         /// </summary>
         public static float GetMetersAboveSeaLevel(Cell cell, MapInfo info)
         {
-            return AbsoluteToMetersAboveSeaLevel(GetAbsoluteHeight(cell, info), info);
+            return Math.Max(0f, GetSignedMeters(cell, info));
         }
 
         /// <summary>
@@ -400,7 +479,7 @@ namespace EconSim.Core.Data
         /// </summary>
         public static float GetSignedMeters(Cell cell, MapInfo info)
         {
-            return SeaRelativeToSignedMeters(GetSeaRelativeHeight(cell, info), info);
+            return GetSeaRelativeHeight(cell, info);
         }
 
         /// <summary>
@@ -437,100 +516,38 @@ namespace EconSim.Core.Data
         }
 
         /// <summary>
-        /// Convert absolute map height (0..100) to meters above sea level (clamped to [0, maxElevation]).
+        /// Convert absolute world height to meters above sea level (clamped to [0, maxElevation]).
         /// </summary>
         public static float AbsoluteToMetersAboveSeaLevel(float absoluteHeight, MapInfo info)
         {
-            AssertAbsoluteHeightInRange(absoluteHeight, "AbsoluteToMetersAboveSeaLevel input");
-            float seaLevel = ResolveSeaLevel(info);
-            float maxElevationMeters = ResolveMaxElevationMeters(info);
-
-            if (absoluteHeight <= seaLevel)
-                return 0f;
-
-            float landRange = Math.Max(1f, LegacyMaxHeight - seaLevel);
-            float normalizedLand = (absoluteHeight - seaLevel) / landRange;
-            return normalizedLand * maxElevationMeters;
+            return Math.Max(0f, AbsoluteToSignedMeters(absoluteHeight, info));
         }
 
         /// <summary>
-        /// Convert meters above sea level to absolute map height (0..100).
+        /// Convert meters above sea level to absolute world height.
         /// </summary>
         public static float MetersAboveSeaLevelToAbsolute(float metersAboveSeaLevel, MapInfo info)
         {
-            if (float.IsNaN(metersAboveSeaLevel) || float.IsInfinity(metersAboveSeaLevel))
-                throw new InvalidOperationException($"MetersAboveSeaLevelToAbsolute input is not finite: {metersAboveSeaLevel}");
-
-            float seaLevel = ResolveSeaLevel(info);
-            if (metersAboveSeaLevel <= 0f)
-                return seaLevel;
-
-            float maxElevationMeters = ResolveMaxElevationMeters(info);
-            float normalized = Math.Min(1f, metersAboveSeaLevel / maxElevationMeters);
-            float landRange = Math.Max(1f, LegacyMaxHeight - seaLevel);
-            float absolute = seaLevel + normalized * landRange;
-            AssertAbsoluteHeightInRange(absolute, "MetersAboveSeaLevelToAbsolute output");
-            return absolute;
+            ValidateFinite(metersAboveSeaLevel, "MetersAboveSeaLevelToAbsolute input");
+            return SignedMetersToAbsolute(Math.Max(0f, metersAboveSeaLevel), info);
         }
 
         /// <summary>
-        /// Convert sea-relative height (legacy units with sea=0) to signed meters (sea=0m).
-        /// Positive values are above sea level; negative values are below sea level.
+        /// Compatibility alias: canonical sea-relative height is already signed meters (sea=0m).
         /// </summary>
         public static float SeaRelativeToSignedMeters(float seaRelativeHeight, MapInfo info)
         {
-            if (float.IsNaN(seaRelativeHeight) || float.IsInfinity(seaRelativeHeight))
-                throw new InvalidOperationException($"SeaRelativeToSignedMeters input is not finite: {seaRelativeHeight}");
-
-            float seaLevel = ResolveSeaLevel(info);
-            float landRange = Math.Max(1f, LegacyMaxHeight - seaLevel);
-            float waterRange = Math.Max(1f, seaLevel - LegacyMinHeight);
-
-            if (seaRelativeHeight >= 0f)
-            {
-                float normalized = seaRelativeHeight / landRange;
-                return normalized * ResolveMaxElevationMeters(info);
-            }
-
-            float normalizedDepth = seaRelativeHeight / waterRange; // negative
-            return normalizedDepth * ResolveMaxSeaDepthMeters(info);
+            AssertSignedMetersInRange(seaRelativeHeight, info, "SeaRelativeToSignedMeters input");
+            return seaRelativeHeight;
         }
 
         /// <summary>
-        /// Convert signed meters relative to sea level back to sea-relative legacy units.
+        /// Canonical signed meters already use sea-relative semantics.
         /// </summary>
         public static float SignedMetersToSeaRelative(float signedMeters, MapInfo info)
         {
-            if (float.IsNaN(signedMeters) || float.IsInfinity(signedMeters))
-                throw new InvalidOperationException($"SignedMetersToSeaRelative input is not finite: {signedMeters}");
-
-            float seaLevel = ResolveSeaLevel(info);
-            float landRange = Math.Max(1f, LegacyMaxHeight - seaLevel);
-            float waterRange = Math.Max(1f, seaLevel - LegacyMinHeight);
-
-            if (signedMeters >= 0f)
-            {
-                float normalized = signedMeters / ResolveMaxElevationMeters(info);
-                return normalized * landRange;
-            }
-
-            float normalizedDepth = signedMeters / ResolveMaxSeaDepthMeters(info); // negative
-            return normalizedDepth * waterRange;
-        }
-
-        public static void AssertAbsoluteHeightInRange(float absoluteHeight, string context)
-        {
-            if (float.IsNaN(absoluteHeight) || float.IsInfinity(absoluteHeight))
-            {
-                throw new InvalidOperationException(
-                    $"Absolute elevation is not finite ({absoluteHeight}) for {context}.");
-            }
-
-            if (absoluteHeight < LegacyMinHeight || absoluteHeight > LegacyMaxHeight)
-            {
-                throw new InvalidOperationException(
-                    $"Absolute elevation {absoluteHeight} is out of range [{LegacyMinHeight}, {LegacyMaxHeight}] for {context}.");
-            }
+            AssertSignedMetersInRange(signedMeters, info, "SignedMetersToSeaRelative input");
+            return signedMeters;
         }
 
         public static float ResolveMaxElevationMeters(MapInfo info)
