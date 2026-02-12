@@ -53,7 +53,6 @@ namespace EconSim.Tests
 
     internal static class TextureTestHarness
     {
-        private const string BaselineFileRelativePath = "Tests/EditMode/MapGenRegressionBaselines.json";
         private const string TextureHashBaselineFileRelativePath = "Tests/EditMode/MapTextureRegressionHashBaselines.json";
         private const string UpdateBaselineEnvVar = "M3_UPDATE_TEXTURE_BASELINES";
         private static readonly object BaselineFileLock = new object();
@@ -328,18 +327,24 @@ namespace EconSim.Tests
 
         private static IEnumerable<TextureBaselineCase> LoadBaselineCases()
         {
-            string fullPath = Path.Combine(Application.dataPath, BaselineFileRelativePath);
-            Assert.That(File.Exists(fullPath), Is.True, $"Missing baseline file at: {fullPath}");
+            string fullPath = Path.Combine(Application.dataPath, TextureHashBaselineFileRelativePath);
+            Assert.That(File.Exists(fullPath), Is.True, $"Missing texture hash baseline file at: {fullPath}");
 
             string json = File.ReadAllText(fullPath);
-            var root = JsonUtility.FromJson<TextureBaselineFile>(json);
-            Assert.That(root, Is.Not.Null, "Failed to parse baseline JSON.");
-            Assert.That(root.cases, Is.Not.Null, "Baseline JSON must contain 'cases'.");
-            Assert.That(root.cases.Length, Is.GreaterThan(0), "Baseline JSON has no cases.");
+            var root = JsonUtility.FromJson<TextureHashBaselineFile>(json);
+            Assert.That(root, Is.Not.Null, "Failed to parse texture hash baseline JSON.");
+            Assert.That(root.cases, Is.Not.Null, "Texture hash baseline JSON must contain 'cases'.");
+            Assert.That(root.cases.Length, Is.GreaterThan(0), "Texture hash baseline JSON has no cases.");
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
 
             for (int i = 0; i < root.cases.Length; i++)
             {
-                TextureBaselineJsonCase entry = root.cases[i];
+                TextureHashBaselineJsonCase entry = root.cases[i];
+                string key = $"{entry.seed}|{entry.template}|{entry.cellCount}";
+                if (!seen.Add(key))
+                    continue;
+
                 yield return new TextureBaselineCase(
                     entry.seed,
                     (HeightmapTemplateType)Enum.Parse(typeof(HeightmapTemplateType), entry.template),
@@ -347,20 +352,6 @@ namespace EconSim.Tests
                 );
             }
         }
-    }
-
-    [Serializable]
-    internal class TextureBaselineFile
-    {
-        public TextureBaselineJsonCase[] cases;
-    }
-
-    [Serializable]
-    internal class TextureBaselineJsonCase
-    {
-        public int seed;
-        public string template;
-        public int cellCount;
     }
 
     [Serializable]
