@@ -277,6 +277,7 @@ namespace MapGen.Core
                     biome.DebugLithosolCandidate[i] = false;
                     biome.DebugWetlandCandidate[i] = false;
                     biome.Biome[i] = biome.IsLakeCell[i] ? BiomeId.Lake : BiomeId.CoastalMarsh;
+                    biome.Soil[i] = SoilType.Permafrost;
                     biome.Habitability[i] = 0f;
                     biome.MovementCost[i] = 100f;
                     biome.Suitability[i] = 0f;
@@ -355,6 +356,7 @@ namespace MapGen.Core
                 biome.DebugWetlandCandidate[i] = wetlandCandidate;
 
                 biome.Biome[i] = id;
+                biome.Soil[i] = soil;
                 float habitability = BaseHabitability(id);
                 float movement = BaseMovementCost(id);
 

@@ -15,6 +15,7 @@ namespace MapGen.Core
         public WaterFeature[] Features;
 
         public BiomeId[] Biome;
+        public SoilType[] Soil;
         public float[] Habitability;
         public float[] MovementCost;
         public float[] Suitability;
@@ -39,6 +40,7 @@ namespace MapGen.Core
             Features = System.Array.Empty<WaterFeature>();
 
             Biome = new BiomeId[n];
+            Soil = new SoilType[n];
             Habitability = new float[n];
             MovementCost = new float[n];
             Suitability = new float[n];
