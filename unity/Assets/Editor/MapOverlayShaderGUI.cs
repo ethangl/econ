@@ -18,6 +18,12 @@ namespace EconSim.Editor
             set => EditorPrefs.SetBool("MapOverlay_WaterRendering", value);
         }
 
+        private static bool reliefRenderingFoldout
+        {
+            get => EditorPrefs.GetBool("MapOverlay_ReliefRendering", true);
+            set => EditorPrefs.SetBool("MapOverlay_ReliefRendering", value);
+        }
+
         private static bool marketRenderingFoldout
         {
             get => EditorPrefs.GetBool("MapOverlay_MarketRendering", true);
@@ -74,11 +80,20 @@ namespace EconSim.Editor
             ("_ShimmerIntensity", "Shimmer Intensity"),
         };
 
+        private static readonly (string name, string label)[] ReliefRenderingProps = new[]
+        {
+            ("_ReliefNormalStrength", "Normal Strength"),
+            ("_ReliefShadeStrength", "Shade Strength"),
+            ("_ReliefAmbient", "Ambient"),
+            ("_ReliefLightDir", "Light Direction"),
+        };
+
         private static readonly (string name, string label)[] TextureMapsProps = new[]
         {
             ("_PoliticalIdsTex", "Political IDs"),
             ("_GeographyBaseTex", "Geography Base"),
             ("_HeightmapTex", "Heightmap"),
+            ("_ReliefNormalTex", "Relief Normal"),
             ("_RiverMaskTex", "River Mask"),
             ("_ModeColorResolve", "Mode Color Resolve"),
             ("_CellDataTex", "Cell Data (Legacy)"),
@@ -120,6 +135,8 @@ namespace EconSim.Editor
             foreach (var (name, _) in RealmRenderingProps)
                 if (name == propName) return true;
             foreach (var (name, _) in WaterRenderingProps)
+                if (name == propName) return true;
+            foreach (var (name, _) in ReliefRenderingProps)
                 if (name == propName) return true;
             foreach (var (name, _) in MarketRenderingProps)
                 if (name == propName) return true;
@@ -198,6 +215,22 @@ namespace EconSim.Editor
             {
                 EditorGUI.indentLevel++;
                 foreach (var (name, label) in WaterRenderingProps)
+                {
+                    var prop = FindProperty(name, properties, false);
+                    if (prop != null)
+                        materialEditor.ShaderProperty(prop, label);
+                }
+                EditorGUI.indentLevel--;
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+
+            // Relief Rendering group
+            EditorGUILayout.Space();
+            reliefRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(reliefRenderingFoldout, "Relief Rendering");
+            if (reliefRenderingFoldout)
+            {
+                EditorGUI.indentLevel++;
+                foreach (var (name, label) in ReliefRenderingProps)
                 {
                     var prop = FindProperty(name, properties, false);
                     if (prop != null)

@@ -25,6 +25,7 @@ namespace EconSim.Tests
             "_GeographyBaseTex",
             "_ModeColorResolve",
             "_HeightmapTex",
+            "_ReliefNormalTex",
             "_RiverMaskTex",
             "_RealmBorderDistTex",
             "_ProvinceBorderDistTex",

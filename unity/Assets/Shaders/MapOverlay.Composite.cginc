@@ -110,6 +110,22 @@ void ComputeWater(bool isCellWater, float height, float riverMask, float2 worldU
     }
 }
 
+float3 ApplyReliefShading(float3 baseColor, float2 uv, bool isWater)
+{
+    if (isWater || _ReliefShadeStrength <= 0.001)
+        return baseColor;
+
+    float3 encodedNormal = tex2D(_ReliefNormalTex, uv).rgb;
+    float3 reliefNormal = normalize(encodedNormal * 2.0 - 1.0);
+    reliefNormal = normalize(lerp(float3(0.0, 1.0, 0.0), reliefNormal, saturate(_ReliefNormalStrength)));
+
+    float3 lightDir = normalize(_ReliefLightDir.xyz);
+    float ndotl = saturate(dot(reliefNormal, lightDir));
+    float shade = lerp(_ReliefAmbient, 1.0, ndotl);
+    float shadeMix = lerp(1.0, shade, _ReliefShadeStrength);
+    return baseColor * shadeMix;
+}
+
 float3 ComputeChannelInspector(float2 uv, float4 politicalIds, float4 geographyBase)
 {
     float sampleValue = 0.0;
@@ -133,6 +149,10 @@ float3 ComputeChannelInspector(float2 uv, float4 politicalIds, float4 geographyB
     {
         float3 mode = tex2D(_ModeColorResolve, uv).rgb;
         sampleValue = dot(mode, float3(0.299, 0.587, 0.114));
+    }
+    else if (_DebugView == 16)
+    {
+        return tex2D(_ReliefNormalTex, uv).rgb;
     }
 
     return float3(sampleValue, sampleValue, sampleValue);
