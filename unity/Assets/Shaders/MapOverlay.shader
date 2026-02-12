@@ -5,12 +5,12 @@ Shader "EconSim/MapOverlay"
         // Heightmap for terrain (Phase 6)
         _HeightmapTex ("Heightmap", 2D) = "gray" {}
         _ReliefNormalTex ("Relief Normal", 2D) = "bump" {}
-        _ReliefNormalStrength ("Relief Normal Strength", Range(0, 1)) = 1
-        _ReliefShadeStrength ("Relief Shade Strength", Range(0, 1)) = 0.35
+        _ReliefNormalStrength ("Relief Normal Strength", Range(0, 1)) = 0.75
+        _ReliefShadeStrength ("Relief Shade Strength", Range(0, 1)) = 0.28
         _ReliefAmbient ("Relief Ambient", Range(0, 1)) = 0.65
         _ReliefLightDir ("Relief Light Direction", Vector) = (0.4, 0.85, 0.3, 0)
-        _HeightScale ("Height Scale", Float) = 3
-        _SeaLevel ("Sea Level", Float) = 0.2
+        _HeightScale ("Height Scale", Float) = 0.2
+        _SeaLevel ("Sea Level (Normalized)", Float) = 0.2
         _UseHeightDisplacement ("Use Height Displacement", Int) = 0
 
         // River mask (Phase 8) - knocks out rivers from land, showing water underneath

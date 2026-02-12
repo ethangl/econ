@@ -133,19 +133,14 @@ public class MapOverlayManager
         private byte[] riverMaskPixels;                // Cached to drive relief synthesis near rivers.
 
         // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
-        private const int ReliefBlurRadius = 3;
+        private const int ReliefBlurRadius = 4;
         private const float ReliefBlurCrossClassWeight = 0.25f;
-        private const float ReliefMacroAmplitude = 0.019f;
-        private const float ReliefMacroFrequency = 2.2f;
-        private const float ReliefMicroAmplitude = 0.010f;
-        private const float ReliefMicroFrequency = 10f;
-        private const int ReliefMicroOctaves = 2;
-        private const float ReliefNoiseRiverFalloffTexels = 8f;
         private const float ReliefErosionRadiusTexels = 7f;
         private const float ReliefErosionStrength = 0.012f;
         private const float ReliefLandMinAboveSea = 0.001f;
-        private const float ReliefNormalDerivativeScale = 0.35f;
-        private static readonly float[] ReliefGaussianKernel = { 1f, 6f, 15f, 20f, 15f, 6f, 1f };
+        private const int ReliefNormalPreBlurPasses = 1;
+        private const float ReliefNormalDerivativeScale = 0.12f;
+        private static readonly float[] ReliefGaussianKernel = { 1f, 8f, 28f, 56f, 70f, 56f, 28f, 8f, 1f };
 
         // Road state (cached for regeneration)
         private RoadState roadState;
@@ -454,7 +449,6 @@ public class MapOverlayManager
             float seaLevel01 = Elevation.NormalizeAbsolute01(Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
             float[] riverDistance = BuildRiverDistanceField(isLand);
             float[] heightData = ApplyLandAwareGaussianBlur(baseHeightData, isLand);
-            ApplyDeterministicReliefNoise(heightData, isLand, riverDistance);
             ApplyRiverBankErosion(heightData, isLand, riverDistance, seaLevel01);
 
             Parallel.For(0, heightData.Length, i =>
@@ -487,16 +481,16 @@ public class MapOverlayManager
             int size = gridWidth * gridHeight;
             var normalPixels = new Color[size];
 
-            float scaleX = gridWidth > 1 ? (gridWidth - 1) * 0.5f * ReliefNormalDerivativeScale : 1f;
-            float scaleY = gridHeight > 1 ? (gridHeight - 1) * 0.5f * ReliefNormalDerivativeScale : 1f;
+            float[] normalSource = (float[])heightData.Clone();
+            for (int i = 0; i < ReliefNormalPreBlurPasses; i++)
+                normalSource = ApplyLandAwareGaussianBlur(normalSource, isLand);
+
+            float scaleX = gridWidth > 1 ? (gridWidth - 1) * ReliefNormalDerivativeScale : 1f;
+            float scaleY = gridHeight > 1 ? (gridHeight - 1) * ReliefNormalDerivativeScale : 1f;
 
             Parallel.For(0, gridHeight, y =>
             {
                 int row = y * gridWidth;
-                int yMin = y > 0 ? y - 1 : y;
-                int yMax = y < gridHeight - 1 ? y + 1 : y;
-                int rowMin = yMin * gridWidth;
-                int rowMax = yMax * gridWidth;
 
                 for (int x = 0; x < gridWidth; x++)
                 {
@@ -507,16 +501,22 @@ public class MapOverlayManager
                         continue;
                     }
 
-                    int xMin = x > 0 ? x - 1 : x;
-                    int xMax = x < gridWidth - 1 ? x + 1 : x;
+                    float center = normalSource[idx];
 
-                    float hL = heightData[row + xMin];
-                    float hR = heightData[row + xMax];
-                    float hD = heightData[rowMin + x];
-                    float hU = heightData[rowMax + x];
+                    float h00 = SampleNormalHeight(normalSource, isLand, x - 1, y - 1, center);
+                    float h10 = SampleNormalHeight(normalSource, isLand, x, y - 1, center);
+                    float h20 = SampleNormalHeight(normalSource, isLand, x + 1, y - 1, center);
+                    float h01 = SampleNormalHeight(normalSource, isLand, x - 1, y, center);
+                    float h21 = SampleNormalHeight(normalSource, isLand, x + 1, y, center);
+                    float h02 = SampleNormalHeight(normalSource, isLand, x - 1, y + 1, center);
+                    float h12 = SampleNormalHeight(normalSource, isLand, x, y + 1, center);
+                    float h22 = SampleNormalHeight(normalSource, isLand, x + 1, y + 1, center);
 
-                    float ddx = (hR - hL) * scaleX;
-                    float ddy = (hU - hD) * scaleY;
+                    // Sobel gradient gives smoother normals than raw central differences.
+                    float gx = (h20 + 2f * h21 + h22) - (h00 + 2f * h01 + h02);
+                    float gy = (h02 + 2f * h12 + h22) - (h00 + 2f * h10 + h20);
+                    float ddx = gx * 0.125f * scaleX;
+                    float ddy = gy * 0.125f * scaleY;
 
                     Vector3 normal = new Vector3(-ddx, 1f, -ddy).normalized;
                     normalPixels[idx] = new Color(
@@ -536,6 +536,14 @@ public class MapOverlayManager
 
             TextureDebugger.SaveTexture(reliefNormalTexture, "relief_normal");
             Debug.Log($"MapOverlayManager: Generated relief normal map {gridWidth}x{gridHeight}");
+        }
+
+        private float SampleNormalHeight(float[] source, bool[] isLand, int x, int y, float fallback)
+        {
+            int cx = Mathf.Clamp(x, 0, gridWidth - 1);
+            int cy = Mathf.Clamp(y, 0, gridHeight - 1);
+            int idx = cy * gridWidth + cx;
+            return isLand[idx] ? source[idx] : fallback;
         }
 
         private float[] ApplyLandAwareGaussianBlur(float[] source, bool[] isLand)
@@ -609,53 +617,6 @@ public class MapOverlayManager
             return output;
         }
 
-        private void ApplyDeterministicReliefNoise(float[] heightData, bool[] isLand, float[] riverDistance)
-        {
-            uint reliefSeed = ComputeReliefSeed();
-            float[] source = (float[])heightData.Clone();
-            bool hasRiverDistance = riverDistance != null && riverDistance.Length == source.Length;
-
-            Parallel.For(0, gridHeight, y =>
-            {
-                int row = y * gridWidth;
-                for (int x = 0; x < gridWidth; x++)
-                {
-                    int idx = row + x;
-                    if (!isLand[idx])
-                        continue;
-
-                    float u = gridWidth > 1 ? (float)x / (gridWidth - 1) : 0f;
-                    float v = gridHeight > 1 ? (float)y / (gridHeight - 1) : 0f;
-
-                    float macro = ValueNoise2D(u * ReliefMacroFrequency, v * ReliefMacroFrequency, reliefSeed);
-                    float micro = FbmNoise2D(
-                        u * ReliefMicroFrequency,
-                        v * ReliefMicroFrequency,
-                        ReliefMicroOctaves,
-                        reliefSeed ^ 0x9E3779B9u);
-
-                    float noise = ((macro - 0.5f) * 2f) * ReliefMacroAmplitude +
-                                  ((micro - 0.5f) * 2f) * ReliefMicroAmplitude;
-
-                    int xMin = x > 0 ? x - 1 : x;
-                    int xMax = x < gridWidth - 1 ? x + 1 : x;
-                    int yMin = y > 0 ? y - 1 : y;
-                    int yMax = y < gridHeight - 1 ? y + 1 : y;
-                    float dx = Mathf.Abs(source[row + xMax] - source[row + xMin]);
-                    float dy = Mathf.Abs(source[yMax * gridWidth + x] - source[yMin * gridWidth + x]);
-                    float slope = dx + dy;
-                    float slopeAttenuation = 1f - SmoothStep(0.015f, 0.12f, slope);
-
-                    float riverAttenuation = 1f;
-                    if (hasRiverDistance)
-                        riverAttenuation = SmoothStep(0f, ReliefNoiseRiverFalloffTexels, riverDistance[idx]);
-
-                    float attenuation = slopeAttenuation * riverAttenuation;
-                    heightData[idx] = Mathf.Clamp01(source[idx] + noise * attenuation);
-                }
-            });
-        }
-
         private void ApplyRiverBankErosion(float[] heightData, bool[] isLand, float[] riverDistance, float seaLevel01)
         {
             if (riverDistance == null || riverDistance.Length != heightData.Length)
@@ -709,85 +670,6 @@ public class MapOverlayManager
 
             RunChamferTransform(dist, isLand);
             return dist;
-        }
-
-        private uint ComputeReliefSeed()
-        {
-            unchecked
-            {
-                uint seed = 2166136261u;
-                string seedText = mapData?.Info?.Seed ?? string.Empty;
-                for (int i = 0; i < seedText.Length; i++)
-                {
-                    seed ^= seedText[i];
-                    seed *= 16777619u;
-                }
-
-                seed ^= (uint)gridWidth * 73856093u;
-                seed ^= (uint)gridHeight * 19349663u;
-                seed ^= (uint)resolutionMultiplier * 83492791u;
-                return seed;
-            }
-        }
-
-        private static float ValueNoise2D(float x, float y, uint seed)
-        {
-            int ix = Mathf.FloorToInt(x);
-            int iy = Mathf.FloorToInt(y);
-            float fx = x - ix;
-            float fy = y - iy;
-
-            float v00 = Hash01(ix, iy, seed);
-            float v10 = Hash01(ix + 1, iy, seed);
-            float v01 = Hash01(ix, iy + 1, seed);
-            float v11 = Hash01(ix + 1, iy + 1, seed);
-
-            float sx = SmoothStep(0f, 1f, fx);
-            float sy = SmoothStep(0f, 1f, fy);
-
-            float nx0 = Mathf.Lerp(v00, v10, sx);
-            float nx1 = Mathf.Lerp(v01, v11, sx);
-            return Mathf.Lerp(nx0, nx1, sy);
-        }
-
-        private static float FbmNoise2D(float x, float y, int octaves, uint seed)
-        {
-            float sum = 0f;
-            float amplitude = 0.5f;
-            float frequency = 1f;
-            float amplitudeSum = 0f;
-
-            for (int i = 0; i < octaves; i++)
-            {
-                sum += ValueNoise2D(x * frequency, y * frequency, seed + (uint)i * 0x9E3779B9u) * amplitude;
-                amplitudeSum += amplitude;
-                frequency *= 2f;
-                amplitude *= 0.5f;
-            }
-
-            return amplitudeSum > 0f ? sum / amplitudeSum : 0.5f;
-        }
-
-        private static float Hash01(int x, int y, uint seed)
-        {
-            unchecked
-            {
-                uint h = (uint)x * 0x9E3779B1u;
-                h ^= (uint)y * 0x85EBCA77u;
-                h ^= seed;
-                h ^= h >> 16;
-                h *= 0x7FEB352Du;
-                h ^= h >> 15;
-                h *= 0x846CA68Bu;
-                h ^= h >> 16;
-                return (h & 0x00FFFFFFu) / 16777215f;
-            }
-        }
-
-        private static float SmoothStep(float edge0, float edge1, float x)
-        {
-            float t = Mathf.Clamp01((x - edge0) / Mathf.Max(edge1 - edge0, 1e-6f));
-            return t * t * (3f - 2f * t);
         }
 
         /// <summary>

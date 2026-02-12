@@ -128,6 +128,9 @@ namespace EconSim.Editor
             "_HoverIntensity",
             "_MapMode",
             "_UseModeColorResolve",
+            "_UseHeightDisplacement",
+            "_HeightScale",
+            "_SeaLevel",
         };
 
         private bool IsGrouped(string propName)
