@@ -35,7 +35,7 @@ namespace EconSim.Tests
                 };
 
                 MapGenResult result = MapGenPipeline.Generate(config);
-                MapData runtimeMap = MapGenAdapter.Convert(result);
+                MapData runtimeMap = WorldGenImporter.Convert(result);
 
                 runtimeMap.AssertElevationInvariants();
                 runtimeMap.AssertWorldInvariants();

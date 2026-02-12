@@ -61,7 +61,7 @@ Notes:
 
 ## Enforcement Gates
 
-- `MapGenAdapter.Convert` now enforces canonical elevation invariants:
+- `WorldGenImporter.Convert` now enforces canonical elevation invariants:
   - all generated cells must set `HasSeaRelativeElevation = true`
   - absolute elevation must remain in `0..100`
 - `MapData.AssertElevationInvariants()` is executed after map conversion.

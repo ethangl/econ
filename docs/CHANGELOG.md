@@ -83,10 +83,10 @@ Replaced Azgaar JSON import with a fully custom, engine-agnostic map generation 
   - Province subdivision (~40k pop target) within state boundaries
   - County grouping: cities (pop ≥ 20k) as single-cell; flood-fill rural clusters (~5k pop, max 64 cells)
 
-- **MapGenAdapter** (`src/EconSim.Core/Import/MapGenAdapter.cs`)
-  - Converts `MapGenResult` → `MapData` for the EconSim engine
-  - Computes coast distance (BFS), water features (flood-fill), river cell paths
-  - Builds full political hierarchy: realms, provinces, counties with burgs
+- **WorldGenImporter** (`src/EconSim.Core/Import/WorldGenImporter.cs`)
+  - Converts `MapGenResult` + `PopGenResult` → `MapData` for the EconSim engine
+  - Imports geographic outputs (cells, biomes, rivers, world metadata) from MapGen
+  - Imports human/political outputs (burgs, counties, provinces, realms) from PopGen
 
 - **Removed legacy import pipeline**
   - Deleted `AzgaarParser`, `AzgaarData`, `MapConverter`, `CountyGrouper`, `MapDataCache`

@@ -807,7 +807,7 @@ econ/
 │       │   ├── MapData.cs         # Cell, Province, Realm, County, World metadata
 │       │   └── WorldScale.cs      # Shared world-scale and transport distance helpers
 │       ├── Import/
-│       │   └── MapGenAdapter.cs   # MapGen.Core result → MapData conversion
+│       │   └── WorldGenImporter.cs # MapGen + PopGen result → MapData conversion
 │       ├── Economy/
 │       │   ├── GoodDef.cs         # Good definitions & registry
 │       │   ├── FacilityDef.cs     # Facility definitions & registry
