@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
@@ -13,10 +15,17 @@ namespace EconSim.Core.Simulation
     /// </summary>
     public class SimulationRunner : ISimulation
     {
+        private const int BootstrapCacheVersion = 1;
+        private const string BootstrapCacheFileName = "simulation_bootstrap.bin";
+
         private readonly MapData _mapData;
         private readonly SimulationState _state;
         private readonly List<ITickSystem> _systems;
         private readonly float _marketZoneMaxTransportCost;
+        private readonly string _bootstrapCachePath;
+        private readonly int _cacheRootSeed;
+        private readonly int _cacheMapGenSeed;
+        private readonly int _cacheEconomySeed;
         private float _accumulator;
 
         public float TimeScale
@@ -32,21 +41,63 @@ namespace EconSim.Core.Simulation
         }
 
         public SimulationRunner(MapData mapData)
-            : this(mapData, null)
+            : this(mapData, null, null, false, mapData?.Info?.RootSeed ?? 0, mapData?.Info?.MapGenSeed ?? 0)
         {
         }
 
         public SimulationRunner(MapData mapData, WorldGenerationContext generationContext)
-            : this(mapData, generationContext.EconomySeed)
+            : this(mapData, generationContext.EconomySeed, null, false, generationContext.RootSeed, generationContext.MapGenSeed)
+        {
+        }
+
+        public SimulationRunner(
+            MapData mapData,
+            WorldGenerationContext generationContext,
+            string bootstrapCacheDirectory,
+            bool preferBootstrapCache = false)
+            : this(
+                mapData,
+                generationContext.EconomySeed,
+                bootstrapCacheDirectory,
+                preferBootstrapCache,
+                generationContext.RootSeed,
+                generationContext.MapGenSeed)
         {
         }
 
         public SimulationRunner(MapData mapData, int? economySeed)
+            : this(mapData, economySeed, null, false, mapData?.Info?.RootSeed ?? 0, mapData?.Info?.MapGenSeed ?? 0)
+        {
+        }
+
+        public SimulationRunner(
+            MapData mapData,
+            int? economySeed,
+            string bootstrapCacheDirectory,
+            bool preferBootstrapCache = false)
+            : this(mapData, economySeed, bootstrapCacheDirectory, preferBootstrapCache, mapData?.Info?.RootSeed ?? 0, mapData?.Info?.MapGenSeed ?? 0)
+        {
+        }
+
+        private SimulationRunner(
+            MapData mapData,
+            int? economySeed,
+            string bootstrapCacheDirectory,
+            bool preferBootstrapCache,
+            int rootSeed,
+            int mapGenSeed)
         {
             _mapData = mapData;
             _state = new SimulationState();
             _systems = new List<ITickSystem>();
             _accumulator = 0f;
+
+            _bootstrapCachePath = string.IsNullOrWhiteSpace(bootstrapCacheDirectory)
+                ? null
+                : Path.Combine(bootstrapCacheDirectory, BootstrapCacheFileName);
+            _cacheRootSeed = rootSeed > 0 ? rootSeed : mapData?.Info?.RootSeed ?? 0;
+            _cacheMapGenSeed = mapGenSeed > 0 ? mapGenSeed : mapData?.Info?.MapGenSeed ?? 0;
+            _cacheEconomySeed = ResolveEconomySeedForCache(mapData, economySeed);
 
             // Initialize economy
             Profiler.Begin("EconomyInitializer");
@@ -63,21 +114,47 @@ namespace EconSim.Core.Simulation
             _marketZoneMaxTransportCost = MarketPlacer.ResolveMarketZoneMaxTransportCost(_mapData);
             SimLog.Log("Market", $"Market zone transport budget: {_marketZoneMaxTransportCost:F1}");
 
-            // Place markets (requires transport for accessibility scoring)
-            Profiler.Begin("InitializeMarkets");
-            InitializeMarkets();
-            Profiler.End();
-
-            if (SimulationConfig.Roads.BuildStaticNetworkAtInit)
+            bool loadedBootstrapCache = false;
+            if (preferBootstrapCache && !string.IsNullOrWhiteSpace(_bootstrapCachePath))
             {
-                Profiler.Begin("StaticTransportBackbone");
-                var stats = StaticTransportBackboneBuilder.Build(_state, _mapData);
-                RecomputeMarketZones();
+                Profiler.Begin("LoadSimulationBootstrapCache");
+                loadedBootstrapCache = TryLoadSimulationBootstrapCache();
                 Profiler.End();
-                SimLog.Log("Roads",
-                    $"Static backbone: majors={stats.MajorCountyCount}/{stats.CandidateCountyCount}, " +
-                    $"pairs={stats.RoutedPairCount}/{stats.RoutePairCount}, missing={stats.MissingPairCount}, " +
-                    $"edges={stats.EdgeCount}, thresholds(path={stats.PathThreshold:F2}, road={stats.RoadThreshold:F2})");
+            }
+
+            if (!loadedBootstrapCache)
+            {
+                // Place markets (requires transport for accessibility scoring)
+                Profiler.Begin("InitializeMarkets");
+                InitializeMarkets();
+                Profiler.End();
+
+                if (SimulationConfig.Roads.BuildStaticNetworkAtInit)
+                {
+                    Profiler.Begin("StaticTransportBackbone");
+                    var stats = StaticTransportBackboneBuilder.Build(_state, _mapData);
+                    RecomputeMarketZones();
+                    Profiler.End();
+                    SimLog.Log("Roads",
+                        $"Static backbone: majors={stats.MajorCountyCount}/{stats.CandidateCountyCount}, " +
+                        $"pairs={stats.RoutedPairCount}/{stats.RoutePairCount}, missing={stats.MissingPairCount}, " +
+                        $"edges={stats.EdgeCount}, thresholds(path={stats.PathThreshold:F2}, road={stats.RoadThreshold:F2})");
+                }
+
+                TrySaveSimulationBootstrapCache(SimulationConfig.Roads.BuildStaticNetworkAtInit);
+            }
+            else
+            {
+                SimLog.Log("Bootstrap", $"Loaded simulation bootstrap cache: {_bootstrapCachePath}");
+                LogMarketAssignmentSummary();
+
+                if (SimulationConfig.Roads.BuildStaticNetworkAtInit)
+                {
+                    SimLog.Log(
+                        "Roads",
+                        $"Loaded static backbone cache: edges={_state.Economy.Roads.EdgeTraffic.Count}, " +
+                        $"thresholds(path={_state.Economy.Roads.PathThreshold:F2}, road={_state.Economy.Roads.RoadThreshold:F2})");
+                }
             }
 
             // Register core systems (order matters!)
@@ -131,6 +208,243 @@ namespace EconSim.Core.Simulation
         public MapData GetMapData() => _mapData;
         public SimulationState GetState() => _state;
 
+        private bool TryLoadSimulationBootstrapCache()
+        {
+            if (string.IsNullOrWhiteSpace(_bootstrapCachePath) || !File.Exists(_bootstrapCachePath))
+                return false;
+
+            try
+            {
+                using var stream = File.Open(_bootstrapCachePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using var reader = new BinaryReader(stream);
+
+                int version = reader.ReadInt32();
+                if (version != BootstrapCacheVersion)
+                    return false;
+
+                int rootSeed = reader.ReadInt32();
+                int mapGenSeed = reader.ReadInt32();
+                int economySeed = reader.ReadInt32();
+                int countyCount = reader.ReadInt32();
+                int cellCount = reader.ReadInt32();
+                bool staticNetworkBuilt = reader.ReadBoolean();
+
+                if (!IsSimulationBootstrapCacheCompatible(rootSeed, mapGenSeed, economySeed, countyCount, cellCount, staticNetworkBuilt))
+                    return false;
+
+                _state.Economy.Markets.Clear();
+
+                int marketCount = reader.ReadInt32();
+                for (int i = 0; i < marketCount; i++)
+                {
+                    int marketId = reader.ReadInt32();
+                    int locationCellId = reader.ReadInt32();
+                    string name = reader.ReadString();
+                    int typeRaw = reader.ReadInt32();
+                    float suitabilityScore = reader.ReadSingle();
+
+                    if (marketId < 0)
+                        continue;
+
+                    MarketType type = typeRaw == (int)MarketType.Black
+                        ? MarketType.Black
+                        : MarketType.Legitimate;
+
+                    var market = new Market
+                    {
+                        Id = marketId,
+                        LocationCellId = locationCellId,
+                        Name = string.IsNullOrWhiteSpace(name) ? $"Market {marketId}" : name,
+                        Type = type,
+                        SuitabilityScore = suitabilityScore
+                    };
+
+                    InitializeMarketGoods(market);
+                    _state.Economy.Markets[market.Id] = market;
+                }
+
+                if (!_state.Economy.Markets.ContainsKey(EconomyState.BlackMarketId))
+                {
+                    InitializeBlackMarket(logInitialization: false);
+                }
+
+                _state.Economy.CountyToMarket.Clear();
+
+                int countyToMarketCount = reader.ReadInt32();
+                for (int i = 0; i < countyToMarketCount; i++)
+                {
+                    int countyId = reader.ReadInt32();
+                    int marketId = reader.ReadInt32();
+
+                    if (countyId <= 0 || marketId <= 0)
+                        continue;
+
+                    if (_state.Economy.Counties.ContainsKey(countyId) && _state.Economy.Markets.ContainsKey(marketId))
+                    {
+                        _state.Economy.CountyToMarket[countyId] = marketId;
+                    }
+                }
+                _state.Economy.RebuildCellToMarketFromCountyLookup();
+
+                float pathThreshold = reader.ReadSingle();
+                float roadThreshold = reader.ReadSingle();
+
+                int roadEdgeCount = reader.ReadInt32();
+                var edgeTraffic = new Dictionary<(int, int), float>(Math.Max(roadEdgeCount, 0));
+                for (int i = 0; i < roadEdgeCount; i++)
+                {
+                    int cellA = reader.ReadInt32();
+                    int cellB = reader.ReadInt32();
+                    float traffic = reader.ReadSingle();
+
+                    if (!SimulationConfig.Roads.BuildStaticNetworkAtInit || !staticNetworkBuilt)
+                        continue;
+
+                    if (cellA <= 0 || cellB <= 0 || cellA == cellB || traffic <= 0f)
+                        continue;
+
+                    var key = RoadState.NormalizeKey(cellA, cellB);
+                    if (edgeTraffic.TryGetValue(key, out float existing))
+                        edgeTraffic[key] = existing + traffic;
+                    else
+                        edgeTraffic[key] = traffic;
+                }
+
+                if (SimulationConfig.Roads.BuildStaticNetworkAtInit && staticNetworkBuilt)
+                {
+                    _state.Economy.Roads.ApplyStaticTraffic(edgeTraffic, pathThreshold, roadThreshold);
+                }
+                else
+                {
+                    _state.Economy.Roads.ApplyStaticTraffic(new Dictionary<(int, int), float>(), 1f, 2f);
+                }
+
+                _state.Transport.SetRoadState(_state.Economy.Roads);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                SimLog.Log("Bootstrap", $"Failed to load simulation bootstrap cache: {ex.Message}");
+                return false;
+            }
+        }
+
+        private bool IsSimulationBootstrapCacheCompatible(
+            int rootSeed,
+            int mapGenSeed,
+            int economySeed,
+            int countyCount,
+            int cellCount,
+            bool staticNetworkBuilt)
+        {
+            if (countyCount != (_mapData?.Counties?.Count ?? 0))
+                return false;
+
+            if (cellCount != (_mapData?.Cells?.Count ?? 0))
+                return false;
+
+            if (_cacheRootSeed > 0 && rootSeed > 0 && _cacheRootSeed != rootSeed)
+                return false;
+
+            if (_cacheMapGenSeed > 0 && mapGenSeed > 0 && _cacheMapGenSeed != mapGenSeed)
+                return false;
+
+            if (_cacheEconomySeed > 0 && economySeed > 0 && _cacheEconomySeed != economySeed)
+                return false;
+
+            if (SimulationConfig.Roads.BuildStaticNetworkAtInit != staticNetworkBuilt)
+                return false;
+
+            return true;
+        }
+
+        private void TrySaveSimulationBootstrapCache(bool staticNetworkBuilt)
+        {
+            if (string.IsNullOrWhiteSpace(_bootstrapCachePath))
+                return;
+
+            try
+            {
+                string directory = Path.GetDirectoryName(_bootstrapCachePath);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                using var stream = File.Open(_bootstrapCachePath, FileMode.Create, FileAccess.Write, FileShare.None);
+                using var writer = new BinaryWriter(stream);
+
+                writer.Write(BootstrapCacheVersion);
+                writer.Write(_cacheRootSeed);
+                writer.Write(_cacheMapGenSeed);
+                writer.Write(_cacheEconomySeed);
+                writer.Write(_mapData?.Counties?.Count ?? 0);
+                writer.Write(_mapData?.Cells?.Count ?? 0);
+                writer.Write(staticNetworkBuilt);
+
+                writer.Write(_state.Economy.Markets.Count);
+                foreach (var market in _state.Economy.Markets.Values)
+                {
+                    writer.Write(market.Id);
+                    writer.Write(market.LocationCellId);
+                    writer.Write(market.Name ?? string.Empty);
+                    writer.Write((int)market.Type);
+                    writer.Write(market.SuitabilityScore);
+                }
+
+                writer.Write(_state.Economy.CountyToMarket.Count);
+                foreach (var kvp in _state.Economy.CountyToMarket)
+                {
+                    writer.Write(kvp.Key);
+                    writer.Write(kvp.Value);
+                }
+
+                writer.Write(_state.Economy.Roads.PathThreshold);
+                writer.Write(_state.Economy.Roads.RoadThreshold);
+
+                if (staticNetworkBuilt)
+                {
+                    writer.Write(_state.Economy.Roads.EdgeTraffic.Count);
+                    foreach (var kvp in _state.Economy.Roads.EdgeTraffic)
+                    {
+                        writer.Write(kvp.Key.Item1);
+                        writer.Write(kvp.Key.Item2);
+                        writer.Write(kvp.Value);
+                    }
+                }
+                else
+                {
+                    writer.Write(0);
+                }
+
+                SimLog.Log("Bootstrap", $"Saved simulation bootstrap cache: {_bootstrapCachePath}");
+            }
+            catch (Exception ex)
+            {
+                SimLog.Log("Bootstrap", $"Failed to save simulation bootstrap cache: {ex.Message}");
+            }
+        }
+
+        private static int ResolveEconomySeedForCache(MapData mapData, int? explicitSeed)
+        {
+            if (explicitSeed.HasValue)
+                return explicitSeed.Value;
+
+            if (mapData?.Info != null)
+            {
+                if (mapData.Info.EconomySeed > 0)
+                    return mapData.Info.EconomySeed;
+
+                if (mapData.Info.RootSeed > 0)
+                    return WorldSeeds.FromRoot(mapData.Info.RootSeed).EconomySeed;
+
+                if (!string.IsNullOrWhiteSpace(mapData.Info.Seed) && int.TryParse(mapData.Info.Seed, out int parsed))
+                    return WorldSeeds.FromRoot(parsed).EconomySeed;
+            }
+
+            return 42;
+        }
+
         private void InitializeMarkets()
         {
             // Initialize the black market first (ID 0, no physical location)
@@ -162,18 +476,7 @@ namespace EconSim.Core.Simulation
                     SuitabilityScore = MarketPlacer.ComputeSuitability(cell, _mapData, _state.Transport, _state.Economy)
                 };
 
-                // Initialize market goods for all tradeable goods
-                foreach (var good in _state.Economy.Goods.All)
-                {
-                    market.Goods[good.Id] = new MarketGoodState
-                    {
-                        GoodId = good.Id,
-                        BasePrice = good.BasePrice,
-                        Price = good.BasePrice,
-                        Supply = 0,
-                        Demand = 0
-                    };
-                }
+                InitializeMarketGoods(market);
 
                 // Compute zone using world-scale normalized transport budget.
                 MarketPlacer.ComputeMarketZone(market, _mapData, _state.Transport, maxTransportCost: _marketZoneMaxTransportCost);
@@ -190,7 +493,11 @@ namespace EconSim.Core.Simulation
 
             // Build lookup table (assigns cells and counties to markets)
             _state.Economy.RebuildCellToMarketLookup();
+            LogMarketAssignmentSummary();
+        }
 
+        private void LogMarketAssignmentSummary()
+        {
             // Log distribution of counties per market
             var countiesPerMarket = new Dictionary<int, int>();
             foreach (var kvp in _state.Economy.CountyToMarket)
@@ -199,6 +506,7 @@ namespace EconSim.Core.Simulation
                     countiesPerMarket[kvp.Value] = 0;
                 countiesPerMarket[kvp.Value]++;
             }
+
             foreach (var market in _state.Economy.Markets.Values)
             {
                 int count = countiesPerMarket.TryGetValue(market.Id, out var c) ? c : 0;
@@ -224,7 +532,7 @@ namespace EconSim.Core.Simulation
         /// <summary>
         /// Initialize the black market - a global underground market with no physical location.
         /// </summary>
-        private void InitializeBlackMarket()
+        private void InitializeBlackMarket(bool logInitialization = true)
         {
             var blackMarket = new Market
             {
@@ -235,23 +543,33 @@ namespace EconSim.Core.Simulation
                 SuitabilityScore = 0
             };
 
-            // Initialize goods with 2x base price (black market premium)
+            InitializeMarketGoods(blackMarket);
+            _state.Economy.Markets[blackMarket.Id] = blackMarket;
+
+            if (logInitialization)
+            {
+                SimLog.Log("Market", "Initialized black market (global, 2x base prices)");
+            }
+        }
+
+        private void InitializeMarketGoods(Market market)
+        {
+            market.Goods.Clear();
             const float BlackMarketPriceMultiplier = 2.0f;
+            bool isBlackMarket = market.Type == MarketType.Black;
+
             foreach (var good in _state.Economy.Goods.All)
             {
-                float blackMarketPrice = good.BasePrice * BlackMarketPriceMultiplier;
-                blackMarket.Goods[good.Id] = new MarketGoodState
+                float price = isBlackMarket ? good.BasePrice * BlackMarketPriceMultiplier : good.BasePrice;
+                market.Goods[good.Id] = new MarketGoodState
                 {
                     GoodId = good.Id,
-                    BasePrice = blackMarketPrice,
-                    Price = blackMarketPrice,
+                    BasePrice = price,
+                    Price = price,
                     Supply = 0,
                     Demand = 0
                 };
             }
-
-            _state.Economy.Markets[blackMarket.Id] = blackMarket;
-            SimLog.Log("Market", "Initialized black market (global, 2x base prices)");
         }
     }
 }

@@ -139,7 +139,11 @@ namespace EconSim.Core
             Profiler.End();
             LogMapGenSummary(result, MapData);
 
-            InitializeWithMapData(generationContext, GetLastMapTexturesDirectory(), preferCachedOverlayTextures: false);
+            InitializeWithMapData(
+                generationContext,
+                GetLastMapTexturesDirectory(),
+                preferCachedOverlayTextures: false,
+                preferCachedSimulationBootstrap: false);
             SaveLastMapCache(MapData, config, generationContext);
 
             Profiler.End();
@@ -162,7 +166,11 @@ namespace EconSim.Core
             MapGenResult = null;
             MapData = cachedMapData;
             Debug.Log($"Loading cached map: {GetLastMapPayloadPath()}");
-            InitializeWithMapData(generationContext, GetLastMapTexturesDirectory(), preferCachedOverlayTextures: true);
+            InitializeWithMapData(
+                generationContext,
+                GetLastMapTexturesDirectory(),
+                preferCachedOverlayTextures: true,
+                preferCachedSimulationBootstrap: true);
 
             Profiler.End();
             Profiler.LogResults();
@@ -210,7 +218,8 @@ namespace EconSim.Core
         private void InitializeWithMapData(
             WorldGenerationContext generationContext,
             string overlayTextureCacheDirectory = null,
-            bool preferCachedOverlayTextures = false)
+            bool preferCachedOverlayTextures = false,
+            bool preferCachedSimulationBootstrap = false)
         {
             Debug.Log($"Map loaded: {MapData.Info.Name}");
             Debug.Log($"  Dimensions: {MapData.Info.Width}x{MapData.Info.Height}");
@@ -244,7 +253,11 @@ namespace EconSim.Core
 
             // Initialize simulation (auto-registers ProductionSystem + ConsumptionSystem)
             Profiler.Begin("Simulation Init");
-            _simulation = new SimulationRunner(MapData, generationContext);
+            _simulation = new SimulationRunner(
+                MapData,
+                generationContext,
+                GetLastMapCacheDirectory(),
+                preferCachedSimulationBootstrap);
             Profiler.End();
             _simulation.IsPaused = true;  // Start paused
 

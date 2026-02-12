@@ -272,6 +272,24 @@ namespace EconSim.Core.Economy
         }
 
         /// <summary>
+        /// Rebuild only the cell-to-market lookup from existing county assignments.
+        /// Use this when county-level market mapping is already known (e.g., loaded from cache).
+        /// </summary>
+        public void RebuildCellToMarketFromCountyLookup()
+        {
+            CellToMarket.Clear();
+            foreach (var kvp in CellToCounty)
+            {
+                int cellId = kvp.Key;
+                int countyId = kvp.Value;
+                if (CountyToMarket.TryGetValue(countyId, out int marketId) && marketId > 0)
+                {
+                    CellToMarket[cellId] = marketId;
+                }
+            }
+        }
+
+        /// <summary>
         /// Get the market that serves a given county.
         /// </summary>
         public Market GetMarketForCounty(int countyId)
