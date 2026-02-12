@@ -1,17 +1,17 @@
 #ifndef MAP_OVERLAY_COMPOSITE_INCLUDED
 #define MAP_OVERLAY_COMPOSITE_INCLUDED
 
-float3 ComputeTerrain(float2 uv, bool isCellWater, float biomeId, float height, float riverMask)
+float3 ComputeTerrain(float2 uv, bool isCellWater, float biomeId, float height)
 {
     float3 terrain;
 
     if (isCellWater)
     {
-        // Seabed: sand hue darkening with depth (50% to 5% value)
-        float depthT = saturate((_SeaLevel - height) / max(_WaterDepthRange, 0.001));
+        // Seabed: sand hue darkening with depth (sea-level-relative depth, no user range control).
+        float depthT = saturate((_SeaLevel - height) / max(_SeaLevel, 0.001));
         depthT = sqrt(depthT);  // Stretch — actual ocean depths cluster in low range
-        float3 sandHue = float3(0.76, 0.70, 0.50);
-        terrain = sandHue * lerp(0.25, 0.05, depthT);
+        float3 sandHue = float3(0.70, 0.64, 0.46);
+        terrain = sandHue * lerp(0.22, 0.04, depthT);
     }
     else
     {
@@ -20,9 +20,6 @@ float3 ComputeTerrain(float2 uv, bool isCellWater, float biomeId, float height, 
         float biomeRaw = clamp(biomeId * 65535.0, 0, 63);
         float biomeU = (biomeRaw + 0.5) / 64.0;
         terrain = tex2D(_BiomeMatrixTex, float2(biomeU, landHeight)).rgb;
-
-        // River darkening: wet soil effect under rivers
-        terrain *= lerp(1.0, 1.0 - _RiverDarken, riverMask);
     }
 
     return terrain;
@@ -78,36 +75,65 @@ float3 ComputeHeightGradient(bool isCellWater, float height, float riverMask)
     return result;
 }
 
-void ComputeWater(bool isCellWater, float height, float riverMask, float2 worldUV, out float3 waterColor, out float waterAlpha)
+float3 ComputeWater(bool isCellWater, float height, float riverMask, float2 uv, float2 worldUV, float3 underlyingColor)
 {
-    waterColor = float3(0, 0, 0);
-    waterAlpha = 0;
-
     // No water layer if not ocean and not river
     if (!isCellWater && riverMask < 0.01)
-        return;
+        return underlyingColor;
 
     if (isCellWater)
     {
-        // Ocean/lake: single color, flat opacity
-        waterColor = _WaterDeepColor.rgb;
+        // Ocean/lake volume attenuation:
+        // Transmittance decays with depth (Beer-Lambert style), so deeper water hides seabed.
+        float depth01 = saturate((_SeaLevel - height) / max(_SeaLevel, 0.001));
+        float curvedDepth = pow(depth01, max(_WaterDepthExponent, 0.001));
+        float opticalDepth = curvedDepth * max(_WaterOpticalDepth, 0.001);
+        float3 absorption = max(_WaterAbsorption.rgb, float3(0.001, 0.001, 0.001));
+        float3 transmittance = exp(-absorption * opticalDepth);
 
-        // Animated shimmer
+        float3 waterTint = lerp(_WaterShallowColor.rgb, _WaterDeepColor.rgb, depth01);
+
+        // Animated shimmer rides on in-scattering tint (more visible in shallower water).
         float time = _Time.y * _ShimmerSpeed;
         float2 uv1 = worldUV + float2(time, time * 0.7);
         float2 uv2 = worldUV * 1.3 + float2(-time * 0.8, time * 0.5);
         float shimmer = (fbm2(uv1) + fbm2(uv2)) * 0.5;
-        float brightness = 1.0 + (shimmer - 0.5) * 2.0 * _ShimmerIntensity;
-        waterColor *= brightness;
+        float shimmerStrength = _ShimmerIntensity * lerp(1.0, 0.45, depth01);
+        float brightness = 1.0 + (shimmer - 0.5) * 2.0 * shimmerStrength;
+        waterTint *= brightness;
 
-        waterAlpha = _WaterDeepAlpha;
+        // Animated seabed refraction (screen-space approximation using UV offset).
+        // Uses independent scale/speed controls so motion is decoupled from shimmer.
+        float refractionStrength = _WaterRefractionStrength * lerp(1.0, 0.35, depth01);
+        float refractionScaleRatio = _WaterRefractionScale / max(_ShimmerScale, 0.0001);
+        float2 refractionBaseUV = worldUV * refractionScaleRatio;
+        float refractionTime = _Time.y * _WaterRefractionSpeed;
+        float2 refractNoiseUV1 = refractionBaseUV + float2(refractionTime * 0.9, -refractionTime * 0.6);
+        float2 refractNoiseUV2 = refractionBaseUV * 1.7 + float2(-refractionTime * 0.7, refractionTime * 1.1);
+        float2 refractionNoise = float2(
+            fbm2(refractNoiseUV1 + float2(11.3, 3.7)),
+            fbm2(refractNoiseUV2 + float2(5.9, 17.1))
+        ) * 2.0 - 1.0;
+        float2 refractUV = saturate(uv + refractionNoise * refractionStrength);
+
+        float3 refractedUnderlying = underlyingColor;
+        float4 refractedGeo = SampleGeographyBase(refractUV);
+        bool refractedIsWater = refractedGeo.a >= 0.5;
+        if (refractedIsWater)
+        {
+            float refractedHeight = tex2D(_HeightmapTex, refractUV).r;
+            refractedUnderlying = ComputeTerrain(refractUV, true, refractedGeo.r, refractedHeight);
+        }
+
+        float3 attenuatedUnderlying = refractedUnderlying * transmittance;
+        float3 inScattering = waterTint * (1.0 - transmittance);
+        float3 volumetricColor = attenuatedUnderlying + inScattering;
+        return volumetricColor;
     }
-    else
-    {
-        // River on land: shallow water color, alpha modulated by mask
-        waterColor = _WaterShallowColor.rgb;
-        waterAlpha = _WaterShallowAlpha * riverMask;
-    }
+
+    // River on land: preserve current shallow overlay behavior.
+    float riverAlpha = _WaterShallowAlpha * riverMask;
+    return lerp(underlyingColor, _WaterShallowColor.rgb, riverAlpha);
 }
 
 float3 ApplyReliefShading(float3 baseColor, float2 uv, bool isWater)

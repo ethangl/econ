@@ -194,12 +194,12 @@ Material:
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 2.2878426e-10
+    - _HoverIntensity: 6e-45
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
-    - _MapMode: 5
+    - _MapMode: 1
     - _MarketBorderDarkening: 0.688
     - _MarketBorderWidth: 0.25
     - _Metallic: 0
@@ -221,10 +221,10 @@ Material:
     - _ReliefAmbient: 0.333
     - _ReliefNormalStrength: 0.5
     - _ReliefShadeStrength: 0.333
-    - _RiverDarken: 0.5
-    - _RiverDepth: 0.2
+    - _RiverDarken: 1
+    - _RiverDepth: 0.5
     - _RoadWidth: 0.045
-    - _SeaLevel: 0
+    - _SeaLevel: 0.2
     - _SelectedCellId: -1
     - _SelectedCountyId: -1
     - _SelectedMarketId: -1
@@ -235,24 +235,29 @@ Material:
     - _SelectionDimming: 1
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
-    - _ShimmerIntensity: 0.08
-    - _ShimmerScale: 0.02
-    - _ShimmerSpeed: 0.03
+    - _ShimmerIntensity: 0.2
+    - _ShimmerScale: 4
+    - _ShimmerSpeed: 4
     - _ShowCountyBorders: 0
     - _ShowMarketBorders: 0
     - _ShowProvinceBorders: 0
     - _ShowRealmBorders: 0
     - _SmoothnessTextureChannel: 0
-    - _SoilHeightFloor: 0.054
+    - _SoilHeightFloor: 0.062
     - _SpecularHighlights: 1
     - _SrcBlend: 1
     - _UVSec: 0
     - _UseHeightDisplacement: 1
-    - _UseModeColorResolve: 0
-    - _WaterDeepAlpha: 0.95
-    - _WaterDepthRange: 0.25
+    - _UseModeColorResolve: 1
+    - _WaterDeepAlpha: 1
+    - _WaterDepthExponent: 0.4
+    - _WaterDepthRange: 1
     - _WaterGradientRadius: 11
-    - _WaterShallowAlpha: 0.75
+    - _WaterOpticalDepth: 6
+    - _WaterRefractionScale: 0.1
+    - _WaterRefractionSpeed: 0.1
+    - _WaterRefractionStrength: 0.02
+    - _WaterShallowAlpha: 0.822
     - _ZWrite: 1
     m_Colors:
     - _CoastlineBorderColor: {r: 0.02, g: 0.049999982, b: 0.14999998, a: 1}
@@ -273,7 +278,8 @@ Material:
     - _SoilColor5: {r: 0.82, g: 0.41999996, b: 0.24999997, a: 1}
     - _SoilColor6: {r: 0.62, g: 0.58, b: 0.47999996, a: 1}
     - _SoilColor7: {r: 0.37999994, g: 0.32999998, b: 0.26999995, a: 1}
-    - _WaterDeepColor: {r: 0, g: 0.0627451, b: 0.1882353, a: 1}
-    - _WaterShallowColor: {r: 0, g: 0.09411765, b: 0.15686275, a: 1}
+    - _WaterAbsorption: {r: 2.2, g: 0.9, b: 0.34999996, a: 1}
+    - _WaterDeepColor: {r: 0, g: 0, b: 0, a: 1}
+    - _WaterShallowColor: {r: 0, g: 0.15131578, b: 0.24999997, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
