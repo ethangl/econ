@@ -2442,7 +2442,8 @@ public class MapOverlayManager
 
         /// <summary>
         /// Set the current map mode for the shader.
-        /// Mode: 1=political, 2=province, 3=county, 4=market, 5=terrain/biome, 6=soil, 7=channel-inspector
+        /// Mode: 1=political, 2=province, 3=county, 4=market, 5=terrain/biome,
+        /// 6=soil (vertex-blended), 7=channel-inspector
         /// </summary>
         public void SetMapMode(MapView.MapMode mode)
         {

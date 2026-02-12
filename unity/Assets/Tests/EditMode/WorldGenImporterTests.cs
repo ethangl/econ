@@ -99,6 +99,25 @@ namespace EconSim.Tests
             Assert.That(assignedCount, Is.EqualTo(runtime.Burgs.Count), "Every burg should be assigned to exactly one cell.");
         }
 
+        [Test]
+        public void Convert_SoilIdsRoundTripFromMapGenBiomes()
+        {
+            WorldGenerationContext context = WorldGenerationContext.FromRootSeed(24681012);
+            MapGenResult map = GenerateMap(context.MapGenSeed, cellCount: 4500);
+            MapData runtime = WorldGenImporter.Convert(map, context);
+
+            Assert.That(map.Biomes.Soil, Is.Not.Null);
+            Assert.That(map.Biomes.Soil.Length, Is.EqualTo(runtime.Cells.Count));
+
+            for (int i = 0; i < runtime.Cells.Count; i++)
+            {
+                int expectedSoilId = (int)map.Biomes.Soil[i];
+                int actualSoilId = runtime.Cells[i].SoilId;
+                Assert.That(actualSoilId, Is.EqualTo(expectedSoilId), $"SoilId mismatch at cell {i}.");
+                Assert.That(actualSoilId, Is.InRange(0, 7), $"SoilId out of range at cell {i}.");
+            }
+        }
+
         static MapGenResult GenerateMap(int seed, int cellCount)
         {
             var config = new MapGenConfig

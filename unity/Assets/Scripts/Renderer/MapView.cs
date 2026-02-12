@@ -97,19 +97,28 @@ namespace EconSim.Renderer
 
         public enum MapMode
         {
-            Political,  // Colored by realm (key: 1, cycles with Province/County)
-            Province,   // Colored by province (key: 1, cycles with Political/County)
-            County,     // Colored by county/cell (key: 1, cycles with Political/Province)
-            Terrain,    // Colored by biome with elevation tinting (key: 2)
-            Market,     // Colored by market zone (key: 3)
-            Soil,       // Terrain multiplied by soil color (key: 4)
-            ChannelInspector // Debug channel visualization (key: 0)
+            Political = 0,      // Colored by realm (key: 1, cycles with Province/County)
+            Province = 1,       // Colored by province (key: 1, cycles with Political/County)
+            County = 2,         // Colored by county/cell (key: 1, cycles with Political/Province)
+            Terrain = 3,        // Colored by biome with elevation tinting (key: 2)
+            Market = 4,         // Colored by market zone (key: 3)
+            Soil = 5,           // Soil (vertex-blended) (key: 4)
+            ChannelInspector = 6 // Debug channel visualization (key: 0)
         }
 
         public MapMode CurrentMode => currentMode;
         public string CurrentModeName => ModeNames[(int)currentMode];
 
-        private static readonly string[] ModeNames = { "Political", "Province", "County", "Terrain", "Market", "Soil", "Channel Inspector" };
+        private static readonly string[] ModeNames =
+        {
+            "Political",
+            "Province",
+            "County",
+            "Terrain",
+            "Market",
+            "Soil",
+            "Channel Inspector"
+        };
 
         [Header("Debug Tooling")]
         private bool showIdProbe = false;
@@ -149,7 +158,7 @@ namespace EconSim.Renderer
         {
             overlayManager?.RefreshPathStyleFromMaterial();
 
-            // Map mode selection with number keys 1-3
+            // Map mode selection with number keys.
             if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1))
             {
                 // Key 1 switches to Political mode (drill-down handles province/county)
