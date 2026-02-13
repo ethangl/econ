@@ -349,6 +349,22 @@ namespace EconSim.Core.Data
     /// </summary>
     public static class Elevation
     {
+        /// <summary>
+        /// Altitude where human cardiovascular strain begins to materially affect overland movement.
+        /// </summary>
+        public const float HumanAltitudeEffectStartMeters = 1500f;
+
+        /// <summary>
+        /// Altitude above which sustained overland movement is treated as impossible.
+        /// </summary>
+        public const float HumanAltitudeImpassableMeters = 3000f;
+
+        /// <summary>
+        /// Span between altitude-effect onset and impassable threshold.
+        /// </summary>
+        public const float HumanAltitudeEffectSpanMeters =
+            HumanAltitudeImpassableMeters - HumanAltitudeEffectStartMeters;
+
         public static float ResolveSeaLevel(MapInfo info)
         {
             WorldInfo world = RequireWorldInfo(info, "ResolveSeaLevel");

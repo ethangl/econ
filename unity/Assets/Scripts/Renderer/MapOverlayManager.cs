@@ -206,6 +206,20 @@ public class MapOverlayManager
             new Color(70/255f, 130/255f, 180/255f),   // Steel blue
         };
 
+        // Transport heatmap colors (low -> high).
+        private static readonly Color HeatLowColor = new Color(0.12f, 0.45f, 0.85f);
+        private static readonly Color HeatMidColor = new Color(0.15f, 0.78f, 0.62f);
+        private static readonly Color HeatHighColor = new Color(0.98f, 0.82f, 0.22f);
+        private static readonly Color HeatExtremeColor = new Color(0.82f, 0.20f, 0.18f);
+        private static readonly Color HeatMissingColor = new Color(0.25f, 0.25f, 0.25f);
+
+        // Mirror transport tuning so Local Transport Cost overlay matches gameplay path cost.
+        private const float OverlayDefaultMovementCost = 1.0f;
+        private const float OverlayBiomeCostMin = 1f;
+        private const float OverlayBiomeCostMax = 20f;
+        private const float OverlayImpassableThreshold = 100f;
+        private const float OverlayMaxPassableAltitudeCost = OverlayImpassableThreshold - 1f;
+
         private const int OverlayTextureCacheVersion = 2;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
         private const string CacheSpatialGridFile = "spatial_grid.bin";
@@ -1849,10 +1863,12 @@ public class MapOverlayManager
         {
             economyState = economy;
             InvalidateModeColorResolveCache(MapView.MapMode.Market);
+            InvalidateModeColorResolveCache(MapView.MapMode.MarketTransportCost);
 
             if (economy == null || economy.CountyToMarket == null)
             {
-                if (currentMapMode == MapView.MapMode.Market)
+                if (currentMapMode == MapView.MapMode.Market ||
+                    currentMapMode == MapView.MapMode.MarketTransportCost)
                     RegenerateModeColorResolveTexture();
                 return;
             }
@@ -1894,7 +1910,8 @@ public class MapOverlayManager
                 overlayCacheDirty = true;
             }
 
-            if (currentMapMode == MapView.MapMode.Market)
+            if (currentMapMode == MapView.MapMode.Market ||
+                currentMapMode == MapView.MapMode.MarketTransportCost)
                 RegenerateModeColorResolveTexture();
             if (currentMapMode != MapView.MapMode.Market)
                 pendingMarketModePrewarm = true;
@@ -2022,7 +2039,9 @@ public class MapOverlayManager
             return mode == MapView.MapMode.Political ||
                    mode == MapView.MapMode.Province ||
                    mode == MapView.MapMode.County ||
-                   mode == MapView.MapMode.Market;
+                   mode == MapView.MapMode.Market ||
+                   mode == MapView.MapMode.LocalTransportCost ||
+                   mode == MapView.MapMode.MarketTransportCost;
         }
 
         private static MapView.MapMode ResolveCacheKeyForMode(MapView.MapMode mode)
@@ -2131,32 +2150,109 @@ public class MapOverlayManager
             Color[] realmPalette = realmPaletteTexture.GetPixels();
             Color[] marketPalette = marketPaletteTexture.GetPixels();
 
-            for (int i = 0; i < size; i++)
+            bool isLocalTransportMode = currentMapMode == MapView.MapMode.LocalTransportCost;
+            bool isMarketTransportMode = currentMapMode == MapView.MapMode.MarketTransportCost;
+            if (isLocalTransportMode || isMarketTransportMode)
             {
-                int cellId = spatialGrid[i];
-                if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
-                    continue;
+                var values = new float[size];
+                for (int i = 0; i < size; i++)
+                    values[i] = float.NaN;
 
-                bool isCellWater = !cell.IsLand;
-                bool isRiver = rivers[i].r > 0.5f;
-                if (isCellWater || isRiver)
-                    continue;
+                float minValue = float.MaxValue;
+                float maxValue = float.MinValue;
+                var biomeMovementCostById = BuildBiomeMovementCostLookup();
 
-                if (currentMapMode == MapView.MapMode.Market)
+                for (int i = 0; i < size; i++)
                 {
-                    int marketId = 0;
-                    if (economyState != null && economyState.CountyToMarket != null)
-                        economyState.CountyToMarket.TryGetValue(cell.CountyId, out marketId);
+                    int cellId = spatialGrid[i];
+                    if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
+                        continue;
 
-                    Color marketColor = LookupPaletteColor(marketPalette, marketId);
-                    marketColor.a = 1f;
-                    resolved[i] = marketColor;
+                    if (!cell.IsLand || rivers[i].r > 0.5f)
+                        continue;
+
+                    float value;
+                    bool hasValue;
+                    if (isLocalTransportMode)
+                    {
+                        value = ComputeLocalTransportCost(cell, biomeMovementCostById);
+                        hasValue = true;
+                    }
+                    else
+                    {
+                        hasValue = TryGetAssignedMarketTransportCost(cellId, cell.CountyId, out value);
+                    }
+
+                    if (!hasValue || float.IsNaN(value) || float.IsInfinity(value))
+                        continue;
+
+                    values[i] = value;
+                    minValue = Mathf.Min(minValue, value);
+                    maxValue = Mathf.Max(maxValue, value);
                 }
-                else
+
+                bool minFinite = !float.IsNaN(minValue) && !float.IsInfinity(minValue);
+                bool maxFinite = !float.IsNaN(maxValue) && !float.IsInfinity(maxValue);
+                if (!minFinite || !maxFinite || maxValue <= minValue)
                 {
-                    Color politicalColor = LookupPaletteColor(realmPalette, cell.RealmId);
-                    politicalColor.a = 1f;
-                    resolved[i] = politicalColor;
+                    minValue = 0f;
+                    maxValue = 1f;
+                }
+
+                float range = Mathf.Max(0.0001f, maxValue - minValue);
+                for (int i = 0; i < size; i++)
+                {
+                    int cellId = spatialGrid[i];
+                    if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
+                        continue;
+
+                    if (!cell.IsLand || rivers[i].r > 0.5f)
+                        continue;
+
+                    float value = values[i];
+                    if (float.IsNaN(value) || float.IsInfinity(value))
+                    {
+                        Color missing = HeatMissingColor;
+                        missing.a = 1f;
+                        resolved[i] = missing;
+                        continue;
+                    }
+
+                    float normalized = Mathf.Clamp01((value - minValue) / range);
+                    Color heat = EvaluateHeatColor(normalized);
+                    heat.a = 1f;
+                    resolved[i] = heat;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < size; i++)
+                {
+                    int cellId = spatialGrid[i];
+                    if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
+                        continue;
+
+                    bool isCellWater = !cell.IsLand;
+                    bool isRiver = rivers[i].r > 0.5f;
+                    if (isCellWater || isRiver)
+                        continue;
+
+                    if (currentMapMode == MapView.MapMode.Market)
+                    {
+                        int marketId = 0;
+                        if (economyState != null && economyState.CountyToMarket != null)
+                            economyState.CountyToMarket.TryGetValue(cell.CountyId, out marketId);
+
+                        Color marketColor = LookupPaletteColor(marketPalette, marketId);
+                        marketColor.a = 1f;
+                        resolved[i] = marketColor;
+                    }
+                    else
+                    {
+                        Color politicalColor = LookupPaletteColor(realmPalette, cell.RealmId);
+                        politicalColor.a = 1f;
+                        resolved[i] = politicalColor;
+                    }
                 }
             }
 
@@ -2167,6 +2263,81 @@ public class MapOverlayManager
             MapView.MapMode cacheKey = ResolveCacheKeyForMode(currentMapMode);
             modeColorResolveCacheRevisionByMode[cacheKey] = GetModeColorResolveRevision(cacheKey);
             TextureDebugger.SaveTexture(modeColorResolveTexture, "mode_color_resolve");
+        }
+
+        private float ComputeLocalTransportCost(Cell cell, Dictionary<int, int> biomeMovementCostById)
+        {
+            float baseCost = OverlayDefaultMovementCost;
+            if (biomeMovementCostById != null &&
+                biomeMovementCostById.TryGetValue(cell.BiomeId, out int biomeMovementCost) &&
+                biomeMovementCost > 0)
+            {
+                baseCost = biomeMovementCost;
+                baseCost = Mathf.Clamp(baseCost, OverlayBiomeCostMin, OverlayBiomeCostMax);
+            }
+
+            float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
+            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeImpassableMeters)
+            {
+                return OverlayImpassableThreshold;
+            }
+
+            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeEffectStartMeters)
+            {
+                float altitudeMetersCapped = Mathf.Min(elevationMetersAboveSeaLevel, Elevation.HumanAltitudeImpassableMeters);
+                float altitudeT = (altitudeMetersCapped - Elevation.HumanAltitudeEffectStartMeters) /
+                    Mathf.Max(1f, Elevation.HumanAltitudeEffectSpanMeters);
+                baseCost = Mathf.Lerp(baseCost, OverlayMaxPassableAltitudeCost, Mathf.Clamp01(altitudeT));
+            }
+
+            return baseCost;
+        }
+
+        private Dictionary<int, int> BuildBiomeMovementCostLookup()
+        {
+            var lookup = new Dictionary<int, int>();
+            if (mapData?.Biomes == null)
+                return lookup;
+
+            foreach (var biome in mapData.Biomes)
+            {
+                if (biome != null)
+                    lookup[biome.Id] = biome.MovementCost;
+            }
+
+            return lookup;
+        }
+
+        private bool TryGetAssignedMarketTransportCost(int cellId, int countyId, out float cost)
+        {
+            cost = 0f;
+            if (economyState?.Markets == null)
+                return false;
+
+            int marketId = 0;
+            if (economyState.CountyToMarket != null)
+                economyState.CountyToMarket.TryGetValue(countyId, out marketId);
+            if (marketId <= 0 && economyState.CellToMarket != null)
+                economyState.CellToMarket.TryGetValue(cellId, out marketId);
+            if (marketId <= 0)
+                return false;
+
+            if (!economyState.Markets.TryGetValue(marketId, out var market))
+                return false;
+            if (market.Type == MarketType.Black || market.ZoneCellCosts == null)
+                return false;
+
+            return market.ZoneCellCosts.TryGetValue(cellId, out cost);
+        }
+
+        private static Color EvaluateHeatColor(float t)
+        {
+            t = Mathf.Clamp01(t);
+            if (t <= 0.33f)
+                return Color.Lerp(HeatLowColor, HeatMidColor, t / 0.33f);
+            if (t <= 0.66f)
+                return Color.Lerp(HeatMidColor, HeatHighColor, (t - 0.33f) / 0.33f);
+            return Color.Lerp(HeatHighColor, HeatExtremeColor, (t - 0.66f) / 0.34f);
         }
 
         private void PrewarmOverlayModeResolveCache(MapView.MapMode mode)
@@ -2496,7 +2667,7 @@ public class MapOverlayManager
         /// <summary>
         /// Set the current map mode for the shader.
         /// Mode: 1=political, 2=province, 3=county, 4=market, 5=terrain/biome,
-        /// 6=soil (vertex-blended), 7=channel-inspector
+        /// 6=soil (vertex-blended), 7=channel-inspector, 8=local transport, 9=market transport
         /// </summary>
         public void SetMapMode(MapView.MapMode mode)
         {
@@ -2526,6 +2697,12 @@ public class MapOverlayManager
                     break;
                 case MapView.MapMode.ChannelInspector:
                     shaderMode = 7;
+                    break;
+                case MapView.MapMode.LocalTransportCost:
+                    shaderMode = 8;
+                    break;
+                case MapView.MapMode.MarketTransportCost:
+                    shaderMode = 9;
                     break;
                 case MapView.MapMode.Terrain:
                 default:
@@ -2827,12 +3004,16 @@ public class MapOverlayManager
                 politicalIdsTexture.Apply();
                 InvalidateModeColorResolveCache(MapView.MapMode.Political);
                 if (newCountyId.HasValue || newRealmId.HasValue)
+                {
                     InvalidateModeColorResolveCache(MapView.MapMode.Market);
+                    InvalidateModeColorResolveCache(MapView.MapMode.MarketTransportCost);
+                }
 
                 if (currentMapMode == MapView.MapMode.Political ||
                     currentMapMode == MapView.MapMode.Province ||
                     currentMapMode == MapView.MapMode.County ||
-                    currentMapMode == MapView.MapMode.Market)
+                    currentMapMode == MapView.MapMode.Market ||
+                    currentMapMode == MapView.MapMode.MarketTransportCost)
                 {
                     RegenerateModeColorResolveTexture();
                 }
