@@ -40,6 +40,13 @@ namespace PopGen.Core
             PopCulture[] cultures = BuildCultures(political.RealmCount, seed);
             int[] realmCultureIds = AssignRealmCultures(political.RealmCount, cultures.Length);
 
+            // Religion generation
+            var centroids = ComputeCultureCentroids(cultures, realmCultureIds, mesh, capitals, political.RealmCount);
+            int religionCount = Math.Max(2, Math.Min(cultures.Length, cultures.Length / 3));
+            int[] religionSeedIndices = PickReligionSeeds(centroids, cultures.Length, religionCount, seed);
+            PopReligion[] religions = BuildReligions(cultures, religionSeedIndices, seed);
+            AssignCultureReligions(cultures, religions, religionSeedIndices, centroids);
+
             var cellBurgId = new int[cellCount];
             PopBurg[] burgs = BuildBurgs(mesh, populations, realmIds, capitals, countySeats, cellBurgId, realmCultureIds);
             PopProvince[] provinces = BuildProvinces(mesh, populations, realmIds, provinceIds, cellBurgId, realmCultureIds, cultures, config, seed);
@@ -53,6 +60,7 @@ namespace PopGen.Core
                 Provinces = provinces,
                 Realms = realms,
                 Cultures = cultures,
+                Religions = religions,
                 CellBurgId = cellBurgId
             };
         }
@@ -458,6 +466,145 @@ namespace PopGen.Core
             }
 
             return counties.ToArray();
+        }
+
+        static Vec2[] ComputeCultureCentroids(PopCulture[] cultures, int[] realmCultureIds, CellMesh mesh, int[] capitals, int realmCount)
+        {
+            var centroids = new Vec2[cultures.Length];
+            var counts = new int[cultures.Length];
+
+            for (int si = 0; si < realmCount; si++)
+            {
+                int realmId = si + 1;
+                if (realmId >= realmCultureIds.Length) continue;
+                int cultureId = realmCultureIds[realmId];
+                int ci = cultureId - 1;
+                if (ci < 0 || ci >= cultures.Length) continue;
+
+                int capitalCell = (capitals != null && si < capitals.Length) ? capitals[si] : -1;
+                if ((uint)capitalCell >= (uint)mesh.CellCount) continue;
+
+                Vec2 pos = mesh.CellCenters[capitalCell];
+                centroids[ci] = new Vec2(centroids[ci].X + pos.X, centroids[ci].Y + pos.Y);
+                counts[ci]++;
+            }
+
+            float centerX = mesh.Width * 0.5f;
+            float centerY = mesh.Height * 0.5f;
+            for (int i = 0; i < cultures.Length; i++)
+            {
+                if (counts[i] > 0)
+                    centroids[i] = new Vec2(centroids[i].X / counts[i], centroids[i].Y / counts[i]);
+                else
+                    centroids[i] = new Vec2(centerX, centerY);
+            }
+
+            return centroids;
+        }
+
+        static int[] PickReligionSeeds(Vec2[] centroids, int cultureCount, int religionCount, PopGenSeed seed)
+        {
+            if (cultureCount == 0 || religionCount == 0)
+                return Array.Empty<int>();
+
+            religionCount = Math.Min(religionCount, cultureCount);
+            var picked = new int[religionCount];
+            var used = new bool[cultureCount];
+
+            // First seed: deterministic via seeded RNG
+            uint rngState = (uint)seed.Value;
+            rngState ^= 0x7E3A9C01u;
+            rngState ^= rngState >> 16;
+            rngState *= 0x85EBCA6Bu;
+            rngState ^= rngState >> 13;
+            int first = (int)(rngState % (uint)cultureCount);
+            picked[0] = first;
+            used[first] = true;
+
+            // Farthest-first for remaining
+            for (int k = 1; k < religionCount; k++)
+            {
+                float bestDist = -1f;
+                int bestIdx = 0;
+                for (int c = 0; c < cultureCount; c++)
+                {
+                    if (used[c]) continue;
+                    float minDist = float.MaxValue;
+                    for (int p = 0; p < k; p++)
+                    {
+                        float dx = centroids[c].X - centroids[picked[p]].X;
+                        float dy = centroids[c].Y - centroids[picked[p]].Y;
+                        float d = dx * dx + dy * dy;
+                        if (d < minDist) minDist = d;
+                    }
+                    if (minDist > bestDist)
+                    {
+                        bestDist = minDist;
+                        bestIdx = c;
+                    }
+                }
+                picked[k] = bestIdx;
+                used[bestIdx] = true;
+            }
+
+            return picked;
+        }
+
+        static PopReligion[] BuildReligions(PopCulture[] cultures, int[] seedIndices, PopGenSeed seed)
+        {
+            if (seedIndices == null || seedIndices.Length == 0)
+                return Array.Empty<PopReligion>();
+
+            var allTypes = (ReligionType[])Enum.GetValues(typeof(ReligionType));
+            var religions = new PopReligion[seedIndices.Length];
+
+            for (int i = 0; i < seedIndices.Length; i++)
+            {
+                int cultureIdx = seedIndices[i];
+                PopCulture seedCulture = cultures[cultureIdx];
+                ReligionType religionType = allTypes[i % allTypes.Length];
+                string[] suffixes = ReligionSuffixes.GetSuffixes(religionType);
+
+                int typeIndex = seedCulture.TypeIndex;
+                var cultureType = CultureTypes.All[typeIndex % CultureTypes.All.Length];
+
+                string name = PopNameGenerator.GenerateReligionName(i + 1, seedCulture.Id, cultureType, suffixes, seed);
+
+                religions[i] = new PopReligion
+                {
+                    Id = i + 1,
+                    Name = name,
+                    Type = religionType,
+                    TypeName = religionType.ToString()
+                };
+            }
+
+            return religions;
+        }
+
+        static void AssignCultureReligions(PopCulture[] cultures, PopReligion[] religions, int[] seedIndices, Vec2[] centroids)
+        {
+            if (religions == null || religions.Length == 0 || seedIndices == null || seedIndices.Length == 0)
+                return;
+
+            for (int c = 0; c < cultures.Length; c++)
+            {
+                float bestDist = float.MaxValue;
+                int bestReligion = 1;
+                for (int r = 0; r < seedIndices.Length; r++)
+                {
+                    int seedIdx = seedIndices[r];
+                    float dx = centroids[c].X - centroids[seedIdx].X;
+                    float dy = centroids[c].Y - centroids[seedIdx].Y;
+                    float d = dx * dx + dy * dy;
+                    if (d < bestDist)
+                    {
+                        bestDist = d;
+                        bestReligion = religions[r].Id;
+                    }
+                }
+                cultures[c].ReligionId = bestReligion;
+            }
         }
 
         static float HashToUnitFloat(int value)

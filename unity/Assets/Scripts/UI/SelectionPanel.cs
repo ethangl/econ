@@ -30,6 +30,7 @@ namespace EconSim.UI
         private Label _stateValue;
         private Label _terrainValue;
         private Label _cultureValue;
+        private Label _religionValue;
         private Label _popTotal;
         private Label _popWorkers;
         private Label _popEmployed;
@@ -169,6 +170,7 @@ namespace EconSim.UI
             _stateValue = _root.Q<Label>("state-value");
             _terrainValue = _root.Q<Label>("terrain-value");
             _cultureValue = _root.Q<Label>("culture-value");
+            _religionValue = _root.Q<Label>("religion-value");
             _popTotal = _root.Q<Label>("pop-total");
             _popWorkers = _root.Q<Label>("pop-workers");
             _popEmployed = _root.Q<Label>("pop-employed");
@@ -291,6 +293,7 @@ namespace EconSim.UI
             capitalName = GetBurgNameById(realm.CapitalBurgId);
             SetLabel(_terrainValue, capitalName);
             SetLabel(_cultureValue, GetCultureName(_selectedRealmId));
+            SetLabel(_religionValue, GetReligionName(_selectedRealmId));
 
             // Find the terrain label and change its text to "Capital"
             var terrainRow = _terrainValue?.parent;
@@ -358,6 +361,7 @@ namespace EconSim.UI
             capitalName = GetBurgNameById(province.CapitalBurgId);
             SetLabel(_terrainValue, capitalName);
             SetLabel(_cultureValue, GetCultureName(province.RealmId));
+            SetLabel(_religionValue, GetReligionName(province.RealmId));
 
             // Change terrain label to "Capital"
             var terrainRow = _terrainValue?.parent;
@@ -439,6 +443,7 @@ namespace EconSim.UI
             // Cell count
             SetLabel(_terrainValue, $"{county.CellCount}");
             SetLabel(_cultureValue, GetCultureName(county.RealmId));
+            SetLabel(_religionValue, GetReligionName(county.RealmId));
 
             // Show all sections for county mode
             SetSectionVisible(_resourcesSection, true);
@@ -659,6 +664,15 @@ namespace EconSim.UI
             if (realmId <= 0 || !_mapData.RealmById.TryGetValue(realmId, out var realm)) return "-";
             if (realm.CultureId <= 0 || !_mapData.CultureById.TryGetValue(realm.CultureId, out var culture)) return "-";
             return culture.Name ?? "-";
+        }
+
+        private string GetReligionName(int realmId)
+        {
+            if (_mapData == null || _mapData.CultureById == null || _mapData.ReligionById == null) return "-";
+            if (realmId <= 0 || !_mapData.RealmById.TryGetValue(realmId, out var realm)) return "-";
+            if (realm.CultureId <= 0 || !_mapData.CultureById.TryGetValue(realm.CultureId, out var culture)) return "-";
+            if (culture.ReligionId <= 0 || !_mapData.ReligionById.TryGetValue(culture.ReligionId, out var religion)) return "-";
+            return religion.Name ?? "-";
         }
 
         private string GetBurgNameById(int burgId)

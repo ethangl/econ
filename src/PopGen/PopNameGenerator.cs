@@ -76,6 +76,13 @@ namespace PopGen.Core
             return core;
         }
 
+        public static string GenerateReligionName(int religionId, int seedCultureId, CultureType culture, string[] suffixes, PopGenSeed seed)
+        {
+            var rng = new PopRandom(DeriveSeed(seed.Value, 0x05u, religionId, seedCultureId));
+            string core = BuildCoreName(ref rng, culture, suffixes);
+            return core;
+        }
+
         static string BuildCoreName(ref PopRandom rng, CultureType culture, string[] suffixes)
         {
             int roll = rng.NextInt(100);

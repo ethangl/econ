@@ -22,6 +22,7 @@ namespace EconSim.Core.Data
         public List<Feature> Features;
         public List<County> Counties;    // Economic unit groupings assigned during map generation
         public List<Culture> Cultures;   // Culture groups assigned during population generation
+        public List<Religion> Religions; // Religion groups assigned during population generation
 
         // Lookup tables (built after loading)
         [NonSerialized] public Dictionary<int, Cell> CellById;
@@ -30,6 +31,7 @@ namespace EconSim.Core.Data
         [NonSerialized] public Dictionary<int, Feature> FeatureById;
         [NonSerialized] public Dictionary<int, County> CountyById;
         [NonSerialized] public Dictionary<int, Culture> CultureById;
+        [NonSerialized] public Dictionary<int, Religion> ReligionById;
 
         public void BuildLookups()
         {
@@ -75,6 +77,15 @@ namespace EconSim.Core.Data
                 foreach (var culture in Cultures)
                 {
                     CultureById[culture.Id] = culture;
+                }
+            }
+
+            ReligionById = new Dictionary<int, Religion>();
+            if (Religions != null)
+            {
+                foreach (var religion in Religions)
+                {
+                    ReligionById[religion.Id] = religion;
                 }
             }
         }
@@ -361,6 +372,15 @@ namespace EconSim.Core.Data
         public int Id;
         public string Name;
         public string TypeName;          // CultureType.Name (e.g. "Generic")
+        public int ReligionId;
+    }
+
+    [Serializable]
+    public class Religion
+    {
+        public int Id;
+        public string Name;
+        public string TypeName;          // ReligionType name (e.g. "Monotheistic")
     }
 
     /// <summary>

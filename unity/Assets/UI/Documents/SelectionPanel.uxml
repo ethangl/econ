@@ -20,6 +20,10 @@
                 <ui:Label text="Culture" />
                 <ui:Label name="culture-value" text="-" />
             </ui:VisualElement>
+            <ui:VisualElement class="stat-row">
+                <ui:Label text="Religion" />
+                <ui:Label name="religion-value" text="-" />
+            </ui:VisualElement>
         </ui:VisualElement>
 
         <ui:VisualElement class="section">
