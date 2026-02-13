@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
 using EconSim.Core.Simulation;
 using EconSim.Core.Transport;
+using EconSim.Renderer;
 using NUnit.Framework;
 
 namespace EconSim.Tests
@@ -62,7 +64,7 @@ namespace EconSim.Tests
                     {
                         Id = 1,
                         IsLand = true,
-                        SeaRelativeElevation = 4900f,
+                        SeaRelativeElevation = Elevation.HumanAltitudeEffectStartMeters,
                         HasSeaRelativeElevation = true,
                         BiomeId = 1,
                         NeighborIds = new List<int>(),
@@ -72,7 +74,7 @@ namespace EconSim.Tests
                     {
                         Id = 2,
                         IsLand = true,
-                        SeaRelativeElevation = 8000f,
+                        SeaRelativeElevation = Elevation.HumanAltitudeImpassableMeters + 100f,
                         HasSeaRelativeElevation = true,
                         BiomeId = 1,
                         NeighborIds = new List<int>(),
@@ -81,7 +83,7 @@ namespace EconSim.Tests
                 },
                 Biomes = new List<Biome>
                 {
-                    new Biome { Id = 1, Name = "Plains", MovementCost = 50 }
+                    new Biome { Id = 1, Name = "Plains", MovementCost = 1 }
                 },
                 Counties = new List<County>(),
                 Provinces = new List<Province>(),
@@ -99,7 +101,7 @@ namespace EconSim.Tests
             float peakCost = transport.GetCellMovementCost(mapData.CellById[2]);
 
             Assert.That(foothillCost, Is.EqualTo(1f).Within(0.0001f), "Cell below mountain threshold should not pay height penalty.");
-            Assert.That(peakCost, Is.EqualTo(3f).Within(0.0001f), "Peak cell should reach full mountain penalty (~3x base).");
+            Assert.That(peakCost, Is.EqualTo(100f).Within(0.0001f), "Cell above impassable threshold should be blocked.");
         }
 
         [Test]
@@ -229,6 +231,34 @@ namespace EconSim.Tests
             Assert.That(WorldScale.ResolveDistanceNormalizationKm(info), Is.EqualTo(60f).Within(0.0001f));
         }
 
+        [Test]
+        public void SimulationBootstrapCache_LatitudeMatch_RejectsFiniteVsNonFinite()
+        {
+            MethodInfo method = typeof(SimulationRunner).GetMethod(
+                "CacheLatitudeMatches",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(method, Is.Not.Null, "Could not find SimulationRunner.CacheLatitudeMatches via reflection.");
+
+            Assert.That((bool)method.Invoke(null, new object[] { float.NaN, 10f }), Is.False);
+            Assert.That((bool)method.Invoke(null, new object[] { 10f, float.PositiveInfinity }), Is.False);
+            Assert.That((bool)method.Invoke(null, new object[] { float.NaN, float.NaN }), Is.True);
+            Assert.That((bool)method.Invoke(null, new object[] { 10f, 10.00005f }), Is.True);
+        }
+
+        [Test]
+        public void OverlayTextureCache_LatitudeMatch_RejectsFiniteVsNonFinite()
+        {
+            MethodInfo method = typeof(MapOverlayManager).GetMethod(
+                "CacheFloatMatches",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(method, Is.Not.Null, "Could not find MapOverlayManager.CacheFloatMatches via reflection.");
+
+            Assert.That((bool)method.Invoke(null, new object[] { float.NegativeInfinity, -20f }), Is.False);
+            Assert.That((bool)method.Invoke(null, new object[] { -20f, float.NaN }), Is.False);
+            Assert.That((bool)method.Invoke(null, new object[] { float.NaN, float.NaN }), Is.True);
+            Assert.That((bool)method.Invoke(null, new object[] { -20f, -20.00005f }), Is.True);
+        }
+
         private static MapData BuildLinearMap()
         {
             var mapData = new MapData
@@ -245,7 +275,7 @@ namespace EconSim.Tests
                 },
                 Biomes = new List<Biome>
                 {
-                    new Biome { Id = 1, Name = "Plains", MovementCost = 50 }
+                    new Biome { Id = 1, Name = "Plains", MovementCost = 1 }
                 },
                 Counties = new List<County>
                 {
@@ -282,7 +312,7 @@ namespace EconSim.Tests
                 },
                 Biomes = new List<Biome>
                 {
-                    new Biome { Id = 1, Name = "Plains", MovementCost = 50 }
+                    new Biome { Id = 1, Name = "Plains", MovementCost = 1 }
                 },
                 Counties = new List<County>(),
                 Provinces = new List<Province>(),

@@ -87,5 +87,29 @@ namespace EconSim.Tests
             Assert.That(runA.Political.ProvinceCount, Is.EqualTo(runB.Political.ProvinceCount), "Province-count determinism failed.");
             Assert.That(runA.Political.CountyCount, Is.EqualTo(runB.Political.CountyCount), "County-count determinism failed.");
         }
+
+        [Test]
+        public void ConfigValidate_RejectsLatitudeOutsidePhysicalRange()
+        {
+            var tooLow = new MapGenConfig { LatitudeSouth = -95f };
+            var tooHigh = new MapGenConfig { LatitudeSouth = 95f };
+
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => tooLow.Validate());
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => tooHigh.Validate());
+        }
+
+        [Test]
+        public void ConfigValidate_RejectsLatitudeSpanCrossingNorthPole()
+        {
+            var config = new MapGenConfig
+            {
+                CellCount = 1_000_000,
+                AspectRatio = 1f,
+                CellSizeKm = 2.5f,
+                LatitudeSouth = 85f
+            };
+
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => config.Validate());
+        }
     }
 }

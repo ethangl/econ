@@ -698,13 +698,13 @@ public class MapOverlayManager
                     return false;
                 if (metadata.MapGenSeed > 0 && mapData.Info.MapGenSeed > 0 && metadata.MapGenSeed != mapData.Info.MapGenSeed)
                     return false;
-                if (mapData.Info.World != null)
-                {
-                    if (!CacheFloatMatches(metadata.LatitudeSouth, mapData.Info.World.LatitudeSouth))
-                        return false;
-                    if (!CacheFloatMatches(metadata.LatitudeNorth, mapData.Info.World.LatitudeNorth))
-                        return false;
-                }
+
+                float expectedLatitudeSouth = mapData.Info.World != null ? mapData.Info.World.LatitudeSouth : float.NaN;
+                float expectedLatitudeNorth = mapData.Info.World != null ? mapData.Info.World.LatitudeNorth : float.NaN;
+                if (!CacheFloatMatches(metadata.LatitudeSouth, expectedLatitudeSouth))
+                    return false;
+                if (!CacheFloatMatches(metadata.LatitudeNorth, expectedLatitudeNorth))
+                    return false;
             }
 
             return true;
@@ -712,7 +712,13 @@ public class MapOverlayManager
 
         private static bool CacheFloatMatches(float cachedValue, float expectedValue)
         {
-            if (!IsFinite(cachedValue) || !IsFinite(expectedValue))
+            bool cachedIsFinite = IsFinite(cachedValue);
+            bool expectedIsFinite = IsFinite(expectedValue);
+
+            if (cachedIsFinite != expectedIsFinite)
+                return false;
+
+            if (!cachedIsFinite)
                 return true;
 
             return Mathf.Abs(cachedValue - expectedValue) <= 0.0001f;

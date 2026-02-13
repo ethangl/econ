@@ -100,12 +100,13 @@ namespace EconSim.UI
             var gameManager = EconSim.Core.GameManager.Instance;
             if (gameManager != null)
             {
+                float latitudeSouth = _latitudeField?.value ?? -50f;
                 var config = new MapGenConfig
                 {
                     Seed = _seedField?.value ?? 12345,
                     CellCount = _cellCountField?.value ?? 100000,
                     AspectRatio = _aspectRatioField?.value ?? 1.5f,
-                    LatitudeSouth = _latitudeField?.value ?? -50f,
+                    LatitudeSouth = latitudeSouth,
                 };
 
                 if (_templateDropdown != null && _templateDropdown.index >= 0)
@@ -113,7 +114,17 @@ namespace EconSim.UI
                     config.Template = (HeightmapTemplateType)_templateDropdown.index;
                 }
 
-                gameManager.GenerateMap(config);
+                try
+                {
+                    config.Validate();
+                    gameManager.GenerateMap(config);
+                }
+                catch (Exception ex)
+                {
+                    SetStatus($"Invalid generation settings: {ex.Message}");
+                    _isLoading = false;
+                    EnableButtons();
+                }
             }
             else
             {

@@ -480,7 +480,13 @@ namespace EconSim.Core.Simulation
 
         private static bool CacheLatitudeMatches(float cachedValue, float expectedValue)
         {
-            if (!IsFinite(cachedValue) || !IsFinite(expectedValue))
+            bool cachedIsFinite = IsFinite(cachedValue);
+            bool expectedIsFinite = IsFinite(expectedValue);
+
+            if (cachedIsFinite != expectedIsFinite)
+                return false;
+
+            if (!cachedIsFinite)
                 return true;
 
             return Math.Abs(cachedValue - expectedValue) <= 0.0001f;
