@@ -13,7 +13,7 @@ namespace MapGen.Core
         public float AspectRatio = 16f / 9f;
         public float CellSizeKm = 2.5f;
         public HeightmapTemplateType Template = HeightmapTemplateType.LowIsland;
-        public float LatitudeSouth = 30f;
+        public float LatitudeSouth = -50f;
 
         // Elevation envelope in signed meters (sea level = 0).
         public float MaxElevationMeters = 5000f;
