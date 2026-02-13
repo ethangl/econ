@@ -56,6 +56,9 @@ namespace EconSim.Renderer
         private bool hasActiveSelection;
         private float currentHoverIntensity = 0f;
         private bool hasActiveHover;
+        private const float RealmZoomedInMax = 0.05f;
+        private const float ProvinceZoomedInMax = 0.75f;
+        private const float PoliticalZoomHysteresis = 0.02f;
 
         /// <summary>Event fired when a cell is clicked. Passes cell ID (-1 if clicked on nothing).</summary>
         public event Action<int> OnCellClicked;
@@ -97,9 +100,9 @@ namespace EconSim.Renderer
 
         public enum MapMode
         {
-            Political = 0,      // Colored by realm (key: 1, cycles with Province/County)
-            Province = 1,       // Colored by province (key: 1, cycles with Political/County)
-            County = 2,         // Colored by county/cell (key: 1, cycles with Political/Province)
+            Political = 0,      // Colored by realm (zoomed-in 0-25%)
+            Province = 1,       // Colored by province (zoomed-in 25-75%)
+            County = 2,         // Colored by county/cell (zoomed-in 75-100%)
             Terrain = 3,        // Colored by biome with elevation tinting (key: 2)
             Market = 4,         // Colored by market zone (key: 3)
             Soil = 5,           // Soil (vertex-blended) (key: 4)
@@ -165,9 +168,9 @@ namespace EconSim.Renderer
             // Map mode selection with number keys.
             if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1))
             {
-                // Key 1 switches to Political mode (drill-down handles province/county)
-                SetMapMode(MapMode.Political);
-                Debug.Log("Map mode: Political (1)");
+                MapMode politicalBandMode = ResolveZoomDrivenPoliticalMode();
+                SetMapMode(politicalBandMode);
+                Debug.Log($"Map mode: {ModeNames[(int)politicalBandMode]} (1, zoom-driven)");
             }
             else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2))
             {
@@ -199,6 +202,8 @@ namespace EconSim.Renderer
                 SetMapMode(MapMode.ChannelInspector);
                 Debug.Log($"Map mode: Channel Inspector (0), view={channelDebugView}");
             }
+
+            ApplyZoomDrivenPoliticalMode();
 
             if (Input.GetKeyDown(cycleDebugChannelKey))
             {
@@ -239,6 +244,66 @@ namespace EconSim.Renderer
             // Animate selection dimming
             UpdateDimmingAnimation();
             UpdateProbe();
+        }
+
+        private static bool IsPoliticalFamilyMode(MapMode mode)
+        {
+            return mode == MapMode.Political || mode == MapMode.Province || mode == MapMode.County;
+        }
+
+        private MapMode ResolveZoomDrivenPoliticalMode()
+        {
+            if (mapCameraController == null)
+                return MapMode.Political;
+
+            float zoomedIn01 = mapCameraController.GetZoomedIn01();
+            if (zoomedIn01 < RealmZoomedInMax)
+                return MapMode.Political;
+            if (zoomedIn01 < ProvinceZoomedInMax)
+                return MapMode.Province;
+            return MapMode.County;
+        }
+
+        private static MapMode ResolveZoomDrivenPoliticalModeWithHysteresis(MapMode currentPoliticalMode, float zoomedIn01)
+        {
+            float realmLower = RealmZoomedInMax - PoliticalZoomHysteresis;
+            float realmUpper = RealmZoomedInMax + PoliticalZoomHysteresis;
+            float provinceLower = ProvinceZoomedInMax - PoliticalZoomHysteresis;
+            float provinceUpper = ProvinceZoomedInMax + PoliticalZoomHysteresis;
+
+            switch (currentPoliticalMode)
+            {
+                case MapMode.Political:
+                    return zoomedIn01 >= realmUpper ? MapMode.Province : MapMode.Political;
+                case MapMode.Province:
+                    if (zoomedIn01 < realmLower)
+                        return MapMode.Political;
+                    if (zoomedIn01 >= provinceUpper)
+                        return MapMode.County;
+                    return MapMode.Province;
+                case MapMode.County:
+                    return zoomedIn01 < provinceLower ? MapMode.Province : MapMode.County;
+                default:
+                    if (zoomedIn01 < RealmZoomedInMax)
+                        return MapMode.Political;
+                    if (zoomedIn01 < ProvinceZoomedInMax)
+                        return MapMode.Province;
+                    return MapMode.County;
+            }
+        }
+
+        private void ApplyZoomDrivenPoliticalMode()
+        {
+            if (!IsPoliticalFamilyMode(currentMode))
+                return;
+
+            if (mapCameraController == null)
+                return;
+
+            float zoomedIn01 = mapCameraController.GetZoomedIn01();
+            MapMode zoomDrivenMode = ResolveZoomDrivenPoliticalModeWithHysteresis(currentMode, zoomedIn01);
+            if (zoomDrivenMode != currentMode)
+                SetMapMode(zoomDrivenMode);
         }
 
         private void SetSelectionActive(bool active)
@@ -636,10 +701,10 @@ namespace EconSim.Renderer
                     break;
             }
 
-            // Zoom and pan camera to frame selection
+            // Pan camera to selection without changing zoom
             if (selectionBounds.HasValue && mapCameraController != null)
             {
-                mapCameraController.FocusOnBounds(selectionBounds.Value);
+                mapCameraController.FocusOn(selectionBounds.Value.center);
             }
         }
 
@@ -710,7 +775,7 @@ namespace EconSim.Renderer
 
             if (selectionBounds.HasValue && mapCameraController != null)
             {
-                mapCameraController.FocusOnBounds(selectionBounds.Value);
+                mapCameraController.FocusOn(selectionBounds.Value.center);
             }
         }
 

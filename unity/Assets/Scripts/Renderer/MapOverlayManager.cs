@@ -2224,13 +2224,11 @@ public class MapOverlayManager
             {
                 Dictionary<int, Color> provinceColorById = null;
                 Dictionary<int, Color> countyColorById = null;
-                if (currentMapMode == MapView.MapMode.Political ||
-                    currentMapMode == MapView.MapMode.Province ||
+                if (currentMapMode == MapView.MapMode.Province ||
                     currentMapMode == MapView.MapMode.County)
                 {
                     provinceColorById = BuildProvinceColorOverrides(realmPalette);
-                    if (currentMapMode == MapView.MapMode.Political ||
-                        currentMapMode == MapView.MapMode.County)
+                    if (currentMapMode == MapView.MapMode.County)
                         countyColorById = BuildCountyColorOverrides(provinceColorById, realmPalette);
                 }
 
@@ -2265,8 +2263,7 @@ public class MapOverlayManager
                             else
                                 politicalColor = DeriveProvinceColorFromRealm(politicalColor, cell.ProvinceId);
                         }
-                        else if (currentMapMode == MapView.MapMode.Political ||
-                                 currentMapMode == MapView.MapMode.County)
+                        else if (currentMapMode == MapView.MapMode.County)
                         {
                             if (countyColorById != null && countyColorById.TryGetValue(cell.CountyId, out Color countyColor))
                             {
