@@ -36,11 +36,15 @@ namespace PopGen.Core
             int[] capitals = political.Capitals ?? Array.Empty<int>();
             int[] countySeats = political.CountySeats ?? Array.Empty<int>();
 
+            // Build cultures before name generation so we can pass CultureType through
+            PopCulture[] cultures = BuildCultures(political.RealmCount, seed);
+            int[] realmCultureIds = AssignRealmCultures(political.RealmCount, cultures.Length);
+
             var cellBurgId = new int[cellCount];
-            PopBurg[] burgs = BuildBurgs(mesh, populations, realmIds, capitals, countySeats, cellBurgId);
-            PopProvince[] provinces = BuildProvinces(mesh, populations, realmIds, provinceIds, cellBurgId, config, seed);
-            PopRealm[] realms = BuildRealms(mesh, populations, realmIds, provinceIds, capitals, cellBurgId, political.RealmCount, config, seed);
-            PopCounty[] counties = BuildCounties(mesh, populations, realmIds, provinceIds, countyIds, countySeats, cellBurgId, political.CountyCount);
+            PopBurg[] burgs = BuildBurgs(mesh, populations, realmIds, capitals, countySeats, cellBurgId, realmCultureIds);
+            PopProvince[] provinces = BuildProvinces(mesh, populations, realmIds, provinceIds, cellBurgId, realmCultureIds, cultures, config, seed);
+            PopRealm[] realms = BuildRealms(mesh, populations, realmIds, provinceIds, capitals, cellBurgId, political.RealmCount, realmCultureIds, cultures, config, seed);
+            PopCounty[] counties = BuildCounties(mesh, populations, realmIds, provinceIds, countyIds, countySeats, political.CountyCount, realmCultureIds, cultures, seed);
 
             return new PopGenResult
             {
@@ -48,8 +52,64 @@ namespace PopGen.Core
                 Counties = counties,
                 Provinces = provinces,
                 Realms = realms,
+                Cultures = cultures,
                 CellBurgId = cellBurgId
             };
+        }
+
+        static PopCulture[] BuildCultures(int realmCount, PopGenSeed seed)
+        {
+            int cultureCount = Math.Max(1, realmCount / 2);
+            var allTypes = CultureTypes.All;
+            var cultures = new PopCulture[cultureCount];
+            for (int i = 0; i < cultureCount; i++)
+            {
+                int typeIndex = i % allTypes.Length;
+                var type = allTypes[typeIndex];
+                cultures[i] = new PopCulture
+                {
+                    Id = i + 1,
+                    Name = PopNameGenerator.GenerateCultureName(i + 1, type, seed),
+                    TypeIndex = typeIndex,
+                    TypeName = type.Name
+                };
+            }
+
+            return cultures;
+        }
+
+        /// <summary>
+        /// Round-robin assignment of realms to cultures.
+        /// Returns array indexed by realmId (1-based), value is cultureId (1-based).
+        /// Index 0 is unused.
+        /// </summary>
+        static int[] AssignRealmCultures(int realmCount, int cultureCount)
+        {
+            var realmCultureIds = new int[realmCount + 1];
+            for (int ri = 1; ri <= realmCount; ri++)
+            {
+                realmCultureIds[ri] = ((ri - 1) % cultureCount) + 1;
+            }
+
+            return realmCultureIds;
+        }
+
+        static CultureType GetCultureType(int realmId, int[] realmCultureIds, PopCulture[] cultures)
+        {
+            if (realmId > 0 && realmId < realmCultureIds.Length)
+            {
+                int cultureId = realmCultureIds[realmId];
+                int idx = cultureId - 1;
+                if (idx >= 0 && idx < cultures.Length)
+                {
+                    int typeIndex = cultures[idx].TypeIndex;
+                    var allTypes = CultureTypes.All;
+                    if (typeIndex >= 0 && typeIndex < allTypes.Length)
+                        return allTypes[typeIndex];
+                }
+            }
+
+            return CultureTypes.All[0];
         }
 
         static PopBurg[] BuildBurgs(
@@ -58,7 +118,8 @@ namespace PopGen.Core
             int[] realmIds,
             int[] capitals,
             int[] countySeats,
-            int[] cellBurgId)
+            int[] cellBurgId,
+            int[] realmCultureIds)
         {
             if (countySeats == null || countySeats.Length == 0)
                 return Array.Empty<PopBurg>();
@@ -72,14 +133,16 @@ namespace PopGen.Core
                     continue;
 
                 int burgId = ci + 1;
+                int realmId = (uint)cellId < (uint)realmIds.Length ? realmIds[cellId] : 0;
+                int cultureId = (realmId > 0 && realmId < realmCultureIds.Length) ? realmCultureIds[realmId] : 0;
                 burgs.Add(new PopBurg
                 {
                     Id = burgId,
                     Name = $"Town {burgId}",
                     Position = mesh.CellCenters[cellId],
                     CellId = cellId,
-                    RealmId = (uint)cellId < (uint)realmIds.Length ? realmIds[cellId] : 0,
-                    CultureId = 0,
+                    RealmId = realmId,
+                    CultureId = cultureId,
                     Population = (uint)cellId < (uint)populations.Length ? populations[cellId] : 0f,
                     IsCapital = capitalCells.Contains(cellId),
                     IsPort = false,
@@ -99,6 +162,8 @@ namespace PopGen.Core
             int[] realmIds,
             int[] provinceIds,
             int[] cellBurgId,
+            int[] realmCultureIds,
+            PopCulture[] cultures,
             PopGenConfig config,
             PopGenSeed seed)
         {
@@ -120,10 +185,13 @@ namespace PopGen.Core
 
             int colorSalt = config.UseSeedForPoliticalColorVariation ? seed.Value : 0;
             var provinces = new List<PopProvince>(provCells.Count);
-            foreach (var kvp in provCells)
+            var provinceIdOrder = new List<int>(provCells.Keys);
+            provinceIdOrder.Sort();
+            var usedProvinceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int p = 0; p < provinceIdOrder.Count; p++)
             {
-                int pid = kvp.Key;
-                List<int> pCells = kvp.Value;
+                int pid = provinceIdOrder[p];
+                List<int> pCells = provCells[pid];
                 int realmId = provRealm.TryGetValue(pid, out var rid) ? rid : 0;
 
                 int centerCell = pCells[0];
@@ -142,12 +210,14 @@ namespace PopGen.Core
                 float s = 0.35f + HashToUnitFloat(pid + 5000 + colorSalt) * 0.15f;
                 float v = 0.65f + HashToUnitFloat(pid + 6000 + colorSalt) * 0.15f;
                 PopColor32 color = HsvToColor32(h, s, v);
+                CultureType cultureType = GetCultureType(realmId, realmCultureIds, cultures);
+                PopProvinceName generatedName = PopNameGenerator.GenerateProvinceName(pid, realmId, cultureType, seed, usedProvinceNames);
 
                 provinces.Add(new PopProvince
                 {
                     Id = pid,
-                    Name = $"Province {pid}",
-                    FullName = $"Province {pid}",
+                    Name = generatedName.Name,
+                    FullName = generatedName.FullName,
                     RealmId = realmId,
                     CenterCellId = centerCell,
                     CapitalBurgId = (uint)centerCell < (uint)cellBurgId.Length ? cellBurgId[centerCell] : 0,
@@ -168,6 +238,8 @@ namespace PopGen.Core
             int[] capitals,
             int[] cellBurgId,
             int realmCount,
+            int[] realmCultureIds,
+            PopCulture[] cultures,
             PopGenConfig config,
             PopGenSeed seed)
         {
@@ -205,6 +277,7 @@ namespace PopGen.Core
 
             int colorSalt = config.UseSeedForPoliticalColorVariation ? seed.Value : 0;
             var realms = new List<PopRealm>(realmCount);
+            var usedRealmNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (int si = 0; si < realmCount; si++)
             {
                 int realmId = si + 1;
@@ -241,15 +314,19 @@ namespace PopGen.Core
                     ? mesh.CellCenters[capitalCell]
                     : new Vec2(0f, 0f);
 
+                int cultureId = (realmId < realmCultureIds.Length) ? realmCultureIds[realmId] : 0;
+                CultureType cultureType = GetCultureType(realmId, realmCultureIds, cultures);
+                PopRealmName generatedName = PopNameGenerator.GenerateRealmName(realmId, cultureType, seed, usedRealmNames);
+
                 realms.Add(new PopRealm
                 {
                     Id = realmId,
-                    Name = $"Kingdom {realmId}",
-                    FullName = $"Kingdom of Region {realmId}",
-                    GovernmentForm = "",
+                    Name = generatedName.Name,
+                    FullName = generatedName.FullName,
+                    GovernmentForm = generatedName.GovernmentForm,
                     CapitalBurgId = capitalBurgId,
                     CenterCellId = capitalCell,
-                    CultureId = 0,
+                    CultureId = cultureId,
                     Color = color,
                     LabelPosition = centerPos,
                     ProvinceIds = provinceSet,
@@ -305,8 +382,10 @@ namespace PopGen.Core
             int[] provinceIds,
             int[] countyIds,
             int[] countySeats,
-            int[] cellBurgId,
-            int countyCount)
+            int countyCount,
+            int[] realmCultureIds,
+            PopCulture[] cultures,
+            PopGenSeed seed)
         {
             if (countyCount <= 0)
                 return Array.Empty<PopCounty>();
@@ -326,10 +405,13 @@ namespace PopGen.Core
             }
 
             var counties = new List<PopCounty>(countyCells.Count);
-            foreach (var kvp in countyCells)
+            var countyIdOrder = new List<int>(countyCells.Keys);
+            countyIdOrder.Sort();
+            var usedCountyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int c = 0; c < countyIdOrder.Count; c++)
             {
-                int cid = kvp.Key;
-                List<int> cCells = kvp.Value;
+                int cid = countyIdOrder[c];
+                List<int> cCells = countyCells[cid];
                 int seatCell = (countySeats != null && cid - 1 >= 0 && cid - 1 < countySeats.Length)
                     ? countySeats[cid - 1]
                     : cCells[0];
@@ -359,10 +441,8 @@ namespace PopGen.Core
                     ? new Vec2(sumX / sumW, sumY / sumW)
                     : ((uint)seatCell < (uint)mesh.CellCount ? mesh.CellCenters[seatCell] : new Vec2(0f, 0f));
 
-                int seatBurgId = (uint)seatCell < (uint)cellBurgId.Length ? cellBurgId[seatCell] : 0;
-                string name = seatBurgId > 0
-                    ? $"Town {seatBurgId}"
-                    : $"County {cid}";
+                CultureType cultureType = GetCultureType(realmId, realmCultureIds, cultures);
+                string name = PopNameGenerator.GenerateCountyName(cid, provinceId, realmId, cultureType, seed, usedCountyNames);
 
                 counties.Add(new PopCounty
                 {
