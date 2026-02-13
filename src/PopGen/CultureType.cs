@@ -22,7 +22,7 @@ namespace PopGen.Core
     /// </summary>
     public static class CultureTypes
     {
-        public static readonly CultureType[] All = { Finnish };
+        public static readonly CultureType[] All = { Finnish, Icelandic };
 
         public static CultureType Finnish => new CultureType
         {
@@ -75,6 +75,59 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Pohjois", "Etelä", "Itä", "Länsi", "Ylä", "Ala", "Sisä", "Ulko"
+            }
+        };
+        public static CultureType Icelandic => new CultureType
+        {
+            Name = "Icelandic",
+            LeadingOnsets = new[]
+            {
+                // Old Norse heritage with voiceless sonorants (hl, hr, hn) and þ/ð
+                "b", "br", "d", "dr", "f", "fl", "fr", "g", "gn", "gr",
+                "h", "hl", "hn", "hr", "hv", "j",
+                "k", "kl", "kr", "l", "m", "n", "r", "s", "sk", "sl", "sn", "sp", "st", "sv",
+                "t", "tr", "v", "þ", "þr"
+            },
+            MedialOnsets = new[]
+            {
+                // Gemination, Norse clusters, ð/þ in medial position
+                "", "", "b", "d", "ð", "f", "g", "h", "k", "l", "m", "n", "r", "s", "t", "v",
+                "ff", "ll", "nn", "rr", "ss", "tt", "kk", "pp",
+                "nd", "ng", "nk", "rn", "rk", "rð", "rl", "lk", "lf", "lg", "fl", "fn"
+            },
+            Vowels = new[]
+            {
+                // Icelandic has short/long vowels and accented forms (á, é, í, ó, ú, ý, æ, ö)
+                "a", "e", "i", "o", "u", "y",
+                "á", "é", "í", "ó", "ú", "ý", "æ", "ö",
+                "au", "ei", "ey"
+            },
+            Codas = new[]
+            {
+                // Icelandic nouns characteristically end in -ur, -ir, -ar
+                "", "r", "n", "ð", "l", "s", "t", "k",
+                "ur", "ir", "ar",
+                "rn", "rð", "nd", "ng", "ll", "nn", "rr"
+            },
+            RealmSuffixes = new[]
+            {
+                "land", "ríki", "veldi", "heim", "garður", "ey"
+            },
+            ProvinceSuffixes = new[]
+            {
+                "fjörður", "nes", "dalur", "vík", "eyja", "staður", "fell", "heiði", "á", "vatn"
+            },
+            CountySuffixes = new[]
+            {
+                "bær", "garður", "holt", "tunga", "strönd", "vellir", "múli", "höfn", "borg", "staður"
+            },
+            GovernmentForms = new[]
+            {
+                "Konungsríki", "Hertogadæmi", "Jarldæmi", "Lýðveldi", "Ríki", "Furstadæmi"
+            },
+            DirectionalPrefixes = new[]
+            {
+                "Norður", "Suður", "Austur", "Vestur", "Efri", "Neðri", "Innri", "Ytri"
             }
         };
     }
