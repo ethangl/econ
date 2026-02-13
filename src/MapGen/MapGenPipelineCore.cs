@@ -25,7 +25,7 @@ namespace MapGen.Core
             var biomes = new BiomeField(mesh);
             BiomeGenerationOps.Compute(biomes, elevation, climate, rivers, config);
             var political = new PoliticalField(mesh);
-            PoliticalGenerationOps.Compute(political, biomes, elevation, config);
+            PoliticalGenerationOps.Compute(political, biomes, rivers, elevation, config);
 
             return new MapGenResult
             {
