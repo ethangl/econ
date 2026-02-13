@@ -30,6 +30,18 @@ namespace EconSim.Editor
             set => EditorPrefs.SetBool("MapOverlay_MarketRendering", value);
         }
 
+        private static bool soilRenderingFoldout
+        {
+            get => EditorPrefs.GetBool("MapOverlay_SoilRendering", true);
+            set => EditorPrefs.SetBool("MapOverlay_SoilRendering", value);
+        }
+
+        private static bool vegetationRenderingFoldout
+        {
+            get => EditorPrefs.GetBool("MapOverlay_VegetationRendering", true);
+            set => EditorPrefs.SetBool("MapOverlay_VegetationRendering", value);
+        }
+
         private static bool textureMapsFoldout
         {
             get => EditorPrefs.GetBool("MapOverlay_TextureMaps", false);
@@ -40,6 +52,12 @@ namespace EconSim.Editor
         {
             get => EditorPrefs.GetBool("MapOverlay_Debug", true);
             set => EditorPrefs.SetBool("MapOverlay_Debug", value);
+        }
+
+        private static bool uiFoldout
+        {
+            get => EditorPrefs.GetBool("MapOverlay_UI", false);
+            set => EditorPrefs.SetBool("MapOverlay_UI", value);
         }
 
         // Grouped properties: (shader name, display label)
@@ -64,6 +82,37 @@ namespace EconSim.Editor
             ("_PathDashLength", "Path Dash Length"),
             ("_PathGapLength", "Path Gap Length"),
             ("_PathWidth", "Path Width"),
+        };
+
+        private static readonly (string name, string label)[] SoilRenderingProps = new[]
+        {
+            ("_SoilHeightFloor", "Soil Height Floor"),
+            ("_SoilBlendRadius", "Soil Blend Radius (texels)"),
+            ("_SoilBlendSharpness", "Soil Blend Sharpness"),
+            ("_SoilColor0", "Permafrost"),
+            ("_SoilColor1", "Saline"),
+            ("_SoilColor2", "Lithosol"),
+            ("_SoilColor3", "Alluvial"),
+            ("_SoilColor4", "Aridisol"),
+            ("_SoilColor5", "Laterite"),
+            ("_SoilColor6", "Podzol"),
+            ("_SoilColor7", "Chernozem"),
+        };
+
+        private static readonly (string name, string label)[] VegetationRenderingProps = new[]
+        {
+            ("_VegetationStippleOpacity", "Stipple Opacity"),
+            ("_VegetationStippleScale", "Stipple Scale (texels)"),
+            ("_VegetationStippleJitter", "Stipple Jitter"),
+            ("_VegetationCoverageContrast", "Coverage Contrast"),
+            ("_VegetationStippleSoftness", "Stipple Softness"),
+            ("_VegetationColor0", "None"),
+            ("_VegetationColor1", "Lichen / Moss"),
+            ("_VegetationColor2", "Grass"),
+            ("_VegetationColor3", "Shrub"),
+            ("_VegetationColor4", "Deciduous"),
+            ("_VegetationColor5", "Coniferous"),
+            ("_VegetationColor6", "Broadleaf"),
         };
 
         private static readonly (string name, string label)[] WaterRenderingProps = new[]
@@ -94,6 +143,7 @@ namespace EconSim.Editor
         {
             ("_PoliticalIdsTex", "Political IDs"),
             ("_GeographyBaseTex", "Geography Base"),
+            ("_VegetationTex", "Vegetation Data"),
             ("_HeightmapTex", "Heightmap"),
             ("_ReliefNormalTex", "Relief Normal"),
             ("_RiverMaskTex", "River Mask"),
@@ -114,6 +164,12 @@ namespace EconSim.Editor
         private static readonly (string name, string label)[] DebugProps = new[]
         {
             ("_DebugView", "Channel Inspector View"),
+        };
+
+        private static readonly (string name, string label)[] UIProps = new[]
+        {
+            ("_SelectionDimming", "Selection Dimming"),
+            ("_SelectionDesaturation", "Selection Desaturation"),
         };
 
         // Properties set programmatically — hidden from Inspector
@@ -145,9 +201,15 @@ namespace EconSim.Editor
                 if (name == propName) return true;
             foreach (var (name, _) in MarketRenderingProps)
                 if (name == propName) return true;
+            foreach (var (name, _) in SoilRenderingProps)
+                if (name == propName) return true;
+            foreach (var (name, _) in VegetationRenderingProps)
+                if (name == propName) return true;
             foreach (var (name, _) in TextureMapsProps)
                 if (name == propName) return true;
             foreach (var (name, _) in DebugProps)
+                if (name == propName) return true;
+            foreach (var (name, _) in UIProps)
                 if (name == propName) return true;
             return false;
         }
@@ -195,20 +257,34 @@ namespace EconSim.Editor
             }
             EditorGUILayout.EndFoldoutHeaderGroup();
 
-            // Debug group
+            // Soil Rendering group
             EditorGUILayout.Space();
-            debugFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(debugFoldout, "Debug");
-            if (debugFoldout)
+            soilRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(soilRenderingFoldout, "Soil Rendering");
+            if (soilRenderingFoldout)
             {
                 EditorGUI.indentLevel++;
-                foreach (var (name, label) in DebugProps)
+                foreach (var (name, label) in SoilRenderingProps)
                 {
                     var prop = FindProperty(name, properties, false);
                     if (prop != null)
                         materialEditor.ShaderProperty(prop, label);
                 }
+                EditorGUI.indentLevel--;
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
 
-                EditorGUILayout.HelpBox("Runtime keys: 0=Channel Inspector mode, O=cycle channels, P=toggle ID probe.", MessageType.Info);
+            // Vegetation Rendering group
+            EditorGUILayout.Space();
+            vegetationRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(vegetationRenderingFoldout, "Vegetation Rendering");
+            if (vegetationRenderingFoldout)
+            {
+                EditorGUI.indentLevel++;
+                foreach (var (name, label) in VegetationRenderingProps)
+                {
+                    var prop = FindProperty(name, properties, false);
+                    if (prop != null)
+                        materialEditor.ShaderProperty(prop, label);
+                }
                 EditorGUI.indentLevel--;
             }
             EditorGUILayout.EndFoldoutHeaderGroup();
@@ -241,6 +317,40 @@ namespace EconSim.Editor
                     if (prop != null)
                         materialEditor.ShaderProperty(prop, label);
                 }
+                EditorGUI.indentLevel--;
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+
+            // UI group
+            EditorGUILayout.Space();
+            uiFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(uiFoldout, "UI");
+            if (uiFoldout)
+            {
+                EditorGUI.indentLevel++;
+                foreach (var (name, label) in UIProps)
+                {
+                    var prop = FindProperty(name, properties, false);
+                    if (prop != null)
+                        materialEditor.ShaderProperty(prop, label);
+                }
+                EditorGUI.indentLevel--;
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+
+            // Debug group
+            EditorGUILayout.Space();
+            debugFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(debugFoldout, "Debug");
+            if (debugFoldout)
+            {
+                EditorGUI.indentLevel++;
+                foreach (var (name, label) in DebugProps)
+                {
+                    var prop = FindProperty(name, properties, false);
+                    if (prop != null)
+                        materialEditor.ShaderProperty(prop, label);
+                }
+
+                EditorGUILayout.HelpBox("Runtime keys: 0=Channel Inspector mode, O=cycle channels, P=toggle ID probe.", MessageType.Info);
                 EditorGUI.indentLevel--;
             }
             EditorGUILayout.EndFoldoutHeaderGroup();

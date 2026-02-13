@@ -65,6 +65,12 @@ Shader "EconSim/MapOverlay"
         _SoilColor5 ("Laterite", Color) = (0.82, 0.42, 0.25, 1)
         _SoilColor6 ("Podzol", Color) = (0.62, 0.58, 0.48, 1)
         _SoilColor7 ("Chernozem", Color) = (0.38, 0.33, 0.27, 1)
+
+        _VegetationStippleOpacity ("Vegetation Stipple Opacity", Range(0, 1)) = 0.8
+        _VegetationStippleScale ("Vegetation Stipple Scale (texels)", Range(1, 12)) = 3
+        _VegetationStippleJitter ("Vegetation Stipple Jitter", Range(0, 1)) = 0.4
+        _VegetationCoverageContrast ("Vegetation Coverage Contrast", Range(0.5, 2)) = 1
+        _VegetationStippleSoftness ("Vegetation Stipple Softness", Range(0.5, 2.5)) = 1
         _VegetationColor0 ("Vegetation None", Color) = (0.0, 0.0, 0.0, 1)
         _VegetationColor1 ("Vegetation Lichen/Moss", Color) = (0.52, 0.62, 0.44, 1)
         _VegetationColor2 ("Vegetation Grass", Color) = (0.48, 0.63, 0.27, 1)
@@ -72,11 +78,6 @@ Shader "EconSim/MapOverlay"
         _VegetationColor4 ("Vegetation Deciduous", Color) = (0.27, 0.45, 0.19, 1)
         _VegetationColor5 ("Vegetation Coniferous", Color) = (0.17, 0.33, 0.20, 1)
         _VegetationColor6 ("Vegetation Broadleaf", Color) = (0.18, 0.37, 0.14, 1)
-        _VegetationStippleOpacity ("Vegetation Stipple Opacity", Range(0, 1)) = 0.8
-        _VegetationStippleScale ("Vegetation Stipple Scale (texels)", Range(1, 12)) = 3
-        _VegetationStippleJitter ("Vegetation Stipple Jitter", Range(0, 1)) = 0.4
-        _VegetationCoverageContrast ("Vegetation Coverage Contrast", Range(0.5, 2)) = 1
-        _VegetationStippleSoftness ("Vegetation Stipple Softness", Range(0.5, 2.5)) = 1
 
         // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome, 6=soil, 7=channel inspector, 8=local transport, 9=market transport
         _MapMode ("Map Mode", Int) = 0
