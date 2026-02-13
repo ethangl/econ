@@ -70,7 +70,7 @@ namespace EconSim.Core.Economy
             SimLog.Log("OffMap", $"On-map biomes: {string.Join(", ", onMapBiomes)}");
 
             // 2. Scan which raw goods are producible on-map
-            var onMapGoods = ScanOnMapRawGoods(onMapBiomes, economy, mapData);
+            var onMapGoods = ScanOnMapRawGoods(economy);
             SimLog.Log("OffMap", $"On-map raw goods: {string.Join(", ", onMapGoods)}");
 
             // 3. For each cardinal direction, check if off-map goods are available
@@ -168,49 +168,21 @@ namespace EconSim.Core.Economy
         }
 
         /// <summary>
-        /// Determine which raw goods can be produced on-map (including mining via elevation).
+        /// Determine which raw goods are actually available on-map based on assigned county resources.
         /// </summary>
-        static HashSet<string> ScanOnMapRawGoods(HashSet<string> onMapBiomes, EconomyState economy, MapData mapData)
+        static HashSet<string> ScanOnMapRawGoods(EconomyState economy)
         {
             var goods = new HashSet<string>();
 
-            // Check elevation for mining goods
-            bool hasHighElevation = false;
-            bool hasMediumElevation = false;
-            float maxElevation = Elevation.ResolveMaxElevationMeters(mapData.Info);
-            float threshold40 = 0.25f * maxElevation;
-            float threshold50 = 0.375f * maxElevation;
-
-            foreach (var cell in mapData.Cells)
+            // Read actual assigned county resources so this matches economy initialization exactly
+            // (including stochastic resources like gold and any terrain alias handling).
+            foreach (var county in economy.Counties.Values)
             {
-                if (!cell.IsLand) continue;
-                float elevMeters = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
-                if (elevMeters > threshold50) hasHighElevation = true;
-                if (elevMeters > threshold40) hasMediumElevation = true;
-                if (hasHighElevation) break; // high implies medium
-            }
-
-            foreach (var good in economy.Goods.ByCategory(GoodCategory.Raw))
-            {
-                if (good.TerrainAffinity == null) continue;
-
-                // Mining goods use elevation, not biome
-                if (good.Id == "iron_ore") { if (hasHighElevation) goods.Add(good.Id); continue; }
-                if (good.Id == "copper_ore") { if (hasMediumElevation) goods.Add(good.Id); continue; }
-                if (good.Id == "gold_ore") { if (hasHighElevation) goods.Add(good.Id); continue; }
-
-                // Normal biome matching (same bidirectional Contains as EconomyInitializer)
-                foreach (var terrain in good.TerrainAffinity)
+                foreach (var resourceId in county.Resources.Keys)
                 {
-                    foreach (var biomeName in onMapBiomes)
-                    {
-                        if (biomeName.Contains(terrain) || terrain.Contains(biomeName))
-                        {
-                            goods.Add(good.Id);
-                            break;
-                        }
-                    }
-                    if (goods.Contains(good.Id)) break;
+                    GoodDef good = economy.Goods.Get(resourceId);
+                    if (good?.Category == GoodCategory.Raw)
+                        goods.Add(resourceId);
                 }
             }
 
@@ -253,7 +225,7 @@ namespace EconSim.Core.Economy
                 {
                     foreach (var biomeName in offMapBiomes)
                     {
-                        if (biomeName.Contains(terrain) || terrain.Contains(biomeName))
+                        if (TerrainAffinityMatcher.MatchesBiome(terrain, biomeName))
                         {
                             availableRaw.Add(good.Id);
                             break;

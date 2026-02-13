@@ -158,7 +158,7 @@ namespace EconSim.Core.Economy
                         // Normal biome matching
                         foreach (var terrain in good.TerrainAffinity)
                         {
-                            if (biomeName.Contains(terrain) || terrain.Contains(biomeName))
+                            if (TerrainAffinityMatcher.MatchesBiome(terrain, biomeName))
                             {
                                 matches = true;
                                 break;
@@ -411,7 +411,7 @@ namespace EconSim.Core.Economy
                     {
                         foreach (var terrain in good.TerrainAffinity)
                         {
-                            if (biomeName.Contains(terrain) || terrain.Contains(biomeName))
+                            if (TerrainAffinityMatcher.MatchesBiome(terrain, biomeName))
                             {
                                 matches = true;
                                 break;

@@ -207,7 +207,15 @@ namespace EconSim.Core.Simulation.Systems
                         {
                             var marketGood = market.Goods[good.Id];
                             marketGood.Demand += toBuy;
-                            TryBuyFromMarkets(county, market, good, toBuy, transportEfficiency, totalBought);
+                            TryBuyFromMarkets(
+                                county,
+                                market,
+                                good,
+                                toBuy,
+                                transportEfficiency,
+                                seatCellId,
+                                economy,
+                                totalBought);
                         }
                     }
                 }
@@ -229,7 +237,15 @@ namespace EconSim.Core.Simulation.Systems
                         float toBuy = unmetDemand * BuyRatio;
                         var marketGood = market.Goods[good.Id];
                         marketGood.Demand += toBuy;
-                        TryBuyFromMarkets(county, market, good, toBuy, transportEfficiency, totalBought);
+                        TryBuyFromMarkets(
+                            county,
+                            market,
+                            good,
+                            toBuy,
+                            transportEfficiency,
+                            seatCellId,
+                            economy,
+                            totalBought);
                     }
                 }
             }
@@ -292,7 +308,7 @@ namespace EconSim.Core.Simulation.Systems
         }
 
         /// <summary>
-        /// Try to buy goods from either local market or black market, whichever is cheaper.
+        /// Try to buy goods from local market, black market, and then accessible off-map routes.
         /// Returns amount actually bought.
         /// </summary>
         private float TryBuyFromMarkets(
@@ -301,6 +317,8 @@ namespace EconSim.Core.Simulation.Systems
             GoodDef good,
             float toBuy,
             float transportEfficiency,
+            int seatCellId,
+            EconomyState economy,
             Dictionary<string, float> totalBought)
         {
             float remaining = toBuy;
@@ -371,10 +389,84 @@ namespace EconSim.Core.Simulation.Systems
                 }
             }
 
+            if (remaining > 0.01f)
+            {
+                float boughtOffMap = TryBuyFromOffMapMarkets(
+                    county,
+                    good,
+                    remaining,
+                    seatCellId,
+                    economy);
+                totalBoughtAmount += boughtOffMap;
+            }
+
             if (totalBoughtAmount > 0)
             {
                 if (!totalBought.ContainsKey(good.Id)) totalBought[good.Id] = 0;
                 totalBought[good.Id] += totalBoughtAmount;
+            }
+
+            return totalBoughtAmount;
+        }
+
+        private float TryBuyFromOffMapMarkets(
+            CountyEconomy county,
+            GoodDef good,
+            float toBuy,
+            int seatCellId,
+            EconomyState economy)
+        {
+            float remaining = toBuy;
+            float totalBoughtAmount = 0f;
+
+            while (remaining > 0.01f)
+            {
+                Market bestMarket = null;
+                MarketGoodState bestState = null;
+                float bestTransportEfficiency = 0f;
+                float bestEffectivePrice = float.MaxValue;
+
+                foreach (var market in economy.Markets.Values)
+                {
+                    if (market.Type != MarketType.OffMap)
+                        continue;
+                    if (market.OffMapGoodIds == null || !market.OffMapGoodIds.Contains(good.Id))
+                        continue;
+                    if (!market.Goods.TryGetValue(good.Id, out var marketState) || marketState.Supply <= 0f)
+                        continue;
+                    if (!TryGetOffMapTransportEfficiency(seatCellId, market, out float efficiency))
+                        continue;
+
+                    float effectivePrice = marketState.Price / efficiency;
+                    if (effectivePrice < bestEffectivePrice)
+                    {
+                        bestEffectivePrice = effectivePrice;
+                        bestMarket = market;
+                        bestState = marketState;
+                        bestTransportEfficiency = efficiency;
+                    }
+                }
+
+                if (bestMarket == null || bestState == null)
+                    break;
+
+                float actualBuy = Math.Min(remaining, bestState.Supply);
+                bestState.Supply -= actualBuy;
+                bestState.Demand += actualBuy;
+
+                float arriving = actualBuy * bestTransportEfficiency;
+                county.Stockpile.Add(good.Id, arriving);
+
+                float lost = actualBuy - arriving;
+                if (_blackMarket != null && lost > 0 && good.TheftRisk > 0 && good.IsFinished)
+                {
+                    float stolen = lost * good.TheftRisk;
+                    if (stolen > 0.001f)
+                        _blackMarket.Goods[good.Id].Supply += stolen;
+                }
+
+                totalBoughtAmount += actualBuy;
+                remaining -= actualBuy;
             }
 
             return totalBoughtAmount;
@@ -392,6 +484,24 @@ namespace EconSim.Core.Simulation.Systems
             if (!costsToMarket.TryGetValue(cellId, out var cost))
                 return 0.5f;  // Not in cache, assume moderate cost
 
+            return ComputeTransportEfficiencyFromCost(cost);
+        }
+
+        private bool TryGetOffMapTransportEfficiency(int cellId, Market market, out float transportEfficiency)
+        {
+            transportEfficiency = 0f;
+            if (market?.ZoneCellCosts == null)
+                return false;
+
+            if (!market.ZoneCellCosts.TryGetValue(cellId, out float cost))
+                return false;
+
+            transportEfficiency = ComputeTransportEfficiencyFromCost(cost);
+            return true;
+        }
+
+        private static float ComputeTransportEfficiencyFromCost(float cost)
+        {
             // Efficiency decreases with transport cost
             // efficiency = 1 / (1 + cost * markup)
             float efficiency = 1f / (1f + cost * TransportCostMarkup);
