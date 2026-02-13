@@ -214,6 +214,71 @@ namespace EconSim.Tests
             }
         }
 
+        [Test]
+        public void Convert_ReligionsRoundTripFromPopGenOutput()
+        {
+            WorldGenerationContext context = WorldGenerationContext.FromRootSeed(101010);
+            MapGenResult map = GenerateMap(context.MapGenSeed, cellCount: 3600);
+
+            PopGenResult expected = PopGenPipeline.Generate(
+                map,
+                new PopGenConfig(),
+                new PopGenSeed(context.PopGenSeed));
+
+            MapData runtime = WorldGenImporter.Convert(map, context);
+
+            Assert.That(runtime.Religions, Is.Not.Null);
+            Assert.That(runtime.ReligionById, Is.Not.Null);
+            Assert.That(runtime.Religions.Count, Is.EqualTo(expected.Religions.Length));
+            Assert.That(runtime.ReligionById.Count, Is.EqualTo(runtime.Religions.Count));
+
+            foreach (PopReligion expectedReligion in expected.Religions)
+            {
+                Assert.That(runtime.ReligionById.TryGetValue(expectedReligion.Id, out Religion actualReligion), Is.True,
+                    $"Missing religion {expectedReligion.Id}.");
+                Assert.That(actualReligion.Name, Is.EqualTo(expectedReligion.Name),
+                    $"Religion name mismatch for {expectedReligion.Id}.");
+                Assert.That(actualReligion.TypeName, Is.EqualTo(expectedReligion.TypeName ?? "Unknown"),
+                    $"Religion type mismatch for {expectedReligion.Id}.");
+            }
+        }
+
+        [Test]
+        public void Convert_CellReligionIdsMatchCultureReligionAssignments()
+        {
+            WorldGenerationContext context = WorldGenerationContext.FromRootSeed(111111);
+            MapGenResult map = GenerateMap(context.MapGenSeed, cellCount: 3600);
+            MapData runtime = WorldGenImporter.Convert(map, context);
+
+            Assert.That(runtime.RealmById, Is.Not.Null);
+            Assert.That(runtime.CultureById, Is.Not.Null);
+            Assert.That(runtime.ReligionById, Is.Not.Null);
+
+            for (int i = 0; i < runtime.Cells.Count; i++)
+            {
+                Cell cell = runtime.Cells[i];
+                if (cell.RealmId <= 0)
+                {
+                    Assert.That(cell.ReligionId, Is.EqualTo(0),
+                        $"Neutral cell {cell.Id} should not have a religion assignment.");
+                    continue;
+                }
+
+                Assert.That(runtime.RealmById.TryGetValue(cell.RealmId, out Realm realm), Is.True,
+                    $"Cell {cell.Id} references missing realm {cell.RealmId}.");
+                Assert.That(realm.CultureId, Is.GreaterThan(0),
+                    $"Realm {realm.Id} should have a culture.");
+                Assert.That(runtime.CultureById.TryGetValue(realm.CultureId, out Culture culture), Is.True,
+                    $"Realm {realm.Id} references missing culture {realm.CultureId}.");
+                Assert.That(culture.ReligionId, Is.GreaterThan(0),
+                    $"Culture {culture.Id} should have a religion.");
+                Assert.That(cell.ReligionId, Is.EqualTo(culture.ReligionId),
+                    $"Cell {cell.Id} religion mismatch: cell={cell.ReligionId}, culture={culture.ReligionId}.");
+                Assert.That(runtime.ReligionById.ContainsKey(cell.ReligionId), Is.True,
+                    $"Cell {cell.Id} references missing religion {cell.ReligionId}.");
+            }
+        }
+
         static MapGenResult GenerateMap(int seed, int cellCount)
         {
             var config = new MapGenConfig
