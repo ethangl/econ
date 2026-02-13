@@ -22,7 +22,7 @@ namespace PopGen.Core
     /// </summary>
     public static class CultureTypes
     {
-        public static readonly CultureType[] All = { Finnish, Icelandic };
+        public static readonly CultureType[] All = { Finnish, Icelandic, Danish };
 
         public static CultureType Finnish => new CultureType
         {
@@ -128,6 +128,64 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Norður", "Suður", "Austur", "Vestur", "Efri", "Neðri", "Innri", "Ytri"
+            }
+        };
+
+        public static CultureType Danish => new CultureType
+        {
+            Name = "Danish",
+            LeadingOnsets = new[]
+            {
+                // Danish has voiced/voiceless stops, affricates, and a few clusters
+                // Stød (glottal stop) is prosodic, not written — phonetic flavor comes from vowels
+                "b", "bl", "br", "d", "dr", "f", "fl", "fr", "g", "gl", "gr", "gn",
+                "h", "hj", "hv", "j", "k", "kl", "kn", "kr", "kv",
+                "l", "m", "n", "p", "pl", "pr", "r", "s", "sk", "sl", "sm", "sn", "sp", "st", "sv",
+                "t", "tr", "v"
+            },
+            MedialOnsets = new[]
+            {
+                // Danish medial: simple consonants, geminates, common clusters
+                "", "", "b", "d", "f", "g", "h", "j", "k", "l", "m", "n", "p", "r", "s", "t", "v",
+                "bb", "dd", "ff", "gg", "kk", "ll", "mm", "nn", "pp", "rr", "ss", "tt",
+                "nd", "ng", "nk", "ld", "lk", "rn", "rk", "rd", "sk", "st", "ft", "gt"
+            },
+            Vowels = new[]
+            {
+                // Danish has one of the largest vowel inventories in the world (~20+ monophthongs)
+                // Written Danish uses æ, ø, å plus many diphthongs
+                "a", "e", "i", "o", "u", "y",
+                "æ", "ø", "å",
+                "aa", "ee", "oo",
+                "aj", "ej", "øj",
+                "av", "ev", "øv",
+                "iu", "ou"
+            },
+            Codas = new[]
+            {
+                // Danish words often end in -en, -er, -el, -et; also -d (soft d), -g, -k, -s
+                "", "", "n", "r", "l", "s", "t", "d", "g", "k",
+                "nd", "ng", "nk", "rd", "rk", "rn", "ld", "lk", "ls"
+            },
+            RealmSuffixes = new[]
+            {
+                "mark", "land", "rige", "gård", "holm", "borg"
+            },
+            ProvinceSuffixes = new[]
+            {
+                "sund", "borg", "bro", "vig", "ø", "sted", "fjord", "dal", "havn", "bjerg"
+            },
+            CountySuffixes = new[]
+            {
+                "by", "lund", "løse", "rup", "lev", "toft", "høj", "ager", "skov", "eng", "bæk"
+            },
+            GovernmentForms = new[]
+            {
+                "Kongerige", "Hertugdømme", "Jarldømme", "Grevskab", "Rige", "Fyrstendømme"
+            },
+            DirectionalPrefixes = new[]
+            {
+                "Nord", "Syd", "Øst", "Vest", "Øvre", "Nedre", "Indre", "Ydre"
             }
         };
     }
