@@ -288,10 +288,7 @@ namespace EconSim.UI
             SetLabel(_stateValue, "-");
 
             string capitalName = "-";
-            if (realm.CapitalBurgId > 0 && realm.CapitalBurgId < _mapData.Burgs.Count)
-            {
-                capitalName = _mapData.Burgs[realm.CapitalBurgId].Name ?? "-";
-            }
+            capitalName = GetBurgNameById(realm.CapitalBurgId);
             SetLabel(_terrainValue, capitalName);
             SetLabel(_cultureValue, GetCultureName(_selectedRealmId));
 
@@ -358,10 +355,7 @@ namespace EconSim.UI
             SetLabel(_stateValue, realmName);
 
             string capitalName = "-";
-            if (province.CapitalBurgId > 0 && province.CapitalBurgId < _mapData.Burgs.Count)
-            {
-                capitalName = _mapData.Burgs[province.CapitalBurgId].Name ?? "-";
-            }
+            capitalName = GetBurgNameById(province.CapitalBurgId);
             SetLabel(_terrainValue, capitalName);
             SetLabel(_cultureValue, GetCultureName(province.RealmId));
 
@@ -665,6 +659,29 @@ namespace EconSim.UI
             if (realmId <= 0 || !_mapData.RealmById.TryGetValue(realmId, out var realm)) return "-";
             if (realm.CultureId <= 0 || !_mapData.CultureById.TryGetValue(realm.CultureId, out var culture)) return "-";
             return culture.Name ?? "-";
+        }
+
+        private string GetBurgNameById(int burgId)
+        {
+            if (_mapData == null || _mapData.Burgs == null || burgId <= 0)
+                return "-";
+
+            int index = burgId - 1; // IDs are 1-based; list indices are 0-based.
+            if (index >= 0 && index < _mapData.Burgs.Count)
+            {
+                Burg burg = _mapData.Burgs[index];
+                if (burg != null && burg.Id == burgId)
+                    return burg.Name ?? "-";
+            }
+
+            for (int i = 0; i < _mapData.Burgs.Count; i++)
+            {
+                Burg burg = _mapData.Burgs[i];
+                if (burg != null && burg.Id == burgId)
+                    return burg.Name ?? "-";
+            }
+
+            return "-";
         }
     }
 }
