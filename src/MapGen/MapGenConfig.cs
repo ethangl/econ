@@ -41,6 +41,10 @@ namespace MapGen.Core
         public int MinRiverVertices = 12;
         const float RiverTuningReferenceCellCount = 5000f;
 
+        // Realm seeding floors: a landmass must pass both to get its own realm seed.
+        public int MinRealmCells = 64;
+        public float MinRealmPopulationFraction = 0.02f;
+
         // Optional per-template tuning override used by analysis/sweeps.
         public HeightmapTemplateTuningProfile TemplateTuningOverride;
 
@@ -113,6 +117,9 @@ namespace MapGen.Core
             if (RiverThreshold <= 0f) throw new ArgumentOutOfRangeException(nameof(RiverThreshold), "RiverThreshold must be positive.");
             if (RiverTraceThreshold <= 0f) throw new ArgumentOutOfRangeException(nameof(RiverTraceThreshold), "RiverTraceThreshold must be positive.");
             if (MinRiverVertices <= 0) throw new ArgumentOutOfRangeException(nameof(MinRiverVertices), "MinRiverVertices must be positive.");
+            if (MinRealmCells <= 0) throw new ArgumentOutOfRangeException(nameof(MinRealmCells), "MinRealmCells must be positive.");
+            if (MinRealmPopulationFraction < 0f || MinRealmPopulationFraction > 1f)
+                throw new ArgumentOutOfRangeException(nameof(MinRealmPopulationFraction), "MinRealmPopulationFraction must be in [0, 1].");
             if (WindBands == null || WindBands.Length == 0) throw new ArgumentException("WindBands must be configured.", nameof(WindBands));
         }
     }

@@ -78,7 +78,7 @@ Shader "EconSim/MapOverlay"
         _VegetationCoverageContrast ("Vegetation Coverage Contrast", Range(0.5, 2)) = 1
         _VegetationStippleSoftness ("Vegetation Stipple Softness", Range(0.5, 2.5)) = 1
 
-        // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome, 6=soil, 7=channel inspector
+        // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome, 6=soil, 7=channel inspector, 8=local transport, 9=market transport
         _MapMode ("Map Mode", Int) = 0
         _DebugView ("Debug View", Int) = 0
 

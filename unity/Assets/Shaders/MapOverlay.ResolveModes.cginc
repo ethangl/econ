@@ -126,6 +126,11 @@ float4 ComputeMapModeFromResolvedBase(float2 uv, bool isCellWater, bool isRiver,
     {
         modeColor = ApplyMarketModeStyle(uv, grayTerrain, resolvedBaseColor);
     }
+    else if (_MapMode == 8 || _MapMode == 9)
+    {
+        // Transport heatmaps are already fully resolved in C#.
+        modeColor = resolvedBaseColor;
+    }
     else
     {
         return float4(0, 0, 0, 0);

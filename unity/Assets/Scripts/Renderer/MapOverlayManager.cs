@@ -206,6 +206,26 @@ public class MapOverlayManager
             new Color(70/255f, 130/255f, 180/255f),   // Steel blue
         };
 
+        // Transport heatmap colors (low -> high).
+        private static readonly Color HeatLowColor = new Color(0.12f, 0.45f, 0.85f);
+        private static readonly Color HeatMidColor = new Color(0.15f, 0.78f, 0.62f);
+        private static readonly Color HeatHighColor = new Color(0.98f, 0.82f, 0.22f);
+        private static readonly Color HeatExtremeColor = new Color(0.82f, 0.20f, 0.18f);
+        private static readonly Color HeatMissingColor = new Color(0.25f, 0.25f, 0.25f);
+        private const float ProvinceHueShiftDegrees = 6f;
+        private const float ProvinceSaturationShift = 0.06f;
+        private const float ProvinceValueShift = 0.06f;
+        private const float CountyHueShiftDegrees = 6f;
+        private const float CountySaturationShift = 0.06f;
+        private const float CountyValueShift = 0.06f;
+
+        // Mirror transport tuning so Local Transport Cost overlay matches gameplay path cost.
+        private const float OverlayDefaultMovementCost = 1.0f;
+        private const float OverlayBiomeCostMin = 1f;
+        private const float OverlayBiomeCostMax = 20f;
+        private const float OverlayImpassableThreshold = 100f;
+        private const float OverlayMaxPassableAltitudeCost = OverlayImpassableThreshold - 1f;
+
         private const int OverlayTextureCacheVersion = 2;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
         private const string CacheSpatialGridFile = "spatial_grid.bin";
@@ -1622,7 +1642,7 @@ public class MapOverlayManager
 
         /// <summary>
         /// Generate color palette textures for realms, markets, and biomes.
-        /// Province/county colors are derived from realm colors in the shader.
+        /// Province/county colors are derived from realm colors during mode-color resolve.
         /// </summary>
         private void GeneratePaletteTextures()
         {
@@ -1849,10 +1869,12 @@ public class MapOverlayManager
         {
             economyState = economy;
             InvalidateModeColorResolveCache(MapView.MapMode.Market);
+            InvalidateModeColorResolveCache(MapView.MapMode.MarketTransportCost);
 
             if (economy == null || economy.CountyToMarket == null)
             {
-                if (currentMapMode == MapView.MapMode.Market)
+                if (currentMapMode == MapView.MapMode.Market ||
+                    currentMapMode == MapView.MapMode.MarketTransportCost)
                     RegenerateModeColorResolveTexture();
                 return;
             }
@@ -1894,7 +1916,8 @@ public class MapOverlayManager
                 overlayCacheDirty = true;
             }
 
-            if (currentMapMode == MapView.MapMode.Market)
+            if (currentMapMode == MapView.MapMode.Market ||
+                currentMapMode == MapView.MapMode.MarketTransportCost)
                 RegenerateModeColorResolveTexture();
             if (currentMapMode != MapView.MapMode.Market)
                 pendingMarketModePrewarm = true;
@@ -2022,21 +2045,13 @@ public class MapOverlayManager
             return mode == MapView.MapMode.Political ||
                    mode == MapView.MapMode.Province ||
                    mode == MapView.MapMode.County ||
-                   mode == MapView.MapMode.Market;
+                   mode == MapView.MapMode.Market ||
+                   mode == MapView.MapMode.LocalTransportCost ||
+                   mode == MapView.MapMode.MarketTransportCost;
         }
 
         private static MapView.MapMode ResolveCacheKeyForMode(MapView.MapMode mode)
         {
-            if (mode == MapView.MapMode.Market)
-                return MapView.MapMode.Market;
-
-            if (mode == MapView.MapMode.Political ||
-                mode == MapView.MapMode.Province ||
-                mode == MapView.MapMode.County)
-            {
-                return MapView.MapMode.Political;
-            }
-
             return mode;
         }
 
@@ -2131,32 +2146,143 @@ public class MapOverlayManager
             Color[] realmPalette = realmPaletteTexture.GetPixels();
             Color[] marketPalette = marketPaletteTexture.GetPixels();
 
-            for (int i = 0; i < size; i++)
+            bool isLocalTransportMode = currentMapMode == MapView.MapMode.LocalTransportCost;
+            bool isMarketTransportMode = currentMapMode == MapView.MapMode.MarketTransportCost;
+            if (isLocalTransportMode || isMarketTransportMode)
             {
-                int cellId = spatialGrid[i];
-                if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
-                    continue;
+                var values = new float[size];
+                for (int i = 0; i < size; i++)
+                    values[i] = float.NaN;
 
-                bool isCellWater = !cell.IsLand;
-                bool isRiver = rivers[i].r > 0.5f;
-                if (isCellWater || isRiver)
-                    continue;
+                float minValue = float.MaxValue;
+                float maxValue = float.MinValue;
+                var biomeMovementCostById = BuildBiomeMovementCostLookup();
 
-                if (currentMapMode == MapView.MapMode.Market)
+                for (int i = 0; i < size; i++)
                 {
-                    int marketId = 0;
-                    if (economyState != null && economyState.CountyToMarket != null)
-                        economyState.CountyToMarket.TryGetValue(cell.CountyId, out marketId);
+                    int cellId = spatialGrid[i];
+                    if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
+                        continue;
 
-                    Color marketColor = LookupPaletteColor(marketPalette, marketId);
-                    marketColor.a = 1f;
-                    resolved[i] = marketColor;
+                    if (!cell.IsLand || rivers[i].r > 0.5f)
+                        continue;
+
+                    float value;
+                    bool hasValue;
+                    if (isLocalTransportMode)
+                    {
+                        value = ComputeLocalTransportCost(cell, biomeMovementCostById);
+                        hasValue = true;
+                    }
+                    else
+                    {
+                        hasValue = TryGetAssignedMarketTransportCost(cellId, cell.CountyId, out value);
+                    }
+
+                    if (!hasValue || float.IsNaN(value) || float.IsInfinity(value))
+                        continue;
+
+                    values[i] = value;
+                    minValue = Mathf.Min(minValue, value);
+                    maxValue = Mathf.Max(maxValue, value);
                 }
-                else
+
+                bool minFinite = !float.IsNaN(minValue) && !float.IsInfinity(minValue);
+                bool maxFinite = !float.IsNaN(maxValue) && !float.IsInfinity(maxValue);
+                if (!minFinite || !maxFinite || maxValue <= minValue)
                 {
-                    Color politicalColor = LookupPaletteColor(realmPalette, cell.RealmId);
-                    politicalColor.a = 1f;
-                    resolved[i] = politicalColor;
+                    minValue = 0f;
+                    maxValue = 1f;
+                }
+
+                float range = Mathf.Max(0.0001f, maxValue - minValue);
+                for (int i = 0; i < size; i++)
+                {
+                    int cellId = spatialGrid[i];
+                    if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
+                        continue;
+
+                    if (!cell.IsLand || rivers[i].r > 0.5f)
+                        continue;
+
+                    float value = values[i];
+                    if (float.IsNaN(value) || float.IsInfinity(value))
+                    {
+                        Color missing = HeatMissingColor;
+                        missing.a = 1f;
+                        resolved[i] = missing;
+                        continue;
+                    }
+
+                    float normalized = Mathf.Clamp01((value - minValue) / range);
+                    Color heat = EvaluateHeatColor(normalized);
+                    heat.a = 1f;
+                    resolved[i] = heat;
+                }
+            }
+            else
+            {
+                Dictionary<int, Color> provinceColorById = null;
+                Dictionary<int, Color> countyColorById = null;
+                if (currentMapMode == MapView.MapMode.Province ||
+                    currentMapMode == MapView.MapMode.County)
+                {
+                    provinceColorById = BuildProvinceColorOverrides(realmPalette);
+                    if (currentMapMode == MapView.MapMode.County)
+                        countyColorById = BuildCountyColorOverrides(provinceColorById, realmPalette);
+                }
+
+                for (int i = 0; i < size; i++)
+                {
+                    int cellId = spatialGrid[i];
+                    if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
+                        continue;
+
+                    bool isCellWater = !cell.IsLand;
+                    bool isRiver = rivers[i].r > 0.5f;
+                    if (isCellWater || isRiver)
+                        continue;
+
+                    if (currentMapMode == MapView.MapMode.Market)
+                    {
+                        int marketId = 0;
+                        if (economyState != null && economyState.CountyToMarket != null)
+                            economyState.CountyToMarket.TryGetValue(cell.CountyId, out marketId);
+
+                        Color marketColor = LookupPaletteColor(marketPalette, marketId);
+                        marketColor.a = 1f;
+                        resolved[i] = marketColor;
+                    }
+                    else
+                    {
+                        Color politicalColor = LookupPaletteColor(realmPalette, cell.RealmId);
+                        if (currentMapMode == MapView.MapMode.Province)
+                        {
+                            if (provinceColorById != null && provinceColorById.TryGetValue(cell.ProvinceId, out Color provinceColor))
+                                politicalColor = provinceColor;
+                            else
+                                politicalColor = DeriveProvinceColorFromRealm(politicalColor, cell.ProvinceId);
+                        }
+                        else if (currentMapMode == MapView.MapMode.County)
+                        {
+                            if (countyColorById != null && countyColorById.TryGetValue(cell.CountyId, out Color countyColor))
+                            {
+                                politicalColor = countyColor;
+                            }
+                            else
+                            {
+                                if (provinceColorById != null && provinceColorById.TryGetValue(cell.ProvinceId, out Color provinceColor))
+                                    politicalColor = DeriveCountyColorFromProvince(provinceColor, cell.CountyId);
+                                else
+                                {
+                                    Color fallbackProvinceColor = DeriveProvinceColorFromRealm(politicalColor, cell.ProvinceId);
+                                    politicalColor = DeriveCountyColorFromProvince(fallbackProvinceColor, cell.CountyId);
+                                }
+                            }
+                        }
+                        politicalColor.a = 1f;
+                        resolved[i] = politicalColor;
+                    }
                 }
             }
 
@@ -2167,6 +2293,425 @@ public class MapOverlayManager
             MapView.MapMode cacheKey = ResolveCacheKeyForMode(currentMapMode);
             modeColorResolveCacheRevisionByMode[cacheKey] = GetModeColorResolveRevision(cacheKey);
             TextureDebugger.SaveTexture(modeColorResolveTexture, "mode_color_resolve");
+        }
+
+        private float ComputeLocalTransportCost(Cell cell, Dictionary<int, int> biomeMovementCostById)
+        {
+            float baseCost = OverlayDefaultMovementCost;
+            if (biomeMovementCostById != null &&
+                biomeMovementCostById.TryGetValue(cell.BiomeId, out int biomeMovementCost) &&
+                biomeMovementCost > 0)
+            {
+                baseCost = biomeMovementCost;
+                baseCost = Mathf.Clamp(baseCost, OverlayBiomeCostMin, OverlayBiomeCostMax);
+            }
+
+            float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
+            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeImpassableMeters)
+            {
+                return OverlayImpassableThreshold;
+            }
+
+            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeEffectStartMeters)
+            {
+                float altitudeMetersCapped = Mathf.Min(elevationMetersAboveSeaLevel, Elevation.HumanAltitudeImpassableMeters);
+                float altitudeT = (altitudeMetersCapped - Elevation.HumanAltitudeEffectStartMeters) /
+                    Mathf.Max(1f, Elevation.HumanAltitudeEffectSpanMeters);
+                baseCost = Mathf.Lerp(baseCost, OverlayMaxPassableAltitudeCost, Mathf.Clamp01(altitudeT));
+            }
+
+            return baseCost;
+        }
+
+        private static Color DeriveProvinceColorFromRealm(Color realmColor, int provinceId)
+        {
+            return DeriveProvinceColorFromRealmVariant(realmColor, provinceId, 0, out _);
+        }
+
+        private static Color DeriveCountyColorFromProvince(Color provinceColor, int countyId)
+        {
+            return DeriveCountyColorFromProvinceVariant(provinceColor, countyId, 0, out _);
+        }
+
+        private static float Hash01(uint value)
+        {
+            uint h = value;
+            h ^= h >> 16;
+            h *= 0x85ebca6bu;
+            h ^= h >> 13;
+            h *= 0xc2b2ae35u;
+            h ^= h >> 16;
+            return (h & 0x7fffffffu) / (float)0x7fffffffu;
+        }
+
+        private static Color DeriveProvinceColorFromRealmVariant(Color realmColor, int provinceId, int variantIndex, out Vector3 hsv)
+        {
+            Color.RGBToHSV(realmColor, out float h, out float s, out float v);
+
+            if (provinceId <= 0)
+            {
+                hsv = new Vector3(h, s, v);
+                return realmColor;
+            }
+
+            uint variant = (uint)Mathf.Max(0, variantIndex + 1);
+            uint seed = ((uint)provinceId * 747796405u) ^ (variant * 2891336453u);
+
+            float hueRand = Hash01(seed ^ 0x68bc21ebu) * 2f - 1f;
+            float satRand = Hash01(seed ^ 0x02e5be93u) * 2f - 1f;
+            float valRand = Hash01(seed ^ 0x967a889bu) * 2f - 1f;
+
+            h = Mathf.Repeat(h + hueRand * (ProvinceHueShiftDegrees / 360f), 1f);
+            s = Mathf.Clamp01(s + satRand * ProvinceSaturationShift);
+            v = Mathf.Clamp01(v + valRand * ProvinceValueShift);
+            hsv = new Vector3(h, s, v);
+
+            Color derived = Color.HSVToRGB(h, s, v);
+            derived.a = realmColor.a;
+            return derived;
+        }
+
+        private static Color DeriveCountyColorFromProvinceVariant(Color provinceColor, int countyId, int variantIndex, out Vector3 hsv)
+        {
+            Color.RGBToHSV(provinceColor, out float h, out float s, out float v);
+
+            if (countyId <= 0)
+            {
+                hsv = new Vector3(h, s, v);
+                return provinceColor;
+            }
+
+            uint variant = (uint)Mathf.Max(0, variantIndex + 1);
+            uint seed = ((uint)countyId * 1640531513u) ^ (variant * 1013904223u);
+
+            float hueRand = Hash01(seed ^ 0x4f1bbcdcu) * 2f - 1f;
+            float satRand = Hash01(seed ^ 0x8f2e7ab7u) * 2f - 1f;
+            float valRand = Hash01(seed ^ 0xbd4f2699u) * 2f - 1f;
+
+            h = Mathf.Repeat(h + hueRand * (CountyHueShiftDegrees / 360f), 1f);
+            s = Mathf.Clamp01(s + satRand * CountySaturationShift);
+            v = Mathf.Clamp01(v + valRand * CountyValueShift);
+            hsv = new Vector3(h, s, v);
+
+            Color derived = Color.HSVToRGB(h, s, v);
+            derived.a = provinceColor.a;
+            return derived;
+        }
+
+        private Dictionary<int, Color> BuildProvinceColorOverrides(Color[] realmPalette)
+        {
+            var provinceColorById = new Dictionary<int, Color>();
+            if (mapData?.Provinces == null || mapData.Provinces.Count == 0 || mapData.CellById == null)
+                return provinceColorById;
+
+            var adjacencyByProvince = BuildProvinceAdjacency();
+            var orderedProvinceIds = new List<int>(mapData.Provinces.Count);
+            for (int i = 0; i < mapData.Provinces.Count; i++)
+            {
+                var province = mapData.Provinces[i];
+                if (province != null && province.Id > 0)
+                    orderedProvinceIds.Add(province.Id);
+            }
+
+            orderedProvinceIds.Sort((a, b) =>
+            {
+                int degreeA = adjacencyByProvince.TryGetValue(a, out var neighborsA) ? neighborsA.Count : 0;
+                int degreeB = adjacencyByProvince.TryGetValue(b, out var neighborsB) ? neighborsB.Count : 0;
+                int degreeCompare = degreeB.CompareTo(degreeA);
+                return degreeCompare != 0 ? degreeCompare : a.CompareTo(b);
+            });
+
+            var provinceHsvById = new Dictionary<int, Vector3>(orderedProvinceIds.Count);
+            const int candidateCount = 12;
+
+            for (int i = 0; i < orderedProvinceIds.Count; i++)
+            {
+                int provinceId = orderedProvinceIds[i];
+                if (!mapData.ProvinceById.TryGetValue(provinceId, out var province) || province == null)
+                    continue;
+
+                Color realmColor = LookupPaletteColor(realmPalette, province.RealmId);
+                Color bestColor = DeriveProvinceColorFromRealmVariant(realmColor, provinceId, 0, out Vector3 bestHsv);
+                float bestScore = float.NegativeInfinity;
+                bool comparedAnyNeighbors = false;
+
+                if (adjacencyByProvince.TryGetValue(provinceId, out var neighbors) && neighbors.Count > 0)
+                {
+                    for (int candidate = 0; candidate < candidateCount; candidate++)
+                    {
+                        Color candidateColor = DeriveProvinceColorFromRealmVariant(realmColor, provinceId, candidate, out Vector3 candidateHsv);
+                        float minNeighborDistance = float.PositiveInfinity;
+                        bool hasAssignedNeighbor = false;
+
+                        foreach (int neighborProvinceId in neighbors)
+                        {
+                            if (!provinceHsvById.TryGetValue(neighborProvinceId, out Vector3 neighborHsv))
+                                continue;
+
+                            hasAssignedNeighbor = true;
+                            float distance = ComputeHsvDistance(candidateHsv, neighborHsv);
+                            if (distance < minNeighborDistance)
+                                minNeighborDistance = distance;
+                        }
+
+                        if (!hasAssignedNeighbor)
+                            continue;
+
+                        comparedAnyNeighbors = true;
+                        if (minNeighborDistance > bestScore)
+                        {
+                            bestScore = minNeighborDistance;
+                            bestColor = candidateColor;
+                            bestHsv = candidateHsv;
+                        }
+                    }
+                }
+
+                if (!comparedAnyNeighbors)
+                    bestColor = DeriveProvinceColorFromRealmVariant(realmColor, provinceId, 0, out bestHsv);
+
+                provinceColorById[provinceId] = bestColor;
+                provinceHsvById[provinceId] = bestHsv;
+            }
+
+            return provinceColorById;
+        }
+
+        private Dictionary<int, Color> BuildCountyColorOverrides(Dictionary<int, Color> provinceColorById, Color[] realmPalette)
+        {
+            var countyColorById = new Dictionary<int, Color>();
+            if (mapData?.Counties == null || mapData.Counties.Count == 0 || mapData.CellById == null || mapData.CountyById == null)
+                return countyColorById;
+
+            var adjacencyByCounty = BuildCountyAdjacency();
+            var orderedCountyIds = new List<int>(mapData.Counties.Count);
+            for (int i = 0; i < mapData.Counties.Count; i++)
+            {
+                var county = mapData.Counties[i];
+                if (county != null && county.Id > 0)
+                    orderedCountyIds.Add(county.Id);
+            }
+
+            orderedCountyIds.Sort((a, b) =>
+            {
+                int degreeA = adjacencyByCounty.TryGetValue(a, out var neighborsA) ? neighborsA.Count : 0;
+                int degreeB = adjacencyByCounty.TryGetValue(b, out var neighborsB) ? neighborsB.Count : 0;
+                int degreeCompare = degreeB.CompareTo(degreeA);
+                return degreeCompare != 0 ? degreeCompare : a.CompareTo(b);
+            });
+
+            var countyHsvById = new Dictionary<int, Vector3>(orderedCountyIds.Count);
+            const int candidateCount = 12;
+
+            for (int i = 0; i < orderedCountyIds.Count; i++)
+            {
+                int countyId = orderedCountyIds[i];
+                if (!mapData.CountyById.TryGetValue(countyId, out var county) || county == null)
+                    continue;
+
+                Color provinceColor = Color.white;
+                if (provinceColorById != null &&
+                    county.ProvinceId > 0 &&
+                    provinceColorById.TryGetValue(county.ProvinceId, out Color resolvedProvinceColor))
+                {
+                    provinceColor = resolvedProvinceColor;
+                }
+                else
+                {
+                    Color realmColor = LookupPaletteColor(realmPalette, county.RealmId);
+                    provinceColor = county.ProvinceId > 0
+                        ? DeriveProvinceColorFromRealm(realmColor, county.ProvinceId)
+                        : realmColor;
+                }
+
+                Color bestColor = DeriveCountyColorFromProvinceVariant(provinceColor, countyId, 0, out Vector3 bestHsv);
+                float bestScore = float.NegativeInfinity;
+                bool comparedAnyNeighbors = false;
+
+                if (adjacencyByCounty.TryGetValue(countyId, out var neighbors) && neighbors.Count > 0)
+                {
+                    for (int candidate = 0; candidate < candidateCount; candidate++)
+                    {
+                        Color candidateColor = DeriveCountyColorFromProvinceVariant(provinceColor, countyId, candidate, out Vector3 candidateHsv);
+                        float minNeighborDistance = float.PositiveInfinity;
+                        bool hasAssignedNeighbor = false;
+
+                        foreach (int neighborCountyId in neighbors)
+                        {
+                            if (!countyHsvById.TryGetValue(neighborCountyId, out Vector3 neighborHsv))
+                                continue;
+
+                            hasAssignedNeighbor = true;
+                            float distance = ComputeHsvDistance(candidateHsv, neighborHsv);
+                            if (distance < minNeighborDistance)
+                                minNeighborDistance = distance;
+                        }
+
+                        if (!hasAssignedNeighbor)
+                            continue;
+
+                        comparedAnyNeighbors = true;
+                        if (minNeighborDistance > bestScore)
+                        {
+                            bestScore = minNeighborDistance;
+                            bestColor = candidateColor;
+                            bestHsv = candidateHsv;
+                        }
+                    }
+                }
+
+                if (!comparedAnyNeighbors)
+                    bestColor = DeriveCountyColorFromProvinceVariant(provinceColor, countyId, 0, out bestHsv);
+
+                countyColorById[countyId] = bestColor;
+                countyHsvById[countyId] = bestHsv;
+            }
+
+            return countyColorById;
+        }
+
+        private Dictionary<int, HashSet<int>> BuildProvinceAdjacency()
+        {
+            var adjacencyByProvince = new Dictionary<int, HashSet<int>>();
+            if (mapData?.Cells == null || mapData.CellById == null)
+                return adjacencyByProvince;
+
+            for (int i = 0; i < mapData.Cells.Count; i++)
+            {
+                var cell = mapData.Cells[i];
+                if (cell == null || cell.ProvinceId <= 0 || cell.NeighborIds == null)
+                    continue;
+
+                int provinceId = cell.ProvinceId;
+                if (!adjacencyByProvince.TryGetValue(provinceId, out var neighbors))
+                {
+                    neighbors = new HashSet<int>();
+                    adjacencyByProvince[provinceId] = neighbors;
+                }
+
+                for (int ni = 0; ni < cell.NeighborIds.Count; ni++)
+                {
+                    int neighborCellId = cell.NeighborIds[ni];
+                    if (!mapData.CellById.TryGetValue(neighborCellId, out var neighborCell) || neighborCell == null)
+                        continue;
+
+                    int neighborProvinceId = neighborCell.ProvinceId;
+                    if (neighborProvinceId <= 0 || neighborProvinceId == provinceId)
+                        continue;
+
+                    neighbors.Add(neighborProvinceId);
+
+                    if (!adjacencyByProvince.TryGetValue(neighborProvinceId, out var reverseNeighbors))
+                    {
+                        reverseNeighbors = new HashSet<int>();
+                        adjacencyByProvince[neighborProvinceId] = reverseNeighbors;
+                    }
+
+                    reverseNeighbors.Add(provinceId);
+                }
+            }
+
+            return adjacencyByProvince;
+        }
+
+        private Dictionary<int, HashSet<int>> BuildCountyAdjacency()
+        {
+            var adjacencyByCounty = new Dictionary<int, HashSet<int>>();
+            if (mapData?.Cells == null || mapData.CellById == null)
+                return adjacencyByCounty;
+
+            for (int i = 0; i < mapData.Cells.Count; i++)
+            {
+                var cell = mapData.Cells[i];
+                if (cell == null || cell.CountyId <= 0 || cell.NeighborIds == null)
+                    continue;
+
+                int countyId = cell.CountyId;
+                if (!adjacencyByCounty.TryGetValue(countyId, out var neighbors))
+                {
+                    neighbors = new HashSet<int>();
+                    adjacencyByCounty[countyId] = neighbors;
+                }
+
+                for (int ni = 0; ni < cell.NeighborIds.Count; ni++)
+                {
+                    int neighborCellId = cell.NeighborIds[ni];
+                    if (!mapData.CellById.TryGetValue(neighborCellId, out var neighborCell) || neighborCell == null)
+                        continue;
+
+                    int neighborCountyId = neighborCell.CountyId;
+                    if (neighborCountyId <= 0 || neighborCountyId == countyId)
+                        continue;
+
+                    neighbors.Add(neighborCountyId);
+
+                    if (!adjacencyByCounty.TryGetValue(neighborCountyId, out var reverseNeighbors))
+                    {
+                        reverseNeighbors = new HashSet<int>();
+                        adjacencyByCounty[neighborCountyId] = reverseNeighbors;
+                    }
+
+                    reverseNeighbors.Add(countyId);
+                }
+            }
+
+            return adjacencyByCounty;
+        }
+
+        private static float ComputeHsvDistance(Vector3 a, Vector3 b)
+        {
+            float hueDelta = Mathf.Abs(a.x - b.x);
+            hueDelta = Mathf.Min(hueDelta, 1f - hueDelta) * 360f;
+            float satDelta = Mathf.Abs(a.y - b.y) * 100f;
+            float valDelta = Mathf.Abs(a.z - b.z) * 100f;
+            return hueDelta * 0.5f + satDelta * 0.25f + valDelta * 0.25f;
+        }
+
+        private Dictionary<int, int> BuildBiomeMovementCostLookup()
+        {
+            var lookup = new Dictionary<int, int>();
+            if (mapData?.Biomes == null)
+                return lookup;
+
+            foreach (var biome in mapData.Biomes)
+            {
+                if (biome != null)
+                    lookup[biome.Id] = biome.MovementCost;
+            }
+
+            return lookup;
+        }
+
+        private bool TryGetAssignedMarketTransportCost(int cellId, int countyId, out float cost)
+        {
+            cost = 0f;
+            if (economyState?.Markets == null)
+                return false;
+
+            int marketId = 0;
+            if (economyState.CountyToMarket != null)
+                economyState.CountyToMarket.TryGetValue(countyId, out marketId);
+            if (marketId <= 0 && economyState.CellToMarket != null)
+                economyState.CellToMarket.TryGetValue(cellId, out marketId);
+            if (marketId <= 0)
+                return false;
+
+            if (!economyState.Markets.TryGetValue(marketId, out var market))
+                return false;
+            if (market.Type == MarketType.Black || market.ZoneCellCosts == null)
+                return false;
+
+            return market.ZoneCellCosts.TryGetValue(cellId, out cost);
+        }
+
+        private static Color EvaluateHeatColor(float t)
+        {
+            t = Mathf.Clamp01(t);
+            if (t <= 0.33f)
+                return Color.Lerp(HeatLowColor, HeatMidColor, t / 0.33f);
+            if (t <= 0.66f)
+                return Color.Lerp(HeatMidColor, HeatHighColor, (t - 0.33f) / 0.33f);
+            return Color.Lerp(HeatHighColor, HeatExtremeColor, (t - 0.66f) / 0.34f);
         }
 
         private void PrewarmOverlayModeResolveCache(MapView.MapMode mode)
@@ -2496,7 +3041,7 @@ public class MapOverlayManager
         /// <summary>
         /// Set the current map mode for the shader.
         /// Mode: 1=political, 2=province, 3=county, 4=market, 5=terrain/biome,
-        /// 6=soil (vertex-blended), 7=channel-inspector
+        /// 6=soil (vertex-blended), 7=channel-inspector, 8=local transport, 9=market transport
         /// </summary>
         public void SetMapMode(MapView.MapMode mode)
         {
@@ -2526,6 +3071,12 @@ public class MapOverlayManager
                     break;
                 case MapView.MapMode.ChannelInspector:
                     shaderMode = 7;
+                    break;
+                case MapView.MapMode.LocalTransportCost:
+                    shaderMode = 8;
+                    break;
+                case MapView.MapMode.MarketTransportCost:
+                    shaderMode = 9;
                     break;
                 case MapView.MapMode.Terrain:
                 default:
@@ -2826,13 +3377,19 @@ public class MapOverlayManager
                 politicalIdsTexture.SetPixels(politicalIdsPixels);
                 politicalIdsTexture.Apply();
                 InvalidateModeColorResolveCache(MapView.MapMode.Political);
+                InvalidateModeColorResolveCache(MapView.MapMode.Province);
+                InvalidateModeColorResolveCache(MapView.MapMode.County);
                 if (newCountyId.HasValue || newRealmId.HasValue)
+                {
                     InvalidateModeColorResolveCache(MapView.MapMode.Market);
+                    InvalidateModeColorResolveCache(MapView.MapMode.MarketTransportCost);
+                }
 
                 if (currentMapMode == MapView.MapMode.Political ||
                     currentMapMode == MapView.MapMode.Province ||
                     currentMapMode == MapView.MapMode.County ||
-                    currentMapMode == MapView.MapMode.Market)
+                    currentMapMode == MapView.MapMode.Market ||
+                    currentMapMode == MapView.MapMode.MarketTransportCost)
                 {
                     RegenerateModeColorResolveTexture();
                 }

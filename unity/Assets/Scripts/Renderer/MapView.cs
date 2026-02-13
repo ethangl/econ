@@ -56,6 +56,9 @@ namespace EconSim.Renderer
         private bool hasActiveSelection;
         private float currentHoverIntensity = 0f;
         private bool hasActiveHover;
+        private const float RealmZoomedInMax = 0.05f;
+        private const float ProvinceZoomedInMax = 0.75f;
+        private const float PoliticalZoomHysteresis = 0.02f;
 
         /// <summary>Event fired when a cell is clicked. Passes cell ID (-1 if clicked on nothing).</summary>
         public event Action<int> OnCellClicked;
@@ -97,13 +100,15 @@ namespace EconSim.Renderer
 
         public enum MapMode
         {
-            Political = 0,      // Colored by realm (key: 1, cycles with Province/County)
-            Province = 1,       // Colored by province (key: 1, cycles with Political/County)
-            County = 2,         // Colored by county/cell (key: 1, cycles with Political/Province)
+            Political = 0,      // Colored by realm (zoomed-in 0-25%)
+            Province = 1,       // Colored by province (zoomed-in 25-75%)
+            County = 2,         // Colored by county/cell (zoomed-in 75-100%)
             Terrain = 3,        // Colored by biome with elevation tinting (key: 2)
             Market = 4,         // Colored by market zone (key: 3)
             Soil = 5,           // Soil (vertex-blended) (key: 4)
-            ChannelInspector = 6 // Debug channel visualization (key: 0)
+            ChannelInspector = 6, // Debug channel visualization (key: 0)
+            LocalTransportCost = 7, // Local per-cell transport difficulty heatmap (key: 5)
+            MarketTransportCost = 8 // Cell-to-assigned-market transport cost heatmap (key: 6)
         }
 
         public MapMode CurrentMode => currentMode;
@@ -117,7 +122,9 @@ namespace EconSim.Renderer
             "Terrain",
             "Market",
             "Soil",
-            "Channel Inspector"
+            "Channel Inspector",
+            "Local Transport Cost",
+            "Market Transport Cost"
         };
 
         [Header("Debug Tooling")]
@@ -161,9 +168,9 @@ namespace EconSim.Renderer
             // Map mode selection with number keys.
             if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1))
             {
-                // Key 1 switches to Political mode (drill-down handles province/county)
-                SetMapMode(MapMode.Political);
-                Debug.Log("Map mode: Political (1)");
+                MapMode politicalBandMode = ResolveZoomDrivenPoliticalMode();
+                SetMapMode(politicalBandMode);
+                Debug.Log($"Map mode: {ModeNames[(int)politicalBandMode]} (1, zoom-driven)");
             }
             else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2))
             {
@@ -180,11 +187,23 @@ namespace EconSim.Renderer
                 SetMapMode(MapMode.Soil);
                 Debug.Log("Map mode: Soil (4)");
             }
+            else if (Input.GetKeyDown(KeyCode.Alpha5) || Input.GetKeyDown(KeyCode.Keypad5))
+            {
+                SetMapMode(MapMode.LocalTransportCost);
+                Debug.Log("Map mode: Local Transport Cost (5)");
+            }
+            else if (Input.GetKeyDown(KeyCode.Alpha6) || Input.GetKeyDown(KeyCode.Keypad6))
+            {
+                SetMapMode(MapMode.MarketTransportCost);
+                Debug.Log("Map mode: Market Transport Cost (6)");
+            }
             else if (Input.GetKeyDown(KeyCode.Alpha0) || Input.GetKeyDown(KeyCode.Keypad0))
             {
                 SetMapMode(MapMode.ChannelInspector);
                 Debug.Log($"Map mode: Channel Inspector (0), view={channelDebugView}");
             }
+
+            ApplyZoomDrivenPoliticalMode();
 
             if (Input.GetKeyDown(cycleDebugChannelKey))
             {
@@ -225,6 +244,66 @@ namespace EconSim.Renderer
             // Animate selection dimming
             UpdateDimmingAnimation();
             UpdateProbe();
+        }
+
+        private static bool IsPoliticalFamilyMode(MapMode mode)
+        {
+            return mode == MapMode.Political || mode == MapMode.Province || mode == MapMode.County;
+        }
+
+        private MapMode ResolveZoomDrivenPoliticalMode()
+        {
+            if (mapCameraController == null)
+                return MapMode.Political;
+
+            float zoomedIn01 = mapCameraController.GetZoomedIn01();
+            if (zoomedIn01 < RealmZoomedInMax)
+                return MapMode.Political;
+            if (zoomedIn01 < ProvinceZoomedInMax)
+                return MapMode.Province;
+            return MapMode.County;
+        }
+
+        private static MapMode ResolveZoomDrivenPoliticalModeWithHysteresis(MapMode currentPoliticalMode, float zoomedIn01)
+        {
+            float realmLower = RealmZoomedInMax - PoliticalZoomHysteresis;
+            float realmUpper = RealmZoomedInMax + PoliticalZoomHysteresis;
+            float provinceLower = ProvinceZoomedInMax - PoliticalZoomHysteresis;
+            float provinceUpper = ProvinceZoomedInMax + PoliticalZoomHysteresis;
+
+            switch (currentPoliticalMode)
+            {
+                case MapMode.Political:
+                    return zoomedIn01 >= realmUpper ? MapMode.Province : MapMode.Political;
+                case MapMode.Province:
+                    if (zoomedIn01 < realmLower)
+                        return MapMode.Political;
+                    if (zoomedIn01 >= provinceUpper)
+                        return MapMode.County;
+                    return MapMode.Province;
+                case MapMode.County:
+                    return zoomedIn01 < provinceLower ? MapMode.Province : MapMode.County;
+                default:
+                    if (zoomedIn01 < RealmZoomedInMax)
+                        return MapMode.Political;
+                    if (zoomedIn01 < ProvinceZoomedInMax)
+                        return MapMode.Province;
+                    return MapMode.County;
+            }
+        }
+
+        private void ApplyZoomDrivenPoliticalMode()
+        {
+            if (!IsPoliticalFamilyMode(currentMode))
+                return;
+
+            if (mapCameraController == null)
+                return;
+
+            float zoomedIn01 = mapCameraController.GetZoomedIn01();
+            MapMode zoomDrivenMode = ResolveZoomDrivenPoliticalModeWithHysteresis(currentMode, zoomedIn01);
+            if (zoomDrivenMode != currentMode)
+                SetMapMode(zoomDrivenMode);
         }
 
         private void SetSelectionActive(bool active)
@@ -530,8 +609,11 @@ namespace EconSim.Renderer
                 return;
             }
 
-            // Terrain/Soil mode - just select county, no drill-down
-            if (currentMode == MapMode.Terrain || currentMode == MapMode.Soil)
+            // Non-political overlays - just select county, no drill-down
+            if (currentMode == MapMode.Terrain ||
+                currentMode == MapMode.Soil ||
+                currentMode == MapMode.LocalTransportCost ||
+                currentMode == MapMode.MarketTransportCost)
             {
                 SelectAtDepth(SelectionDepth.County, cell);
                 return;
@@ -619,10 +701,10 @@ namespace EconSim.Renderer
                     break;
             }
 
-            // Zoom and pan camera to frame selection
+            // Pan camera to selection without changing zoom
             if (selectionBounds.HasValue && mapCameraController != null)
             {
-                mapCameraController.FocusOnBounds(selectionBounds.Value);
+                mapCameraController.FocusOn(selectionBounds.Value.center);
             }
         }
 
@@ -693,7 +775,7 @@ namespace EconSim.Renderer
 
             if (selectionBounds.HasValue && mapCameraController != null)
             {
-                mapCameraController.FocusOnBounds(selectionBounds.Value);
+                mapCameraController.FocusOn(selectionBounds.Value.center);
             }
         }
 
@@ -1519,6 +1601,9 @@ namespace EconSim.Renderer
                     return GetTerrainColor(cell);  // Fallback; soil tint is shader-only
                 case MapMode.ChannelInspector:
                     return GetTerrainColor(cell);  // Shader debug visualization overrides this.
+                case MapMode.LocalTransportCost:
+                case MapMode.MarketTransportCost:
+                    return GetTerrainColor(cell);  // Transport heatmaps are shader-only.
                 default:
                     return new Color32(128, 128, 128, 255);
             }
@@ -1904,15 +1989,6 @@ namespace EconSim.Renderer
                 return;
             }
 
-            int marketId = 0;
-            if (economyState != null)
-            {
-                if (!economyState.CellToMarket.TryGetValue(cellId, out marketId))
-                {
-                    economyState.CountyToMarket.TryGetValue(cell.CountyId, out marketId);
-                }
-            }
-
             probeBuilder.Clear();
             probeBuilder.Append("ID Probe");
             if (currentMode == MapMode.ChannelInspector)
@@ -1920,6 +1996,7 @@ namespace EconSim.Renderer
                 probeBuilder.Append(" | Channel=").Append(channelDebugView);
             }
             probeBuilder.AppendLine();
+            probeBuilder.Append("Mode=").Append(CurrentModeName).AppendLine();
             float absoluteHeight = Elevation.GetAbsoluteHeight(cell, mapData.Info);
             float seaRelativeHeight = Elevation.GetSeaRelativeHeight(cell, mapData.Info);
             float metersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
@@ -1932,24 +2009,186 @@ namespace EconSim.Renderer
                 .Append(" AboveSeaM=").Append(metersAboveSeaLevel.ToString("F0"))
                 .Append(" SignedM=").Append(signedMeters.ToString("F0"))
                 .AppendLine();
-            probeBuilder.Append("Realm=").Append(cell.RealmId)
-                .Append(" Province=").Append(cell.ProvinceId)
-                .Append(" County=").Append(cell.CountyId)
-                .Append(" Market=").Append(marketId)
-                .AppendLine();
-            probeBuilder.Append("PoliticalIdsTex: R=").Append(FormatNorm(cell.RealmId))
-                .Append(" G=").Append(FormatNorm(cell.ProvinceId))
-                .Append(" B=").Append(FormatNorm(cell.CountyId))
-                .Append(" A=0.000000")
-                .AppendLine();
-            probeBuilder.Append("GeographyBaseTex: R=").Append(FormatNorm(cell.BiomeId))
-                .Append(" G=").Append(FormatNorm(cell.SoilId))
-                .Append(" B=0.000000")
-                .Append(" A=").Append(cell.IsLand ? "0.000000" : "1.000000")
-                .AppendLine();
-            probeBuilder.Append("Vegetation: Type=").Append(cell.VegetationTypeId)
-                .Append(" Density=").Append(cell.VegetationDensity.ToString("F3"));
+
+            switch (currentMode)
+            {
+                case MapMode.Political:
+                case MapMode.Province:
+                case MapMode.County:
+                    probeBuilder.Append("Political: Realm=").Append(cell.RealmId)
+                        .Append(" Province=").Append(cell.ProvinceId)
+                        .Append(" County=").Append(cell.CountyId)
+                        .AppendLine();
+                    probeBuilder.Append("PoliticalIdsTex: R=").Append(FormatNorm(cell.RealmId))
+                        .Append(" G=").Append(FormatNorm(cell.ProvinceId))
+                        .Append(" B=").Append(FormatNorm(cell.CountyId))
+                        .AppendLine();
+                    break;
+
+                case MapMode.Market:
+                case MapMode.MarketTransportCost:
+                    if (TryGetAssignedMarket(cell.Id, cell.CountyId, out int marketId, out var market))
+                    {
+                        probeBuilder.Append("Market: Id=").Append(marketId)
+                            .Append(" Name=").Append(market?.Name ?? $"Market {marketId}")
+                            .Append(" Type=").Append(market?.Type.ToString() ?? "Unknown");
+
+                        if (market != null &&
+                            market.ZoneCellCosts != null &&
+                            market.ZoneCellCosts.TryGetValue(cell.Id, out float zoneCost))
+                        {
+                            probeBuilder.Append(" Cost=").Append(zoneCost.ToString("F2"));
+                        }
+                        else
+                        {
+                            probeBuilder.Append(" Cost=n/a");
+                        }
+
+                        probeBuilder.AppendLine();
+                    }
+                    else
+                    {
+                        probeBuilder.Append("Market: none").AppendLine();
+                    }
+                    break;
+
+                case MapMode.Terrain:
+                    string biomeName = "Unknown";
+                    if (mapData.Biomes != null)
+                    {
+                        for (int i = 0; i < mapData.Biomes.Count; i++)
+                        {
+                            var biome = mapData.Biomes[i];
+                            if (biome != null && biome.Id == cell.BiomeId)
+                            {
+                                biomeName = biome.Name;
+                                break;
+                            }
+                        }
+                    }
+                    probeBuilder.Append("Terrain: Biome=").Append(biomeName)
+                        .Append(" (").Append(cell.BiomeId).Append(")")
+                        .Append(" Soil=").Append(cell.SoilId)
+                        .Append(" VegType=").Append(cell.VegetationTypeId)
+                        .Append(" VegDensity=").Append(cell.VegetationDensity.ToString("F3"))
+                        .AppendLine();
+                    break;
+
+                case MapMode.Soil:
+                    probeBuilder.Append("Soil: Type=").Append(cell.SoilId)
+                        .Append(" VegType=").Append(cell.VegetationTypeId)
+                        .Append(" VegDensity=").Append(cell.VegetationDensity.ToString("F3"))
+                        .AppendLine();
+                    probeBuilder.Append("GeographyBaseTex: R=").Append(FormatNorm(cell.BiomeId))
+                        .Append(" G=").Append(FormatNorm(cell.SoilId))
+                        .Append(" A=").Append(cell.IsLand ? "0.000000" : "1.000000")
+                        .AppendLine();
+                    break;
+
+                case MapMode.ChannelInspector:
+                    probeBuilder.Append("PoliticalIdsTex: R=").Append(FormatNorm(cell.RealmId))
+                        .Append(" G=").Append(FormatNorm(cell.ProvinceId))
+                        .Append(" B=").Append(FormatNorm(cell.CountyId))
+                        .Append(" A=0.000000")
+                        .AppendLine();
+                    probeBuilder.Append("GeographyBaseTex: R=").Append(FormatNorm(cell.BiomeId))
+                        .Append(" G=").Append(FormatNorm(cell.SoilId))
+                        .Append(" B=0.000000")
+                        .Append(" A=").Append(cell.IsLand ? "0.000000" : "1.000000")
+                        .AppendLine();
+                    probeBuilder.Append("VegetationTex: Type=").Append(cell.VegetationTypeId)
+                        .Append(" Density=").Append(cell.VegetationDensity.ToString("F3"))
+                        .AppendLine();
+                    break;
+
+                case MapMode.LocalTransportCost:
+                    float localCost = ComputeProbeLocalTransportCost(cell, out int biomeMovementCost, out float biomeBaseCost, out float elevationMultiplier);
+                    probeBuilder.Append("LocalTransport: Cost=").Append(localCost.ToString("F2"))
+                        .Append(" BiomeMove=").Append(biomeMovementCost)
+                        .Append(" BiomeBase=").Append(biomeBaseCost.ToString("F2"))
+                        .Append(" ElevMult=").Append(elevationMultiplier.ToString("F2"))
+                        .AppendLine();
+                    break;
+
+                default:
+                    probeBuilder.Append("Political: Realm=").Append(cell.RealmId)
+                        .Append(" Province=").Append(cell.ProvinceId)
+                        .Append(" County=").Append(cell.CountyId)
+                        .AppendLine();
+                    break;
+            }
+
             probeText = probeBuilder.ToString();
+        }
+
+        private bool TryGetAssignedMarket(int cellId, int countyId, out int marketId, out EconSim.Core.Economy.Market market)
+        {
+            marketId = 0;
+            market = null;
+
+            if (economyState == null || economyState.Markets == null)
+                return false;
+
+            if (economyState.CellToMarket == null || !economyState.CellToMarket.TryGetValue(cellId, out marketId))
+            {
+                economyState.CountyToMarket?.TryGetValue(countyId, out marketId);
+            }
+
+            if (marketId <= 0)
+                return false;
+
+            return economyState.Markets.TryGetValue(marketId, out market);
+        }
+
+        private float ComputeProbeLocalTransportCost(
+            Cell cell,
+            out int biomeMovementCost,
+            out float biomeBaseCost,
+            out float elevationMultiplier)
+        {
+            const float defaultMovementCost = 1f;
+            const float maxPassableAltitudeCost = 99f;
+
+            biomeMovementCost = 0;
+            biomeBaseCost = defaultMovementCost;
+            elevationMultiplier = 1f;
+
+            if (mapData?.Biomes != null)
+            {
+                for (int i = 0; i < mapData.Biomes.Count; i++)
+                {
+                    var biome = mapData.Biomes[i];
+                    if (biome != null && biome.Id == cell.BiomeId)
+                    {
+                        biomeMovementCost = biome.MovementCost;
+                        break;
+                    }
+                }
+            }
+
+            if (biomeMovementCost > 0)
+            {
+                biomeBaseCost = Mathf.Clamp(biomeMovementCost, 1f, 20f);
+            }
+
+            float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
+            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeImpassableMeters)
+            {
+                elevationMultiplier = maxPassableAltitudeCost / Mathf.Max(0.001f, biomeBaseCost);
+                return 100f;
+            }
+
+            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeEffectStartMeters)
+            {
+                float altitudeMetersCapped = Mathf.Min(elevationMetersAboveSeaLevel, Elevation.HumanAltitudeImpassableMeters);
+                float altitudeT = (altitudeMetersCapped - Elevation.HumanAltitudeEffectStartMeters) /
+                    Mathf.Max(1f, Elevation.HumanAltitudeEffectSpanMeters);
+                float adjustedCost = Mathf.Lerp(biomeBaseCost, maxPassableAltitudeCost, Mathf.Clamp01(altitudeT));
+                elevationMultiplier = adjustedCost / Mathf.Max(0.001f, biomeBaseCost);
+                return adjustedCost;
+            }
+
+            return biomeBaseCost;
         }
 
         private static string FormatNorm(int value)
@@ -1969,7 +2208,7 @@ namespace EconSim.Renderer
             GUI.Box(new Rect(10, 10, width, height), GUIContent.none);
             GUI.Label(
                 new Rect(18, 18, width - 16, height - 16),
-                probeText + "\nKeys: 0=Channel Inspector, O=Cycle Channel, P=Toggle Probe");
+                probeText + "\nKeys: 5=Local Transport, 6=Market Transport, 0=Channel Inspector, O=Cycle Channel, P=Toggle Probe");
         }
 
 #if UNITY_EDITOR
@@ -1999,6 +2238,12 @@ namespace EconSim.Renderer
 
         [ContextMenu("Set Mode: Soil")]
         private void SetModeSoil() => SetMapMode(MapMode.Soil);
+
+        [ContextMenu("Set Mode: Local Transport Cost")]
+        private void SetModeLocalTransportCost() => SetMapMode(MapMode.LocalTransportCost);
+
+        [ContextMenu("Set Mode: Market Transport Cost")]
+        private void SetModeMarketTransportCost() => SetMapMode(MapMode.MarketTransportCost);
 
         [ContextMenu("Set Mode: Channel Inspector")]
         private void SetModeChannelInspector() => SetMapMode(MapMode.ChannelInspector);

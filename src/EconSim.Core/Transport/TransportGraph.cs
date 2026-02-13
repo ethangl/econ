@@ -63,11 +63,8 @@ namespace EconSim.Core.Transport
 
         // Impassable threshold (cells with cost >= this are blocked)
         private const float ImpassableThreshold = 100f;
-        private const float MountainStartAboveSeaFraction = 0.625f; // Legacy 70 in [20..100] => 62.5% of land elevation span.
-        private const float MinMountainRangeMeters = 1f;
+        private const float MaxPassableAltitudeCost = ImpassableThreshold - 1f;
 
-        private readonly float _mountainStartMetersAboveSeaLevel;
-        private readonly float _mountainRangeMeters;
         private readonly float _distanceNormalizationKm;
 
         public TransportGraph(MapData mapData, int maxCacheSize = 10000)
@@ -75,11 +72,6 @@ namespace EconSim.Core.Transport
             _mapData = mapData;
             _maxCacheSize = maxCacheSize;
             _pathCache = new Dictionary<(int, int), PathResult>();
-            _mountainStartMetersAboveSeaLevel =
-                Elevation.ResolveMaxElevationMeters(mapData.Info) * MountainStartAboveSeaFraction;
-            _mountainRangeMeters = Math.Max(
-                MinMountainRangeMeters,
-                Elevation.ResolveMaxElevationMeters(mapData.Info) - _mountainStartMetersAboveSeaLevel);
             _distanceNormalizationKm = WorldScale.ResolveDistanceNormalizationKm(mapData.Info);
 
             // Build biome lookup
@@ -113,21 +105,27 @@ namespace EconSim.Core.Transport
 
             float baseCost = DefaultMovementCost;
 
-            // Use biome movement cost if available
-            // Biome costs are on a 10-5000 scale, normalize to 1-10 range by dividing by 50
+            // Use biome movement cost if available (catalog already stores runtime-scaled values).
             if (_biomeById.TryGetValue(cell.BiomeId, out var biome) && biome.MovementCost > 0)
             {
-                baseCost = biome.MovementCost / 50f;
+                baseCost = biome.MovementCost;
                 // Clamp to reasonable range
                 baseCost = Math.Max(1f, Math.Min(baseCost, 20f));
             }
 
-            // Height modifier: higher = harder (mountains).
+            // Altitude modifier: movement difficulty ramps up from 1500m and becomes impassable above 3000m.
             float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, _mapData.Info);
-            if (elevationMetersAboveSeaLevel > _mountainStartMetersAboveSeaLevel)
+            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeImpassableMeters)
             {
-                float heightPenalty = (elevationMetersAboveSeaLevel - _mountainStartMetersAboveSeaLevel) / _mountainRangeMeters; // 0-1 range
-                baseCost *= 1f + heightPenalty * 2f; // Up to 3x cost at peak
+                return ImpassableThreshold;
+            }
+
+            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeEffectStartMeters)
+            {
+                float altitudeMetersCapped = Math.Min(elevationMetersAboveSeaLevel, Elevation.HumanAltitudeImpassableMeters);
+                float altitudeT = (altitudeMetersCapped - Elevation.HumanAltitudeEffectStartMeters) /
+                    Math.Max(1f, Elevation.HumanAltitudeEffectSpanMeters);
+                baseCost += (MaxPassableAltitudeCost - baseCost) * altitudeT;
             }
 
             return baseCost;

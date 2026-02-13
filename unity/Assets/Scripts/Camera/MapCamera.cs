@@ -503,6 +503,19 @@ namespace EconSim.Camera
         }
 
         /// <summary>
+        /// Returns zoom-in amount in [0,1], where 0 is fully zoomed out and 1 is fully zoomed in.
+        /// </summary>
+        public float GetZoomedIn01()
+        {
+            float zoom = currentZoom > 0f ? currentZoom : transform.position.y;
+            if (maxZoom <= minZoom + 0.0001f)
+                return 0f;
+
+            float zoomOut01 = Mathf.InverseLerp(minZoom, maxZoom, zoom);
+            return 1f - zoomOut01;
+        }
+
+        /// <summary>
         /// Fit the camera to show the given bounds with some margin.
         /// Centers on the bounds and sets zoom to show the full area.
         /// Also updates map bounds and zoom limits based on the new bounds.
