@@ -10,5 +10,6 @@ namespace PopGen.Core
         public string Name;
         public int TypeIndex;
         public string TypeName;
+        public int ReligionId;
     }
 }

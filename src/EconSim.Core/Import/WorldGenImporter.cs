@@ -130,11 +130,13 @@ namespace EconSim.Core.Import
 
             ApplyCellBurgIds(cells, popResult.CellBurgId);
             ApplyCellCultureIds(cells, popResult.Realms);
+            ApplyCellReligionIds(cells, popResult.Realms, popResult.Cultures);
             var burgs = ConvertBurgs(popResult.Burgs);
             var realms = ConvertRealms(popResult.Realms);
             var provinces = ConvertProvinces(popResult.Provinces);
             var counties = ConvertCounties(popResult.Counties);
             var cultures = ConvertCultures(popResult.Cultures);
+            var religions = ConvertReligions(popResult.Religions);
             var biomeDefs = BuildBiomeDefinitions();
 
             int landCells = 0;
@@ -177,7 +179,8 @@ namespace EconSim.Core.Import
                 Burgs = burgs,
                 Features = features,
                 Counties = counties,
-                Cultures = cultures
+                Cultures = cultures,
+                Religions = religions
             };
 
             mapData.BuildLookups();
@@ -224,6 +227,29 @@ namespace EconSim.Core.Import
             }
         }
 
+        static void ApplyCellReligionIds(List<Cell> cells, PopRealm[] realms, PopCulture[] cultures)
+        {
+            if (realms == null || realms.Length == 0 || cultures == null || cultures.Length == 0) return;
+
+            var realmCulture = new Dictionary<int, int>(realms.Length);
+            foreach (var r in realms)
+                realmCulture[r.Id] = r.CultureId;
+
+            var cultureReligion = new Dictionary<int, int>(cultures.Length);
+            foreach (var c in cultures)
+                cultureReligion[c.Id] = c.ReligionId;
+
+            foreach (var cell in cells)
+            {
+                if (cell.RealmId > 0
+                    && realmCulture.TryGetValue(cell.RealmId, out int cid)
+                    && cultureReligion.TryGetValue(cid, out int rid))
+                {
+                    cell.ReligionId = rid;
+                }
+            }
+        }
+
         static List<Culture> ConvertCultures(PopCulture[] source)
         {
             if (source == null || source.Length == 0)
@@ -237,11 +263,32 @@ namespace EconSim.Core.Import
                 {
                     Id = c.Id,
                     Name = c.Name,
-                    TypeName = c.TypeName ?? "Generic"
+                    TypeName = c.TypeName ?? "Generic",
+                    ReligionId = c.ReligionId
                 });
             }
 
             return cultures;
+        }
+
+        static List<Religion> ConvertReligions(PopReligion[] source)
+        {
+            if (source == null || source.Length == 0)
+                return new List<Religion>();
+
+            var religions = new List<Religion>(source.Length);
+            for (int i = 0; i < source.Length; i++)
+            {
+                PopReligion r = source[i];
+                religions.Add(new Religion
+                {
+                    Id = r.Id,
+                    Name = r.Name,
+                    TypeName = r.TypeName ?? "Unknown"
+                });
+            }
+
+            return religions;
         }
 
         static List<Burg> ConvertBurgs(PopBurg[] source)
