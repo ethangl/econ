@@ -15,7 +15,7 @@ namespace EconSim.Core.Simulation
     /// </summary>
     public class SimulationRunner : ISimulation
     {
-        private const int BootstrapCacheVersion = 4;
+        private const int BootstrapCacheVersion = 6;
         private const string BootstrapCacheFileName = "simulation_bootstrap.bin";
 
         private readonly MapData _mapData;
@@ -160,6 +160,7 @@ namespace EconSim.Core.Simulation
             // Register core systems (order matters!)
             RegisterSystem(new ProductionSystem());
             RegisterSystem(new ConsumptionSystem());
+            RegisterSystem(new OffMapSupplySystem());
             RegisterSystem(new TradeSystem());
             RegisterSystem(new TheftSystem());
         }
@@ -256,9 +257,13 @@ namespace EconSim.Core.Simulation
                     if (marketId < 0)
                         continue;
 
-                    MarketType type = typeRaw == (int)MarketType.Black
-                        ? MarketType.Black
-                        : MarketType.Legitimate;
+                    MarketType type;
+                    if (typeRaw == (int)MarketType.Black)
+                        type = MarketType.Black;
+                    else if (typeRaw == (int)MarketType.OffMap)
+                        type = MarketType.OffMap;
+                    else
+                        type = MarketType.Legitimate;
 
                     var market = new Market
                     {
@@ -268,8 +273,6 @@ namespace EconSim.Core.Simulation
                         Type = type,
                         SuitabilityScore = suitabilityScore
                     };
-
-                    InitializeMarketGoods(market);
 
                     int zoneEntryCount = reader.ReadInt32();
                     if (zoneEntryCount > 0 && market.Type != MarketType.Black)
@@ -291,6 +294,17 @@ namespace EconSim.Core.Simulation
                         }
                     }
 
+                    // Read OffMap market metadata (must come before InitializeMarketGoods)
+                    if (market.Type == MarketType.OffMap)
+                    {
+                        market.OffMapPriceMultiplier = reader.ReadSingle();
+                        int goodCount = reader.ReadInt32();
+                        market.OffMapGoodIds = new HashSet<string>(goodCount);
+                        for (int gi = 0; gi < goodCount; gi++)
+                            market.OffMapGoodIds.Add(reader.ReadString());
+                    }
+
+                    InitializeMarketGoods(market);
                     _state.Economy.Markets[market.Id] = market;
                 }
 
@@ -443,6 +457,19 @@ namespace EconSim.Core.Simulation
                             writer.Write(zoneEntry.Value);
                         }
                     }
+
+                    // OffMap market metadata
+                    if (market.Type == MarketType.OffMap)
+                    {
+                        writer.Write(market.OffMapPriceMultiplier);
+                        int goodCount = market.OffMapGoodIds?.Count ?? 0;
+                        writer.Write(goodCount);
+                        if (market.OffMapGoodIds != null)
+                        {
+                            foreach (var goodId in market.OffMapGoodIds)
+                                writer.Write(goodId);
+                        }
+                    }
                 }
 
                 writer.Write(_state.Economy.CountyToMarket.Count);
@@ -563,6 +590,20 @@ namespace EconSim.Core.Simulation
                 SimLog.Log("Market", $"Placed market '{market.Name}' at cell {cellId} in {realmName} (score: {market.SuitabilityScore:F1})");
             }
 
+            // Place off-map virtual markets at map edges
+            int nextId = _state.Economy.Markets.Count; // After black market (0) + legitimate markets
+            var offMapResult = OffMapMarketPlacer.Place(
+                _mapData, _state.Economy, _state.Transport, nextId, _marketZoneMaxTransportCost);
+            foreach (var offMapMarket in offMapResult.Markets)
+            {
+                _state.Economy.Markets[offMapMarket.Id] = offMapMarket;
+            }
+            if (offMapResult.Markets.Count > 0)
+            {
+                SimLog.Log("Market",
+                    $"Placed {offMapResult.Markets.Count} off-map markets offering {offMapResult.TotalGoodsOffered} goods");
+            }
+
             // Build lookup table (assigns cells and counties to markets)
             _state.Economy.RebuildCellToMarketLookup();
             LogMarketAssignmentSummary();
@@ -629,10 +670,18 @@ namespace EconSim.Core.Simulation
             market.Goods.Clear();
             const float BlackMarketPriceMultiplier = 2.0f;
             bool isBlackMarket = market.Type == MarketType.Black;
+            bool isOffMap = market.Type == MarketType.OffMap;
 
             foreach (var good in _state.Economy.Goods.All)
             {
-                float price = isBlackMarket ? good.BasePrice * BlackMarketPriceMultiplier : good.BasePrice;
+                float price;
+                if (isBlackMarket)
+                    price = good.BasePrice * BlackMarketPriceMultiplier;
+                else if (isOffMap && market.OffMapGoodIds != null && market.OffMapGoodIds.Contains(good.Id))
+                    price = good.BasePrice * market.OffMapPriceMultiplier;
+                else
+                    price = good.BasePrice;
+
                 market.Goods[good.Id] = new MarketGoodState
                 {
                     GoodId = good.Id,

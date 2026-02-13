@@ -224,9 +224,13 @@ namespace EconSim.Core.Economy
                 list.Add(cellId);
             }
 
-            // First pass: assign cells to markets
+            // First pass: assign cells to primary (legitimate) markets only.
+            // Off-map markets are supplemental import channels and should not replace county assignments.
             foreach (var market in Markets.Values)
             {
+                if (market.Type != MarketType.Legitimate)
+                    continue;
+
                 foreach (var cellId in market.ZoneCellIds)
                 {
                     float cost = market.ZoneCellCosts.TryGetValue(cellId, out var c) ? c : float.MaxValue;

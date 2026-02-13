@@ -4,7 +4,7 @@ namespace EconSim.Core.Economy
 {
     /// <summary>
     /// Initial good and facility definitions for the v1 economy.
-    /// Eight production chains: Food, Tools, Jewelry, Furniture, Clothing, Dairy, Leatherwork, Copperwork.
+    /// Ten production chains: Food, Tools, Jewelry, Furniture, Clothing, Dairy, Leatherwork, Copperwork, Sugar, Spices.
     /// </summary>
     public static class InitialData
     {
@@ -299,6 +299,42 @@ namespace EconSim.Core.Economy
             });
 
             // =============================================
+            // CHAIN 10: Spices (Spice Plants → Spices)
+            // Two-tier chain: harvest and dry/grind
+            // =============================================
+
+            registry.Register(new GoodDef
+            {
+                Id = "spice_plants",
+                Name = "Spice Plants",
+                Category = GoodCategory.Raw,
+                HarvestMethod = "farming",
+                TerrainAffinity = new List<string> {
+                    "Tropical seasonal forest",
+                    "Tropical rainforest"
+                },
+                BaseYield = 3f,  // Low yield - spices are scarce
+                DecayRate = 0.01f,  // 1% per day - fresh plants wilt
+                TheftRisk = 0.2f,
+                BasePrice = 2.0f
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "spices",
+                Name = "Spices",
+                Category = GoodCategory.Finished,
+                Inputs = new List<GoodInput> { new GoodInput("spice_plants", 2) },
+                FacilityType = "spice_house",
+                ProcessingTicks = 2,
+                NeedCategory = NeedCategory.Luxury,
+                BaseConsumption = 0.0003f,  // Very low - used sparingly
+                DecayRate = 0.001f,  // 0.1% per day - dried spices keep well
+                TheftRisk = 0.9f,    // Extremely high value-to-weight
+                BasePrice = 25.0f    // Classic luxury trade good
+            });
+
+            // =============================================
             // CHAIN 8: Copperwork (Copper Ore → Copper → Cookware)
             // =============================================
 
@@ -341,6 +377,55 @@ namespace EconSim.Core.Economy
                 DecayRate = 0f,
                 TheftRisk = 0.6f,
                 BasePrice = 12.0f
+            });
+
+            // =============================================
+            // CHAIN 9: Sugar (Sugarcane → Cane Juice → Sugar)
+            // =============================================
+
+            registry.Register(new GoodDef
+            {
+                Id = "sugarcane",
+                Name = "Sugarcane",
+                Category = GoodCategory.Raw,
+                HarvestMethod = "farming",
+                TerrainAffinity = new List<string> {
+                    "Tropical seasonal forest",
+                    "Tropical rainforest",
+                    "Savanna"
+                },
+                BaseYield = 8f,
+                DecayRate = 0.02f,  // 2% per day - cut cane dries out fast
+                TheftRisk = 0.1f,   // Bulky, low value
+                BasePrice = 1.0f
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "cane_juice",
+                Name = "Cane Juice",
+                Category = GoodCategory.Refined,
+                Inputs = new List<GoodInput> { new GoodInput("sugarcane", 3) },
+                FacilityType = "sugar_press",
+                ProcessingTicks = 1,
+                DecayRate = 0.06f,  // 6% per day - ferments quickly
+                TheftRisk = 0.1f,
+                BasePrice = 4.0f  // 3 sugarcane (3.0) + pressing
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "sugar",
+                Name = "Sugar",
+                Category = GoodCategory.Finished,
+                Inputs = new List<GoodInput> { new GoodInput("cane_juice", 2) },
+                FacilityType = "sugar_refinery",
+                ProcessingTicks = 2,
+                NeedCategory = NeedCategory.Luxury,
+                BaseConsumption = 0.0005f,
+                DecayRate = 0.002f,  // 0.2% per day - crystallized, stores well
+                TheftRisk = 0.7f,    // High value, portable
+                BasePrice = 20.0f    // Luxury, long processing chain
             });
 
             // =============================================
@@ -449,6 +534,37 @@ namespace EconSim.Core.Economy
                     "Tropical seasonal forest",
                     "Tropical rainforest",
                     "Taiga"
+                }
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "spice_farm",
+                Name = "Spice Farm",
+                OutputGoodId = "spice_plants",
+                LaborRequired = 4,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 3f,
+                IsExtraction = true,
+                TerrainRequirements = new List<string> {
+                    "Tropical seasonal forest",
+                    "Tropical rainforest"
+                }
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "sugar_plantation",
+                Name = "Sugar Plantation",
+                OutputGoodId = "sugarcane",
+                LaborRequired = 6,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 8f,
+                IsExtraction = true,
+                TerrainRequirements = new List<string> {
+                    "Tropical seasonal forest",
+                    "Tropical rainforest",
+                    "Savanna"
                 }
             });
 
@@ -572,6 +688,39 @@ namespace EconSim.Core.Economy
                 LaborRequired = 2,
                 LaborType = LaborType.Skilled,
                 BaseThroughput = 2f,  // Needs >= 2 to handle understaffing (int truncation)
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "spice_house",
+                Name = "Spice House",
+                OutputGoodId = "spices",
+                LaborRequired = 2,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 2f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "sugar_press",
+                Name = "Sugar Press",
+                OutputGoodId = "cane_juice",
+                LaborRequired = 4,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 4f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "sugar_refinery",
+                Name = "Sugar Refinery",
+                OutputGoodId = "sugar",
+                LaborRequired = 4,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 2f,
                 IsExtraction = false
             });
 

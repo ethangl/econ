@@ -158,7 +158,7 @@ namespace EconSim.Core.Economy
                         // Normal biome matching
                         foreach (var terrain in good.TerrainAffinity)
                         {
-                            if (biomeName.Contains(terrain) || terrain.Contains(biomeName))
+                            if (TerrainAffinityMatcher.MatchesBiome(terrain, biomeName))
                             {
                                 matches = true;
                                 break;
@@ -288,6 +288,8 @@ namespace EconSim.Core.Economy
             var primaryProcessors = new Dictionary<string, string>
             {
                 { "mill", "wheat" },
+                { "sugar_press", "sugarcane" },
+                { "spice_house", "spice_plants" },
                 { "smelter", "iron_ore" },
                 { "copper_smelter", "copper_ore" },
                 { "refinery", "gold_ore" },
@@ -328,6 +330,7 @@ namespace EconSim.Core.Economy
             var secondaryProcessors = new Dictionary<string, string>
             {
                 { "bakery", "mill" },
+                { "sugar_refinery", "sugar_press" },
                 { "smithy", "smelter" },
                 { "coppersmith", "copper_smelter" },
                 { "jeweler", "refinery" },
@@ -408,7 +411,7 @@ namespace EconSim.Core.Economy
                     {
                         foreach (var terrain in good.TerrainAffinity)
                         {
-                            if (biomeName.Contains(terrain) || terrain.Contains(biomeName))
+                            if (TerrainAffinityMatcher.MatchesBiome(terrain, biomeName))
                             {
                                 matches = true;
                                 break;

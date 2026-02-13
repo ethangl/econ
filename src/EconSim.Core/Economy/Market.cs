@@ -11,7 +11,9 @@ namespace EconSim.Core.Economy
         /// <summary>Normal market with physical location and zone.</summary>
         Legitimate,
         /// <summary>Underground market - no physical location, accessible from anywhere.</summary>
-        Black
+        Black,
+        /// <summary>Off-map virtual market - represents trade with the outside world via edge access point.</summary>
+        OffMap
     }
 
     /// <summary>
@@ -62,6 +64,17 @@ namespace EconSim.Core.Economy
         /// Higher = better location.
         /// </summary>
         public float SuitabilityScore { get; set; }
+
+        /// <summary>
+        /// For OffMap markets: good IDs that this market supplies from off-map.
+        /// Null/empty for non-OffMap markets.
+        /// </summary>
+        public HashSet<string> OffMapGoodIds { get; set; }
+
+        /// <summary>
+        /// For OffMap markets: the price multiplier applied to off-map goods.
+        /// </summary>
+        public float OffMapPriceMultiplier { get; set; } = 1f;
     }
 
     /// <summary>

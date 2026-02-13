@@ -5,6 +5,7 @@ using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
 using EconSim.Core.Simulation;
+using EconSim.Core.Simulation.Systems;
 using EconSim.Core.Transport;
 using EconSim.Renderer;
 using NUnit.Framework;
@@ -259,6 +260,150 @@ namespace EconSim.Tests
             Assert.That((bool)method.Invoke(null, new object[] { -20f, -20.00005f }), Is.True);
         }
 
+        [Test]
+        public void RebuildCellToMarketLookup_IgnoresOffMapMarketsDuringCountyAssignment()
+        {
+            var mapData = new MapData
+            {
+                Info = new MapInfo
+                {
+                    World = CreateWorldInfo(cellSizeKm: 2.5f, mapWidthKm: 10f, mapHeightKm: 10f)
+                },
+                Cells = new List<Cell>
+                {
+                    new Cell { Id = 1, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 2 }, CountyId = 10, Center = new Vec2(0, 0) },
+                    new Cell { Id = 2, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 1 }, CountyId = 20, Center = new Vec2(1, 0) }
+                },
+                Biomes = new List<Biome>
+                {
+                    new Biome { Id = 1, Name = "Plains", MovementCost = 1 }
+                },
+                Counties = new List<County>
+                {
+                    new County { Id = 10, SeatCellId = 1, CellIds = new List<int> { 1 }, TotalPopulation = 4000, Centroid = new Vec2(0, 0) },
+                    new County { Id = 20, SeatCellId = 2, CellIds = new List<int> { 2 }, TotalPopulation = 4000, Centroid = new Vec2(1, 0) }
+                },
+                Provinces = new List<Province>(),
+                Realms = new List<Realm>(),
+                Rivers = new List<River>(),
+                Burgs = new List<Burg>(),
+                Features = new List<Feature>(),
+                Vertices = new List<Vec2>()
+            };
+            mapData.BuildLookups();
+
+            var economy = new EconomyState();
+            economy.InitializeFromMap(mapData);
+
+            var localMarket = new Market
+            {
+                Id = 1,
+                Type = MarketType.Legitimate,
+                Name = "Local",
+                LocationCellId = 1
+            };
+            localMarket.ZoneCellIds.Add(1);
+            localMarket.ZoneCellIds.Add(2);
+            localMarket.ZoneCellCosts[1] = 10f;
+            localMarket.ZoneCellCosts[2] = 10f;
+
+            var offMap = new Market
+            {
+                Id = 2,
+                Type = MarketType.OffMap,
+                Name = "OffMap",
+                LocationCellId = 2,
+                OffMapGoodIds = new HashSet<string> { "iron_ore" }
+            };
+            offMap.ZoneCellIds.Add(1);
+            offMap.ZoneCellIds.Add(2);
+            offMap.ZoneCellCosts[1] = 1f;
+            offMap.ZoneCellCosts[2] = 1f;
+
+            economy.Markets[1] = localMarket;
+            economy.Markets[2] = offMap;
+
+            economy.RebuildCellToMarketLookup();
+
+            Assert.That(economy.CountyToMarket[10], Is.EqualTo(1),
+                "County should remain assigned to legitimate market, not off-map supplemental market.");
+            Assert.That(economy.CountyToMarket[20], Is.EqualTo(1),
+                "County should remain assigned to legitimate market, not off-map supplemental market.");
+        }
+
+        [Test]
+        public void OffMapSupplySystem_ReplenishesConfiguredGoodsOnly()
+        {
+            var state = new SimulationState
+            {
+                Economy = new EconomyState()
+            };
+
+            var offMap = new Market
+            {
+                Id = 5,
+                Type = MarketType.OffMap,
+                Name = "OffMap",
+                OffMapGoodIds = new HashSet<string> { "spices" }
+            };
+            offMap.Goods["spices"] = new MarketGoodState
+            {
+                GoodId = "spices",
+                Supply = 3f,
+                SupplyOffered = 3f,
+                Price = 20f,
+                BasePrice = 20f
+            };
+            offMap.Goods["wheat"] = new MarketGoodState
+            {
+                GoodId = "wheat",
+                Supply = 7f,
+                SupplyOffered = 7f,
+                Price = 1f,
+                BasePrice = 1f
+            };
+            state.Economy.Markets[offMap.Id] = offMap;
+
+            var system = new OffMapSupplySystem();
+            system.Initialize(state, null);
+            system.Tick(state, null);
+
+            Assert.That(offMap.Goods["spices"].Supply, Is.EqualTo(1000f).Within(0.0001f));
+            Assert.That(offMap.Goods["spices"].SupplyOffered, Is.EqualTo(1000f).Within(0.0001f));
+            Assert.That(offMap.Goods["wheat"].Supply, Is.EqualTo(7f).Within(0.0001f),
+                "Only goods listed in OffMapGoodIds should be replenished.");
+            Assert.That(offMap.Goods["wheat"].SupplyOffered, Is.EqualTo(7f).Within(0.0001f),
+                "Only goods listed in OffMapGoodIds should be replenished.");
+        }
+
+        [Test]
+        public void OffMapMarketPlacer_DoesNotOfferRawGoodsAlreadyPresentOnMap()
+        {
+            var mapData = BuildOffMapPlacementMap();
+
+            var economy = new EconomyState();
+            InitialData.RegisterAll(economy);
+            economy.Counties[1] = new CountyEconomy(1);
+            economy.Counties[1].Resources["wheat"] = 1f;
+
+            var transport = new TransportGraph(mapData);
+            var result = OffMapMarketPlacer.Place(
+                mapData,
+                economy,
+                transport,
+                nextMarketId: 10,
+                marketZoneMaxTransportCost: 100f);
+
+            Assert.That(result.Markets.Count, Is.GreaterThan(0), "Expected at least one off-map market to be placed.");
+            foreach (var market in result.Markets)
+            {
+                Assert.That(market.Type, Is.EqualTo(MarketType.OffMap));
+                Assert.That(market.OffMapGoodIds, Is.Not.Null.And.Not.Empty);
+                Assert.That(market.OffMapGoodIds.Contains("wheat"), Is.False,
+                    "Raw goods already available on-map should be filtered out from off-map offerings.");
+            }
+        }
+
         private static MapData BuildLinearMap()
         {
             var mapData = new MapData
@@ -282,6 +427,74 @@ namespace EconSim.Tests
                     new County { Id = 10, SeatCellId = 1, CellIds = new List<int> { 1 }, TotalPopulation = 22000, Centroid = new Vec2(0, 0) },
                     new County { Id = 20, SeatCellId = 2, CellIds = new List<int> { 2 }, TotalPopulation = 18000, Centroid = new Vec2(1, 0) },
                     new County { Id = 30, SeatCellId = 3, CellIds = new List<int> { 3 }, TotalPopulation = 16000, Centroid = new Vec2(2, 0) }
+                },
+                Provinces = new List<Province>(),
+                Realms = new List<Realm>(),
+                Rivers = new List<River>(),
+                Burgs = new List<Burg>(),
+                Features = new List<Feature>(),
+                Vertices = new List<Vec2>()
+            };
+
+            mapData.BuildLookups();
+            return mapData;
+        }
+
+        private static MapData BuildOffMapPlacementMap()
+        {
+            var mapData = new MapData
+            {
+                Info = new MapInfo
+                {
+                    World = CreateWorldInfo(cellSizeKm: 2.5f, mapWidthKm: 100f, mapHeightKm: 100f)
+                },
+                Cells = new List<Cell>
+                {
+                    new Cell
+                    {
+                        Id = 1, IsLand = true, BiomeId = 1, CountyId = 1, IsBoundary = true,
+                        SeaRelativeElevation = 20f, HasSeaRelativeElevation = true, CoastDistance = 1,
+                        NeighborIds = new List<int> { 5 }, Center = new Vec2(0f, 50f)
+                    },
+                    new Cell
+                    {
+                        Id = 2, IsLand = true, BiomeId = 1, CountyId = 1, IsBoundary = true,
+                        SeaRelativeElevation = 20f, HasSeaRelativeElevation = true, CoastDistance = 1,
+                        NeighborIds = new List<int> { 5 }, Center = new Vec2(100f, 50f)
+                    },
+                    new Cell
+                    {
+                        Id = 3, IsLand = true, BiomeId = 1, CountyId = 1, IsBoundary = true,
+                        SeaRelativeElevation = 20f, HasSeaRelativeElevation = true, CoastDistance = 1,
+                        NeighborIds = new List<int> { 5 }, Center = new Vec2(50f, 0f)
+                    },
+                    new Cell
+                    {
+                        Id = 4, IsLand = true, BiomeId = 1, CountyId = 1, IsBoundary = true,
+                        SeaRelativeElevation = 20f, HasSeaRelativeElevation = true, CoastDistance = 1,
+                        NeighborIds = new List<int> { 5 }, Center = new Vec2(50f, 100f)
+                    },
+                    new Cell
+                    {
+                        Id = 5, IsLand = true, BiomeId = 1, CountyId = 1, IsBoundary = false,
+                        SeaRelativeElevation = 20f, HasSeaRelativeElevation = true, CoastDistance = 2,
+                        NeighborIds = new List<int> { 1, 2, 3, 4 }, Center = new Vec2(50f, 50f)
+                    }
+                },
+                Biomes = new List<Biome>
+                {
+                    new Biome { Id = 1, Name = "Grassland", MovementCost = 1 }
+                },
+                Counties = new List<County>
+                {
+                    new County
+                    {
+                        Id = 1,
+                        SeatCellId = 5,
+                        CellIds = new List<int> { 1, 2, 3, 4, 5 },
+                        TotalPopulation = 10000,
+                        Centroid = new Vec2(50f, 50f)
+                    }
                 },
                 Provinces = new List<Province>(),
                 Realms = new List<Realm>(),
