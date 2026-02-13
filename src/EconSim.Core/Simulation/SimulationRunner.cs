@@ -485,7 +485,7 @@ namespace EconSim.Core.Simulation
 
             var usedCells = new HashSet<int>();
             var usedRealms = new HashSet<int>();
-            int marketCount = 3;
+            int marketCount = _mapData.Realms.Count;
 
             for (int i = 0; i < marketCount; i++)
             {

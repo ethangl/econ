@@ -143,6 +143,11 @@ namespace EconSim.Core.Economy
                     {
                         matches = elevationMetersAboveSeaLevel > elevation50Meters;
                     }
+                    // Special case: copper_ore uses lower elevation (foothills)
+                    else if (good.Id == "copper_ore")
+                    {
+                        matches = elevationMetersAboveSeaLevel > elevation40Meters;
+                    }
                     // Special case: gold_ore uses high terrain with rare probability
                     else if (good.Id == "gold_ore")
                     {
@@ -284,8 +289,12 @@ namespace EconSim.Core.Economy
             {
                 { "mill", "wheat" },
                 { "smelter", "iron_ore" },
+                { "copper_smelter", "copper_ore" },
                 { "refinery", "gold_ore" },
-                { "sawmill", "timber" }
+                { "sawmill", "timber" },
+                { "spinning_mill", "sheep" },
+                { "tannery", "deer" },
+                { "dairy", "goats" }
             };
 
             foreach (var kvp in primaryProcessors)
@@ -320,8 +329,12 @@ namespace EconSim.Core.Economy
             {
                 { "bakery", "mill" },
                 { "smithy", "smelter" },
+                { "coppersmith", "copper_smelter" },
                 { "jeweler", "refinery" },
-                { "workshop", "sawmill" }
+                { "workshop", "sawmill" },
+                { "tailor", "spinning_mill" },
+                { "cobbler", "tannery" },
+                { "creamery", "dairy" }
             };
 
             foreach (var kvp in secondaryProcessors)
@@ -362,6 +375,7 @@ namespace EconSim.Core.Economy
                 biomeNames[biome.Id] = biome.Name;
             }
 
+            float elevation40Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, Elevation40FractionAboveSea);
             float elevation45Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, Elevation45FractionAboveSea);
             float elevation50Meters = ResolveThresholdMetersAboveSeaLevel(mapData.Info, Elevation50FractionAboveSea);
 
@@ -381,6 +395,10 @@ namespace EconSim.Core.Economy
                     if (good.Id == "iron_ore")
                     {
                         matches = elevationMetersAboveSeaLevel > elevation50Meters;
+                    }
+                    else if (good.Id == "copper_ore")
+                    {
+                        matches = elevationMetersAboveSeaLevel > elevation40Meters;
                     }
                     else if (good.Id == "gold_ore")
                     {
