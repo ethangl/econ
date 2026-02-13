@@ -4,7 +4,7 @@ namespace EconSim.Core.Economy
 {
     /// <summary>
     /// Initial good and facility definitions for the v1 economy.
-    /// Four production chains: Food, Tools, Jewelry, Furniture.
+    /// Eight production chains: Food, Tools, Jewelry, Furniture, Clothing, Dairy, Leatherwork, Copperwork.
     /// </summary>
     public static class InitialData
     {
@@ -204,6 +204,192 @@ namespace EconSim.Core.Economy
                 TheftRisk = 0.6f, // High value, identifiable
                 BasePrice = 12.0f // 2 lumber (6.0) + crafting
             });
+            // =============================================
+            // CHAIN 5: Clothing (Sheep → Wool → Clothes)
+            // =============================================
+
+            registry.Register(new GoodDef
+            {
+                Id = "sheep",
+                Name = "Sheep",
+                Category = GoodCategory.Raw,
+                HarvestMethod = "herding",
+                TerrainAffinity = new List<string> { "Grassland", "Steppe", "Highland" },
+                BaseYield = 6f,
+                DecayRate = 0f,  // Livestock, not perishable
+                TheftRisk = 0.2f, // Hard to steal a flock
+                BasePrice = 1.0f
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "wool",
+                Name = "Wool",
+                Category = GoodCategory.Refined,
+                Inputs = new List<GoodInput> { new GoodInput("sheep", 2) },
+                FacilityType = "spinning_mill",
+                ProcessingTicks = 1,
+                DecayRate = 0.002f,  // 0.2% per day - raw fiber, slight degradation
+                TheftRisk = 0.3f,
+                BasePrice = 3.0f  // 2 sheep (2.0) + processing
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "clothes",
+                Name = "Clothes",
+                Category = GoodCategory.Finished,
+                Inputs = new List<GoodInput> { new GoodInput("wool", 1) },
+                FacilityType = "tailor",
+                ProcessingTicks = 1,
+                NeedCategory = NeedCategory.Basic,
+                BaseConsumption = 0.005f,  // Lower than bread - clothes last longer
+                DecayRate = 0.001f,  // 0.1% per day - wears slowly
+                TheftRisk = 0.5f,  // Portable, useful
+                BasePrice = 6.0f  // Basic need, modest markup
+            });
+            // =============================================
+            // CHAIN 7: Leatherwork (Deer → Leather → Shoes)
+            // =============================================
+
+            registry.Register(new GoodDef
+            {
+                Id = "deer",
+                Name = "Deer",
+                Category = GoodCategory.Raw,
+                HarvestMethod = "hunting",
+                TerrainAffinity = new List<string> {
+                    "Temperate deciduous forest",
+                    "Temperate rainforest",
+                    "Tropical seasonal forest",
+                    "Taiga"
+                },
+                BaseYield = 4f,  // Hunting is less productive than herding
+                DecayRate = 0f,
+                TheftRisk = 0.1f,
+                BasePrice = 1.0f
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "leather",
+                Name = "Leather",
+                Category = GoodCategory.Refined,
+                Inputs = new List<GoodInput> { new GoodInput("deer", 2) },
+                FacilityType = "tannery",
+                ProcessingTicks = 2,  // Tanning takes time
+                DecayRate = 0.001f,  // 0.1% per day - cured hide, very durable
+                TheftRisk = 0.4f,
+                BasePrice = 4.0f  // 2 deer (2.0) + tanning
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "shoes",
+                Name = "Shoes",
+                Category = GoodCategory.Finished,
+                Inputs = new List<GoodInput> { new GoodInput("leather", 1) },
+                FacilityType = "cobbler",
+                ProcessingTicks = 2,
+                NeedCategory = NeedCategory.Comfort,
+                BaseConsumption = 0.002f,  // Shoes wear out but last a while
+                DecayRate = 0f,  // Durable
+                TheftRisk = 0.5f,
+                BasePrice = 10.0f  // Skilled craftsmanship
+            });
+
+            // =============================================
+            // CHAIN 8: Copperwork (Copper Ore → Copper → Cookware)
+            // =============================================
+
+            registry.Register(new GoodDef
+            {
+                Id = "copper_ore",
+                Name = "Copper Ore",
+                Category = GoodCategory.Raw,
+                HarvestMethod = "mining",
+                TerrainAffinity = new List<string> { "Highland", "Mountain" },
+                BaseYield = 4f,  // Between iron (5) and gold (1)
+                DecayRate = 0f,
+                TheftRisk = 0.2f,
+                BasePrice = 1.0f
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "copper",
+                Name = "Copper Ingots",
+                Category = GoodCategory.Refined,
+                Inputs = new List<GoodInput> { new GoodInput("copper_ore", 3) },
+                FacilityType = "copper_smelter",
+                ProcessingTicks = 2,
+                DecayRate = 0f,
+                TheftRisk = 0.4f,
+                BasePrice = 5.0f  // 3 ore (3.0) + smelting
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "cookware",
+                Name = "Cookware",
+                Category = GoodCategory.Finished,
+                Inputs = new List<GoodInput> { new GoodInput("copper", 1) },
+                FacilityType = "coppersmith",
+                ProcessingTicks = 2,
+                NeedCategory = NeedCategory.Comfort,
+                BaseConsumption = 0.001f,  // Durable, similar to tools
+                DecayRate = 0f,
+                TheftRisk = 0.6f,
+                BasePrice = 12.0f
+            });
+
+            // =============================================
+            // CHAIN 6: Dairy (Goats → Milk → Cheese)
+            // Milk is also directly consumable (Basic need)
+            // =============================================
+
+            registry.Register(new GoodDef
+            {
+                Id = "goats",
+                Name = "Goats",
+                Category = GoodCategory.Raw,
+                HarvestMethod = "herding",
+                TerrainAffinity = new List<string> { "Grassland", "Steppe", "Highland" },
+                BaseYield = 6f,
+                DecayRate = 0f,  // Livestock
+                TheftRisk = 0.2f,
+                BasePrice = 1.0f
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "milk",
+                Name = "Milk",
+                Category = GoodCategory.Refined,
+                Inputs = new List<GoodInput> { new GoodInput("goats", 2) },
+                FacilityType = "dairy",
+                ProcessingTicks = 1,
+                NeedCategory = NeedCategory.Basic,  // Directly consumable
+                BaseConsumption = 0.005f,  // Modest direct consumption
+                DecayRate = 0.08f,  // 8% per day - highly perishable
+                TheftRisk = 0.1f,  // Perishable, low fence value
+                BasePrice = 3.0f
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "cheese",
+                Name = "Cheese",
+                Category = GoodCategory.Finished,
+                Inputs = new List<GoodInput> { new GoodInput("milk", 2) },
+                FacilityType = "creamery",
+                ProcessingTicks = 2,
+                NeedCategory = NeedCategory.Comfort,
+                BaseConsumption = 0.002f,
+                DecayRate = 0.01f,  // 1% per day - lasts much longer than milk
+                TheftRisk = 0.3f,
+                BasePrice = 8.0f  // 2 milk (6.0) + aging/processing
+            });
         }
 
         public static void RegisterFacilities(FacilityRegistry registry)
@@ -264,6 +450,59 @@ namespace EconSim.Core.Economy
                     "Tropical rainforest",
                     "Taiga"
                 }
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "copper_mine",
+                Name = "Copper Mine",
+                OutputGoodId = "copper_ore",
+                LaborRequired = 6,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 4f,
+                IsExtraction = true,
+                TerrainRequirements = new List<string> { "Highland", "Mountain" }
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "hunting_lodge",
+                Name = "Hunting Lodge",
+                OutputGoodId = "deer",
+                LaborRequired = 3,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 4f,
+                IsExtraction = true,
+                TerrainRequirements = new List<string> {
+                    "Temperate deciduous forest",
+                    "Temperate rainforest",
+                    "Tropical seasonal forest",
+                    "Taiga"
+                }
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "goat_farm",
+                Name = "Goat Farm",
+                OutputGoodId = "goats",
+                LaborRequired = 3,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 6f,
+                IsExtraction = true,
+                TerrainRequirements = new List<string> { "Grassland", "Steppe", "Highland" }
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "ranch",
+                Name = "Sheep Ranch",
+                OutputGoodId = "sheep",
+                LaborRequired = 4,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 6f,
+                IsExtraction = true,
+                TerrainRequirements = new List<string> { "Grassland", "Steppe", "Highland" }
             });
 
             // =============================================
@@ -333,6 +572,94 @@ namespace EconSim.Core.Economy
                 LaborRequired = 2,
                 LaborType = LaborType.Skilled,
                 BaseThroughput = 2f,  // Needs >= 2 to handle understaffing (int truncation)
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "copper_smelter",
+                Name = "Copper Smelter",
+                OutputGoodId = "copper",
+                LaborRequired = 5,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 3f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "coppersmith",
+                Name = "Coppersmith",
+                OutputGoodId = "cookware",
+                LaborRequired = 3,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 2f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "tannery",
+                Name = "Tannery",
+                OutputGoodId = "leather",
+                LaborRequired = 3,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 3f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "cobbler",
+                Name = "Cobbler",
+                OutputGoodId = "shoes",
+                LaborRequired = 3,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 3f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "dairy",
+                Name = "Dairy",
+                OutputGoodId = "milk",
+                LaborRequired = 2,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 4f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "creamery",
+                Name = "Creamery",
+                OutputGoodId = "cheese",
+                LaborRequired = 3,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 3f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "spinning_mill",
+                Name = "Spinning Mill",
+                OutputGoodId = "wool",
+                LaborRequired = 3,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 4f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "tailor",
+                Name = "Tailor",
+                OutputGoodId = "clothes",
+                LaborRequired = 3,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 4f,
                 IsExtraction = false
             });
 

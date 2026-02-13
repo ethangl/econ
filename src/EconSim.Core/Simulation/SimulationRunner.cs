@@ -15,7 +15,7 @@ namespace EconSim.Core.Simulation
     /// </summary>
     public class SimulationRunner : ISimulation
     {
-        private const int BootstrapCacheVersion = 2;
+        private const int BootstrapCacheVersion = 3;
         private const string BootstrapCacheFileName = "simulation_bootstrap.bin";
 
         private readonly MapData _mapData;
@@ -485,7 +485,7 @@ namespace EconSim.Core.Simulation
 
             var usedCells = new HashSet<int>();
             var usedRealms = new HashSet<int>();
-            int marketCount = 3;
+            int marketCount = _mapData.Realms.Count;
 
             for (int i = 0; i < marketCount; i++)
             {
