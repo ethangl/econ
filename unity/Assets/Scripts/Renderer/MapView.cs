@@ -1945,7 +1945,10 @@ namespace EconSim.Renderer
             probeBuilder.Append("GeographyBaseTex: R=").Append(FormatNorm(cell.BiomeId))
                 .Append(" G=").Append(FormatNorm(cell.SoilId))
                 .Append(" B=0.000000")
-                .Append(" A=").Append(cell.IsLand ? "0.000000" : "1.000000");
+                .Append(" A=").Append(cell.IsLand ? "0.000000" : "1.000000")
+                .AppendLine();
+            probeBuilder.Append("Vegetation: Type=").Append(cell.VegetationTypeId)
+                .Append(" Density=").Append(cell.VegetationDensity.ToString("F3"));
             probeText = probeBuilder.ToString();
         }
 

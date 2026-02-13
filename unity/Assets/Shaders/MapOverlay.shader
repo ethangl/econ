@@ -19,6 +19,7 @@ Shader "EconSim/MapOverlay"
         // Split core textures (M3-S1)
         _PoliticalIdsTex ("Political IDs", 2D) = "black" {}
         _GeographyBaseTex ("Geography Base", 2D) = "black" {}
+        _VegetationTex ("Vegetation Data", 2D) = "black" {}
         // Legacy packed texture kept for migration compatibility.
         _CellDataTex ("Cell Data (Legacy)", 2D) = "black" {}
 
@@ -64,6 +65,18 @@ Shader "EconSim/MapOverlay"
         _SoilColor5 ("Laterite", Color) = (0.82, 0.42, 0.25, 1)
         _SoilColor6 ("Podzol", Color) = (0.62, 0.58, 0.48, 1)
         _SoilColor7 ("Chernozem", Color) = (0.38, 0.33, 0.27, 1)
+        _VegetationColor0 ("Vegetation None", Color) = (0.0, 0.0, 0.0, 1)
+        _VegetationColor1 ("Vegetation Lichen/Moss", Color) = (0.52, 0.62, 0.44, 1)
+        _VegetationColor2 ("Vegetation Grass", Color) = (0.48, 0.63, 0.27, 1)
+        _VegetationColor3 ("Vegetation Shrub", Color) = (0.41, 0.52, 0.25, 1)
+        _VegetationColor4 ("Vegetation Deciduous", Color) = (0.27, 0.45, 0.19, 1)
+        _VegetationColor5 ("Vegetation Coniferous", Color) = (0.17, 0.33, 0.20, 1)
+        _VegetationColor6 ("Vegetation Broadleaf", Color) = (0.18, 0.37, 0.14, 1)
+        _VegetationStippleOpacity ("Vegetation Stipple Opacity", Range(0, 1)) = 0.8
+        _VegetationStippleScale ("Vegetation Stipple Scale (texels)", Range(1, 12)) = 3
+        _VegetationStippleJitter ("Vegetation Stipple Jitter", Range(0, 1)) = 0.4
+        _VegetationCoverageContrast ("Vegetation Coverage Contrast", Range(0.5, 2)) = 1
+        _VegetationStippleSoftness ("Vegetation Stipple Softness", Range(0.5, 2.5)) = 1
 
         // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome, 6=soil, 7=channel inspector
         _MapMode ("Map Mode", Int) = 0
@@ -154,6 +167,7 @@ Shader "EconSim/MapOverlay"
             sampler2D _PoliticalIdsTex;
             sampler2D _GeographyBaseTex;
             float4 _GeographyBaseTex_TexelSize;  // (1/width, 1/height, width, height)
+            sampler2D _VegetationTex;
             sampler2D _CellDataTex; // Legacy compatibility path.
             sampler2D _ModeColorResolve;
             int _UseModeColorResolve;
@@ -175,6 +189,18 @@ Shader "EconSim/MapOverlay"
             fixed4 _SoilColor5;
             fixed4 _SoilColor6;
             fixed4 _SoilColor7;
+            fixed4 _VegetationColor0;
+            fixed4 _VegetationColor1;
+            fixed4 _VegetationColor2;
+            fixed4 _VegetationColor3;
+            fixed4 _VegetationColor4;
+            fixed4 _VegetationColor5;
+            fixed4 _VegetationColor6;
+            float _VegetationStippleOpacity;
+            float _VegetationStippleScale;
+            float _VegetationStippleJitter;
+            float _VegetationCoverageContrast;
+            float _VegetationStippleSoftness;
 
             int _MapMode;
             int _DebugView;
@@ -268,6 +294,63 @@ Shader "EconSim/MapOverlay"
             int DecodeSoilIdFromGeography(float4 geographyBase)
             {
                 return (int)clamp(round(geographyBase.g * 65535.0), 0.0, 7.0);
+            }
+
+            int DecodeVegetationType(float2 uv)
+            {
+                float vegetationType = tex2D(_VegetationTex, uv).r;
+                return (int)clamp(round(vegetationType * 65535.0), 0.0, 6.0);
+            }
+
+            float DecodeVegetationDensity(float2 uv)
+            {
+                return saturate(tex2D(_VegetationTex, uv).g);
+            }
+
+            float3 VegetationColorFromId(int vegetationId)
+            {
+                if (vegetationId <= 0) return _VegetationColor0.rgb;
+                if (vegetationId == 1) return _VegetationColor1.rgb;
+                if (vegetationId == 2) return _VegetationColor2.rgb;
+                if (vegetationId == 3) return _VegetationColor3.rgb;
+                if (vegetationId == 4) return _VegetationColor4.rgb;
+                if (vegetationId == 5) return _VegetationColor5.rgb;
+                return _VegetationColor6.rgb;
+            }
+
+            float ComputeVegetationStippleMask(float2 uv, float vegetationCoverage, int vegetationType)
+            {
+                float coverage = saturate(vegetationCoverage);
+                if (coverage <= 0.0001)
+                    return 0.0;
+                if (coverage >= 0.9999)
+                    return 1.0;
+
+                float contrast = max(_VegetationCoverageContrast, 0.5);
+                coverage = saturate((coverage - 0.5) * contrast + 0.5);
+
+                float cellSize = max(_VegetationStippleScale, 1.0);
+                float2 texelPos = uv * _GeographyBaseTex_TexelSize.zw;
+                float2 tilePos = texelPos / cellSize;
+                float2 tile = floor(tilePos);
+                float2 local = frac(tilePos) - 0.5;
+
+                float seed = float(vegetationType) * 19.37;
+                float2 jitterRand = float2(
+                    hash2d(tile + float2(17.0 + seed, 59.0 + seed)),
+                    hash2d(tile + float2(83.0 + seed, 29.0 + seed)));
+                float2 jitter = (jitterRand - 0.5) * (0.6 * saturate(_VegetationStippleJitter));
+                local -= jitter;
+
+                float occupancyRand = hash2d(tile + float2(111.0 + seed, 7.0 + seed));
+                float occupancy = saturate(coverage + (occupancyRand - 0.5) * 0.35 * saturate(_VegetationStippleJitter));
+
+                // Area-proportional dot growth with overlap headroom at high density.
+                float radius = 0.72 * sqrt(occupancy);
+                float dist = length(local);
+                float aa = max(fwidth(dist), 1e-4) * max(_VegetationStippleSoftness, 0.5);
+
+                return 1.0 - smoothstep(radius - aa, radius + aa, dist);
             }
 
             void AccumulateBlendSoilSample(
@@ -404,8 +487,17 @@ Shader "EconSim/MapOverlay"
                     {
                         float landHeight = NormalizeLandHeight(height);
                         float3 soilColor = ComputeBlendedSoilColor(uv, soilId);
+                        int vegetationType = DecodeVegetationType(uv);
+                        float vegetationCoverage = DecodeVegetationDensity(uv);
+                        if (vegetationType <= 0)
+                            vegetationCoverage = 0.0;
+                        float3 vegetationColor = VegetationColorFromId(vegetationType);
+                        float stippleMask = ComputeVegetationStippleMask(uv, vegetationCoverage, vegetationType);
+                        float3 soilLayer = soilColor;
+                        float3 stippleLayer = vegetationColor * (stippleMask * saturate(_VegetationStippleOpacity));
+                        float3 blendedColor = saturate(soilLayer + stippleLayer);
                         float brightness = lerp(_SoilHeightFloor, 1.0, landHeight);
-                        terrain = soilColor * brightness;
+                        terrain = blendedColor * brightness;
                     }
                 }
                 else

@@ -194,6 +194,8 @@ namespace EconSim.Core.Data
         public bool HasSeaRelativeElevation; // Must be true for runtime-generated maps
         public int BiomeId;
         public int SoilId;             // MapGen.Core.SoilType ordinal (0-7)
+        public int VegetationTypeId;   // MapGen.Core.VegetationType ordinal (0-6)
+        public float VegetationDensity; // 0..1
         public bool IsLand;
         public int CoastDistance;       // + for land (dist to coast), - for water
         public int FeatureId;           // Index into Features (ocean, lake, island, etc.)

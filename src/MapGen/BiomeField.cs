@@ -16,6 +16,8 @@ namespace MapGen.Core
 
         public BiomeId[] Biome;
         public SoilType[] Soil;
+        public VegetationType[] Vegetation;
+        public float[] VegetationDensity;
         public float[] Habitability;
         public float[] MovementCost;
         public float[] Suitability;
@@ -41,6 +43,8 @@ namespace MapGen.Core
 
             Biome = new BiomeId[n];
             Soil = new SoilType[n];
+            Vegetation = new VegetationType[n];
+            VegetationDensity = new float[n];
             Habitability = new float[n];
             MovementCost = new float[n];
             Suitability = new float[n];

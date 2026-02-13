@@ -12,6 +12,17 @@ namespace MapGen.Core
         Chernozem
     }
 
+    public enum VegetationType : byte
+    {
+        None,
+        LichenMoss,
+        Grass,
+        Shrub,
+        DeciduousForest,
+        ConiferousForest,
+        BroadleafForest
+    }
+
     public enum WaterFeatureType : byte
     {
         Ocean,

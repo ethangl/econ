@@ -278,6 +278,8 @@ namespace MapGen.Core
                     biome.DebugWetlandCandidate[i] = false;
                     biome.Biome[i] = biome.IsLakeCell[i] ? BiomeId.Lake : BiomeId.CoastalMarsh;
                     biome.Soil[i] = SoilType.Permafrost;
+                    biome.Vegetation[i] = VegetationType.None;
+                    biome.VegetationDensity[i] = 0f;
                     biome.Habitability[i] = 0f;
                     biome.MovementCost[i] = 100f;
                     biome.Suitability[i] = 0f;
@@ -357,6 +359,12 @@ namespace MapGen.Core
 
                 biome.Biome[i] = id;
                 biome.Soil[i] = soil;
+                VegetationType vegetationType = VegetationFromBiome(id, temp);
+                float vegetationDensity = VegetationDensityForBiome(id, precipPct, temp, altPct, coastSaltProxy);
+                if (vegetationDensity <= 0.01f)
+                    vegetationType = VegetationType.None;
+                biome.Vegetation[i] = vegetationType;
+                biome.VegetationDensity[i] = vegetationDensity;
                 float habitability = BaseHabitability(id);
                 float movement = BaseMovementCost(id);
 
@@ -532,6 +540,153 @@ namespace MapGen.Core
             }
         }
 
+        static VegetationType VegetationFromBiome(BiomeId biome, float tempC)
+        {
+            switch (biome)
+            {
+                case BiomeId.Glacier:
+                case BiomeId.SaltFlat:
+                case BiomeId.AlpineBarren:
+                case BiomeId.HotDesert:
+                case BiomeId.ColdDesert:
+                case BiomeId.Lake:
+                    return VegetationType.None;
+                case BiomeId.Tundra:
+                    return VegetationType.LichenMoss;
+                case BiomeId.CoastalMarsh:
+                case BiomeId.Floodplain:
+                case BiomeId.Wetland:
+                case BiomeId.Savanna:
+                case BiomeId.Grassland:
+                    return VegetationType.Grass;
+                case BiomeId.MountainShrub:
+                case BiomeId.Scrubland:
+                    return VegetationType.Shrub;
+                case BiomeId.BorealForest:
+                    return VegetationType.ConiferousForest;
+                case BiomeId.TropicalRainforest:
+                    return tempC < 8f ? VegetationType.DeciduousForest : VegetationType.BroadleafForest;
+                case BiomeId.TropicalDryForest:
+                    return tempC < 10f ? VegetationType.DeciduousForest : VegetationType.BroadleafForest;
+                case BiomeId.TemperateForest:
+                case BiomeId.Woodland:
+                    return tempC < 3f ? VegetationType.ConiferousForest : VegetationType.DeciduousForest;
+                default:
+                    return VegetationType.Grass;
+            }
+        }
+
+        static float VegetationDensityForBiome(
+            BiomeId biome,
+            float precipPct,
+            float tempC,
+            float elevationPct,
+            float coastSaltProxy)
+        {
+            GetVegetationDensityRange(biome, out float minDensity, out float maxDensity);
+            if (maxDensity <= 0f)
+                return 0f;
+
+            float precip01 = Clamp01(precipPct / 100f);
+            float density = Lerp(minDensity, maxDensity, precip01);
+
+            // High-elevation and cold penalties reduce canopy continuity.
+            if (elevationPct > 85f)
+            {
+                float highElevationFactor = 1f - 0.5f * Clamp01((elevationPct - 85f) / 15f);
+                density *= highElevationFactor;
+            }
+
+            if (tempC < 0f)
+            {
+                float coldFactor = Lerp(0.6f, 1f, Clamp01((tempC + 10f) / 10f));
+                density *= coldFactor;
+            }
+
+            // Slight inland-from-salt-flat fade.
+            density *= 1f - 0.25f * Clamp01(coastSaltProxy);
+
+            return Clamp01(density);
+        }
+
+        static void GetVegetationDensityRange(BiomeId biome, out float minDensity, out float maxDensity)
+        {
+            switch (biome)
+            {
+                case BiomeId.Glacier:
+                case BiomeId.SaltFlat:
+                case BiomeId.AlpineBarren:
+                case BiomeId.Lake:
+                    minDensity = 0f;
+                    maxDensity = 0f;
+                    return;
+                case BiomeId.Tundra:
+                    minDensity = 0.08f;
+                    maxDensity = 0.25f;
+                    return;
+                case BiomeId.CoastalMarsh:
+                    minDensity = 0.35f;
+                    maxDensity = 0.75f;
+                    return;
+                case BiomeId.MountainShrub:
+                    minDensity = 0.20f;
+                    maxDensity = 0.50f;
+                    return;
+                case BiomeId.Floodplain:
+                    minDensity = 0.55f;
+                    maxDensity = 0.90f;
+                    return;
+                case BiomeId.Wetland:
+                    minDensity = 0.45f;
+                    maxDensity = 0.80f;
+                    return;
+                case BiomeId.HotDesert:
+                    minDensity = 0.00f;
+                    maxDensity = 0.08f;
+                    return;
+                case BiomeId.ColdDesert:
+                    minDensity = 0.02f;
+                    maxDensity = 0.15f;
+                    return;
+                case BiomeId.Scrubland:
+                    minDensity = 0.20f;
+                    maxDensity = 0.45f;
+                    return;
+                case BiomeId.TropicalRainforest:
+                    minDensity = 0.80f;
+                    maxDensity = 1.00f;
+                    return;
+                case BiomeId.TropicalDryForest:
+                    minDensity = 0.50f;
+                    maxDensity = 0.75f;
+                    return;
+                case BiomeId.Savanna:
+                    minDensity = 0.25f;
+                    maxDensity = 0.55f;
+                    return;
+                case BiomeId.BorealForest:
+                    minDensity = 0.45f;
+                    maxDensity = 0.75f;
+                    return;
+                case BiomeId.TemperateForest:
+                    minDensity = 0.50f;
+                    maxDensity = 0.82f;
+                    return;
+                case BiomeId.Grassland:
+                    minDensity = 0.35f;
+                    maxDensity = 0.68f;
+                    return;
+                case BiomeId.Woodland:
+                    minDensity = 0.30f;
+                    maxDensity = 0.55f;
+                    return;
+                default:
+                    minDensity = 0.25f;
+                    maxDensity = 0.50f;
+                    return;
+            }
+        }
+
         static float BaseMovementCost(BiomeId biome)
         {
             switch (biome)
@@ -558,6 +713,7 @@ namespace MapGen.Core
             }
         }
 
+        static float Lerp(float a, float b, float t) => a + (b - a) * t;
         static float Clamp01(float x) => x < 0f ? 0f : (x > 1f ? 1f : x);
         static float Clamp(float x, float lo, float hi) => x < lo ? lo : (x > hi ? hi : x);
     }
