@@ -15,11 +15,23 @@ float3 ComputeTerrain(float2 uv, bool isCellWater, float biomeId, float height)
     }
     else
     {
-        // Land: biome-elevation matrix
+        // Land: biome palette with elevation-based shading.
         float landHeight = NormalizeLandHeight(height);
-        float biomeRaw = clamp(biomeId * 65535.0, 0, 63);
-        float biomeU = (biomeRaw + 0.5) / 64.0;
-        terrain = tex2D(_BiomeMatrixTex, float2(biomeU, landHeight)).rgb;
+        float3 biomeColor = LookupPaletteColor(_BiomePaletteTex, biomeId);
+
+        if (landHeight < 0.85)
+        {
+            // Continuous brightness gradient: darker at low elevation, brighter at high.
+            float brightness = 0.4 + landHeight * 0.7;
+            terrain = saturate(biomeColor * brightness);
+        }
+        else
+        {
+            // Snow zone: blend biome color toward white at high elevation.
+            float t = saturate((landHeight - 0.85) / 0.15);
+            float3 snow = float3(0.95, 0.95, 0.98);
+            terrain = lerp(biomeColor, snow, t);
+        }
     }
 
     return terrain;

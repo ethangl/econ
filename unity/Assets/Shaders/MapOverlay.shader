@@ -35,9 +35,6 @@ Shader "EconSim/MapOverlay"
         _MarketPaletteTex ("Market Palette", 2D) = "white" {}
         _BiomePaletteTex ("Biome Palette", 2D) = "white" {}
 
-        // Biome-elevation matrix (64x64: biome x elevation)
-        _BiomeMatrixTex ("Biome Elevation Matrix", 2D) = "white" {}
-
         // Selection highlight (only one should be >= 0 at a time)
         _SelectedRealmId ("Selected Realm ID (normalized)", Float) = -1
         _SelectedProvinceId ("Selected Province ID (normalized)", Float) = -1
@@ -53,7 +50,7 @@ Shader "EconSim/MapOverlay"
         _HoveredMarketId ("Hovered Market ID (normalized)", Float) = -1
         _HoverIntensity ("Hover Intensity", Range(0, 1)) = 0
 
-        // Soil overlay (mode 6, vertex-blended)
+        // Biomes overlay (mode 6, vertex-blended)
         _SoilHeightFloor ("Soil Height Floor", Range(0, 1)) = 0
         _SoilBlendRadius ("Soil Blend Radius (texels)", Range(0.25, 6)) = 1.0
         _SoilBlendSharpness ("Soil Blend Sharpness", Range(0.5, 6)) = 1.4
@@ -79,7 +76,7 @@ Shader "EconSim/MapOverlay"
         _VegetationColor5 ("Vegetation Coniferous", Color) = (0.17, 0.33, 0.20, 1)
         _VegetationColor6 ("Vegetation Broadleaf", Color) = (0.18, 0.37, 0.14, 1)
 
-        // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 5=terrain/biome, 6=soil, 7=channel inspector, 8=local transport, 9=market transport
+        // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 6=biomes, 7=channel inspector, 8=local transport, 9=market transport
         _MapMode ("Map Mode", Int) = 0
         _DebugView ("Debug View", Int) = 0
 
@@ -178,7 +175,6 @@ Shader "EconSim/MapOverlay"
             sampler2D _RealmPaletteTex;
             sampler2D _MarketPaletteTex;
             sampler2D _BiomePaletteTex;
-            sampler2D _BiomeMatrixTex;
             float _SoilHeightFloor;
             float _SoilBlendRadius;
             float _SoilBlendSharpness;
@@ -479,7 +475,7 @@ Shader "EconSim/MapOverlay"
                 }
                 else if (_MapMode == 6)
                 {
-                    // Soil mode: grayscale heightmap × blended soil color.
+                    // Biomes mode: grayscale heightmap × blended soil/vegetation color.
                     if (isCellWater)
                     {
                         terrain = ComputeTerrain(uv, isCellWater, biomeId, height);

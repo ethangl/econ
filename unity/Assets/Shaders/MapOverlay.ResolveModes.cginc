@@ -77,8 +77,8 @@ float3 ApplyMarketModeStyle(float2 uv, float3 grayTerrain, float3 marketColor)
 
 float4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, float realmId, float provinceId, float countyId, float marketId)
 {
-    // No map mode overlay on water, rivers, height mode (0), terrain mode (5), or soil mode (6).
-    if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 5 || _MapMode == 6)
+    // No map mode overlay on water, rivers, height mode (0), or biomes mode (6).
+    if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 6)
         return float4(0, 0, 0, 0);
 
     // Grayscale terrain for multiply blending
@@ -109,8 +109,8 @@ float4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, f
 
 float4 ComputeMapModeFromResolvedBase(float2 uv, bool isCellWater, bool isRiver, float height, float3 resolvedBaseColor)
 {
-    // No map mode overlay on water, rivers, height mode (0), terrain mode (5), or soil mode (6).
-    if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 5 || _MapMode == 6)
+    // No map mode overlay on water, rivers, height mode (0), or biomes mode (6).
+    if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 6)
         return float4(0, 0, 0, 0);
 
     // Grayscale terrain for multiply blending
