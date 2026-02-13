@@ -7,7 +7,7 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: MapMaterila
+  m_Name: MapMaterial
   m_Shader: {fileID: 4800000, guid: 40d760363ce5541ba9ddc5e6ea85c55b, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
@@ -181,8 +181,8 @@ Material:
     - _CoastGradientIntensity: 0
     - _CoastGradientRadius: 15
     - _CoastlineBorderWidth: 2
-    - _CountyBorderDarkening: 0.519
-    - _CountyBorderWidth: 0.075
+    - _CountyBorderDarkening: 0.25
+    - _CountyBorderWidth: 0.05
     - _Cutoff: 0.5
     - _DebugView: 0
     - _DetailNormalMapScale: 1
@@ -190,20 +190,20 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _GradientCenterOpacity: 0.273
-    - _GradientEdgeDarkening: 0.493
+    - _GradientCenterOpacity: 0.75
+    - _GradientEdgeDarkening: 0.5
     - _GradientRadius: 5
     - _HalftoneScale: 0.15
     - _HeightScale: 0.2
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.013200856
-    - _HoveredCountyId: 0.0050659953
+    - _HoverIntensity: 0.000016896985
+    - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
-    - _MapMode: 6
+    - _MapMode: 2
     - _MarketBorderDarkening: 0.688
     - _MarketBorderWidth: 0.25
     - _Metallic: 0
@@ -218,7 +218,7 @@ Material:
     - _PoliticalEdgeDarkening: 0.777
     - _PoliticalEdgeOpacity: 0.8
     - _PoliticalGradientRadius: 64
-    - _ProvinceBorderDarkening: 0.774
+    - _ProvinceBorderDarkening: 0.4
     - _ProvinceBorderWidth: 0.1
     - _RealmBorderDarkening: 0.75
     - _RealmBorderWidth: 0.25
@@ -233,10 +233,10 @@ Material:
     - _SelectedCountyId: -1
     - _SelectedMarketId: -1
     - _SelectedProvinceId: -1
-    - _SelectedRealmId: -1
+    - _SelectedRealmId: 0.00009155413
     - _SelectionBorderWidth: 3
-    - _SelectionDesaturation: 0
-    - _SelectionDimming: 1
+    - _SelectionDesaturation: 0.8
+    - _SelectionDimming: 0.25
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
     - _ShimmerIntensity: 0.2
@@ -257,7 +257,7 @@ Material:
     - _SrcBlend: 1
     - _UVSec: 0
     - _UseHeightDisplacement: 1
-    - _UseModeColorResolve: 0
+    - _UseModeColorResolve: 1
     - _VegetationCoverageContrast: 1.3
     - _VegetationStippleJitter: 1
     - _VegetationStippleOpacity: 0.8
