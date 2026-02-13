@@ -29,6 +29,7 @@ namespace EconSim.UI
         private Label _provinceValue;
         private Label _stateValue;
         private Label _terrainValue;
+        private Label _cultureValue;
         private Label _popTotal;
         private Label _popWorkers;
         private Label _popEmployed;
@@ -167,6 +168,7 @@ namespace EconSim.UI
             _provinceValue = _root.Q<Label>("province-value");
             _stateValue = _root.Q<Label>("state-value");
             _terrainValue = _root.Q<Label>("terrain-value");
+            _cultureValue = _root.Q<Label>("culture-value");
             _popTotal = _root.Q<Label>("pop-total");
             _popWorkers = _root.Q<Label>("pop-workers");
             _popEmployed = _root.Q<Label>("pop-employed");
@@ -278,19 +280,17 @@ namespace EconSim.UI
             if (_selectedRealmId <= 0 || _mapData == null) return;
             if (!_mapData.RealmById.TryGetValue(_selectedRealmId, out var realm)) return;
 
-            // Title
-            SetLabel(_entityName, realm.Name ?? $"Realm {realm.Id}");
+            // Title - use full name (includes government form, e.g. "Kuningaskunta of Härvälä")
+            SetLabel(_entityName, realm.FullName ?? realm.Name ?? $"Realm {realm.Id}");
 
-            // Location section - show capital
+            // Location section - show capital and culture
             SetLabel(_provinceValue, "-");
             SetLabel(_stateValue, "-");
 
             string capitalName = "-";
-            if (realm.CapitalBurgId > 0 && realm.CapitalBurgId < _mapData.Burgs.Count)
-            {
-                capitalName = _mapData.Burgs[realm.CapitalBurgId].Name ?? "-";
-            }
+            capitalName = GetBurgNameById(realm.CapitalBurgId);
             SetLabel(_terrainValue, capitalName);
+            SetLabel(_cultureValue, GetCultureName(_selectedRealmId));
 
             // Find the terrain label and change its text to "Capital"
             var terrainRow = _terrainValue?.parent;
@@ -341,8 +341,8 @@ namespace EconSim.UI
             if (_selectedProvinceId <= 0 || _mapData == null) return;
             if (!_mapData.ProvinceById.TryGetValue(_selectedProvinceId, out var province)) return;
 
-            // Title
-            SetLabel(_entityName, province.Name ?? $"Province {province.Id}");
+            // Title - use full name (e.g. "Province of Koskiniemi")
+            SetLabel(_entityName, province.FullName ?? province.Name ?? $"Province {province.Id}");
 
             // Location section
             SetLabel(_provinceValue, "-");
@@ -355,11 +355,9 @@ namespace EconSim.UI
             SetLabel(_stateValue, realmName);
 
             string capitalName = "-";
-            if (province.CapitalBurgId > 0 && province.CapitalBurgId < _mapData.Burgs.Count)
-            {
-                capitalName = _mapData.Burgs[province.CapitalBurgId].Name ?? "-";
-            }
+            capitalName = GetBurgNameById(province.CapitalBurgId);
             SetLabel(_terrainValue, capitalName);
+            SetLabel(_cultureValue, GetCultureName(province.RealmId));
 
             // Change terrain label to "Capital"
             var terrainRow = _terrainValue?.parent;
@@ -440,6 +438,7 @@ namespace EconSim.UI
 
             // Cell count
             SetLabel(_terrainValue, $"{county.CellCount}");
+            SetLabel(_cultureValue, GetCultureName(county.RealmId));
 
             // Show all sections for county mode
             SetSectionVisible(_resourcesSection, true);
@@ -652,6 +651,37 @@ namespace EconSim.UI
         private void ClearList(VisualElement list)
         {
             list?.Clear();
+        }
+
+        private string GetCultureName(int realmId)
+        {
+            if (_mapData == null || _mapData.CultureById == null) return "-";
+            if (realmId <= 0 || !_mapData.RealmById.TryGetValue(realmId, out var realm)) return "-";
+            if (realm.CultureId <= 0 || !_mapData.CultureById.TryGetValue(realm.CultureId, out var culture)) return "-";
+            return culture.Name ?? "-";
+        }
+
+        private string GetBurgNameById(int burgId)
+        {
+            if (_mapData == null || _mapData.Burgs == null || burgId <= 0)
+                return "-";
+
+            int index = burgId - 1; // IDs are 1-based; list indices are 0-based.
+            if (index >= 0 && index < _mapData.Burgs.Count)
+            {
+                Burg burg = _mapData.Burgs[index];
+                if (burg != null && burg.Id == burgId)
+                    return burg.Name ?? "-";
+            }
+
+            for (int i = 0; i < _mapData.Burgs.Count; i++)
+            {
+                Burg burg = _mapData.Burgs[i];
+                if (burg != null && burg.Id == burgId)
+                    return burg.Name ?? "-";
+            }
+
+            return "-";
         }
     }
 }

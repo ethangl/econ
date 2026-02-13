@@ -85,6 +85,7 @@ namespace PopGen.Core
         public PopCounty[] Counties;
         public PopProvince[] Provinces;
         public PopRealm[] Realms;
+        public PopCulture[] Cultures;
         public int[] CellBurgId;
 
         public PopGenResult()
@@ -93,6 +94,7 @@ namespace PopGen.Core
             Counties = System.Array.Empty<PopCounty>();
             Provinces = System.Array.Empty<PopProvince>();
             Realms = System.Array.Empty<PopRealm>();
+            Cultures = System.Array.Empty<PopCulture>();
             CellBurgId = System.Array.Empty<int>();
         }
     }

@@ -129,10 +129,12 @@ namespace EconSim.Core.Import
             PopGenResult popResult = PopGenPipeline.Generate(result, new PopGenConfig(), popSeed);
 
             ApplyCellBurgIds(cells, popResult.CellBurgId);
+            ApplyCellCultureIds(cells, popResult.Realms);
             var burgs = ConvertBurgs(popResult.Burgs);
             var realms = ConvertRealms(popResult.Realms);
             var provinces = ConvertProvinces(popResult.Provinces);
             var counties = ConvertCounties(popResult.Counties);
+            var cultures = ConvertCultures(popResult.Cultures);
             var biomeDefs = BuildBiomeDefinitions();
 
             int landCells = 0;
@@ -174,7 +176,8 @@ namespace EconSim.Core.Import
                 Biomes = biomeDefs,
                 Burgs = burgs,
                 Features = features,
-                Counties = counties
+                Counties = counties,
+                Cultures = cultures
             };
 
             mapData.BuildLookups();
@@ -205,6 +208,40 @@ namespace EconSim.Core.Import
             int n = Math.Min(cells.Count, cellBurgId.Length);
             for (int i = 0; i < n; i++)
                 cells[i].BurgId = cellBurgId[i];
+        }
+
+        static void ApplyCellCultureIds(List<Cell> cells, PopRealm[] realms)
+        {
+            if (realms == null || realms.Length == 0) return;
+            var realmCulture = new Dictionary<int, int>(realms.Length);
+            foreach (var r in realms)
+                realmCulture[r.Id] = r.CultureId;
+
+            foreach (var cell in cells)
+            {
+                if (cell.RealmId > 0 && realmCulture.TryGetValue(cell.RealmId, out int cid))
+                    cell.CultureId = cid;
+            }
+        }
+
+        static List<Culture> ConvertCultures(PopCulture[] source)
+        {
+            if (source == null || source.Length == 0)
+                return new List<Culture>();
+
+            var cultures = new List<Culture>(source.Length);
+            for (int i = 0; i < source.Length; i++)
+            {
+                PopCulture c = source[i];
+                cultures.Add(new Culture
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    TypeName = c.TypeName ?? "Generic"
+                });
+            }
+
+            return cultures;
         }
 
         static List<Burg> ConvertBurgs(PopBurg[] source)

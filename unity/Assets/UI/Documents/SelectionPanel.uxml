@@ -16,6 +16,10 @@
                 <ui:Label text="Terrain" />
                 <ui:Label name="terrain-value" text="-" />
             </ui:VisualElement>
+            <ui:VisualElement class="stat-row">
+                <ui:Label text="Culture" />
+                <ui:Label name="culture-value" text="-" />
+            </ui:VisualElement>
         </ui:VisualElement>
 
         <ui:VisualElement class="section">

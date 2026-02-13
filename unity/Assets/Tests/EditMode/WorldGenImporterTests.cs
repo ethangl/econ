@@ -158,6 +158,62 @@ namespace EconSim.Tests
             Assert.That(maxDensityOnLand - minDensityOnLand, Is.GreaterThan(0.05f), "Vegetation density is unexpectedly uniform across land cells.");
         }
 
+        [Test]
+        public void Convert_CulturesRoundTripFromPopGenOutput()
+        {
+            WorldGenerationContext context = WorldGenerationContext.FromRootSeed(808080);
+            MapGenResult map = GenerateMap(context.MapGenSeed, cellCount: 3600);
+
+            PopGenResult expected = PopGenPipeline.Generate(
+                map,
+                new PopGenConfig(),
+                new PopGenSeed(context.PopGenSeed));
+
+            MapData runtime = WorldGenImporter.Convert(map, context);
+
+            Assert.That(runtime.Cultures, Is.Not.Null);
+            Assert.That(runtime.CultureById, Is.Not.Null);
+            Assert.That(runtime.Cultures.Count, Is.EqualTo(expected.Cultures.Length));
+            Assert.That(runtime.CultureById.Count, Is.EqualTo(runtime.Cultures.Count));
+
+            foreach (PopCulture expectedCulture in expected.Cultures)
+            {
+                Assert.That(runtime.CultureById.TryGetValue(expectedCulture.Id, out Culture actualCulture), Is.True,
+                    $"Missing culture {expectedCulture.Id}.");
+                Assert.That(actualCulture.Name, Is.EqualTo(expectedCulture.Name), $"Culture name mismatch for {expectedCulture.Id}.");
+                Assert.That(actualCulture.TypeName, Is.EqualTo(expectedCulture.TypeName ?? "Generic"), $"Culture type mismatch for {expectedCulture.Id}.");
+            }
+        }
+
+        [Test]
+        public void Convert_CellCultureIdsMatchRealmCultureAssignments()
+        {
+            WorldGenerationContext context = WorldGenerationContext.FromRootSeed(909090);
+            MapGenResult map = GenerateMap(context.MapGenSeed, cellCount: 3600);
+            MapData runtime = WorldGenImporter.Convert(map, context);
+
+            Assert.That(runtime.RealmById, Is.Not.Null);
+            Assert.That(runtime.CultureById, Is.Not.Null);
+
+            for (int i = 0; i < runtime.Cells.Count; i++)
+            {
+                Cell cell = runtime.Cells[i];
+                if (cell.RealmId <= 0)
+                {
+                    Assert.That(cell.CultureId, Is.EqualTo(0), $"Neutral cell {cell.Id} should not have a culture assignment.");
+                    continue;
+                }
+
+                Assert.That(runtime.RealmById.TryGetValue(cell.RealmId, out Realm realm), Is.True,
+                    $"Cell {cell.Id} references missing realm {cell.RealmId}.");
+                Assert.That(realm.CultureId, Is.GreaterThan(0), $"Realm {realm.Id} should have a culture.");
+                Assert.That(cell.CultureId, Is.EqualTo(realm.CultureId),
+                    $"Cell {cell.Id} culture mismatch: cell={cell.CultureId}, realm={realm.CultureId}.");
+                Assert.That(runtime.CultureById.ContainsKey(cell.CultureId), Is.True,
+                    $"Cell {cell.Id} references missing culture {cell.CultureId}.");
+            }
+        }
+
         static MapGenResult GenerateMap(int seed, int cellCount)
         {
             var config = new MapGenConfig
