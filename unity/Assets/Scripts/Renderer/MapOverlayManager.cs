@@ -53,7 +53,6 @@ public class MapOverlayManager
         private static readonly int RealmPaletteTexId = Shader.PropertyToID("_RealmPaletteTex");
         private static readonly int MarketPaletteTexId = Shader.PropertyToID("_MarketPaletteTex");
         private static readonly int BiomePaletteTexId = Shader.PropertyToID("_BiomePaletteTex");
-        private static readonly int BiomeMatrixTexId = Shader.PropertyToID("_BiomeMatrixTex");
         private static readonly int CellToMarketTexId = Shader.PropertyToID("_CellToMarketTex");
         private static readonly int RealmBorderDistTexId = Shader.PropertyToID("_RealmBorderDistTex");
         private static readonly int ProvinceBorderDistTexId = Shader.PropertyToID("_ProvinceBorderDistTex");
@@ -125,7 +124,6 @@ public class MapOverlayManager
         private Texture2D realmPaletteTexture;  // 256x1: realm colors
         private Texture2D marketPaletteTexture; // 256x1: market colors
         private Texture2D biomePaletteTexture;  // 256x1: biome colors
-        private Texture2D biomeElevationMatrix; // 64x64: biome × elevation colors
         private Texture2D realmBorderDistTexture; // R8: distance to nearest realm boundary (texels)
         private Texture2D provinceBorderDistTexture; // R8: distance to nearest province boundary (texels)
         private Texture2D countyBorderDistTexture;   // R8: distance to nearest county boundary (texels)
@@ -347,10 +345,6 @@ public class MapOverlayManager
 
             Profiler.Begin("GeneratePaletteTextures");
             GeneratePaletteTextures();
-            Profiler.End();
-
-            Profiler.Begin("GenerateBiomeElevationMatrix");
-            GenerateBiomeElevationMatrix();
             Profiler.End();
 
             Profiler.Begin("GenerateVegetationTexture");
@@ -1743,78 +1737,6 @@ public class MapOverlayManager
         }
 
         /// <summary>
-        /// Generate the biome-elevation matrix texture (64x64).
-        /// X axis = biome ID (0-63), Y axis = normalized elevation (0-1).
-        /// Applies elevation-based color modifications to biome base colors.
-        /// </summary>
-        private void GenerateBiomeElevationMatrix()
-        {
-            const int MatrixSize = 64;
-
-            biomeElevationMatrix = new Texture2D(MatrixSize, MatrixSize, TextureFormat.RGBA32, false);
-            biomeElevationMatrix.name = "BiomeElevationMatrix";
-            biomeElevationMatrix.filterMode = FilterMode.Bilinear;
-            biomeElevationMatrix.wrapMode = TextureWrapMode.Clamp;
-
-            var pixels = new Color[MatrixSize * MatrixSize];
-
-            // For each biome column
-            for (int biomeIdx = 0; biomeIdx < MatrixSize; biomeIdx++)
-            {
-                // Get biome color from map data, fall back to neutral green
-                Color baseColor = new Color(0.4f, 0.6f, 0.4f);
-
-                var biome = mapData.Biomes.Find(b => b.Id == biomeIdx);
-                if (biome != null)
-                {
-                    baseColor = new Color(
-                        biome.Color.R / 255f,
-                        biome.Color.G / 255f,
-                        biome.Color.B / 255f
-                    );
-                }
-
-                Color.RGBToHSV(baseColor, out float h, out float s, out float v);
-
-                for (int elevIdx = 0; elevIdx < MatrixSize; elevIdx++)
-                {
-                    float elevation = elevIdx / (float)(MatrixSize - 1);
-                    Color finalColor = ApplyElevationZone(h, s, v, elevation);
-                    pixels[elevIdx * MatrixSize + biomeIdx] = finalColor;
-                }
-            }
-
-            biomeElevationMatrix.SetPixels(pixels);
-            biomeElevationMatrix.Apply();
-
-            TextureDebugger.SaveTexture(biomeElevationMatrix, "biome_elevation_matrix");
-            Debug.Log($"MapOverlayManager: Generated biome-elevation matrix {MatrixSize}x{MatrixSize}");
-        }
-
-        /// <summary>
-        /// Apply elevation-based color modifications to biome color.
-        /// Elevation input is normalized absolute height [0..1] from the height texture.
-        /// Brightness gradient from 0.4 (coastal) to 1.0 (high), snow blend above 85%.
-        /// </summary>
-        private Color ApplyElevationZone(float h, float s, float v, float elevation)
-        {
-            if (elevation < 0.85f)
-            {
-                // Continuous brightness gradient: darker at low elevation, brighter at high
-                float brightness = 0.4f + elevation * 0.7f;
-                return Color.HSVToRGB(h, s, v * brightness);
-            }
-            else
-            {
-                // Snow zone (Azgaar height 88-100): blend to white
-                float t = (elevation - 0.85f) / 0.15f;
-                Color baseCol = Color.HSVToRGB(h, s, v);
-                Color snow = new Color(0.95f, 0.95f, 0.98f);
-                return Color.Lerp(baseCol, snow, t);
-            }
-        }
-
-        /// <summary>
         /// Apply all textures and initial settings to the terrain material.
         /// </summary>
         private void ApplyTexturesToMaterial()
@@ -1831,7 +1753,6 @@ public class MapOverlayManager
             terrainMaterial.SetTexture(RealmPaletteTexId, realmPaletteTexture);
             terrainMaterial.SetTexture(MarketPaletteTexId, marketPaletteTexture);
             terrainMaterial.SetTexture(BiomePaletteTexId, biomePaletteTexture);
-            terrainMaterial.SetTexture(BiomeMatrixTexId, biomeElevationMatrix);
             terrainMaterial.SetTexture(RealmBorderDistTexId, realmBorderDistTexture);
             terrainMaterial.SetTexture(ProvinceBorderDistTexId, provinceBorderDistTexture);
             terrainMaterial.SetTexture(CountyBorderDistTexId, countyBorderDistTexture);
@@ -3070,8 +2991,8 @@ public class MapOverlayManager
 
         /// <summary>
         /// Set the current map mode for the shader.
-        /// Mode: 1=political, 2=province, 3=county, 4=market, 5=terrain/biome,
-        /// 6=soil (vertex-blended), 7=channel-inspector, 8=local transport, 9=market transport
+        /// Mode: 1=political, 2=province, 3=county, 4=market,
+        /// 6=biomes (vertex-blended), 7=channel-inspector, 8=local transport, 9=market transport
         /// </summary>
         public void SetMapMode(MapView.MapMode mode)
         {
@@ -3096,7 +3017,7 @@ public class MapOverlayManager
                 case MapView.MapMode.Market:
                     shaderMode = 4;
                     break;
-                case MapView.MapMode.Soil:
+                case MapView.MapMode.Biomes:
                     shaderMode = 6;
                     break;
                 case MapView.MapMode.ChannelInspector:
@@ -3108,9 +3029,8 @@ public class MapOverlayManager
                 case MapView.MapMode.MarketTransportCost:
                     shaderMode = 9;
                     break;
-                case MapView.MapMode.Terrain:
                 default:
-                    shaderMode = 5;  // Biome texture with elevation tinting
+                    shaderMode = 1;
                     break;
             }
 
@@ -3441,7 +3361,6 @@ public class MapOverlayManager
             AddTextureForDestroy(texturesToDestroy, realmPaletteTexture);
             AddTextureForDestroy(texturesToDestroy, marketPaletteTexture);
             AddTextureForDestroy(texturesToDestroy, biomePaletteTexture);
-            AddTextureForDestroy(texturesToDestroy, biomeElevationMatrix);
             AddTextureForDestroy(texturesToDestroy, cellToMarketTexture);
             AddTextureForDestroy(texturesToDestroy, realmBorderDistTexture);
             AddTextureForDestroy(texturesToDestroy, provinceBorderDistTexture);
@@ -3468,7 +3387,6 @@ public class MapOverlayManager
             realmPaletteTexture = null;
             marketPaletteTexture = null;
             biomePaletteTexture = null;
-            biomeElevationMatrix = null;
             cellToMarketTexture = null;
             realmBorderDistTexture = null;
             provinceBorderDistTexture = null;

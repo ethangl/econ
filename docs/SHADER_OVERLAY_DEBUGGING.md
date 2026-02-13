@@ -29,7 +29,7 @@ Supporting generated textures:
 - `_RiverMaskTex`
 - `_RealmPaletteTex`
 - `_MarketPaletteTex`
-- `_BiomeMatrixTex`
+- `_BiomePaletteTex`
 - `_RealmBorderDistTex` / `_ProvinceBorderDistTex` / `_CountyBorderDistTex`
 - `_MarketBorderDistTex`
 - `_RoadMaskTex`
@@ -245,7 +245,7 @@ Before closing a shader/overlay bug:
 2. Fix validated in isolation and full composition.
 3. No regression in at least:
    - Political mode
-   - Terrain mode
+   - Biomes mode
    - Market mode
 4. Hover and border behavior verified for low-saturation realms.
 5. Note added to relevant doc if the failure mode is likely to recur.

@@ -106,7 +106,7 @@ namespace EconSim.UI
         {
             if (_mapView == null) return;
 
-            // Don't show in non-political modes (Market/Terrain have their own panels or no panel)
+            // Don't show in non-political modes (Market/Biomes have their own panels or no panel)
             var mode = _mapView.CurrentMode;
             if (mode != MapView.MapMode.Political &&
                 mode != MapView.MapMode.Province &&

@@ -153,7 +153,6 @@ namespace EconSim.Editor
             ("_RealmPaletteTex", "Realm Palette"),
             ("_MarketPaletteTex", "Market Palette"),
             ("_BiomePaletteTex", "Biome Palette"),
-            ("_BiomeMatrixTex", "Biome Elevation Matrix"),
             ("_RealmBorderDistTex", "Realm Border Distance"),
             ("_ProvinceBorderDistTex", "Province Border Distance"),
             ("_CountyBorderDistTex", "County Border Distance"),

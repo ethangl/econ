@@ -25,9 +25,8 @@ Full control reference:
 Quick map/debug keys:
 
 - `1` Political mode
-- `2` Terrain mode
+- `2` Biomes mode
 - `3` Market mode
-- `4` Soil mode
 - `0` Channel Inspector mode
 - `O` Cycle Channel Inspector views
 - `P` Toggle ID probe overlay

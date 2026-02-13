@@ -103,12 +103,11 @@ namespace EconSim.Renderer
             Political = 0,      // Colored by realm (zoomed-in 0-25%)
             Province = 1,       // Colored by province (zoomed-in 25-75%)
             County = 2,         // Colored by county/cell (zoomed-in 75-100%)
-            Terrain = 3,        // Colored by biome with elevation tinting (key: 2)
-            Market = 4,         // Colored by market zone (key: 3)
-            Soil = 5,           // Soil (vertex-blended) (key: 4)
-            ChannelInspector = 6, // Debug channel visualization (key: 0)
-            LocalTransportCost = 7, // Local per-cell transport difficulty heatmap (key: 5)
-            MarketTransportCost = 8 // Cell-to-assigned-market transport cost heatmap (key: 6)
+            Market = 3,         // Colored by market zone (key: 3)
+            Biomes = 4,         // Biomes (vertex-blended) (key: 2)
+            ChannelInspector = 5, // Debug channel visualization (key: 0)
+            LocalTransportCost = 6, // Local per-cell transport difficulty heatmap (key: 5)
+            MarketTransportCost = 7 // Cell-to-assigned-market transport cost heatmap (key: 6)
         }
 
         public MapMode CurrentMode => currentMode;
@@ -119,9 +118,8 @@ namespace EconSim.Renderer
             "Political",
             "Province",
             "County",
-            "Terrain",
             "Market",
-            "Soil",
+            "Biomes",
             "Channel Inspector",
             "Local Transport Cost",
             "Market Transport Cost"
@@ -174,18 +172,13 @@ namespace EconSim.Renderer
             }
             else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2))
             {
-                SetMapMode(MapMode.Terrain);
-                Debug.Log("Map mode: Terrain (2)");
+                SetMapMode(MapMode.Biomes);
+                Debug.Log("Map mode: Biomes (2)");
             }
             else if (Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3))
             {
                 SetMapMode(MapMode.Market);
                 Debug.Log("Map mode: Market (3)");
-            }
-            else if (Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4))
-            {
-                SetMapMode(MapMode.Soil);
-                Debug.Log("Map mode: Soil (4)");
             }
             else if (Input.GetKeyDown(KeyCode.Alpha5) || Input.GetKeyDown(KeyCode.Keypad5))
             {
@@ -392,7 +385,7 @@ namespace EconSim.Renderer
                     }
                     break;
                 case MapMode.County:
-                case MapMode.Terrain:
+                case MapMode.Biomes:
                 default:
                     overlayManager.SetHoveredCounty(cell.CountyId);
                     break;
@@ -610,8 +603,7 @@ namespace EconSim.Renderer
             }
 
             // Non-political overlays - just select county, no drill-down
-            if (currentMode == MapMode.Terrain ||
-                currentMode == MapMode.Soil ||
+            if (currentMode == MapMode.Biomes ||
                 currentMode == MapMode.LocalTransportCost ||
                 currentMode == MapMode.MarketTransportCost)
             {
@@ -1593,12 +1585,10 @@ namespace EconSim.Renderer
                     return GetProvinceColor(cell);
                 case MapMode.County:
                     return GetCountyColor(cell);
-                case MapMode.Terrain:
-                    return GetTerrainColor(cell);
                 case MapMode.Market:
                     return GetMarketColor(cell);
-                case MapMode.Soil:
-                    return GetTerrainColor(cell);  // Fallback; soil tint is shader-only
+                case MapMode.Biomes:
+                    return GetTerrainColor(cell);  // Fallback; biome tint is shader-driven
                 case MapMode.ChannelInspector:
                     return GetTerrainColor(cell);  // Shader debug visualization overrides this.
                 case MapMode.LocalTransportCost:
@@ -2052,7 +2042,7 @@ namespace EconSim.Renderer
                     }
                     break;
 
-                case MapMode.Terrain:
+                case MapMode.Biomes:
                     string biomeName = "Unknown";
                     if (mapData.Biomes != null)
                     {
@@ -2066,16 +2056,9 @@ namespace EconSim.Renderer
                             }
                         }
                     }
-                    probeBuilder.Append("Terrain: Biome=").Append(biomeName)
+                    probeBuilder.Append("Biomes: Biome=").Append(biomeName)
                         .Append(" (").Append(cell.BiomeId).Append(")")
                         .Append(" Soil=").Append(cell.SoilId)
-                        .Append(" VegType=").Append(cell.VegetationTypeId)
-                        .Append(" VegDensity=").Append(cell.VegetationDensity.ToString("F3"))
-                        .AppendLine();
-                    break;
-
-                case MapMode.Soil:
-                    probeBuilder.Append("Soil: Type=").Append(cell.SoilId)
                         .Append(" VegType=").Append(cell.VegetationTypeId)
                         .Append(" VegDensity=").Append(cell.VegetationDensity.ToString("F3"))
                         .AppendLine();
@@ -2208,7 +2191,7 @@ namespace EconSim.Renderer
             GUI.Box(new Rect(10, 10, width, height), GUIContent.none);
             GUI.Label(
                 new Rect(18, 18, width - 16, height - 16),
-                probeText + "\nKeys: 5=Local Transport, 6=Market Transport, 0=Channel Inspector, O=Cycle Channel, P=Toggle Probe");
+                probeText + "\nKeys: 2=Biomes, 5=Local Transport, 6=Market Transport, 0=Channel Inspector, O=Cycle Channel, P=Toggle Probe");
         }
 
 #if UNITY_EDITOR
@@ -2230,14 +2213,11 @@ namespace EconSim.Renderer
         [ContextMenu("Set Mode: County")]
         private void SetModeCounty() => SetMapMode(MapMode.County);
 
-        [ContextMenu("Set Mode: Terrain")]
-        private void SetModeTerrain() => SetMapMode(MapMode.Terrain);
+        [ContextMenu("Set Mode: Biomes")]
+        private void SetModeBiomes() => SetMapMode(MapMode.Biomes);
 
         [ContextMenu("Set Mode: Market")]
         private void SetModeMarket() => SetMapMode(MapMode.Market);
-
-        [ContextMenu("Set Mode: Soil")]
-        private void SetModeSoil() => SetMapMode(MapMode.Soil);
 
         [ContextMenu("Set Mode: Local Transport Cost")]
         private void SetModeLocalTransportCost() => SetMapMode(MapMode.LocalTransportCost);

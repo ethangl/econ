@@ -3,9 +3,8 @@
 ## Map Modes (`MapView`)
 
 - `1`: Political
-- `2`: Terrain
+- `2`: Biomes
 - `3`: Market
-- `4`: Soil
 - `0`: Channel Inspector
 
 ## Rendering Debug (`MapView`)
