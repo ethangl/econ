@@ -237,6 +237,9 @@ namespace EconSim.Core.Data
         public int CultureId;
         public int ReligionId;
 
+        // Boundary
+        public bool IsBoundary;             // True if cell is on map edge
+
         public bool HasRiver => RiverId > 0;
         public bool HasBurg => BurgId > 0;
     }

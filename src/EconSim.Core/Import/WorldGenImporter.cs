@@ -73,7 +73,8 @@ namespace EconSim.Core.Import
                     RealmId = political.RealmId[i],
                     ProvinceId = political.ProvinceId[i],
                     CountyId = political.CountyId[i],
-                    Population = biomes.Population[i]
+                    Population = biomes.Population[i],
+                    IsBoundary = mesh.CellIsBoundary[i]
                 };
 
                 cells.Add(cell);

@@ -74,7 +74,8 @@ namespace EconSim.Core.Simulation.Systems
                 foreach (var goodState in market.Goods.Values)
                 {
                     // For black market, preserve accumulated supply (stolen goods persist)
-                    if (market.Type == MarketType.Black)
+                    // For off-map markets, preserve supply (replenished by OffMapSupplySystem)
+                    if (market.Type == MarketType.Black || market.Type == MarketType.OffMap)
                     {
                         goodState.SupplyOffered = goodState.Supply;
                         goodState.Demand = 0;
