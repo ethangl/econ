@@ -15,7 +15,7 @@ namespace EconSim.Core.Simulation
     /// </summary>
     public class SimulationRunner : ISimulation
     {
-        private const int BootstrapCacheVersion = 3;
+        private const int BootstrapCacheVersion = 4;
         private const string BootstrapCacheFileName = "simulation_bootstrap.bin";
 
         private readonly MapData _mapData;
@@ -227,9 +227,19 @@ namespace EconSim.Core.Simulation
                 int economySeed = reader.ReadInt32();
                 int countyCount = reader.ReadInt32();
                 int cellCount = reader.ReadInt32();
+                float latitudeSouth = reader.ReadSingle();
+                float latitudeNorth = reader.ReadSingle();
                 bool staticNetworkBuilt = reader.ReadBoolean();
 
-                if (!IsSimulationBootstrapCacheCompatible(rootSeed, mapGenSeed, economySeed, countyCount, cellCount, staticNetworkBuilt))
+                if (!IsSimulationBootstrapCacheCompatible(
+                    rootSeed,
+                    mapGenSeed,
+                    economySeed,
+                    countyCount,
+                    cellCount,
+                    latitudeSouth,
+                    latitudeNorth,
+                    staticNetworkBuilt))
                     return false;
 
                 _state.Economy.Markets.Clear();
@@ -356,6 +366,8 @@ namespace EconSim.Core.Simulation
             int economySeed,
             int countyCount,
             int cellCount,
+            float latitudeSouth,
+            float latitudeNorth,
             bool staticNetworkBuilt)
         {
             if (countyCount != (_mapData?.Counties?.Count ?? 0))
@@ -371,6 +383,12 @@ namespace EconSim.Core.Simulation
                 return false;
 
             if (_cacheEconomySeed > 0 && economySeed > 0 && _cacheEconomySeed != economySeed)
+                return false;
+
+            if (!CacheLatitudeMatches(latitudeSouth, _mapData?.Info?.World != null ? _mapData.Info.World.LatitudeSouth : float.NaN))
+                return false;
+
+            if (!CacheLatitudeMatches(latitudeNorth, _mapData?.Info?.World != null ? _mapData.Info.World.LatitudeNorth : float.NaN))
                 return false;
 
             if (SimulationConfig.Roads.BuildStaticNetworkAtInit != staticNetworkBuilt)
@@ -401,6 +419,8 @@ namespace EconSim.Core.Simulation
                 writer.Write(_cacheEconomySeed);
                 writer.Write(_mapData?.Counties?.Count ?? 0);
                 writer.Write(_mapData?.Cells?.Count ?? 0);
+                writer.Write(_mapData?.Info?.World != null ? _mapData.Info.World.LatitudeSouth : float.NaN);
+                writer.Write(_mapData?.Info?.World != null ? _mapData.Info.World.LatitudeNorth : float.NaN);
                 writer.Write(staticNetworkBuilt);
 
                 writer.Write(_state.Economy.Markets.Count);
@@ -456,6 +476,25 @@ namespace EconSim.Core.Simulation
             {
                 SimLog.Log("Bootstrap", $"Failed to save simulation bootstrap cache: {ex.Message}");
             }
+        }
+
+        private static bool CacheLatitudeMatches(float cachedValue, float expectedValue)
+        {
+            bool cachedIsFinite = IsFinite(cachedValue);
+            bool expectedIsFinite = IsFinite(expectedValue);
+
+            if (cachedIsFinite != expectedIsFinite)
+                return false;
+
+            if (!cachedIsFinite)
+                return true;
+
+            return Math.Abs(cachedValue - expectedValue) <= 0.0001f;
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
 
         private static int ResolveEconomySeedForCache(MapData mapData, int? explicitSeed)

@@ -13,7 +13,7 @@ namespace MapGen.Core
         public float AspectRatio = 16f / 9f;
         public float CellSizeKm = 2.5f;
         public HeightmapTemplateType Template = HeightmapTemplateType.LowIsland;
-        public float LatitudeSouth = 30f;
+        public float LatitudeSouth = -50f;
 
         // Elevation envelope in signed meters (sea level = 0).
         public float MaxElevationMeters = 5000f;
@@ -110,6 +110,10 @@ namespace MapGen.Core
             if (CellCount <= 0) throw new ArgumentOutOfRangeException(nameof(CellCount), "CellCount must be positive.");
             if (AspectRatio <= 0f) throw new ArgumentOutOfRangeException(nameof(AspectRatio), "AspectRatio must be positive.");
             if (CellSizeKm <= 0f) throw new ArgumentOutOfRangeException(nameof(CellSizeKm), "CellSizeKm must be positive.");
+            if (float.IsNaN(LatitudeSouth) || float.IsInfinity(LatitudeSouth))
+                throw new ArgumentOutOfRangeException(nameof(LatitudeSouth), "LatitudeSouth must be finite.");
+            if (LatitudeSouth < -90f || LatitudeSouth > 90f)
+                throw new ArgumentOutOfRangeException(nameof(LatitudeSouth), "LatitudeSouth must be within [-90, 90].");
             if (MaxElevationMeters <= 0f) throw new ArgumentOutOfRangeException(nameof(MaxElevationMeters), "MaxElevationMeters must be positive.");
             if (MaxSeaDepthMeters <= 0f) throw new ArgumentOutOfRangeException(nameof(MaxSeaDepthMeters), "MaxSeaDepthMeters must be positive.");
             if (LapseRateCPerKm <= 0f) throw new ArgumentOutOfRangeException(nameof(LapseRateCPerKm), "LapseRateCPerKm must be positive.");
@@ -121,6 +125,24 @@ namespace MapGen.Core
             if (MinRealmPopulationFraction < 0f || MinRealmPopulationFraction > 1f)
                 throw new ArgumentOutOfRangeException(nameof(MinRealmPopulationFraction), "MinRealmPopulationFraction must be in [0, 1].");
             if (WindBands == null || WindBands.Length == 0) throw new ArgumentException("WindBands must be configured.", nameof(WindBands));
+
+            double latitudeNorth = ResolveLatitudeNorthEstimate();
+            if (double.IsNaN(latitudeNorth) || double.IsInfinity(latitudeNorth))
+                throw new ArgumentOutOfRangeException(nameof(LatitudeSouth), "Derived latitude range must be finite.");
+            if (latitudeNorth <= LatitudeSouth)
+                throw new ArgumentOutOfRangeException(nameof(LatitudeSouth), "Derived latitude span must increase northward.");
+            if (latitudeNorth > 90d)
+                throw new ArgumentOutOfRangeException(nameof(LatitudeSouth), "Derived latitude north edge exceeds +90. Reduce size or lower LatitudeSouth.");
+        }
+
+        double ResolveLatitudeNorthEstimate()
+        {
+            double cellSizeKm = CellSizeKm;
+            double aspectRatio = AspectRatio;
+            double mapAreaKm2 = CellCount * cellSizeKm * cellSizeKm;
+            double mapWidthKm = Math.Sqrt(mapAreaKm2 * aspectRatio);
+            double mapHeightKm = mapWidthKm / aspectRatio;
+            return LatitudeSouth + mapHeightKm / 111d;
         }
     }
 }

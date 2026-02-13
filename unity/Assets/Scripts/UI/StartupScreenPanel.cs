@@ -24,6 +24,7 @@ namespace EconSim.UI
         private IntegerField _seedField;
         private IntegerField _cellCountField;
         private FloatField _aspectRatioField;
+        private FloatField _latitudeField;
         private bool _isLoading;
 
         private static readonly List<string> TemplateNames =
@@ -74,6 +75,7 @@ namespace EconSim.UI
             _seedField = root.Q<IntegerField>("seed-field");
             _cellCountField = root.Q<IntegerField>("cellcount-field");
             _aspectRatioField = root.Q<FloatField>("aspect-ratio-field");
+            _latitudeField = root.Q<FloatField>("latitude-field");
             // Setup template dropdown
             if (_templateDropdown != null)
             {
@@ -98,11 +100,13 @@ namespace EconSim.UI
             var gameManager = EconSim.Core.GameManager.Instance;
             if (gameManager != null)
             {
+                float latitudeSouth = _latitudeField?.value ?? -50f;
                 var config = new MapGenConfig
                 {
                     Seed = _seedField?.value ?? 12345,
                     CellCount = _cellCountField?.value ?? 100000,
                     AspectRatio = _aspectRatioField?.value ?? 1.5f,
+                    LatitudeSouth = latitudeSouth,
                 };
 
                 if (_templateDropdown != null && _templateDropdown.index >= 0)
@@ -110,7 +114,17 @@ namespace EconSim.UI
                     config.Template = (HeightmapTemplateType)_templateDropdown.index;
                 }
 
-                gameManager.GenerateMap(config);
+                try
+                {
+                    config.Validate();
+                    gameManager.GenerateMap(config);
+                }
+                catch (Exception ex)
+                {
+                    SetStatus($"Invalid generation settings: {ex.Message}");
+                    _isLoading = false;
+                    EnableButtons();
+                }
             }
             else
             {

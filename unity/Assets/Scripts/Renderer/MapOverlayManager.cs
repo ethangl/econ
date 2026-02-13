@@ -226,7 +226,7 @@ public class MapOverlayManager
         private const float OverlayImpassableThreshold = 100f;
         private const float OverlayMaxPassableAltitudeCost = OverlayImpassableThreshold - 1f;
 
-        private const int OverlayTextureCacheVersion = 2;
+        private const int OverlayTextureCacheVersion = 3;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
         private const string CacheSpatialGridFile = "spatial_grid.bin";
         private const string CachePoliticalIdsFile = "political_ids.bin";
@@ -251,6 +251,8 @@ public class MapOverlayManager
             public int ResolutionMultiplier;
             public int RootSeed;
             public int MapGenSeed;
+            public float LatitudeSouth;
+            public float LatitudeNorth;
             public int CountyToMarketHash;
             public int RoadStateHash;
         }
@@ -655,6 +657,8 @@ public class MapOverlayManager
                     ResolutionMultiplier = resolutionMultiplier,
                     RootSeed = mapData?.Info != null ? mapData.Info.RootSeed : 0,
                     MapGenSeed = mapData?.Info != null ? mapData.Info.MapGenSeed : 0,
+                    LatitudeSouth = mapData?.Info?.World != null ? mapData.Info.World.LatitudeSouth : float.NaN,
+                    LatitudeNorth = mapData?.Info?.World != null ? mapData.Info.World.LatitudeNorth : float.NaN,
                     CountyToMarketHash = cachedCountyToMarketHash,
                     RoadStateHash = cachedRoadStateHash
                 };
@@ -694,9 +698,35 @@ public class MapOverlayManager
                     return false;
                 if (metadata.MapGenSeed > 0 && mapData.Info.MapGenSeed > 0 && metadata.MapGenSeed != mapData.Info.MapGenSeed)
                     return false;
+
+                float expectedLatitudeSouth = mapData.Info.World != null ? mapData.Info.World.LatitudeSouth : float.NaN;
+                float expectedLatitudeNorth = mapData.Info.World != null ? mapData.Info.World.LatitudeNorth : float.NaN;
+                if (!CacheFloatMatches(metadata.LatitudeSouth, expectedLatitudeSouth))
+                    return false;
+                if (!CacheFloatMatches(metadata.LatitudeNorth, expectedLatitudeNorth))
+                    return false;
             }
 
             return true;
+        }
+
+        private static bool CacheFloatMatches(float cachedValue, float expectedValue)
+        {
+            bool cachedIsFinite = IsFinite(cachedValue);
+            bool expectedIsFinite = IsFinite(expectedValue);
+
+            if (cachedIsFinite != expectedIsFinite)
+                return false;
+
+            if (!cachedIsFinite)
+                return true;
+
+            return Mathf.Abs(cachedValue - expectedValue) <= 0.0001f;
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
 
         private static Texture2D LoadTextureFromRaw(
