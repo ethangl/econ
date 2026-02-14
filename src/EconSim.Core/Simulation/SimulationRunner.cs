@@ -15,7 +15,7 @@ namespace EconSim.Core.Simulation
     /// </summary>
     public class SimulationRunner : ISimulation
     {
-        private const int BootstrapCacheVersion = 6;
+        private const int BootstrapCacheVersion = 7;
         private const string BootstrapCacheFileName = "simulation_bootstrap.bin";
 
         private readonly MapData _mapData;
