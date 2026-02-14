@@ -57,8 +57,8 @@ namespace EconSim.Core.Transport
         private const float RiverCrossingBonus = 0.8f;
 
         // Sea transport costs
-        private const float SeaMovementCost = 3.5f;    // ~5-6x cheaper than flat grassland
-        private const float PortTransitionCost = 12.0f; // Loading/unloading cargo is expensive and slow
+        private const float SeaMovementCost = 12f;     // ~3.5x cheaper than flat grassland per cell
+        private const float PortTransitionCost = 90f;  // Loading/unloading is the expensive part; break-even ~6 ocean cells
 
         // Impassable threshold (cells with cost >= this are blocked)
         private const float ImpassableThreshold = 100f;
