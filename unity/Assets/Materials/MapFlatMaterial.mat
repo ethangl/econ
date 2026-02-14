@@ -1,0 +1,262 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: MapFlatMaterial
+  m_Shader: {fileID: 4800000, guid: 46b07d097d094fa7b47e754c92986b7b, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: _ProvinceBorderColor _ProvinceBorderWidth _SoilColor1
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _BiomePaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BiomeTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BorderSDFTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BumpMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _OverlayTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _CellPropertyTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _CellToMarketTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _CountyBorderDistTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailAlbedoMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailNormalMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _EmissionMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _GeographyBaseTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _HeightmapTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MainTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MarketBorderDistTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MarketColorTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MarketPaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MetallicGlossMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ModeColorResolve:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _OcclusionMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ParallaxMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _PoliticalIdsTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ProvinceBorderDistTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ProvinceColorTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ProvincePaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _RealmBorderDistTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _RealmColorTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _RealmPaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _RiverMaskTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _RoadDistTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _RoadMaskTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SoilDataTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SoilPaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _VegPaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _VegetationTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _BumpScale: 1
+    - _CoastGradientIntensity: 0
+    - _CoastGradientRadius: 15
+    - _CoastlineBorderWidth: 2
+    - _CountyBorderDarkening: 0.353
+    - _CountyBorderWidth: 0.05
+    - _Cutoff: 0.5
+    - _DebugView: 0
+    - _DetailNormalMapScale: 1
+    - _DstBlend: 0
+    - _GlossMapScale: 1
+    - _Glossiness: 0.5
+    - _GlossyReflections: 1
+    - _GradientEdgeDarkening: 0.176
+    - _GradientRadius: 5
+    - _HalftoneScale: 0.15
+    - _HeightScale: 0
+    - _HoverDimming: 0.9992545
+    - _HoverFillAlpha: 0.15
+    - _HoverGradientRadius: 40
+    - _HoverIntensity: 4e-45
+    - _HoveredCountyId: -1
+    - _HoveredMarketId: -1
+    - _HoveredProvinceId: -1
+    - _HoveredRealmId: -1
+    - _MapMode: 1
+    - _MarketBorderDarkening: 0.688
+    - _MarketBorderWidth: 0.25
+    - _Metallic: 0
+    - _Mode: 0
+    - _OcclusionStrength: 1
+    - _OverlayEnabled: 1
+    - _OverlayOpacity: 0.8
+    - _Parallax: 0.02
+    - _PathDashLength: 0.1
+    - _PathGapLength: 1.5
+    - _PathOpacity: 0.75
+    - _PathWidth: 0.81
+    - _PoliticalCenterOpacity: 0.222
+    - _PoliticalEdgeDarkening: 0.777
+    - _PoliticalEdgeOpacity: 0.8
+    - _PoliticalGradientRadius: 64
+    - _ProvinceBorderDarkening: 0.4
+    - _ProvinceBorderWidth: 0.1
+    - _RealmBorderDarkening: 0.5
+    - _RealmBorderWidth: 0.3
+    - _RiverDarken: 1
+    - _RiverDepth: 0.5
+    - _RoadWidth: 0.045
+    - _SeaLevel: 0.2
+    - _SelectedCellId: -1
+    - _SelectedCountyId: -1
+    - _SelectedMarketId: -1
+    - _SelectedProvinceId: -1
+    - _SelectedRealmId: -1
+    - _SelectionBorderWidth: 3
+    - _SelectionDesaturation: 4e-45
+    - _SelectionDimming: 0.9999998
+    - _SelectionFillAlpha: 0.15
+    - _SelectionPopAmount: 0.2
+    - _ShowCountyBorders: 0
+    - _ShowMarketBorders: 0
+    - _ShowProvinceBorders: 0
+    - _ShowRealmBorders: 0
+    - _SmoothnessTextureChannel: 0
+    - _SoilBlurRadius: 3
+    - _SoilTerrainOverlayOpacity: 0
+    - _SoilTintStrength: 0.181
+    - _SpecularHighlights: 1
+    - _SrcBlend: 1
+    - _UVSec: 0
+    - _UseHeightDisplacement: 1
+    - _UseModeColorResolve: 1
+    - _WaterDeepAlpha: 1
+    - _WaterDepthRange: 1
+    - _WaterGradientRadius: 11
+    - _WaterShallowAlpha: 1
+    - _ZWrite: 1
+    m_Colors:
+    - _CoastlineBorderColor: {r: 0.02, g: 0.049999982, b: 0.14999998, a: 1}
+    - _Color: {r: 1, g: 1, b: 1, a: 1}
+    - _CountyBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
+    - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+    - _HoverFillColor: {r: 1, g: 1, b: 1, a: 1}
+    - _MarketBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
+    - _ProvinceBorderColor: {r: 0, g: 0, b: 0, a: 0.87058824}
+    - _RealmBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
+    - _SelectionBorderColor: {r: 1, g: 0.9, b: 0.1999999, a: 0}
+    - _WaterShallowColor: {r: 0.94, g: 0.88986665, b: 0.7896, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

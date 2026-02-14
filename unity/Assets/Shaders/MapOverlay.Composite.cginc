@@ -87,6 +87,7 @@ float3 ComputeHeightGradient(bool isCellWater, float height, float riverMask)
     return result;
 }
 
+#ifndef MAP_OVERLAY_DISABLE_WATER_VOLUME
 float3 ComputeWater(bool isCellWater, float height, float riverMask, float2 uv, float2 worldUV, float3 underlyingColor)
 {
     // No water layer if not ocean and not river
@@ -163,7 +164,9 @@ float3 ApplyReliefShading(float3 baseColor, float2 uv, bool isWater)
     float shadeMix = lerp(1.0, shade, _ReliefShadeStrength);
     return baseColor * shadeMix;
 }
+#endif
 
+#ifndef MAP_OVERLAY_DISABLE_CHANNEL_INSPECTOR
 float3 ComputeChannelInspector(float2 uv, float4 politicalIds, float4 geographyBase)
 {
     float sampleValue = 0.0;
@@ -203,5 +206,6 @@ float3 ComputeChannelInspector(float2 uv, float4 politicalIds, float4 geographyB
 
     return float3(sampleValue, sampleValue, sampleValue);
 }
+#endif
 
 #endif

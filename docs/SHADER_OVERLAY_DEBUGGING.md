@@ -10,13 +10,14 @@ Debug map overlay rendering issues quickly and reproducibly, especially:
 - water/river masking problems,
 - mode-specific visual regressions.
 
-This playbook is for `MapOverlay.shader` + `MapOverlayManager` pipeline debugging.
+This playbook is for `MapOverlayFlat.shader` / `MapOverlayBiome.shader` + `MapOverlayManager` pipeline debugging.
 
 ---
 
 ## Relevant Components
 
-- `unity/Assets/Shaders/MapOverlay.shader`
+- `unity/Assets/Shaders/MapOverlayFlat.shader`
+- `unity/Assets/Shaders/MapOverlayBiome.shader`
 - `unity/Assets/Scripts/Renderer/MapOverlayManager.cs`
 - `unity/Assets/Scripts/Renderer/MapView.cs`
 - `unity/Assets/Editor/MapOverlayShaderGUI.cs`
@@ -24,7 +25,7 @@ This playbook is for `MapOverlay.shader` + `MapOverlayManager` pipeline debuggin
 
 Supporting generated textures:
 
-- `_CellDataTex`
+- `_OverlayTex`
 - `_HeightmapTex`
 - `_RiverMaskTex`
 - `_RealmPaletteTex`
@@ -59,7 +60,7 @@ Supporting generated textures:
 
 Likely causes:
 
-- bad ID decode from `_CellDataTex`
+- bad ID decode from `_PoliticalIdsTex`
 - palette lookup mismatch
 - precision/hue-shifting transform in shader path
 
@@ -116,7 +117,7 @@ Likely causes:
 
 Checks:
 
-1. Set `_GradientEdgeDarkening = 0` and `_GradientCenterOpacity = 1` to baseline.
+1. Set `_GradientEdgeDarkening = 0` and `_PoliticalCenterOpacity = 1` to baseline.
 2. Disable borders temporarily.
 3. Reintroduce gradient, then borders, one parameter group at a time.
 
@@ -167,14 +168,14 @@ Use the built-in runtime tooling:
 
 - Press `0` to enter **Channel Inspector** mode.
 - Press `O` to cycle channel views:
-  - `CellData R/G/B/A`
+  - `PoliticalIds R/G/B/A`
   - `Realm/Province/County/Market border distance`
   - `River mask`
   - `Heightmap`
   - `Road mask`
 - Press `P` to toggle the on-screen **ID Probe**.
   - Probe shows decoded `realm/province/county/market` IDs under cursor.
-  - Probe shows normalized channel values matching `_CellDataTex` packing.
+  - Probe shows normalized channel values matching `_PoliticalIdsTex` packing.
 
 In material Inspector (`MapOverlayShaderGUI`):
 

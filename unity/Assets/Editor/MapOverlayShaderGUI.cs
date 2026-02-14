@@ -5,6 +5,13 @@ namespace EconSim.Editor
 {
     public class MapOverlayShaderGUI : ShaderGUI
     {
+        private enum InspectorStyle
+        {
+            Unknown = 0,
+            Flat = 1,
+            Biome = 2
+        }
+
         // Foldout states (persisted per-editor-session via EditorPrefs)
         private static bool realmRenderingFoldout
         {
@@ -71,7 +78,6 @@ namespace EconSim.Editor
             ("_CountyBorderDarkening", "County Border Darkening"),
             ("_GradientRadius", "Gradient Radius (pixels)"),
             ("_GradientEdgeDarkening", "Gradient Edge Darkening"),
-            ("_GradientCenterOpacity", "Gradient Center Opacity"),
             ("_OverlayOpacity", "Overlay Opacity"),
         };
 
@@ -116,7 +122,13 @@ namespace EconSim.Editor
             ("_VegetationColor6", "Broadleaf"),
         };
 
-        private static readonly (string name, string label)[] WaterRenderingProps = new[]
+        private static readonly (string name, string label)[] WaterRenderingFlatProps = new[]
+        {
+            ("_WaterShallowColor", "Shallow Water Color"),
+            ("_WaterShallowAlpha", "River Alpha"),
+        };
+
+        private static readonly (string name, string label)[] WaterRenderingBiomeProps = new[]
         {
             ("_WaterShallowColor", "Shallow Water Color"),
             ("_WaterShallowAlpha", "River Alpha"),
@@ -149,7 +161,7 @@ namespace EconSim.Editor
             ("_ReliefNormalTex", "Relief Normal"),
             ("_RiverMaskTex", "River Mask"),
             ("_ModeColorResolve", "Mode Color Resolve"),
-            ("_CellDataTex", "Cell Data (Legacy)"),
+            ("_OverlayTex", "Overlay Layer"),
             ("_CellToMarketTex", "Cell To Market"),
             ("_RealmPaletteTex", "Realm Palette"),
             ("_MarketPaletteTex", "Market Palette"),
@@ -196,7 +208,9 @@ namespace EconSim.Editor
         {
             foreach (var (name, _) in RealmRenderingProps)
                 if (name == propName) return true;
-            foreach (var (name, _) in WaterRenderingProps)
+            foreach (var (name, _) in WaterRenderingFlatProps)
+                if (name == propName) return true;
+            foreach (var (name, _) in WaterRenderingBiomeProps)
                 if (name == propName) return true;
             foreach (var (name, _) in ReliefRenderingProps)
                 if (name == propName) return true;
@@ -215,8 +229,47 @@ namespace EconSim.Editor
             return false;
         }
 
+        private static InspectorStyle ResolveInspectorStyle(MaterialEditor materialEditor)
+        {
+            if (materialEditor == null || materialEditor.targets == null || materialEditor.targets.Length == 0)
+                return InspectorStyle.Unknown;
+
+            InspectorStyle resolved = InspectorStyle.Unknown;
+            foreach (Object target in materialEditor.targets)
+            {
+                if (!(target is Material material) || material.shader == null)
+                    return InspectorStyle.Unknown;
+
+                string shaderName = material.shader.name;
+                InspectorStyle current =
+                    shaderName == "EconSim/MapOverlayFlat" ? InspectorStyle.Flat :
+                    shaderName == "EconSim/MapOverlayBiome" ? InspectorStyle.Biome :
+                    InspectorStyle.Unknown;
+
+                if (current == InspectorStyle.Unknown)
+                    return InspectorStyle.Unknown;
+
+                if (resolved == InspectorStyle.Unknown)
+                {
+                    resolved = current;
+                }
+                else if (resolved != current)
+                {
+                    return InspectorStyle.Unknown;
+                }
+            }
+
+            return resolved;
+        }
+
         public override void OnGUI(MaterialEditor materialEditor, MaterialProperty[] properties)
         {
+            InspectorStyle style = ResolveInspectorStyle(materialEditor);
+            bool isFlat = style == InspectorStyle.Flat;
+            bool isBiome = style == InspectorStyle.Biome;
+            bool showFlatGroups = !isBiome;
+            bool showBiomeGroups = !isFlat;
+
             // Draw ungrouped, non-hidden properties
             foreach (var prop in properties)
             {
@@ -226,69 +279,81 @@ namespace EconSim.Editor
                 materialEditor.ShaderProperty(prop, prop.displayName);
             }
 
-            // Realm Rendering group
-            EditorGUILayout.Space();
-            realmRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(realmRenderingFoldout, "Realm Rendering");
-            if (realmRenderingFoldout)
+            if (showFlatGroups)
             {
-                EditorGUI.indentLevel++;
-                foreach (var (name, label) in RealmRenderingProps)
+                // Realm Rendering group
+                EditorGUILayout.Space();
+                realmRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(realmRenderingFoldout, "Realm Rendering");
+                if (realmRenderingFoldout)
                 {
-                    var prop = FindProperty(name, properties, false);
-                    if (prop != null)
-                        materialEditor.ShaderProperty(prop, label);
+                    EditorGUI.indentLevel++;
+                    foreach (var (name, label) in RealmRenderingProps)
+                    {
+                        var prop = FindProperty(name, properties, false);
+                        if (prop != null)
+                            materialEditor.ShaderProperty(prop, label);
+                    }
+                    EditorGUI.indentLevel--;
                 }
-                EditorGUI.indentLevel--;
+                EditorGUILayout.EndFoldoutHeaderGroup();
             }
-            EditorGUILayout.EndFoldoutHeaderGroup();
 
-            // Market Rendering group
-            EditorGUILayout.Space();
-            marketRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(marketRenderingFoldout, "Market Rendering");
-            if (marketRenderingFoldout)
+            if (showFlatGroups)
             {
-                EditorGUI.indentLevel++;
-                foreach (var (name, label) in MarketRenderingProps)
+                // Market Rendering group
+                EditorGUILayout.Space();
+                marketRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(marketRenderingFoldout, "Market Rendering");
+                if (marketRenderingFoldout)
                 {
-                    var prop = FindProperty(name, properties, false);
-                    if (prop != null)
-                        materialEditor.ShaderProperty(prop, label);
+                    EditorGUI.indentLevel++;
+                    foreach (var (name, label) in MarketRenderingProps)
+                    {
+                        var prop = FindProperty(name, properties, false);
+                        if (prop != null)
+                            materialEditor.ShaderProperty(prop, label);
+                    }
+                    EditorGUI.indentLevel--;
                 }
-                EditorGUI.indentLevel--;
+                EditorGUILayout.EndFoldoutHeaderGroup();
             }
-            EditorGUILayout.EndFoldoutHeaderGroup();
 
-            // Soil Rendering group
-            EditorGUILayout.Space();
-            soilRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(soilRenderingFoldout, "Soil Rendering");
-            if (soilRenderingFoldout)
+            if (showBiomeGroups)
             {
-                EditorGUI.indentLevel++;
-                foreach (var (name, label) in SoilRenderingProps)
+                // Soil Rendering group
+                EditorGUILayout.Space();
+                soilRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(soilRenderingFoldout, "Soil Rendering");
+                if (soilRenderingFoldout)
                 {
-                    var prop = FindProperty(name, properties, false);
-                    if (prop != null)
-                        materialEditor.ShaderProperty(prop, label);
+                    EditorGUI.indentLevel++;
+                    foreach (var (name, label) in SoilRenderingProps)
+                    {
+                        var prop = FindProperty(name, properties, false);
+                        if (prop != null)
+                            materialEditor.ShaderProperty(prop, label);
+                    }
+                    EditorGUI.indentLevel--;
                 }
-                EditorGUI.indentLevel--;
+                EditorGUILayout.EndFoldoutHeaderGroup();
             }
-            EditorGUILayout.EndFoldoutHeaderGroup();
 
-            // Vegetation Rendering group
-            EditorGUILayout.Space();
-            vegetationRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(vegetationRenderingFoldout, "Vegetation Rendering");
-            if (vegetationRenderingFoldout)
+            if (showBiomeGroups)
             {
-                EditorGUI.indentLevel++;
-                foreach (var (name, label) in VegetationRenderingProps)
+                // Vegetation Rendering group
+                EditorGUILayout.Space();
+                vegetationRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(vegetationRenderingFoldout, "Vegetation Rendering");
+                if (vegetationRenderingFoldout)
                 {
-                    var prop = FindProperty(name, properties, false);
-                    if (prop != null)
-                        materialEditor.ShaderProperty(prop, label);
+                    EditorGUI.indentLevel++;
+                    foreach (var (name, label) in VegetationRenderingProps)
+                    {
+                        var prop = FindProperty(name, properties, false);
+                        if (prop != null)
+                            materialEditor.ShaderProperty(prop, label);
+                    }
+                    EditorGUI.indentLevel--;
                 }
-                EditorGUI.indentLevel--;
+                EditorGUILayout.EndFoldoutHeaderGroup();
             }
-            EditorGUILayout.EndFoldoutHeaderGroup();
 
             // Water Rendering group
             EditorGUILayout.Space();
@@ -296,7 +361,8 @@ namespace EconSim.Editor
             if (waterRenderingFoldout)
             {
                 EditorGUI.indentLevel++;
-                foreach (var (name, label) in WaterRenderingProps)
+                var waterProps = isFlat ? WaterRenderingFlatProps : WaterRenderingBiomeProps;
+                foreach (var (name, label) in waterProps)
                 {
                     var prop = FindProperty(name, properties, false);
                     if (prop != null)
@@ -306,21 +372,24 @@ namespace EconSim.Editor
             }
             EditorGUILayout.EndFoldoutHeaderGroup();
 
-            // Relief Rendering group
-            EditorGUILayout.Space();
-            reliefRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(reliefRenderingFoldout, "Relief Rendering");
-            if (reliefRenderingFoldout)
+            if (showBiomeGroups)
             {
-                EditorGUI.indentLevel++;
-                foreach (var (name, label) in ReliefRenderingProps)
+                // Relief Rendering group
+                EditorGUILayout.Space();
+                reliefRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(reliefRenderingFoldout, "Relief Rendering");
+                if (reliefRenderingFoldout)
                 {
-                    var prop = FindProperty(name, properties, false);
-                    if (prop != null)
-                        materialEditor.ShaderProperty(prop, label);
+                    EditorGUI.indentLevel++;
+                    foreach (var (name, label) in ReliefRenderingProps)
+                    {
+                        var prop = FindProperty(name, properties, false);
+                        if (prop != null)
+                            materialEditor.ShaderProperty(prop, label);
+                    }
+                    EditorGUI.indentLevel--;
                 }
-                EditorGUI.indentLevel--;
+                EditorGUILayout.EndFoldoutHeaderGroup();
             }
-            EditorGUILayout.EndFoldoutHeaderGroup();
 
             // UI group
             EditorGUILayout.Space();
