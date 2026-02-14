@@ -58,9 +58,12 @@ Artifacts:
 
 Deferred on cached load to reduce time-to-interactive:
 
-1. Market mode resolve prewarm
+1. Province/county/market mode resolve prewarm
 - Deferred until startup coroutine runs.
-- If user enters Market mode first, on-demand generation still works.
+- Province and county resolve caches are warmed so first switch from political mode is hot.
+- Market resolve cache is also warmed when market assignments are ready.
+- Warmup is frame-sliced (one mode per frame) to avoid a single post-load hitch.
+- If user enters a mode before warmup completes, on-demand generation still works.
 
 2. Overlay cache flush
 - Dynamic texture updates (market border / road mask) mark cache dirty.

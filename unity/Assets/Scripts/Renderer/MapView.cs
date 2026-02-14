@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -2058,9 +2059,12 @@ namespace EconSim.Renderer
             UpdateModeMarkerVisibility();
         }
 
-        public void RunDeferredStartupWork()
+        public IEnumerator RunDeferredStartupWork()
         {
-            overlayManager?.RunDeferredStartupWork();
+            if (overlayManager == null)
+                yield break;
+
+            yield return overlayManager.RunDeferredStartupWork();
         }
 
         /// <summary>
