@@ -288,7 +288,7 @@ namespace EconSim.Core.Economy
                 ProcessingTicks = 2,  // Tanning takes time
                 DecayRate = 0.001f,  // 0.1% per day - cured hide, very durable
                 TheftRisk = 0.4f,
-                BasePrice = 4.0f  // 2 deer (2.0) + tanning
+                BasePrice = 4.0f  // 2 hides (2.0) + tanning
             });
 
             registry.Register(new GoodDef

@@ -294,8 +294,8 @@ namespace EconSim.Core.Economy
                 { "copper_smelter", "copper_ore" },
                 { "refinery", "gold_ore" },
                 { "sawmill", "timber" },
-                { "spinning_mill", "sheep" },
-                { "tannery", "deer" },
+                { "shearing_shed", "sheep" },
+                { "tannery", "hides" },
                 { "dairy", "goats" }
             };
 
@@ -335,12 +335,44 @@ namespace EconSim.Core.Economy
                 { "coppersmith", "copper_smelter" },
                 { "jeweler", "refinery" },
                 { "workshop", "sawmill" },
-                { "tailor", "spinning_mill" },
+                { "spinning_mill", "shearing_shed" },
                 { "cobbler", "tannery" },
                 { "creamery", "dairy" }
             };
 
             foreach (var kvp in secondaryProcessors)
+            {
+                var facilityId = kvp.Key;
+                var upstreamFacility = kvp.Value;
+                var facilityDef = economy.FacilityDefs.Get(facilityId);
+                if (facilityDef == null) continue;
+
+                if (!facilityCounties.TryGetValue(upstreamFacility, out var candidates) || candidates.Count == 0)
+                {
+                    SimLog.Log("Economy", $"  {facilityId}: no counties with {upstreamFacility}");
+                    continue;
+                }
+
+                facilityCounties[facilityId] = new List<int>();
+
+                // Place in ALL counties that have the upstream processor
+                foreach (var countyId in candidates)
+                {
+                    int cellId = GetCountySeatCell(countyId, mapData);
+                    if (cellId < 0) continue;
+                    economy.CreateFacility(facilityId, cellId);
+                    facilityCounties[facilityId].Add(countyId);
+                }
+                SimLog.Log("Economy", $"  {facilityId}: placed {candidates.Count} (co-located with {upstreamFacility})");
+            }
+
+            // Stage 3: Tertiary processors - place where secondary processors are
+            var tertiaryProcessors = new Dictionary<string, string>
+            {
+                { "tailor", "spinning_mill" }
+            };
+
+            foreach (var kvp in tertiaryProcessors)
             {
                 var facilityId = kvp.Key;
                 var upstreamFacility = kvp.Value;
