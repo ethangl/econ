@@ -217,12 +217,7 @@ public class MapOverlayManager
         private const float CountySaturationShift = 0.06f;
         private const float CountyValueShift = 0.06f;
 
-        // Mirror transport tuning so Local Transport Cost overlay matches gameplay path cost.
-        private const float OverlayDefaultMovementCost = 1.0f;
-        private const float OverlayBiomeCostMin = 1f;
-        private const float OverlayBiomeCostMax = 20f;
-        private const float OverlayImpassableThreshold = 100f;
-        private const float OverlayMaxPassableAltitudeCost = OverlayImpassableThreshold - 1f;
+        private const float OverlayDefaultMovementCost = 10.0f;
 
         private const int OverlayTextureCacheVersion = 3;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
@@ -1820,12 +1815,12 @@ public class MapOverlayManager
         {
             economyState = economy;
             InvalidateModeColorResolveCache(MapView.MapMode.Market);
-            InvalidateModeColorResolveCache(MapView.MapMode.MarketTransportCost);
+            InvalidateModeColorResolveCache(MapView.MapMode.MarketAccess);
 
             if (economy == null || economy.CountyToMarket == null)
             {
                 if (currentMapMode == MapView.MapMode.Market ||
-                    currentMapMode == MapView.MapMode.MarketTransportCost)
+                    currentMapMode == MapView.MapMode.MarketAccess)
                     RegenerateModeColorResolveTexture();
                 return;
             }
@@ -1868,7 +1863,7 @@ public class MapOverlayManager
             }
 
             if (currentMapMode == MapView.MapMode.Market ||
-                currentMapMode == MapView.MapMode.MarketTransportCost)
+                currentMapMode == MapView.MapMode.MarketAccess)
                 RegenerateModeColorResolveTexture();
             if (currentMapMode != MapView.MapMode.Market)
                 pendingMarketModePrewarm = true;
@@ -1997,8 +1992,8 @@ public class MapOverlayManager
                    mode == MapView.MapMode.Province ||
                    mode == MapView.MapMode.County ||
                    mode == MapView.MapMode.Market ||
-                   mode == MapView.MapMode.LocalTransportCost ||
-                   mode == MapView.MapMode.MarketTransportCost;
+                   mode == MapView.MapMode.TransportCost ||
+                   mode == MapView.MapMode.MarketAccess;
         }
 
         private static MapView.MapMode ResolveCacheKeyForMode(MapView.MapMode mode)
@@ -2097,8 +2092,8 @@ public class MapOverlayManager
             Color[] realmPalette = realmPaletteTexture.GetPixels();
             Color[] marketPalette = marketPaletteTexture.GetPixels();
 
-            bool isLocalTransportMode = currentMapMode == MapView.MapMode.LocalTransportCost;
-            bool isMarketTransportMode = currentMapMode == MapView.MapMode.MarketTransportCost;
+            bool isLocalTransportMode = currentMapMode == MapView.MapMode.TransportCost;
+            bool isMarketTransportMode = currentMapMode == MapView.MapMode.MarketAccess;
             if (isLocalTransportMode || isMarketTransportMode)
             {
                 var values = new float[size];
@@ -2107,7 +2102,6 @@ public class MapOverlayManager
 
                 float minValue = float.MaxValue;
                 float maxValue = float.MinValue;
-                var biomeMovementCostById = BuildBiomeMovementCostLookup();
 
                 for (int i = 0; i < size; i++)
                 {
@@ -2122,12 +2116,12 @@ public class MapOverlayManager
                     bool hasValue;
                     if (isLocalTransportMode)
                     {
-                        value = ComputeLocalTransportCost(cell, biomeMovementCostById);
+                        value = ComputeTransportCost(cell);
                         hasValue = true;
                     }
                     else
                     {
-                        hasValue = TryGetAssignedMarketTransportCost(cellId, cell.CountyId, out value);
+                        hasValue = TryGetAssignedMarketAccess(cellId, cell.CountyId, out value);
                     }
 
                     if (!hasValue || float.IsNaN(value) || float.IsInfinity(value))
@@ -2246,32 +2240,10 @@ public class MapOverlayManager
             TextureDebugger.SaveTexture(modeColorResolveTexture, "mode_color_resolve");
         }
 
-        private float ComputeLocalTransportCost(Cell cell, Dictionary<int, int> biomeMovementCostById)
+        private float ComputeTransportCost(Cell cell)
         {
-            float baseCost = OverlayDefaultMovementCost;
-            if (biomeMovementCostById != null &&
-                biomeMovementCostById.TryGetValue(cell.BiomeId, out int biomeMovementCost) &&
-                biomeMovementCost > 0)
-            {
-                baseCost = biomeMovementCost;
-                baseCost = Mathf.Clamp(baseCost, OverlayBiomeCostMin, OverlayBiomeCostMax);
-            }
-
-            float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
-            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeImpassableMeters)
-            {
-                return OverlayImpassableThreshold;
-            }
-
-            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeEffectStartMeters)
-            {
-                float altitudeMetersCapped = Mathf.Min(elevationMetersAboveSeaLevel, Elevation.HumanAltitudeImpassableMeters);
-                float altitudeT = (altitudeMetersCapped - Elevation.HumanAltitudeEffectStartMeters) /
-                    Mathf.Max(1f, Elevation.HumanAltitudeEffectSpanMeters);
-                baseCost = Mathf.Lerp(baseCost, OverlayMaxPassableAltitudeCost, Mathf.Clamp01(altitudeT));
-            }
-
-            return baseCost;
+            float cost = cell.MovementCost;
+            return cost > 0 ? cost : OverlayDefaultMovementCost;
         }
 
         private static Color DeriveProvinceColorFromRealm(Color realmColor, int provinceId)
@@ -2618,22 +2590,8 @@ public class MapOverlayManager
             return hueDelta * 0.5f + satDelta * 0.25f + valDelta * 0.25f;
         }
 
-        private Dictionary<int, int> BuildBiomeMovementCostLookup()
-        {
-            var lookup = new Dictionary<int, int>();
-            if (mapData?.Biomes == null)
-                return lookup;
 
-            foreach (var biome in mapData.Biomes)
-            {
-                if (biome != null)
-                    lookup[biome.Id] = biome.MovementCost;
-            }
-
-            return lookup;
-        }
-
-        private bool TryGetAssignedMarketTransportCost(int cellId, int countyId, out float cost)
+        private bool TryGetAssignedMarketAccess(int cellId, int countyId, out float cost)
         {
             cost = 0f;
             if (economyState?.Markets == null)
@@ -3023,10 +2981,10 @@ public class MapOverlayManager
                 case MapView.MapMode.ChannelInspector:
                     shaderMode = 7;
                     break;
-                case MapView.MapMode.LocalTransportCost:
+                case MapView.MapMode.TransportCost:
                     shaderMode = 8;
                     break;
-                case MapView.MapMode.MarketTransportCost:
+                case MapView.MapMode.MarketAccess:
                     shaderMode = 9;
                     break;
                 default:
@@ -3332,14 +3290,14 @@ public class MapOverlayManager
                 if (newCountyId.HasValue || newRealmId.HasValue)
                 {
                     InvalidateModeColorResolveCache(MapView.MapMode.Market);
-                    InvalidateModeColorResolveCache(MapView.MapMode.MarketTransportCost);
+                    InvalidateModeColorResolveCache(MapView.MapMode.MarketAccess);
                 }
 
                 if (currentMapMode == MapView.MapMode.Political ||
                     currentMapMode == MapView.MapMode.Province ||
                     currentMapMode == MapView.MapMode.County ||
                     currentMapMode == MapView.MapMode.Market ||
-                    currentMapMode == MapView.MapMode.MarketTransportCost)
+                    currentMapMode == MapView.MapMode.MarketAccess)
                 {
                     RegenerateModeColorResolveTexture();
                 }

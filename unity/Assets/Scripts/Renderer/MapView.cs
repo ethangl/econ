@@ -106,8 +106,8 @@ namespace EconSim.Renderer
             Market = 3,         // Colored by market zone (key: 3)
             Biomes = 4,         // Biomes (vertex-blended) (key: 2)
             ChannelInspector = 5, // Debug channel visualization (key: 0)
-            LocalTransportCost = 6, // Local per-cell transport difficulty heatmap (key: 5)
-            MarketTransportCost = 7 // Cell-to-assigned-market transport cost heatmap (key: 6)
+            TransportCost = 6, // Local per-cell transport difficulty heatmap (key: 5)
+            MarketAccess = 7 // Cell-to-assigned-market transport cost heatmap (key: 6)
         }
 
         public MapMode CurrentMode => currentMode;
@@ -121,8 +121,8 @@ namespace EconSim.Renderer
             "Market",
             "Biomes",
             "Channel Inspector",
-            "Local Transport Cost",
-            "Market Transport Cost"
+            "Transport Cost",
+            "Market Access"
         };
 
         [Header("Debug Tooling")]
@@ -182,13 +182,13 @@ namespace EconSim.Renderer
             }
             else if (Input.GetKeyDown(KeyCode.Alpha5) || Input.GetKeyDown(KeyCode.Keypad5))
             {
-                SetMapMode(MapMode.LocalTransportCost);
-                Debug.Log("Map mode: Local Transport Cost (5)");
+                SetMapMode(MapMode.TransportCost);
+                Debug.Log("Map mode: Transport Cost (5)");
             }
             else if (Input.GetKeyDown(KeyCode.Alpha6) || Input.GetKeyDown(KeyCode.Keypad6))
             {
-                SetMapMode(MapMode.MarketTransportCost);
-                Debug.Log("Map mode: Market Transport Cost (6)");
+                SetMapMode(MapMode.MarketAccess);
+                Debug.Log("Map mode: Market Access (6)");
             }
             else if (Input.GetKeyDown(KeyCode.Alpha0) || Input.GetKeyDown(KeyCode.Keypad0))
             {
@@ -604,8 +604,8 @@ namespace EconSim.Renderer
 
             // Non-political overlays - just select county, no drill-down
             if (currentMode == MapMode.Biomes ||
-                currentMode == MapMode.LocalTransportCost ||
-                currentMode == MapMode.MarketTransportCost)
+                currentMode == MapMode.TransportCost ||
+                currentMode == MapMode.MarketAccess)
             {
                 SelectAtDepth(SelectionDepth.County, cell);
                 return;
@@ -1591,8 +1591,8 @@ namespace EconSim.Renderer
                     return GetTerrainColor(cell);  // Fallback; biome tint is shader-driven
                 case MapMode.ChannelInspector:
                     return GetTerrainColor(cell);  // Shader debug visualization overrides this.
-                case MapMode.LocalTransportCost:
-                case MapMode.MarketTransportCost:
+                case MapMode.TransportCost:
+                case MapMode.MarketAccess:
                     return GetTerrainColor(cell);  // Transport heatmaps are shader-only.
                 default:
                     return new Color32(128, 128, 128, 255);
@@ -2016,7 +2016,7 @@ namespace EconSim.Renderer
                     break;
 
                 case MapMode.Market:
-                case MapMode.MarketTransportCost:
+                case MapMode.MarketAccess:
                     if (TryGetAssignedMarket(cell.Id, cell.CountyId, out int marketId, out var market))
                     {
                         probeBuilder.Append("Market: Id=").Append(marketId)
@@ -2084,12 +2084,8 @@ namespace EconSim.Renderer
                         .AppendLine();
                     break;
 
-                case MapMode.LocalTransportCost:
-                    float localCost = ComputeProbeLocalTransportCost(cell, out int biomeMovementCost, out float biomeBaseCost, out float elevationMultiplier);
-                    probeBuilder.Append("LocalTransport: Cost=").Append(localCost.ToString("F2"))
-                        .Append(" BiomeMove=").Append(biomeMovementCost)
-                        .Append(" BiomeBase=").Append(biomeBaseCost.ToString("F2"))
-                        .Append(" ElevMult=").Append(elevationMultiplier.ToString("F2"))
+                case MapMode.TransportCost:
+                    probeBuilder.Append("TransportCost: ").Append(cell.MovementCost.ToString("F1"))
                         .AppendLine();
                     break;
 
@@ -2123,56 +2119,6 @@ namespace EconSim.Renderer
             return economyState.Markets.TryGetValue(marketId, out market);
         }
 
-        private float ComputeProbeLocalTransportCost(
-            Cell cell,
-            out int biomeMovementCost,
-            out float biomeBaseCost,
-            out float elevationMultiplier)
-        {
-            const float defaultMovementCost = 1f;
-            const float maxPassableAltitudeCost = 99f;
-
-            biomeMovementCost = 0;
-            biomeBaseCost = defaultMovementCost;
-            elevationMultiplier = 1f;
-
-            if (mapData?.Biomes != null)
-            {
-                for (int i = 0; i < mapData.Biomes.Count; i++)
-                {
-                    var biome = mapData.Biomes[i];
-                    if (biome != null && biome.Id == cell.BiomeId)
-                    {
-                        biomeMovementCost = biome.MovementCost;
-                        break;
-                    }
-                }
-            }
-
-            if (biomeMovementCost > 0)
-            {
-                biomeBaseCost = Mathf.Clamp(biomeMovementCost, 1f, 20f);
-            }
-
-            float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
-            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeImpassableMeters)
-            {
-                elevationMultiplier = maxPassableAltitudeCost / Mathf.Max(0.001f, biomeBaseCost);
-                return 100f;
-            }
-
-            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeEffectStartMeters)
-            {
-                float altitudeMetersCapped = Mathf.Min(elevationMetersAboveSeaLevel, Elevation.HumanAltitudeImpassableMeters);
-                float altitudeT = (altitudeMetersCapped - Elevation.HumanAltitudeEffectStartMeters) /
-                    Mathf.Max(1f, Elevation.HumanAltitudeEffectSpanMeters);
-                float adjustedCost = Mathf.Lerp(biomeBaseCost, maxPassableAltitudeCost, Mathf.Clamp01(altitudeT));
-                elevationMultiplier = adjustedCost / Mathf.Max(0.001f, biomeBaseCost);
-                return adjustedCost;
-            }
-
-            return biomeBaseCost;
-        }
 
         private static string FormatNorm(int value)
         {
@@ -2219,11 +2165,11 @@ namespace EconSim.Renderer
         [ContextMenu("Set Mode: Market")]
         private void SetModeMarket() => SetMapMode(MapMode.Market);
 
-        [ContextMenu("Set Mode: Local Transport Cost")]
-        private void SetModeLocalTransportCost() => SetMapMode(MapMode.LocalTransportCost);
+        [ContextMenu("Set Mode: Transport Cost")]
+        private void SetModeTransportCost() => SetMapMode(MapMode.TransportCost);
 
-        [ContextMenu("Set Mode: Market Transport Cost")]
-        private void SetModeMarketTransportCost() => SetMapMode(MapMode.MarketTransportCost);
+        [ContextMenu("Set Mode: Market Access")]
+        private void SetModeMarketAccess() => SetMapMode(MapMode.MarketAccess);
 
         [ContextMenu("Set Mode: Channel Inspector")]
         private void SetModeChannelInspector() => SetMapMode(MapMode.ChannelInspector);
