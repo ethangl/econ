@@ -557,6 +557,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: EconSim::EconSim.Core.GameManager
   mapView: {fileID: 2039203591}
   mapCamera: {fileID: 1070810156}
+  generationMode: 0
 --- !u!4 &2084237326
 Transform:
   m_ObjectHideFlags: 0

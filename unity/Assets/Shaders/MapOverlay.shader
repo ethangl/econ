@@ -89,7 +89,6 @@ Shader "EconSim/MapOverlay"
         // Gradient fill style (edge-to-center fade for political/market modes)
         _GradientRadius ("Gradient Radius (pixels)", Range(5, 100)) = 40
         _GradientEdgeDarkening ("Gradient Edge Darkening", Range(0, 1)) = 0.5
-        _GradientCenterOpacity ("Gradient Center Opacity", Range(0, 1)) = 0.5
 
         // Realm border (world-space, in texels of data texture)
         _RealmBorderDistTex ("Realm Border Distance", 2D) = "white" {}
@@ -240,7 +239,6 @@ Shader "EconSim/MapOverlay"
                 int _DebugView;
                 float _GradientRadius;
                 float _GradientEdgeDarkening;
-                float _GradientCenterOpacity;
                 float _RealmBorderWidth;
                 float _RealmBorderDarkening;
                 float _ProvinceBorderWidth;
@@ -553,7 +551,22 @@ Shader "EconSim/MapOverlay"
                     marketId = 0.0;
                     mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId);
                 }
-                float3 afterMapMode = lerp(terrain, mapMode.rgb, mapMode.a);
+                float3 afterMapMode;
+                if (_MapMode == 6)
+                {
+                    // Biomes mode keeps terrain as the base layer.
+                    afterMapMode = lerp(terrain, mapMode.rgb, mapMode.a);
+                }
+                else if (!isWater && mapMode.a > 0.001)
+                {
+                    // Non-biome land modes are pure mode color (no terrain layer).
+                    afterMapMode = mapMode.rgb;
+                }
+                else
+                {
+                    // Preserve terrain substrate for water/rivers and debug fallback modes.
+                    afterMapMode = terrain;
+                }
 
                 // ---- Layer 3: Water ----
 
@@ -564,12 +577,26 @@ Shader "EconSim/MapOverlay"
                     // (ComputeWater is only for normal overlay compositing.)
                     // NOP
                 }
-                else
+                else if (_MapMode == 6)
                 {
+                    // Full water rendering (volumetric/refraction/shimmer) is biome-only.
                     afterMapMode = ComputeWater(isCellWater, height, riverMask, uv, IN.worldUV, afterMapMode);
                 }
+                else
+                {
+                    // Non-biome modes use simple flat water tinting.
+                    if (isCellWater)
+                    {
+                        afterMapMode = _WaterShallowColor.rgb;
+                    }
+                    else if (riverMask > 0.01)
+                    {
+                        float riverAlpha = _WaterShallowAlpha * riverMask;
+                        afterMapMode = lerp(afterMapMode, _WaterShallowColor.rgb, riverAlpha);
+                    }
+                }
                 float3 afterWater = afterMapMode;
-                float3 relitColor = ApplyReliefShading(afterWater, uv, isWater);
+                float3 relitColor = _MapMode == 6 ? ApplyReliefShading(afterWater, uv, isWater) : afterWater;
 
                 // ---- Layer 4: Selection / hover (operates on composited color) ----
 

@@ -186,25 +186,26 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _GradientCenterOpacity: 0.75
-    - _GradientEdgeDarkening: 0.5
+    - _GradientEdgeDarkening: 0.333
     - _GradientRadius: 5
     - _HalftoneScale: 0.15
-    - _HeightScale: 0.2
+    - _HeightScale: 0
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0
+    - _HoverIntensity: 0.00899245
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
-    - _MapMode: 1
+    - _MapMode: 2
     - _MarketBorderDarkening: 0.688
     - _MarketBorderWidth: 0.25
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
+    - _OverlayEnabled: 0
+    - _OverlayOpacity: 0.65
     - _Parallax: 0.02
     - _PathDashLength: 0.1
     - _PathGapLength: 1.5

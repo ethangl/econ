@@ -1,15 +1,14 @@
 #ifndef MAP_OVERLAY_RESOLVE_MODES_INCLUDED
 #define MAP_OVERLAY_RESOLVE_MODES_INCLUDED
 
-float3 ApplyPoliticalModeStyle(float2 uv, float3 grayTerrain, float3 politicalColor)
+float3 ApplyPoliticalModeStyle(float2 uv, float3 politicalColor)
 {
     float realmDist = tex2D(_RealmBorderDistTex, uv).r * 255.0;
     float edgeProximity = saturate(realmDist / _GradientRadius);
 
-    float3 multiplied = grayTerrain * politicalColor;
-    float3 edgeColor = lerp(politicalColor, multiplied, _GradientEdgeDarkening);
-    float3 centerColor = lerp(grayTerrain, politicalColor, _GradientCenterOpacity);
-    float3 modeColor = lerp(edgeColor, centerColor, edgeProximity);
+    float edgeDarkening = saturate(_GradientEdgeDarkening);
+    float3 edgeColor = politicalColor * (1.0 - edgeDarkening);
+    float3 modeColor = lerp(edgeColor, politicalColor, edgeProximity);
 
     // County border band overlay (thinnest, lightest — drawn first).
     float countyBorderDist = tex2D(_CountyBorderDistTex, uv).r * 255.0;
@@ -44,15 +43,14 @@ float3 ApplyPoliticalModeStyle(float2 uv, float3 grayTerrain, float3 politicalCo
     return modeColor;
 }
 
-float3 ApplyMarketModeStyle(float2 uv, float3 grayTerrain, float3 marketColor)
+float3 ApplyMarketModeStyle(float2 uv, float3 marketColor)
 {
     float marketDist = tex2D(_MarketBorderDistTex, uv).r * 255.0;
     float edgeProximity = saturate(marketDist / _GradientRadius);
 
-    float3 multiplied = grayTerrain * marketColor;
-    float3 edgeColor = lerp(marketColor, multiplied, _GradientEdgeDarkening);
-    float3 centerColor = lerp(grayTerrain, marketColor, _GradientCenterOpacity);
-    float3 modeColor = lerp(edgeColor, centerColor, edgeProximity);
+    float edgeDarkening = saturate(_GradientEdgeDarkening);
+    float3 edgeColor = marketColor * (1.0 - edgeDarkening);
+    float3 modeColor = lerp(edgeColor, marketColor, edgeProximity);
 
     // Path overlay: white dotted routes blended over market color.
     // Mask is direct coverage (0=no path, 1=path), bilinear-filtered for AA.
@@ -81,23 +79,19 @@ float4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, f
     if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 6)
         return float4(0, 0, 0, 0);
 
-    // Grayscale terrain for multiply blending
-    float landHeight = NormalizeLandHeight(height);
-    float3 grayTerrain = float3(landHeight, landHeight, landHeight);
-
     float3 modeColor;
 
     if (_MapMode >= 1 && _MapMode <= 3)
     {
         // Political modes (1=realm, 2=province, 3=county)
         float3 politicalColor = LookupPaletteColor(_RealmPaletteTex, sampler_RealmPaletteTex, realmId);
-        modeColor = ApplyPoliticalModeStyle(uv, grayTerrain, politicalColor);
+        modeColor = ApplyPoliticalModeStyle(uv, politicalColor);
     }
     else if (_MapMode == 4)
     {
         // Market mode
         float3 marketColor = LookupPaletteColor(_MarketPaletteTex, sampler_MarketPaletteTex, marketId);
-        modeColor = ApplyMarketModeStyle(uv, grayTerrain, marketColor);
+        modeColor = ApplyMarketModeStyle(uv, marketColor);
     }
     else
     {
@@ -113,18 +107,15 @@ float4 ComputeMapModeFromResolvedBase(float2 uv, bool isCellWater, bool isRiver,
     if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 6)
         return float4(0, 0, 0, 0);
 
-    // Grayscale terrain for multiply blending
-    float landHeight = NormalizeLandHeight(height);
-    float3 grayTerrain = float3(landHeight, landHeight, landHeight);
     float3 modeColor;
 
     if (_MapMode >= 1 && _MapMode <= 3)
     {
-        modeColor = ApplyPoliticalModeStyle(uv, grayTerrain, resolvedBaseColor);
+        modeColor = ApplyPoliticalModeStyle(uv, resolvedBaseColor);
     }
     else if (_MapMode == 4)
     {
-        modeColor = ApplyMarketModeStyle(uv, grayTerrain, resolvedBaseColor);
+        modeColor = ApplyMarketModeStyle(uv, resolvedBaseColor);
     }
     else if (_MapMode == 8 || _MapMode == 9)
     {

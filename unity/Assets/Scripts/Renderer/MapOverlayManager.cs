@@ -73,7 +73,6 @@ public class MapOverlayManager
         private static readonly int PathOpacityId = Shader.PropertyToID("_PathOpacity");
         private static readonly int GradientRadiusId = Shader.PropertyToID("_GradientRadius");
         private static readonly int GradientEdgeDarkeningId = Shader.PropertyToID("_GradientEdgeDarkening");
-        private static readonly int GradientCenterOpacityId = Shader.PropertyToID("_GradientCenterOpacity");
         private static readonly int RealmBorderWidthId = Shader.PropertyToID("_RealmBorderWidth");
         private static readonly int RealmBorderDarkeningId = Shader.PropertyToID("_RealmBorderDarkening");
         private static readonly int ProvinceBorderWidthId = Shader.PropertyToID("_ProvinceBorderWidth");
