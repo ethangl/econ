@@ -421,9 +421,7 @@ namespace EconSim.Core.Import
                 {
                     Id = item.Id,
                     Name = item.Name,
-                    Color = new Color32(item.Color.R, item.Color.G, item.Color.B, item.Color.A),
-                    Habitability = item.Habitability,
-                    MovementCost = item.MovementCost
+                    Color = new Color32(item.Color.R, item.Color.G, item.Color.B, item.Color.A)
                 });
             }
 

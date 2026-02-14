@@ -217,12 +217,7 @@ public class MapOverlayManager
         private const float CountySaturationShift = 0.06f;
         private const float CountyValueShift = 0.06f;
 
-        // Mirror transport tuning so Local Transport Cost overlay matches gameplay path cost.
-        private const float OverlayDefaultMovementCost = 1.0f;
-        private const float OverlayBiomeCostMin = 1f;
-        private const float OverlayBiomeCostMax = 20f;
-        private const float OverlayImpassableThreshold = 100f;
-        private const float OverlayMaxPassableAltitudeCost = OverlayImpassableThreshold - 1f;
+        private const float OverlayDefaultMovementCost = 10.0f;
 
         private const int OverlayTextureCacheVersion = 3;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
@@ -2107,7 +2102,6 @@ public class MapOverlayManager
 
                 float minValue = float.MaxValue;
                 float maxValue = float.MinValue;
-                var biomeMovementCostById = BuildBiomeMovementCostLookup();
 
                 for (int i = 0; i < size; i++)
                 {
@@ -2122,7 +2116,7 @@ public class MapOverlayManager
                     bool hasValue;
                     if (isLocalTransportMode)
                     {
-                        value = ComputeLocalTransportCost(cell, biomeMovementCostById);
+                        value = ComputeLocalTransportCost(cell);
                         hasValue = true;
                     }
                     else
@@ -2246,32 +2240,10 @@ public class MapOverlayManager
             TextureDebugger.SaveTexture(modeColorResolveTexture, "mode_color_resolve");
         }
 
-        private float ComputeLocalTransportCost(Cell cell, Dictionary<int, int> biomeMovementCostById)
+        private float ComputeLocalTransportCost(Cell cell)
         {
-            float baseCost = OverlayDefaultMovementCost;
-            if (biomeMovementCostById != null &&
-                biomeMovementCostById.TryGetValue(cell.BiomeId, out int biomeMovementCost) &&
-                biomeMovementCost > 0)
-            {
-                baseCost = biomeMovementCost;
-                baseCost = Mathf.Clamp(baseCost, OverlayBiomeCostMin, OverlayBiomeCostMax);
-            }
-
-            float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
-            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeImpassableMeters)
-            {
-                return OverlayImpassableThreshold;
-            }
-
-            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeEffectStartMeters)
-            {
-                float altitudeMetersCapped = Mathf.Min(elevationMetersAboveSeaLevel, Elevation.HumanAltitudeImpassableMeters);
-                float altitudeT = (altitudeMetersCapped - Elevation.HumanAltitudeEffectStartMeters) /
-                    Mathf.Max(1f, Elevation.HumanAltitudeEffectSpanMeters);
-                baseCost = Mathf.Lerp(baseCost, OverlayMaxPassableAltitudeCost, Mathf.Clamp01(altitudeT));
-            }
-
-            return baseCost;
+            float cost = cell.MovementCost;
+            return cost > 0 ? cost : OverlayDefaultMovementCost;
         }
 
         private static Color DeriveProvinceColorFromRealm(Color realmColor, int provinceId)
@@ -2618,20 +2590,6 @@ public class MapOverlayManager
             return hueDelta * 0.5f + satDelta * 0.25f + valDelta * 0.25f;
         }
 
-        private Dictionary<int, int> BuildBiomeMovementCostLookup()
-        {
-            var lookup = new Dictionary<int, int>();
-            if (mapData?.Biomes == null)
-                return lookup;
-
-            foreach (var biome in mapData.Biomes)
-            {
-                if (biome != null)
-                    lookup[biome.Id] = biome.MovementCost;
-            }
-
-            return lookup;
-        }
 
         private bool TryGetAssignedMarketTransportCost(int cellId, int countyId, out float cost)
         {

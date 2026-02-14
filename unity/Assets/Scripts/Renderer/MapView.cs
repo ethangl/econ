@@ -2085,11 +2085,7 @@ namespace EconSim.Renderer
                     break;
 
                 case MapMode.LocalTransportCost:
-                    float localCost = ComputeProbeLocalTransportCost(cell, out int biomeMovementCost, out float biomeBaseCost, out float elevationMultiplier);
-                    probeBuilder.Append("LocalTransport: Cost=").Append(localCost.ToString("F2"))
-                        .Append(" BiomeMove=").Append(biomeMovementCost)
-                        .Append(" BiomeBase=").Append(biomeBaseCost.ToString("F2"))
-                        .Append(" ElevMult=").Append(elevationMultiplier.ToString("F2"))
+                    probeBuilder.Append("LocalTransport: Cost=").Append(cell.MovementCost.ToString("F1"))
                         .AppendLine();
                     break;
 
@@ -2123,56 +2119,6 @@ namespace EconSim.Renderer
             return economyState.Markets.TryGetValue(marketId, out market);
         }
 
-        private float ComputeProbeLocalTransportCost(
-            Cell cell,
-            out int biomeMovementCost,
-            out float biomeBaseCost,
-            out float elevationMultiplier)
-        {
-            const float defaultMovementCost = 1f;
-            const float maxPassableAltitudeCost = 99f;
-
-            biomeMovementCost = 0;
-            biomeBaseCost = defaultMovementCost;
-            elevationMultiplier = 1f;
-
-            if (mapData?.Biomes != null)
-            {
-                for (int i = 0; i < mapData.Biomes.Count; i++)
-                {
-                    var biome = mapData.Biomes[i];
-                    if (biome != null && biome.Id == cell.BiomeId)
-                    {
-                        biomeMovementCost = biome.MovementCost;
-                        break;
-                    }
-                }
-            }
-
-            if (biomeMovementCost > 0)
-            {
-                biomeBaseCost = Mathf.Clamp(biomeMovementCost, 1f, 20f);
-            }
-
-            float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, mapData.Info);
-            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeImpassableMeters)
-            {
-                elevationMultiplier = maxPassableAltitudeCost / Mathf.Max(0.001f, biomeBaseCost);
-                return 100f;
-            }
-
-            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeEffectStartMeters)
-            {
-                float altitudeMetersCapped = Mathf.Min(elevationMetersAboveSeaLevel, Elevation.HumanAltitudeImpassableMeters);
-                float altitudeT = (altitudeMetersCapped - Elevation.HumanAltitudeEffectStartMeters) /
-                    Mathf.Max(1f, Elevation.HumanAltitudeEffectSpanMeters);
-                float adjustedCost = Mathf.Lerp(biomeBaseCost, maxPassableAltitudeCost, Mathf.Clamp01(altitudeT));
-                elevationMultiplier = adjustedCost / Mathf.Max(0.001f, biomeBaseCost);
-                return adjustedCost;
-            }
-
-            return biomeBaseCost;
-        }
 
         private static string FormatNorm(int value)
         {

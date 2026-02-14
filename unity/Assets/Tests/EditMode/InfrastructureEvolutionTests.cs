@@ -68,6 +68,7 @@ namespace EconSim.Tests
                         SeaRelativeElevation = Elevation.HumanAltitudeEffectStartMeters,
                         HasSeaRelativeElevation = true,
                         BiomeId = 1,
+                        MovementCost = 42f,
                         NeighborIds = new List<int>(),
                         Center = new Vec2(0, 0)
                     },
@@ -78,13 +79,14 @@ namespace EconSim.Tests
                         SeaRelativeElevation = Elevation.HumanAltitudeImpassableMeters + 100f,
                         HasSeaRelativeElevation = true,
                         BiomeId = 1,
+                        MovementCost = 100f,
                         NeighborIds = new List<int>(),
                         Center = new Vec2(1, 0)
                     }
                 },
                 Biomes = new List<Biome>
                 {
-                    new Biome { Id = 1, Name = "Plains", MovementCost = 1 }
+                    new Biome { Id = 1, Name = "Plains" }
                 },
                 Counties = new List<County>(),
                 Provinces = new List<Province>(),
@@ -101,8 +103,8 @@ namespace EconSim.Tests
             float foothillCost = transport.GetCellMovementCost(mapData.CellById[1]);
             float peakCost = transport.GetCellMovementCost(mapData.CellById[2]);
 
-            Assert.That(foothillCost, Is.EqualTo(1f).Within(0.0001f), "Cell below mountain threshold should not pay height penalty.");
-            Assert.That(peakCost, Is.EqualTo(100f).Within(0.0001f), "Cell above impassable threshold should be blocked.");
+            Assert.That(foothillCost, Is.EqualTo(42f).Within(0.0001f), "Cell with moderate movement cost should return per-cell value.");
+            Assert.That(peakCost, Is.EqualTo(100f).Within(0.0001f), "Cell at impassable threshold should be blocked.");
         }
 
         [Test]
@@ -130,6 +132,7 @@ namespace EconSim.Tests
                         SeaRelativeElevation = 2000f,
                         HasSeaRelativeElevation = true,
                         BiomeId = 1,
+                        MovementCost = 74f,
                         CountyId = 10,
                         NeighborIds = new List<int> { 2 },
                         Center = new Vec2(0, 0)
@@ -141,6 +144,7 @@ namespace EconSim.Tests
                         SeaRelativeElevation = 6000f,
                         HasSeaRelativeElevation = true,
                         BiomeId = 1,
+                        MovementCost = 92f,
                         CountyId = 20,
                         NeighborIds = new List<int> { 1 },
                         Center = new Vec2(1, 0)
@@ -148,7 +152,7 @@ namespace EconSim.Tests
                 },
                 Biomes = new List<Biome>
                 {
-                    new Biome { Id = 1, Name = "Mountain", MovementCost = 80 }
+                    new Biome { Id = 1, Name = "Mountain" }
                 },
                 Counties = new List<County>
                 {
@@ -184,7 +188,7 @@ namespace EconSim.Tests
             float baselineCost = baselineGraph.GetEdgeCost(baselineMap.CellById[1], baselineMap.CellById[2]);
             float worldScaleCost = worldScaleGraph.GetEdgeCost(worldScaleMap.CellById[1], worldScaleMap.CellById[2]);
 
-            Assert.That(baselineCost, Is.EqualTo(1f).Within(0.0001f), "Normalization should keep 30km @ 2.5km cells near 1x distance factor.");
+            Assert.That(baselineCost, Is.EqualTo(42f).Within(0.0001f), "Normalization should keep 30km @ 2.5km cells near 1x distance factor.");
             Assert.That(worldScaleCost, Is.EqualTo(baselineCost).Within(0.0001f),
                 "Distance normalization should preserve equivalent edge cost when world scale doubles.");
         }
@@ -271,12 +275,12 @@ namespace EconSim.Tests
                 },
                 Cells = new List<Cell>
                 {
-                    new Cell { Id = 1, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 2 }, CountyId = 10, Center = new Vec2(0, 0) },
-                    new Cell { Id = 2, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 1 }, CountyId = 20, Center = new Vec2(1, 0) }
+                    new Cell { Id = 1, IsLand = true, BiomeId = 1, MovementCost = 42f, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 2 }, CountyId = 10, Center = new Vec2(0, 0) },
+                    new Cell { Id = 2, IsLand = true, BiomeId = 1, MovementCost = 42f, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 1 }, CountyId = 20, Center = new Vec2(1, 0) }
                 },
                 Biomes = new List<Biome>
                 {
-                    new Biome { Id = 1, Name = "Plains", MovementCost = 1 }
+                    new Biome { Id = 1, Name = "Plains" }
                 },
                 Counties = new List<County>
                 {
@@ -414,13 +418,13 @@ namespace EconSim.Tests
                 },
                 Cells = new List<Cell>
                 {
-                    new Cell { Id = 1, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 2 }, CountyId = 10, Center = new Vec2(0, 0) },
-                    new Cell { Id = 2, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 1, 3 }, CountyId = 20, Center = new Vec2(1, 0) },
-                    new Cell { Id = 3, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 2 }, CountyId = 30, Center = new Vec2(2, 0) }
+                    new Cell { Id = 1, IsLand = true, BiomeId = 1, MovementCost = 42f, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 2 }, CountyId = 10, Center = new Vec2(0, 0) },
+                    new Cell { Id = 2, IsLand = true, BiomeId = 1, MovementCost = 42f, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 1, 3 }, CountyId = 20, Center = new Vec2(1, 0) },
+                    new Cell { Id = 3, IsLand = true, BiomeId = 1, MovementCost = 42f, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 2 }, CountyId = 30, Center = new Vec2(2, 0) }
                 },
                 Biomes = new List<Biome>
                 {
-                    new Biome { Id = 1, Name = "Plains", MovementCost = 1 }
+                    new Biome { Id = 1, Name = "Plains" }
                 },
                 Counties = new List<County>
                 {
@@ -452,38 +456,38 @@ namespace EconSim.Tests
                 {
                     new Cell
                     {
-                        Id = 1, IsLand = true, BiomeId = 1, CountyId = 1, IsBoundary = true,
+                        Id = 1, IsLand = true, BiomeId = 1, MovementCost = 42f, CountyId = 1, IsBoundary = true,
                         SeaRelativeElevation = 20f, HasSeaRelativeElevation = true, CoastDistance = 1,
                         NeighborIds = new List<int> { 5 }, Center = new Vec2(0f, 50f)
                     },
                     new Cell
                     {
-                        Id = 2, IsLand = true, BiomeId = 1, CountyId = 1, IsBoundary = true,
+                        Id = 2, IsLand = true, BiomeId = 1, MovementCost = 42f, CountyId = 1, IsBoundary = true,
                         SeaRelativeElevation = 20f, HasSeaRelativeElevation = true, CoastDistance = 1,
                         NeighborIds = new List<int> { 5 }, Center = new Vec2(100f, 50f)
                     },
                     new Cell
                     {
-                        Id = 3, IsLand = true, BiomeId = 1, CountyId = 1, IsBoundary = true,
+                        Id = 3, IsLand = true, BiomeId = 1, MovementCost = 42f, CountyId = 1, IsBoundary = true,
                         SeaRelativeElevation = 20f, HasSeaRelativeElevation = true, CoastDistance = 1,
                         NeighborIds = new List<int> { 5 }, Center = new Vec2(50f, 0f)
                     },
                     new Cell
                     {
-                        Id = 4, IsLand = true, BiomeId = 1, CountyId = 1, IsBoundary = true,
+                        Id = 4, IsLand = true, BiomeId = 1, MovementCost = 42f, CountyId = 1, IsBoundary = true,
                         SeaRelativeElevation = 20f, HasSeaRelativeElevation = true, CoastDistance = 1,
                         NeighborIds = new List<int> { 5 }, Center = new Vec2(50f, 100f)
                     },
                     new Cell
                     {
-                        Id = 5, IsLand = true, BiomeId = 1, CountyId = 1, IsBoundary = false,
+                        Id = 5, IsLand = true, BiomeId = 1, MovementCost = 42f, CountyId = 1, IsBoundary = false,
                         SeaRelativeElevation = 20f, HasSeaRelativeElevation = true, CoastDistance = 2,
                         NeighborIds = new List<int> { 1, 2, 3, 4 }, Center = new Vec2(50f, 50f)
                     }
                 },
                 Biomes = new List<Biome>
                 {
-                    new Biome { Id = 1, Name = "Grassland", MovementCost = 1 }
+                    new Biome { Id = 1, Name = "Grassland" }
                 },
                 Counties = new List<County>
                 {
@@ -520,12 +524,12 @@ namespace EconSim.Tests
                 Info = info,
                 Cells = new List<Cell>
                 {
-                    new Cell { Id = 1, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 2 }, Center = new Vec2(0, 0) },
-                    new Cell { Id = 2, IsLand = true, BiomeId = 1, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 1 }, Center = new Vec2(distanceKm, 0) }
+                    new Cell { Id = 1, IsLand = true, BiomeId = 1, MovementCost = 42f, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 2 }, Center = new Vec2(0, 0) },
+                    new Cell { Id = 2, IsLand = true, BiomeId = 1, MovementCost = 42f, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true, NeighborIds = new List<int> { 1 }, Center = new Vec2(distanceKm, 0) }
                 },
                 Biomes = new List<Biome>
                 {
-                    new Biome { Id = 1, Name = "Plains", MovementCost = 1 }
+                    new Biome { Id = 1, Name = "Plains" }
                 },
                 Counties = new List<County>(),
                 Provinces = new List<Province>(),

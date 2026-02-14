@@ -331,8 +331,6 @@ namespace EconSim.Core.Data
         public int Id;
         public string Name;
         public Color32 Color;
-        public int Habitability;        // 0-100
-        public int MovementCost;        // Travel difficulty
     }
 
     [Serializable]
