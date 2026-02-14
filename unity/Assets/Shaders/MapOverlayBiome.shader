@@ -308,7 +308,6 @@ Shader "EconSim/MapOverlayBiome"
 
             #include "MapOverlay.Common.cginc"
             #include "MapOverlay.Composite.cginc"
-            #include "MapOverlay.ResolveModes.cginc"
 
             float3 SoilColorFromId(int soilId)
             {
@@ -502,101 +501,31 @@ Shader "EconSim/MapOverlayBiome"
                 // ---- Layer 1: Terrain ----
 
                 float3 terrain;
-                if (_MapMode == 0)
-                {
-                    // Height gradient mode: override terrain with debug viz
-                    terrain = ComputeHeightGradient(isCellWater, height, riverMask);
-                }
-                else if (_MapMode == 6)
-                {
-                    // Biomes mode: grayscale heightmap × blended soil/vegetation color.
-                    if (isCellWater)
-                    {
-                        terrain = ComputeTerrain(uv, isCellWater, biomeId, height);
-                    }
-                    else
-                    {
-                        float landHeight = NormalizeLandHeight(height);
-                        float3 soilColor = ComputeBlendedSoilColor(uv, soilId);
-                        int vegetationType = DecodeVegetationType(uv);
-                        float vegetationCoverage = DecodeVegetationDensity(uv);
-                        if (vegetationType <= 0)
-                            vegetationCoverage = 0.0;
-                        float3 vegetationColor = VegetationColorFromId(vegetationType);
-                        float stippleMask = ComputeVegetationStippleMask(uv, vegetationCoverage, vegetationType);
-                        float3 soilLayer = soilColor;
-                        float3 stippleLayer = vegetationColor * (stippleMask * saturate(_VegetationStippleOpacity));
-                        float3 blendedColor = saturate(soilLayer + stippleLayer);
-                        float brightness = lerp(_SoilHeightFloor, 1.0, landHeight);
-                        terrain = blendedColor * brightness;
-                    }
-                }
-                else
+                if (isCellWater)
                 {
                     terrain = ComputeTerrain(uv, isCellWater, biomeId, height);
                 }
-
-                // ---- Layer 2: Map mode ----
-
-                float4 mapMode;
-                if (_UseModeColorResolve > 0)
-                {
-                    float4 resolvedMode = tex2D(_ModeColorResolve, uv);
-                    float3 resolvedBase = resolvedMode.rgb;
-                    marketId = resolvedMode.a;
-                    mapMode = ComputeMapModeFromResolvedBase(uv, isCellWater, isRiver, height, resolvedBase);
-                }
                 else
                 {
-                    marketId = 0.0;
-                    mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId);
-                }
-                float3 afterMapMode;
-                if (_MapMode == 6)
-                {
-                    // Biomes mode keeps terrain as the base layer.
-                    afterMapMode = lerp(terrain, mapMode.rgb, mapMode.a);
-                }
-                else if (!isWater && mapMode.a > 0.001)
-                {
-                    // Non-biome land modes are pure mode color (no terrain layer).
-                    afterMapMode = mapMode.rgb;
-                }
-                else
-                {
-                    // Preserve terrain substrate for water/rivers and debug fallback modes.
-                    afterMapMode = terrain;
+                    float landHeight = NormalizeLandHeight(height);
+                    float3 soilColor = ComputeBlendedSoilColor(uv, soilId);
+                    int vegetationType = DecodeVegetationType(uv);
+                    float vegetationCoverage = DecodeVegetationDensity(uv);
+                    if (vegetationType <= 0)
+                        vegetationCoverage = 0.0;
+                    float3 vegetationColor = VegetationColorFromId(vegetationType);
+                    float stippleMask = ComputeVegetationStippleMask(uv, vegetationCoverage, vegetationType);
+                    float3 soilLayer = soilColor;
+                    float3 stippleLayer = vegetationColor * (stippleMask * saturate(_VegetationStippleOpacity));
+                    float3 blendedColor = saturate(soilLayer + stippleLayer);
+                    float brightness = lerp(_SoilHeightFloor, 1.0, landHeight);
+                    terrain = blendedColor * brightness;
                 }
 
                 // ---- Layer 3: Water ----
 
-                if (_MapMode == 0)
-                {
-                    // Height mode: no water overlay (already has its own water colors)
-                    // Keep the height-mode water gradient untouched.
-                    // (ComputeWater is only for normal overlay compositing.)
-                    // NOP
-                }
-                else if (_MapMode == 6)
-                {
-                    // Full water rendering (volumetric/refraction/shimmer) is biome-only.
-                    afterMapMode = ComputeWater(isCellWater, height, riverMask, uv, IN.worldUV, afterMapMode);
-                }
-                else
-                {
-                    // Non-biome modes use simple flat water tinting.
-                    if (isCellWater)
-                    {
-                        afterMapMode = _WaterShallowColor.rgb;
-                    }
-                    else if (riverMask > 0.01)
-                    {
-                        float riverAlpha = _WaterShallowAlpha * riverMask;
-                        afterMapMode = lerp(afterMapMode, _WaterShallowColor.rgb, riverAlpha);
-                    }
-                }
-                float3 afterWater = afterMapMode;
-                float3 relitColor = _MapMode == 6 ? ApplyReliefShading(afterWater, uv, isWater) : afterWater;
+                float3 afterWater = ComputeWater(isCellWater, height, riverMask, uv, IN.worldUV, terrain);
+                float3 relitColor = ApplyReliefShading(afterWater, uv, isWater);
 
                 // ---- Layer 4: Selection / hover (operates on composited color) ----
 

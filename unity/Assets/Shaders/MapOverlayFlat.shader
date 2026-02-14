@@ -488,7 +488,6 @@ Shader "EconSim/MapOverlayFlat"
                 float marketId = 0.0;
 
                 float biomeId = geographyBase.r;
-                int soilId = DecodeSoilIdFromGeography(geographyBase);
                 bool isCellWater = geographyBase.a >= 0.5;
 
                 float riverMask = tex2D(_RiverMaskTex, IN.dataUV).r;
@@ -506,30 +505,6 @@ Shader "EconSim/MapOverlayFlat"
                 {
                     // Height gradient mode: override terrain with debug viz
                     terrain = ComputeHeightGradient(isCellWater, height, riverMask);
-                }
-                else if (_MapMode == 6)
-                {
-                    // Biomes mode: grayscale heightmap × blended soil/vegetation color.
-                    if (isCellWater)
-                    {
-                        terrain = ComputeTerrain(uv, isCellWater, biomeId, height);
-                    }
-                    else
-                    {
-                        float landHeight = NormalizeLandHeight(height);
-                        float3 soilColor = ComputeBlendedSoilColor(uv, soilId);
-                        int vegetationType = DecodeVegetationType(uv);
-                        float vegetationCoverage = DecodeVegetationDensity(uv);
-                        if (vegetationType <= 0)
-                            vegetationCoverage = 0.0;
-                        float3 vegetationColor = VegetationColorFromId(vegetationType);
-                        float stippleMask = ComputeVegetationStippleMask(uv, vegetationCoverage, vegetationType);
-                        float3 soilLayer = soilColor;
-                        float3 stippleLayer = vegetationColor * (stippleMask * saturate(_VegetationStippleOpacity));
-                        float3 blendedColor = saturate(soilLayer + stippleLayer);
-                        float brightness = lerp(_SoilHeightFloor, 1.0, landHeight);
-                        terrain = blendedColor * brightness;
-                    }
                 }
                 else
                 {
@@ -552,14 +527,9 @@ Shader "EconSim/MapOverlayFlat"
                     mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId);
                 }
                 float3 afterMapMode;
-                if (_MapMode == 6)
+                if (!isWater && mapMode.a > 0.001)
                 {
-                    // Biomes mode keeps terrain as the base layer.
-                    afterMapMode = lerp(terrain, mapMode.rgb, mapMode.a);
-                }
-                else if (!isWater && mapMode.a > 0.001)
-                {
-                    // Non-biome land modes are pure mode color (no terrain layer).
+                    // Flat land modes are pure mode color (no terrain layer).
                     afterMapMode = mapMode.rgb;
                 }
                 else
@@ -577,14 +547,9 @@ Shader "EconSim/MapOverlayFlat"
                     // (ComputeWater is only for normal overlay compositing.)
                     // NOP
                 }
-                else if (_MapMode == 6)
-                {
-                    // Full water rendering (volumetric/refraction/shimmer) is biome-only.
-                    afterMapMode = ComputeWater(isCellWater, height, riverMask, uv, IN.worldUV, afterMapMode);
-                }
                 else
                 {
-                    // Non-biome modes use simple flat water tinting.
+                    // Flat style water tinting (no volumetric/refraction/shimmer).
                     if (isCellWater)
                     {
                         afterMapMode = _WaterShallowColor.rgb;
@@ -596,7 +561,7 @@ Shader "EconSim/MapOverlayFlat"
                     }
                 }
                 float3 afterWater = afterMapMode;
-                float3 relitColor = _MapMode == 6 ? ApplyReliefShading(afterWater, uv, isWater) : afterWater;
+                float3 relitColor = afterWater;
 
                 // ---- Layer 4: Selection / hover (operates on composited color) ----
 

@@ -10,13 +10,14 @@ Debug map overlay rendering issues quickly and reproducibly, especially:
 - water/river masking problems,
 - mode-specific visual regressions.
 
-This playbook is for `MapOverlay.shader` + `MapOverlayManager` pipeline debugging.
+This playbook is for `MapOverlayFlat.shader` / `MapOverlayBiome.shader` + `MapOverlayManager` pipeline debugging.
 
 ---
 
 ## Relevant Components
 
-- `unity/Assets/Shaders/MapOverlay.shader`
+- `unity/Assets/Shaders/MapOverlayFlat.shader`
+- `unity/Assets/Shaders/MapOverlayBiome.shader`
 - `unity/Assets/Scripts/Renderer/MapOverlayManager.cs`
 - `unity/Assets/Scripts/Renderer/MapView.cs`
 - `unity/Assets/Editor/MapOverlayShaderGUI.cs`
@@ -116,7 +117,7 @@ Likely causes:
 
 Checks:
 
-1. Set `_GradientEdgeDarkening = 0` and `_GradientCenterOpacity = 1` to baseline.
+1. Set `_GradientEdgeDarkening = 0` and `_PoliticalCenterOpacity = 1` to baseline.
 2. Disable borders temporarily.
 3. Reintroduce gradient, then borders, one parameter group at a time.
 

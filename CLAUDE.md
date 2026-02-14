@@ -96,7 +96,8 @@ The map uses a GPU-driven overlay system for borders and map modes:
 
 **Key files:**
 
-- `Assets/Shaders/MapOverlay.shader` - GPU border detection, color derivation
+- `Assets/Shaders/MapOverlayFlat.shader` - flat political/market rendering style
+- `Assets/Shaders/MapOverlayBiome.shader` - biome terrain + water rendering style
 - `Assets/Scripts/Renderer/MapOverlayManager.cs` - Data texture generation
 - `EconSim.Core/Rendering/PoliticalPalette.cs` - Realm color generation
 
@@ -183,7 +184,7 @@ Shader uniforms for gradient control:
 
 - `_GradientRadius` (default 40) - how far from edges the gradient extends (pixels)
 - `_GradientEdgeDarkening` (default 0.5, range 0-1) - multiply blend strength at edges
-- `_GradientCenterOpacity` (default 0.5, range 0-1) - how much terrain shows through in center
+- `_PoliticalCenterOpacity` (default 0.5, range 0-1) - center blend weight for political fill
 
 Shader renders terrain with gradient fill; borders are separate mesh layer on top.
 

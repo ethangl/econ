@@ -87,8 +87,8 @@ namespace EconSim.Tests
 
             var mapData = GetOrCreateMapData(baseline);
 
-            var shader = Shader.Find("EconSim/MapOverlay");
-            Assert.That(shader, Is.Not.Null, "Shader EconSim/MapOverlay not found.");
+            var shader = Shader.Find("EconSim/MapOverlayFlat");
+            Assert.That(shader, Is.Not.Null, "Shader EconSim/MapOverlayFlat not found.");
 
             var material = new Material(shader);
             var manager = new MapOverlayManager(mapData, material, resolutionMultiplier);

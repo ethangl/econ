@@ -2,7 +2,7 @@ namespace EconSim.Renderer
 {
     /// <summary>
     /// Static utility for coherent domain warping of grid coordinates.
-    /// Value noise implementation matches MapOverlay.shader hash2d/valueNoise (lines 214-236).
+    /// Value noise implementation matches the map overlay shader hash2d/valueNoise functions.
     /// Two decorrelated noise evaluations per point (X and Y offset via seed offset).
     /// </summary>
     public static class DomainWarp

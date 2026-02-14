@@ -20,7 +20,6 @@ namespace EconSim.Renderer
         [SerializeField] private float heightScale = 15f;
         [SerializeField] private float cellScale = 0.01f;  // Scale from map data pixels to Unity units
         public float CellScale => cellScale;
-        [SerializeField] private Material terrainMaterial; // Legacy fallback when style-specific materials are unset.
         [SerializeField] private Material flatTerrainMaterial;
         [SerializeField] private Material biomeTerrainMaterial;
         [SerializeField] private bool renderLandOnly = false;
@@ -39,11 +38,7 @@ namespace EconSim.Renderer
             Biome = 1
         }
 
-        private const string FlatShaderName = "EconSim/MapOverlayFlat";
-        private const string BiomeShaderName = "EconSim/MapOverlayBiome";
         private RenderStyle currentRenderStyle = RenderStyle.Flat;
-        private Material runtimeFlatTerrainMaterial;
-        private Material runtimeBiomeTerrainMaterial;
 
         [Header("Shader Overlays")]
         private bool useShaderOverlays = true;
@@ -201,7 +196,6 @@ namespace EconSim.Renderer
 
             // Clean up overlay manager textures
             overlayManager?.Dispose();
-            DestroyRuntimeStyleMaterials();
         }
 
         private void Update()
@@ -308,62 +302,9 @@ namespace EconSim.Renderer
                 return biomeTerrainMaterial;
             if (style == RenderStyle.Flat && flatTerrainMaterial != null)
                 return flatTerrainMaterial;
-            if (style == RenderStyle.Biome)
-            {
-                runtimeBiomeTerrainMaterial ??= CreateRuntimeStyleMaterial(BiomeShaderName, "Biome");
-                if (runtimeBiomeTerrainMaterial != null)
-                    return runtimeBiomeTerrainMaterial;
-            }
-            else
-            {
-                runtimeFlatTerrainMaterial ??= CreateRuntimeStyleMaterial(FlatShaderName, "Flat");
-                if (runtimeFlatTerrainMaterial != null)
-                    return runtimeFlatTerrainMaterial;
-            }
-            if (terrainMaterial != null)
-                return terrainMaterial;
-            return meshRenderer != null ? meshRenderer.sharedMaterial : null;
-        }
-
-        private Material CreateRuntimeStyleMaterial(string shaderName, string styleSuffix)
-        {
-            Material source = terrainMaterial != null ? terrainMaterial : meshRenderer != null ? meshRenderer.sharedMaterial : null;
-            if (source == null)
-                return null;
-
-            Shader shader = Shader.Find(shaderName);
-            if (shader == null)
-            {
-                Debug.LogWarning($"MapView: Could not find shader '{shaderName}' for render style material fallback.");
-                return null;
-            }
-
-            var runtimeMaterial = new Material(source)
-            {
-                name = $"{source.name}_{styleSuffix}",
-                shader = shader,
-                hideFlags = HideFlags.DontSave
-            };
-            return runtimeMaterial;
-        }
-
-        private void DestroyRuntimeStyleMaterials()
-        {
-            DestroyMaterial(runtimeFlatTerrainMaterial);
-            DestroyMaterial(runtimeBiomeTerrainMaterial);
-            runtimeFlatTerrainMaterial = null;
-            runtimeBiomeTerrainMaterial = null;
-        }
-
-        private static void DestroyMaterial(Material material)
-        {
-            if (material == null)
-                return;
-
-            if (Application.isPlaying)
-                Destroy(material);
-            else
-                DestroyImmediate(material);
+            string styleName = style == RenderStyle.Biome ? "Biome" : "Flat";
+            Debug.LogError($"MapView: Missing {styleName} material assignment.");
+            return null;
         }
 
         private void ApplyRenderMaterialForMode(MapMode mode)
@@ -793,11 +734,6 @@ namespace EconSim.Renderer
 
             currentRenderStyle = ResolveRenderStyleForMode(currentMode);
             Material mat = ResolveRenderStyleMaterial(currentRenderStyle);
-            if (mat == null && meshRenderer != null)
-            {
-                mat = meshRenderer.sharedMaterial;
-            }
-
             if (mat == null)
                 return;
 
