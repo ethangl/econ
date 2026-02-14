@@ -4,7 +4,8 @@ using System.Collections.Generic;
 namespace MapGen.Core
 {
     /// <summary>
-    /// Political assignment: landmasses -> realms -> provinces -> counties.
+    /// Bottom-up political assignment: landmasses -> cultures -> counties -> realms -> provinces.
+    /// Counties form first (terrain-respecting), then group upward into realms via culture majority vote.
     /// </summary>
     public static class PoliticalGenerationOps
     {
@@ -16,10 +17,15 @@ namespace MapGen.Core
             MapGenConfig config)
         {
             DetectLandmasses(political, biomes, elevation);
-            AssignRealms(political, biomes, rivers, elevation, config);
-            AssignProvinces(political, biomes, rivers, elevation, config);
-            AssignCounties(political, biomes, rivers, elevation, config);
+            SpreadCultures(political, biomes, rivers, elevation, config);
+            AssignCountiesGlobal(political, biomes, rivers, elevation, config);
+            DeriveRealmsFromCountyCulture(political);
+            AssignProvincesAtCountyGranularity(political, biomes, rivers, elevation, config);
         }
+
+        // ────────────────────────────────────────────────────────────────
+        // Step 1: DetectLandmasses — UNCHANGED
+        // ────────────────────────────────────────────────────────────────
 
         static void DetectLandmasses(PoliticalField pol, BiomeField biomes, ElevationField elevation)
         {
@@ -70,13 +76,18 @@ namespace MapGen.Core
             pol.LandmassCount = nextLandmassId - 1;
         }
 
-        static void AssignRealms(PoliticalField pol, BiomeField biomes, RiverField rivers, ElevationField elevation, MapGenConfig config)
+        // ────────────────────────────────────────────────────────────────
+        // Step 2: SpreadCultures — replaces AssignRealms
+        // Same seed selection + transport frontier, writes CultureId[]
+        // ────────────────────────────────────────────────────────────────
+
+        static void SpreadCultures(PoliticalField pol, BiomeField biomes, RiverField rivers, ElevationField elevation, MapGenConfig config)
         {
             var mesh = pol.Mesh;
             var landCells = CollectLandCells(elevation, biomes);
             if (landCells.Count == 0)
             {
-                pol.RealmCount = 0;
+                pol.CultureCount = 0;
                 pol.Capitals = Array.Empty<int>();
                 return;
             }
@@ -89,7 +100,7 @@ namespace MapGen.Core
             var landmassStats = BuildLandmassStats(landCells, pol.LandmassId, biomes);
             var eligibleLandmasses = ResolveEligibleRealmLandmasses(landmassStats, config);
 
-            var realmSeedCells = new List<int>(landCells.Count);
+            var cultureSeedCells = new List<int>(landCells.Count);
             for (int i = 0; i < landCells.Count; i++)
             {
                 int c = landCells[i];
@@ -97,10 +108,10 @@ namespace MapGen.Core
                     continue;
 
                 if (eligibleLandmasses.Contains(pol.LandmassId[c]))
-                    realmSeedCells.Add(c);
+                    cultureSeedCells.Add(c);
             }
 
-            if (realmSeedCells.Count == 0)
+            if (cultureSeedCells.Count == 0)
             {
                 int fallbackLandmass = SelectFallbackLandmass(landmassStats);
                 if (fallbackLandmass > 0)
@@ -110,31 +121,31 @@ namespace MapGen.Core
                     {
                         int c = landCells[i];
                         if ((uint)c < (uint)pol.LandmassId.Length && pol.LandmassId[c] == fallbackLandmass)
-                            realmSeedCells.Add(c);
+                            cultureSeedCells.Add(c);
                     }
                 }
             }
 
-            if (realmSeedCells.Count == 0)
-                realmSeedCells = landCells;
+            if (cultureSeedCells.Count == 0)
+                cultureSeedCells = landCells;
 
-            int targetRealms = Clamp((int)Math.Round((realmSeedCells.Count / 900f) * realmScale), 1, 24);
+            int targetCultures = Clamp((int)Math.Round((cultureSeedCells.Count / 900f) * realmScale), 1, 24);
             var capitals = SelectSeeds(
-                realmSeedCells,
+                cultureSeedCells,
                 mesh,
-                targetRealms,
+                targetCultures,
                 scoreCell: capitalScore,
-                minSpacingKm: EstimateSpacing(mesh, targetRealms) * 0.35f);
+                minSpacingKm: EstimateSpacing(mesh, targetCultures) * 0.35f);
 
             EnsureLandmassSeedCoverage(capitals, landCells, pol.LandmassId, capitalScore, eligibleLandmasses);
             if (capitals.Count == 0)
-                capitals.Add(realmSeedCells[0]);
+                capitals.Add(cultureSeedCells[0]);
 
-            pol.RealmCount = capitals.Count;
+            pol.CultureCount = capitals.Count;
             pol.Capitals = capitals.ToArray();
 
             AssignByTransportFrontier(
-                pol.RealmId,
+                pol.CultureId,
                 landCells,
                 capitals,
                 mesh,
@@ -143,74 +154,433 @@ namespace MapGen.Core
                 config);
         }
 
-        static void AssignProvinces(PoliticalField pol, BiomeField biomes, RiverField rivers, ElevationField elevation, MapGenConfig config)
+        // ────────────────────────────────────────────────────────────────
+        // Step 3: AssignCountiesGlobal — single global pass (no per-province loop)
+        // ────────────────────────────────────────────────────────────────
+
+        static void AssignCountiesGlobal(PoliticalField pol, BiomeField biomes, RiverField rivers, ElevationField elevation, MapGenConfig config)
         {
             var mesh = pol.Mesh;
             HeightmapTemplateTuningProfile profile = HeightmapTemplateCompiler.ResolveTuningProfile(config.Template, config);
-            float provinceScale = profile != null ? profile.ProvinceTargetScale : 1f;
-            if (provinceScale <= 0f) provinceScale = 1f;
-            var provinceIds = new int[mesh.CellCount];
-            int nextProvince = 1;
+            float countyScale = profile != null ? profile.CountyTargetScale : 1f;
+            if (countyScale <= 0f) countyScale = 1f;
 
-            var politicalLandCells = new List<int>();
-            var politicalLandMask = new bool[mesh.CellCount];
+            // Collect all land cells with culture assignment
+            var landCells = new List<int>();
+            var landMask = new bool[mesh.CellCount];
             for (int i = 0; i < mesh.CellCount; i++)
             {
-                if (pol.RealmId[i] <= 0)
-                    continue;
+                if (pol.CultureId[i] > 0)
+                {
+                    landCells.Add(i);
+                    landMask[i] = true;
+                }
+            }
 
-                politicalLandCells.Add(i);
-                politicalLandMask[i] = true;
+            if (landCells.Count == 0)
+            {
+                pol.CountyId = new int[mesh.CellCount];
+                pol.CountySeats = Array.Empty<int>();
+                pol.CountyCount = 0;
+                return;
             }
 
             int[][] sharedNeighborEdges = BuildNeighborEdgeLookup(mesh);
-            float nominalMovementCost = EstimateNominalMovementCost(politicalLandCells, biomes);
+            float nominalMovementCost = EstimateNominalMovementCost(landCells, biomes);
             float[] riverPenaltyByEdge = BuildRiverCrossingPenaltyByEdge(mesh, rivers, config, nominalMovementCost);
-            float nominalNeighborDistance = EstimateNominalNeighborDistance(mesh, politicalLandMask);
+            float nominalNeighborDistance = EstimateNominalNeighborDistance(mesh, landMask);
+
+            int targetCounties = Clamp((int)Math.Round((landCells.Count / 120f) * countyScale), 1, 4096);
+
+            var seeds = SelectSeeds(
+                landCells,
+                mesh,
+                targetCounties,
+                scoreCell: c => biomes.Population[c] * 1.25f + biomes.Suitability[c] * 0.4f,
+                minSpacingKm: EstimateSpacing(mesh, targetCounties) * 0.18f);
+
+            DeduplicateSeedCells(seeds);
+            if (seeds.Count == 0)
+                seeds.Add(landCells[0]);
+
+            float totalPopulation = SumPopulation(landCells, biomes);
+            float targetCountyPopulation = totalPopulation / Math.Max(1, seeds.Count);
+            if (targetCountyPopulation < 1f)
+                targetCountyPopulation = 1f;
+
+            var localAssignment = new int[mesh.CellCount];
+            AssignCountiesByPopulationFrontier(
+                localAssignment,
+                landCells,
+                seeds,
+                mesh,
+                biomes,
+                sharedNeighborEdges,
+                riverPenaltyByEdge,
+                nominalNeighborDistance,
+                targetCountyPopulation);
+            MergeCountyOrphans(
+                localAssignment,
+                landCells,
+                mesh,
+                biomes,
+                sharedNeighborEdges,
+                riverPenaltyByEdge,
+                nominalNeighborDistance,
+                targetCountyPopulation);
+
+            // Remap local IDs to contiguous global IDs and extract county seats
+            var countyIds = new int[mesh.CellCount];
+            var localToGlobal = new Dictionary<int, int>();
+            var seatPopulationByGlobal = new Dictionary<int, float>();
+            var seatCellByGlobal = new Dictionary<int, int>();
+            var firstCellByGlobal = new Dictionary<int, int>();
+            int nextCounty = 1;
+
+            for (int i = 0; i < landCells.Count; i++)
+            {
+                int c = landCells[i];
+                int local = localAssignment[c];
+                if (local <= 0)
+                    local = 1;
+
+                if (!localToGlobal.TryGetValue(local, out int globalId))
+                {
+                    globalId = nextCounty++;
+                    localToGlobal[local] = globalId;
+                }
+
+                countyIds[c] = globalId;
+                if (!firstCellByGlobal.ContainsKey(globalId))
+                    firstCellByGlobal[globalId] = c;
+
+                float pop = CellPopulation(biomes, c);
+                if (!seatPopulationByGlobal.TryGetValue(globalId, out float bestPop) || pop > bestPop)
+                {
+                    seatPopulationByGlobal[globalId] = pop;
+                    seatCellByGlobal[globalId] = c;
+                }
+            }
+
+            int totalCounties = nextCounty - 1;
+            var countySeats = new int[totalCounties];
+            for (int countyId = 1; countyId <= totalCounties; countyId++)
+            {
+                if (seatCellByGlobal.TryGetValue(countyId, out int seat))
+                    countySeats[countyId - 1] = seat;
+                else if (firstCellByGlobal.TryGetValue(countyId, out int fallbackSeat))
+                    countySeats[countyId - 1] = fallbackSeat;
+                else
+                    countySeats[countyId - 1] = landCells[0];
+            }
+
+            pol.CountyId = countyIds;
+            pol.CountySeats = countySeats;
+            pol.CountyCount = totalCounties;
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // Step 4: DeriveRealmsFromCountyCulture — majority culture vote per county
+        // ────────────────────────────────────────────────────────────────
+
+        static void DeriveRealmsFromCountyCulture(PoliticalField pol)
+        {
+            var mesh = pol.Mesh;
+            int n = mesh.CellCount;
+
+            // Tally culture votes per county
+            // cultureTally[county][culture] = vote count
+            var cultureTally = new Dictionary<int, Dictionary<int, int>>();
+            for (int cell = 0; cell < n; cell++)
+            {
+                int county = pol.CountyId[cell];
+                if (county <= 0) continue;
+                int culture = pol.CultureId[cell];
+                if (culture <= 0) continue;
+
+                if (!cultureTally.TryGetValue(county, out var tally))
+                {
+                    tally = new Dictionary<int, int>();
+                    cultureTally[county] = tally;
+                }
+
+                tally.TryGetValue(culture, out int votes);
+                tally[culture] = votes + 1;
+            }
+
+            // Assign each county to its majority culture (ties: lower culture ID)
+            var countyRealm = new int[pol.CountyCount + 1];
+            for (int county = 1; county <= pol.CountyCount; county++)
+            {
+                if (!cultureTally.TryGetValue(county, out var tally))
+                {
+                    // Fallback: use culture of seat cell
+                    int seat = pol.CountySeats[county - 1];
+                    countyRealm[county] = pol.CultureId[seat] > 0 ? pol.CultureId[seat] : 1;
+                    continue;
+                }
+
+                int bestCulture = 0;
+                int bestVotes = 0;
+                foreach (var kvp in tally)
+                {
+                    if (kvp.Value > bestVotes || (kvp.Value == bestVotes && kvp.Key < bestCulture))
+                    {
+                        bestCulture = kvp.Key;
+                        bestVotes = kvp.Value;
+                    }
+                }
+
+                countyRealm[county] = bestCulture > 0 ? bestCulture : 1;
+            }
+
+            // Force capital counties to belong to their capital's realm.
+            // First-write wins: if two capitals share a county (rare, after merges),
+            // the earlier capital keeps the county and the later one falls back to majority vote.
+            var anchoredCounties = new HashSet<int>();
+            for (int r = 0; r < pol.Capitals.Length; r++)
+            {
+                int capitalCell = pol.Capitals[r];
+                int realmId = r + 1;
+                if ((uint)capitalCell >= (uint)n) continue;
+                int county = pol.CountyId[capitalCell];
+                if (county > 0 && county < countyRealm.Length && anchoredCounties.Add(county))
+                    countyRealm[county] = realmId;
+            }
+
+            // Stamp RealmId on all cells based on their county's realm
+            pol.RealmCount = pol.CultureCount; // 1:1 culture → realm
+            for (int cell = 0; cell < n; cell++)
+            {
+                int county = pol.CountyId[cell];
+                if (county > 0 && county < countyRealm.Length)
+                    pol.RealmId[cell] = countyRealm[county];
+            }
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // Step 5: AssignProvincesAtCountyGranularity — county adjacency graph + Dijkstra
+        // ────────────────────────────────────────────────────────────────
+
+        static void AssignProvincesAtCountyGranularity(PoliticalField pol, BiomeField biomes, RiverField rivers, ElevationField elevation, MapGenConfig config)
+        {
+            var mesh = pol.Mesh;
+            int n = mesh.CellCount;
+            HeightmapTemplateTuningProfile profile = HeightmapTemplateCompiler.ResolveTuningProfile(config.Template, config);
+            float provinceScale = profile != null ? profile.ProvinceTargetScale : 1f;
+            if (provinceScale <= 0f) provinceScale = 1f;
+
+            int countyCount = pol.CountyCount;
+            if (countyCount == 0)
+            {
+                pol.ProvinceId = new int[n];
+                pol.ProvinceCount = 0;
+                return;
+            }
+
+            // Build county metadata arrays (1-indexed)
+            var seatCell = new int[countyCount + 1];
+            var countyRealm = new int[countyCount + 1];
+            var countyPopulation = new float[countyCount + 1];
+            var countyCellCount = new int[countyCount + 1];
+
+            for (int county = 1; county <= countyCount; county++)
+                seatCell[county] = pol.CountySeats[county - 1];
+
+            for (int cell = 0; cell < n; cell++)
+            {
+                int county = pol.CountyId[cell];
+                if (county <= 0 || county > countyCount) continue;
+                countyCellCount[county]++;
+                countyPopulation[county] += CellPopulation(biomes, cell);
+                countyRealm[county] = pol.RealmId[cell];
+            }
+
+            // Build county adjacency graph
+            var neighborSets = new HashSet<int>[countyCount + 1];
+            for (int i = 1; i <= countyCount; i++)
+                neighborSets[i] = new HashSet<int>();
+
+            for (int cell = 0; cell < n; cell++)
+            {
+                int county = pol.CountyId[cell];
+                if (county <= 0) continue;
+
+                int[] neighbors = mesh.CellNeighbors[cell];
+                if (neighbors == null) continue;
+
+                for (int ni = 0; ni < neighbors.Length; ni++)
+                {
+                    int nb = neighbors[ni];
+                    if ((uint)nb >= (uint)n) continue;
+                    int nbCounty = pol.CountyId[nb];
+                    if (nbCounty > 0 && nbCounty != county)
+                        neighborSets[county].Add(nbCounty);
+                }
+            }
+
+            var countyNeighbors = new int[countyCount + 1][];
+            for (int i = 1; i <= countyCount; i++)
+            {
+                var set = neighborSets[i];
+                var arr = new int[set.Count];
+                set.CopyTo(arr);
+                countyNeighbors[i] = arr;
+            }
+
+            // Group counties by realm
+            var realmCounties = new List<int>[pol.RealmCount + 1];
+            var realmCellCount = new int[pol.RealmCount + 1];
+            for (int i = 1; i <= pol.RealmCount; i++)
+                realmCounties[i] = new List<int>();
+
+            for (int county = 1; county <= countyCount; county++)
+            {
+                int realm = countyRealm[county];
+                if (realm > 0 && realm <= pol.RealmCount)
+                {
+                    realmCounties[realm].Add(county);
+                    realmCellCount[realm] += countyCellCount[county];
+                }
+            }
+
+            // Build county→cells index once (O(N)) for efficient stamping
+            var countyCells = new List<int>[countyCount + 1];
+            for (int i = 1; i <= countyCount; i++)
+                countyCells[i] = new List<int>();
+            for (int cell = 0; cell < n; cell++)
+            {
+                int c = pol.CountyId[cell];
+                if (c > 0 && c <= countyCount)
+                    countyCells[c].Add(cell);
+            }
+
+            // Per-realm province assignment via competitive Dijkstra on county graph
+            var provinceIds = new int[n];
+            int nextProvince = 1;
 
             for (int realm = 1; realm <= pol.RealmCount; realm++)
             {
-                var realmCells = new List<int>();
-                for (int i = 0; i < mesh.CellCount; i++)
-                {
-                    if (pol.RealmId[i] == realm)
-                        realmCells.Add(i);
-                }
+                var counties = realmCounties[realm];
+                if (counties.Count == 0) continue;
 
-                if (realmCells.Count == 0)
-                    continue;
+                int provinceTarget = Clamp((int)Math.Round((realmCellCount[realm] / 450f) * provinceScale), 1, 18);
 
-                int provinceTarget = Clamp((int)Math.Round((realmCells.Count / 450f) * provinceScale), 1, 18);
-                var seeds = SelectSeeds(
-                    realmCells,
+                // Select seed counties (highest population, with spacing)
+                var seedCounties = SelectCountySeeds(
+                    counties,
                     mesh,
                     provinceTarget,
-                    scoreCell: c => biomes.Suitability[c] + biomes.Population[c] * 0.015f,
-                    minSpacingKm: EstimateSpacing(mesh, provinceTarget) * 0.25f);
+                    county => countyPopulation[county],
+                    EstimateSpacing(mesh, provinceTarget) * 0.25f,
+                    seatCell);
 
-                if (seeds.Count == 0)
-                    seeds.Add(realmCells[0]);
+                if (seedCounties.Count == 0)
+                    seedCounties.Add(counties[0]);
 
-                var localAssignment = new int[mesh.CellCount];
-                AssignByTransportFrontier(
-                    localAssignment,
-                    realmCells,
-                    seeds,
-                    mesh,
-                    biomes,
-                    sharedNeighborEdges,
-                    riverPenaltyByEdge,
-                    nominalNeighborDistance);
+                // Competitive Dijkstra on county graph
+                // Reuse FrontierQueue: Cell=countyId, RealmId=provinceLocalId
+                var bestCost = new float[countyCount + 1];
+                var countyProvince = new int[countyCount + 1];
+                for (int i = 0; i <= countyCount; i++)
+                    bestCost[i] = float.PositiveInfinity;
 
+                var frontier = new FrontierQueue(Math.Max(64, counties.Count));
+
+                for (int i = 0; i < seedCounties.Count; i++)
+                {
+                    int seedCounty = seedCounties[i];
+                    int localProvId = i + 1;
+                    bestCost[seedCounty] = 0f;
+                    countyProvince[seedCounty] = localProvId;
+                    frontier.Push(seedCounty, localProvId, 0f);
+                }
+
+                const float tieEpsilon = 1e-4f;
+                while (frontier.Count > 0)
+                {
+                    FrontierNode current = frontier.Pop();
+                    int curCounty = current.Cell;
+
+                    if ((uint)curCounty > (uint)countyCount)
+                        continue;
+
+                    float settledCost = bestCost[curCounty];
+                    if (current.Cost > settledCost + tieEpsilon)
+                        continue;
+
+                    int[] nbCounties = countyNeighbors[curCounty];
+                    if (nbCounties == null) continue;
+
+                    for (int ni = 0; ni < nbCounties.Length; ni++)
+                    {
+                        int nbCounty = nbCounties[ni];
+                        if ((uint)nbCounty > (uint)countyCount) continue;
+
+                        // Stay within realm
+                        if (countyRealm[nbCounty] != realm) continue;
+
+                        float edgeCost = ComputeCountyEdgeCost(curCounty, nbCounty, mesh, biomes, seatCell);
+                        if (!(edgeCost > 0f) || float.IsNaN(edgeCost) || float.IsInfinity(edgeCost))
+                            continue;
+
+                        float candidateCost = current.Cost + edgeCost;
+                        float existingCost = bestCost[nbCounty];
+                        int existingProv = countyProvince[nbCounty];
+
+                        bool better = candidateCost + tieEpsilon < existingCost;
+                        bool tieBreak = Math.Abs(candidateCost - existingCost) <= tieEpsilon &&
+                            (existingProv == 0 || current.RealmId < existingProv);
+
+                        if (!better && !tieBreak)
+                            continue;
+
+                        bestCost[nbCounty] = candidateCost;
+                        countyProvince[nbCounty] = current.RealmId;
+                        frontier.Push(nbCounty, current.RealmId, candidateCost);
+                    }
+                }
+
+                // Safety net: nearest-seed fallback for disconnected counties
+                for (int ci = 0; ci < counties.Count; ci++)
+                {
+                    int county = counties[ci];
+                    if (countyProvince[county] != 0)
+                        continue;
+
+                    int bestLocal = 1;
+                    float bestDist = float.MaxValue;
+                    for (int si = 0; si < seedCounties.Count; si++)
+                    {
+                        int seedCounty = seedCounties[si];
+                        float d = Vec2.Distance(mesh.CellCenters[seatCell[county]], mesh.CellCenters[seatCell[seedCounty]]);
+                        if (d < bestDist)
+                        {
+                            bestDist = d;
+                            bestLocal = si + 1;
+                        }
+                    }
+
+                    countyProvince[county] = bestLocal;
+                }
+
+                // Remap local province IDs to global
                 var remap = new Dictionary<int, int>();
-                for (int s = 0; s < seeds.Count; s++)
+                for (int s = 0; s < seedCounties.Count; s++)
                     remap[s + 1] = nextProvince++;
 
-                for (int i = 0; i < realmCells.Count; i++)
+                // Stamp ProvinceId on all cells via county→cells index (O(cells) total)
+                for (int ci = 0; ci < counties.Count; ci++)
                 {
-                    int c = realmCells[i];
-                    int local = localAssignment[c];
-                    provinceIds[c] = remap[local];
+                    int county = counties[ci];
+                    int local = countyProvince[county];
+                    if (local <= 0) local = 1;
+                    if (!remap.TryGetValue(local, out int globalProv))
+                        globalProv = remap.Count > 0 ? nextProvince - 1 : nextProvince++;
+
+                    var cells = countyCells[county];
+                    for (int j = 0; j < cells.Count; j++)
+                        provinceIds[cells[j]] = globalProv;
                 }
             }
 
@@ -218,134 +588,71 @@ namespace MapGen.Core
             pol.ProvinceCount = nextProvince - 1;
         }
 
-        static void AssignCounties(PoliticalField pol, BiomeField biomes, RiverField rivers, ElevationField elevation, MapGenConfig config)
+        // ────────────────────────────────────────────────────────────────
+        // Province helpers
+        // ────────────────────────────────────────────────────────────────
+
+        static List<int> SelectCountySeeds(
+            List<int> countyIds,
+            CellMesh mesh,
+            int target,
+            Func<int, float> scoreCounty,
+            float minSpacingKm,
+            int[] seatCell)
         {
-            var mesh = pol.Mesh;
-            HeightmapTemplateTuningProfile profile = HeightmapTemplateCompiler.ResolveTuningProfile(config.Template, config);
-            float countyScale = profile != null ? profile.CountyTargetScale : 1f;
-            if (countyScale <= 0f) countyScale = 1f;
-            var countyIds = new int[mesh.CellCount];
-            var countySeats = new List<int>();
-            int nextCounty = 1;
+            var ranked = new List<int>(countyIds);
+            ranked.Sort((a, b) => scoreCounty(b).CompareTo(scoreCounty(a)));
 
-            var politicalLandCells = new List<int>();
-            var politicalLandMask = new bool[mesh.CellCount];
-            for (int i = 0; i < mesh.CellCount; i++)
+            var seeds = new List<int>();
+            for (int i = 0; i < ranked.Count && seeds.Count < target; i++)
             {
-                if (pol.ProvinceId[i] <= 0)
-                    continue;
-
-                politicalLandCells.Add(i);
-                politicalLandMask[i] = true;
-            }
-
-            int[][] sharedNeighborEdges = BuildNeighborEdgeLookup(mesh);
-            float nominalMovementCost = EstimateNominalMovementCost(politicalLandCells, biomes);
-            float[] riverPenaltyByEdge = BuildRiverCrossingPenaltyByEdge(mesh, rivers, config, nominalMovementCost);
-            float nominalNeighborDistance = EstimateNominalNeighborDistance(mesh, politicalLandMask);
-            float globalAveragePopulation = EstimateAveragePopulation(politicalLandCells, biomes);
-            float baselineCountyPopulation = Math.Max(1f, globalAveragePopulation * (120f / countyScale));
-
-            for (int province = 1; province <= pol.ProvinceCount; province++)
-            {
-                var provinceCells = new List<int>();
-                for (int i = 0; i < mesh.CellCount; i++)
+                int c = ranked[i];
+                bool farEnough = true;
+                for (int s = 0; s < seeds.Count; s++)
                 {
-                    if (pol.ProvinceId[i] == province)
-                        provinceCells.Add(i);
-                }
-
-                if (provinceCells.Count == 0)
-                    continue;
-
-                float provincePopulation = SumPopulation(provinceCells, biomes);
-                int countyTargetByCells = Clamp((int)Math.Round((provinceCells.Count / 120f) * countyScale), 1, 32);
-                int countyTargetByPopulation = Clamp((int)Math.Round(provincePopulation / baselineCountyPopulation), 1, 32);
-                int countyTarget = Clamp((int)Math.Round(countyTargetByCells * 0.35f + countyTargetByPopulation * 0.65f), 1, 32);
-                countyTarget = Math.Min(countyTarget, Math.Max(1, provinceCells.Count));
-
-                var seeds = SelectSeeds(
-                    provinceCells,
-                    mesh,
-                    countyTarget,
-                    scoreCell: c => biomes.Population[c] * 1.25f + biomes.Suitability[c] * 0.4f,
-                    minSpacingKm: EstimateSpacing(mesh, countyTarget) * 0.18f);
-
-                DeduplicateSeedCells(seeds);
-                if (seeds.Count == 0)
-                    seeds.Add(provinceCells[0]);
-
-                float targetCountyPopulation = provincePopulation / Math.Max(1, seeds.Count);
-                if (targetCountyPopulation < 1f)
-                    targetCountyPopulation = 1f;
-
-                var localAssignment = new int[mesh.CellCount];
-                AssignCountiesByPopulationFrontier(
-                    localAssignment,
-                    provinceCells,
-                    seeds,
-                    mesh,
-                    biomes,
-                    sharedNeighborEdges,
-                    riverPenaltyByEdge,
-                    nominalNeighborDistance,
-                    targetCountyPopulation);
-                MergeCountyOrphans(
-                    localAssignment,
-                    provinceCells,
-                    mesh,
-                    biomes,
-                    sharedNeighborEdges,
-                    riverPenaltyByEdge,
-                    nominalNeighborDistance,
-                    targetCountyPopulation);
-
-                var localToGlobal = new Dictionary<int, int>();
-                var seatPopulationByGlobal = new Dictionary<int, float>();
-                var seatCellByGlobal = new Dictionary<int, int>();
-                var firstCellByGlobal = new Dictionary<int, int>();
-
-                for (int i = 0; i < provinceCells.Count; i++)
-                {
-                    int c = provinceCells[i];
-                    int local = localAssignment[c];
-                    if (local <= 0)
-                        local = 1;
-
-                    if (!localToGlobal.TryGetValue(local, out int globalId))
+                    float d = Vec2.Distance(mesh.CellCenters[seatCell[c]], mesh.CellCenters[seatCell[seeds[s]]]);
+                    if (d < minSpacingKm)
                     {
-                        globalId = nextCounty++;
-                        localToGlobal[local] = globalId;
-                    }
-
-                    countyIds[c] = globalId;
-                    if (!firstCellByGlobal.ContainsKey(globalId))
-                        firstCellByGlobal[globalId] = c;
-
-                    float pop = CellPopulation(biomes, c);
-                    if (!seatPopulationByGlobal.TryGetValue(globalId, out float bestPop) || pop > bestPop)
-                    {
-                        seatPopulationByGlobal[globalId] = pop;
-                        seatCellByGlobal[globalId] = c;
+                        farEnough = false;
+                        break;
                     }
                 }
 
-                int countyStart = nextCounty - localToGlobal.Count;
-                for (int countyId = countyStart; countyId < nextCounty; countyId++)
-                {
-                    if (seatCellByGlobal.TryGetValue(countyId, out int seat))
-                        countySeats.Add(seat);
-                    else if (firstCellByGlobal.TryGetValue(countyId, out int fallbackSeat))
-                        countySeats.Add(fallbackSeat);
-                    else
-                        countySeats.Add(provinceCells[0]);
-                }
+                if (farEnough)
+                    seeds.Add(c);
             }
 
-            pol.CountyId = countyIds;
-            pol.CountySeats = countySeats.ToArray();
-            pol.CountyCount = pol.CountySeats.Length;
+            for (int i = 0; i < ranked.Count && seeds.Count < target; i++)
+            {
+                int c = ranked[i];
+                if (!seeds.Contains(c))
+                    seeds.Add(c);
+            }
+
+            return seeds;
         }
+
+        static float ComputeCountyEdgeCost(
+            int countyA, int countyB,
+            CellMesh mesh, BiomeField biomes,
+            int[] seatCell)
+        {
+            int seatA = seatCell[countyA];
+            int seatB = seatCell[countyB];
+            float distance = Vec2.Distance(mesh.CellCenters[seatA], mesh.CellCenters[seatB]);
+
+            float movA = biomes.MovementCost[seatA];
+            float movB = biomes.MovementCost[seatB];
+            if (movA < 1f) movA = 1f;
+            if (movB < 1f) movB = 1f;
+            float avgMovement = 0.5f * (movA + movB);
+
+            return distance * avgMovement;
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // County formation helpers (unchanged)
+        // ────────────────────────────────────────────────────────────────
 
         static void DeduplicateSeedCells(List<int> seeds)
         {
@@ -648,30 +955,19 @@ namespace MapGen.Core
             float targetCountyCells)
         {
             float popTarget = Math.Max(1f, targetCountyPopulation);
-            float cellTarget = Math.Max(1f, targetCountyCells);
-
             float popRatio = countyPopulation / popTarget;
-            float cellRatio = countyCellCount / cellTarget;
 
-            float balance = 1f;
+            // Bonus for underpopulated counties (lower priority = expands sooner)
+            float bonus = 1f;
             if (popRatio < 1f)
-                balance *= 0.55f + 0.45f * popRatio;
-            else
-                balance *= 1f + (popRatio - 1f) * 4f;
+                bonus = 0.5f + 0.5f * popRatio; // 0.5 at empty, 1.0 at target
 
-            if (cellRatio > 1f)
-                balance *= 1f + (cellRatio - 1f) * 1.5f;
-
-            // Preserve very high-pop tiny counties as deliberate single-cell hubs.
-            if (countyCellCount <= 2 && popRatio >= 0.9f)
-                balance *= 6f;
-
-            return pathCost * balance;
+            return pathCost * bonus;
         }
 
         static void MergeCountyOrphans(
             int[] assignment,
-            List<int> provinceCells,
+            List<int> cells,
             CellMesh mesh,
             BiomeField biomes,
             int[][] neighborEdges,
@@ -679,16 +975,16 @@ namespace MapGen.Core
             float nominalNeighborDistance,
             float targetCountyPopulation)
         {
-            if (assignment == null || provinceCells == null || provinceCells.Count == 0)
+            if (assignment == null || cells == null || cells.Count == 0)
                 return;
 
             const int orphanCellLimit = 2;
             float preservePopulationThreshold = Math.Max(1f, targetCountyPopulation * 0.85f);
 
             int maxCountyId = 0;
-            for (int i = 0; i < provinceCells.Count; i++)
+            for (int i = 0; i < cells.Count; i++)
             {
-                int cell = provinceCells[i];
+                int cell = cells[i];
                 int countyId = assignment[cell];
                 if (countyId > maxCountyId)
                     maxCountyId = countyId;
@@ -701,9 +997,9 @@ namespace MapGen.Core
             {
                 var countyCellCount = new int[maxCountyId + 1];
                 var countyPopulation = new float[maxCountyId + 1];
-                for (int i = 0; i < provinceCells.Count; i++)
+                for (int i = 0; i < cells.Count; i++)
                 {
-                    int cell = provinceCells[i];
+                    int cell = cells[i];
                     int countyId = assignment[cell];
                     if (countyId <= 0 || countyId >= countyCellCount.Length)
                         continue;
@@ -712,7 +1008,7 @@ namespace MapGen.Core
                     countyPopulation[countyId] += CellPopulation(biomes, cell);
                 }
 
-                bool changed = false;
+                bool anyChanged = false;
                 for (int countyId = 1; countyId <= maxCountyId; countyId++)
                 {
                     int cellCount = countyCellCount[countyId];
@@ -725,7 +1021,7 @@ namespace MapGen.Core
                     int mergeTarget = FindCountyMergeTarget(
                         countyId,
                         assignment,
-                        provinceCells,
+                        cells,
                         mesh,
                         biomes,
                         neighborEdges,
@@ -740,7 +1036,7 @@ namespace MapGen.Core
                         mergeTarget = FindCountyMergeTarget(
                             countyId,
                             assignment,
-                            provinceCells,
+                            cells,
                             mesh,
                             biomes,
                             neighborEdges,
@@ -755,17 +1051,17 @@ namespace MapGen.Core
                     if (mergeTarget <= 0)
                         continue;
 
-                    for (int i = 0; i < provinceCells.Count; i++)
+                    for (int i = 0; i < cells.Count; i++)
                     {
-                        int cell = provinceCells[i];
+                        int cell = cells[i];
                         if (assignment[cell] == countyId)
                             assignment[cell] = mergeTarget;
                     }
 
-                    changed = true;
+                    anyChanged = true;
                 }
 
-                if (!changed)
+                if (!anyChanged)
                     break;
             }
         }
@@ -773,7 +1069,7 @@ namespace MapGen.Core
         static int FindCountyMergeTarget(
             int sourceCountyId,
             int[] assignment,
-            List<int> provinceCells,
+            List<int> cells,
             CellMesh mesh,
             BiomeField biomes,
             int[][] neighborEdges,
@@ -787,9 +1083,9 @@ namespace MapGen.Core
             int bestTarget = 0;
             float bestScore = float.MaxValue;
 
-            for (int i = 0; i < provinceCells.Count; i++)
+            for (int i = 0; i < cells.Count; i++)
             {
-                int cell = provinceCells[i];
+                int cell = cells[i];
                 if (assignment[cell] != sourceCountyId)
                     continue;
 
@@ -834,6 +1130,10 @@ namespace MapGen.Core
 
             return bestTarget;
         }
+
+        // ────────────────────────────────────────────────────────────────
+        // Shared helpers (unchanged)
+        // ────────────────────────────────────────────────────────────────
 
         static List<int> CollectLandCells(ElevationField elevation, BiomeField biomes)
         {
@@ -884,37 +1184,6 @@ namespace MapGen.Core
             }
 
             return seeds;
-        }
-
-        static void AssignByNearestSeed(
-            int[] outAssignment,
-            List<int> cells,
-            List<int> seeds,
-            CellMesh mesh,
-            Func<int, float> scoreBias)
-        {
-            for (int ci = 0; ci < cells.Count; ci++)
-            {
-                int c = cells[ci];
-                int best = 1;
-                float bestScore = float.MaxValue;
-                float bias = scoreBias(c);
-                if (bias < 0.1f) bias = 0.1f;
-
-                for (int s = 0; s < seeds.Count; s++)
-                {
-                    int seed = seeds[s];
-                    float d = Vec2.Distance(mesh.CellCenters[c], mesh.CellCenters[seed]);
-                    float score = d / bias;
-                    if (score < bestScore)
-                    {
-                        bestScore = score;
-                        best = s + 1;
-                    }
-                }
-
-                outAssignment[c] = best;
-            }
         }
 
         static void EnsureLandmassSeedCoverage(
@@ -1056,6 +1325,10 @@ namespace MapGen.Core
 
             return bestId;
         }
+
+        // ────────────────────────────────────────────────────────────────
+        // Transport frontier (unchanged)
+        // ────────────────────────────────────────────────────────────────
 
         static void AssignByTransportFrontier(
             int[] outAssignment,
@@ -1204,6 +1477,10 @@ namespace MapGen.Core
                 outAssignment[cell] = bestRealm;
             }
         }
+
+        // ────────────────────────────────────────────────────────────────
+        // Edge cost + infrastructure helpers (unchanged)
+        // ────────────────────────────────────────────────────────────────
 
         static float ComputeRealmEdgeCost(
             int fromCell,
@@ -1367,6 +1644,10 @@ namespace MapGen.Core
 
             return (float)(total / count);
         }
+
+        // ────────────────────────────────────────────────────────────────
+        // Data structures (unchanged)
+        // ────────────────────────────────────────────────────────────────
 
         struct CountyFrontierNode
         {
