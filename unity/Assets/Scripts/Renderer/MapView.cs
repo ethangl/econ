@@ -59,6 +59,11 @@ namespace EconSim.Renderer
         private const float RealmZoomedInMax = 0.05f;
         private const float ProvinceZoomedInMax = 0.75f;
         private const float PoliticalZoomHysteresis = 0.02f;
+        private const float DefaultModeHeightScale = 0f;
+        private const float BiomesModeHeightScale = 0.3f;
+        private const float HeightScaleTransitionSpeed = 2f;
+        private float currentAnimatedHeightScale = DefaultModeHeightScale;
+        private float targetHeightScale = DefaultModeHeightScale;
 
         /// <summary>Event fired when a cell is clicked. Passes cell ID (-1 if clicked on nothing).</summary>
         public event Action<int> OnCellClicked;
@@ -267,6 +272,7 @@ namespace EconSim.Renderer
             }
 
             // Animate selection dimming
+            UpdateHeightScaleAnimation();
             UpdateDimmingAnimation();
             UpdateProbe();
         }
@@ -274,6 +280,40 @@ namespace EconSim.Renderer
         private static bool IsPoliticalFamilyMode(MapMode mode)
         {
             return mode == MapMode.Political || mode == MapMode.Province || mode == MapMode.County;
+        }
+
+        private float ResolveHeightScaleForMode(MapMode mode)
+        {
+            return mode switch
+            {
+                MapMode.Biomes => BiomesModeHeightScale,
+                _ => DefaultModeHeightScale
+            };
+        }
+
+        private void SetHeightScaleTargetForMode(MapMode mode)
+        {
+            targetHeightScale = ResolveHeightScaleForMode(mode);
+        }
+
+        private void SetHeightScaleImmediateForMode(MapMode mode)
+        {
+            targetHeightScale = ResolveHeightScaleForMode(mode);
+            currentAnimatedHeightScale = targetHeightScale;
+            overlayManager?.SetHeightScale(currentAnimatedHeightScale);
+        }
+
+        private void UpdateHeightScaleAnimation()
+        {
+            if (overlayManager == null)
+                return;
+
+            currentAnimatedHeightScale = Mathf.MoveTowards(
+                currentAnimatedHeightScale,
+                targetHeightScale,
+                HeightScaleTransitionSpeed * Time.deltaTime);
+
+            overlayManager.SetHeightScale(currentAnimatedHeightScale);
         }
 
         private static MapMode ResolveOverlayScope(MapMode mode)
@@ -649,9 +689,9 @@ namespace EconSim.Renderer
                 overlayTextureCacheDirectory,
                 preferCachedOverlayTextures);
 
-            // Height displacement follows grid-mesh mode.
+            // Height displacement follows grid-mesh mode with map-mode-specific scale.
             overlayManager.SetHeightDisplacementEnabled(useGridMesh);
-            overlayManager.SetHeightScale(gridHeightScale);
+            SetHeightScaleImmediateForMode(currentMode);
             overlayManager.SetSeaLevel(Elevation.ResolveSeaLevel(mapData.Info));
 
             // Sync shader mode with current map mode
@@ -1093,6 +1133,7 @@ namespace EconSim.Renderer
                 if (useShaderOverlays && overlayManager != null)
                 {
                     overlayManager.SetMapMode(mode);
+                    SetHeightScaleTargetForMode(mode);
                     overlayManager.SetChannelDebugView(channelDebugView);
                     ApplyOverlayForCurrentMode();
 
