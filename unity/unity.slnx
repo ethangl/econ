@@ -1,6 +1,6 @@
 ﻿<Solution>
-  <Project Path="EconSim.csproj" />
   <Project Path="EconSim.Editor.csproj" />
   <Project Path="MapGen.csproj" />
+  <Project Path="EconSim.csproj" />
   <Project Path="EconSim.EditModeTests.csproj" />
 </Solution>

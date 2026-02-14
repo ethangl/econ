@@ -134,7 +134,7 @@ Shader "EconSim/MapOverlay"
     }
     SubShader
     {
-        Tags { "RenderType"="Opaque" }
+        Tags { "RenderType"="Opaque" "RenderPipeline"="UniversalPipeline" }
         LOD 100
 
         CGINCLUDE
@@ -618,6 +618,7 @@ Shader "EconSim/MapOverlay"
         // Pass 0: Main rendering
         Pass
         {
+            Tags { "LightMode"="UniversalForward" }
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -628,6 +629,7 @@ Shader "EconSim/MapOverlay"
         // Pass 1: Stencil mask for realm border band
         Pass
         {
+            Tags { "LightMode"="SRPDefaultUnlit" }
             ColorMask 0
             ZWrite Off
             ZTest LEqual

@@ -5,11 +5,13 @@ Shader "EconSim/VertexColorUnlit"
     }
     SubShader
     {
-        Tags { "RenderType"="Opaque" }
+        Tags { "RenderType"="Opaque" "RenderPipeline"="UniversalPipeline" }
         LOD 100
 
         Pass
         {
+            Tags { "LightMode"="UniversalForward" }
+
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag

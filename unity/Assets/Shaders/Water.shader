@@ -20,11 +20,12 @@ Shader "EconSim/Water"
     }
     SubShader
     {
-        Tags { "RenderType"="Opaque" "Queue"="Geometry-1" }  // Render before land
+        Tags { "RenderType"="Opaque" "Queue"="Geometry-1" "RenderPipeline"="UniversalPipeline" }  // Render before land
         LOD 100
 
         Pass
         {
+            Tags { "LightMode"="UniversalForward" }
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag

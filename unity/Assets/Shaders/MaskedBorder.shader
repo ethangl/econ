@@ -7,12 +7,13 @@ Shader "EconSim/MaskedBorder"
 
     SubShader
     {
-        Tags { "RenderType"="Transparent" "Queue"="Transparent" }
+        Tags { "RenderType"="Transparent" "Queue"="Transparent" "RenderPipeline"="UniversalPipeline" }
         Blend SrcAlpha OneMinusSrcAlpha
         ZWrite Off
 
         Pass
         {
+            Tags { "LightMode"="UniversalForward" }
             Offset -1, -1
 
             CGPROGRAM
