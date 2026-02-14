@@ -14,6 +14,10 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 **Important: Do NOT tell the user to check Unity console logs.** Use the MCP `read_console` tool to check logs yourself. There are 100+ logs at startup; filter appropriately.
 
+### Review Preference
+
+**When the user asks for a "sanity check":** prioritize checking intent alignment, logical consistency, likely regressions, and API/contract mismatches in the code. Do not start by running builds/tests unless the user asks for that explicitly.
+
 ### Unity Gotchas
 
 **Namespace conflicts:** The `EconSim.Renderer` namespace conflicts with Unity types. Use fully qualified names:
