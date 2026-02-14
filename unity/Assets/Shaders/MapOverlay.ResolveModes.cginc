@@ -90,13 +90,13 @@ float4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, f
     if (_MapMode >= 1 && _MapMode <= 3)
     {
         // Political modes (1=realm, 2=province, 3=county)
-        float3 politicalColor = LookupPaletteColor(_RealmPaletteTex, realmId);
+        float3 politicalColor = LookupPaletteColor(_RealmPaletteTex, sampler_RealmPaletteTex, realmId);
         modeColor = ApplyPoliticalModeStyle(uv, grayTerrain, politicalColor);
     }
     else if (_MapMode == 4)
     {
         // Market mode
-        float3 marketColor = LookupPaletteColor(_MarketPaletteTex, marketId);
+        float3 marketColor = LookupPaletteColor(_MarketPaletteTex, sampler_MarketPaletteTex, marketId);
         modeColor = ApplyMarketModeStyle(uv, grayTerrain, marketColor);
     }
     else

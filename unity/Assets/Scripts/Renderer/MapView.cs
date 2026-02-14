@@ -1346,6 +1346,14 @@ namespace EconSim.Renderer
             Shader markerShader = Shader.Find("Unlit/Color");
             if (markerShader == null)
             {
+                markerShader = Shader.Find("Universal Render Pipeline/Unlit");
+            }
+            if (markerShader == null)
+            {
+                markerShader = Shader.Find("Universal Render Pipeline/Lit");
+            }
+            if (markerShader == null)
+            {
                 markerShader = Shader.Find("Standard");
             }
 

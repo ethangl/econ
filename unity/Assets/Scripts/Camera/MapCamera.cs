@@ -86,12 +86,6 @@ namespace EconSim.Camera
 
         private void Start()
         {
-            // Add screen noise overlay if not present
-            if (GetComponent<Renderer.ScreenNoiseOverlay>() == null)
-            {
-                gameObject.AddComponent<Renderer.ScreenNoiseOverlay>();
-            }
-
             // Initialize zoom limits based on default map size
             RecalculateZoomLimits();
 

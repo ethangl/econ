@@ -16,11 +16,11 @@ float4 SampleGeographyBase(float2 uv)
 
 // Look up color from palette texture (256 entries).
 // normalizedId is id / 65535.
-float3 LookupPaletteColor(sampler2D palette, float normalizedId)
+float3 LookupPaletteColor(Texture2D paletteTex, SamplerState paletteSampler, float normalizedId)
 {
     float id = normalizedId * 65535.0;
     float paletteU = (clamp(round(id), 0, 255) + 0.5) / 256.0;
-    return tex2D(palette, float2(paletteU, 0.5)).rgb;
+    return SAMPLE_TEXTURE2D(paletteTex, paletteSampler, float2(paletteU, 0.5)).rgb;
 }
 
 float NormalizeLandHeight(float height)

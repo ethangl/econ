@@ -1,6 +1,7 @@
 # Philosophy & Overview
 
 See also: [Startup Performance Notes](./STARTUP_PERFORMANCE.md)
+See also: [Render Performance Baseline](./RENDER_PERFORMANCE_BASELINE.md)
 
 ## Goals
 
