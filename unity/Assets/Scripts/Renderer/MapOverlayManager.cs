@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
@@ -2989,11 +2990,25 @@ public class MapOverlayManager
             }
         }
 
-        public void RunDeferredStartupWork()
+        public IEnumerator RunDeferredStartupWork()
         {
+            // Warm up political hierarchy modes after initial load so first user switch is instant.
+            if (currentMapMode != MapView.MapMode.Province)
+            {
+                PrewarmOverlayModeResolveCache(MapView.MapMode.Province);
+                yield return null;
+            }
+
+            if (currentMapMode != MapView.MapMode.County)
+            {
+                PrewarmOverlayModeResolveCache(MapView.MapMode.County);
+                yield return null;
+            }
+
             if (pendingMarketModePrewarm && currentMapMode != MapView.MapMode.Market)
             {
                 PrewarmOverlayModeResolveCache(MapView.MapMode.Market);
+                yield return null;
             }
 
             pendingMarketModePrewarm = false;

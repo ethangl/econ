@@ -370,8 +370,15 @@ Shader "EconSim/MapOverlayFlat"
                 {
                     float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
                     float provinceBorderDist = tex2D(_ProvinceBorderDistTex, IN.dataUV).r * 255.0;
-                    float countyBorderDist = tex2D(_CountyBorderDistTex, IN.dataUV).r * 255.0;
-                    if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth && countyBorderDist >= _CountyBorderWidth) discard;
+                    if (_MapMode == 1)
+                    {
+                        if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth) discard;
+                    }
+                    else
+                    {
+                        float countyBorderDist = tex2D(_CountyBorderDistTex, IN.dataUV).r * 255.0;
+                        if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth && countyBorderDist >= _CountyBorderWidth) discard;
+                    }
                 }
                 else if (_MapMode == 4)
                 {

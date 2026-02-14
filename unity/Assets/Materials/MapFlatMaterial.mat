@@ -39,10 +39,6 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
-    - _OverlayTex:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
     - _CellPropertyTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -104,6 +100,10 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _OcclusionMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _OverlayTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -173,7 +173,7 @@ Material:
     - _CoastGradientIntensity: 0
     - _CoastGradientRadius: 15
     - _CoastlineBorderWidth: 2
-    - _CountyBorderDarkening: 0.353
+    - _CountyBorderDarkening: 0.15
     - _CountyBorderWidth: 0.05
     - _Cutoff: 0.5
     - _DebugView: 0
@@ -189,7 +189,7 @@ Material:
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 4e-45
+    - _HoverIntensity: 6e-45
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
@@ -200,7 +200,7 @@ Material:
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
-    - _OverlayEnabled: 1
+    - _OverlayEnabled: 0
     - _OverlayOpacity: 0.8
     - _Parallax: 0.02
     - _PathDashLength: 0.1
@@ -211,7 +211,7 @@ Material:
     - _PoliticalEdgeDarkening: 0.777
     - _PoliticalEdgeOpacity: 0.8
     - _PoliticalGradientRadius: 64
-    - _ProvinceBorderDarkening: 0.4
+    - _ProvinceBorderDarkening: 0.25
     - _ProvinceBorderWidth: 0.1
     - _RealmBorderDarkening: 0.5
     - _RealmBorderWidth: 0.3
@@ -225,8 +225,8 @@ Material:
     - _SelectedProvinceId: -1
     - _SelectedRealmId: -1
     - _SelectionBorderWidth: 3
-    - _SelectionDesaturation: 4e-45
-    - _SelectionDimming: 0.9999998
+    - _SelectionDesaturation: 0
+    - _SelectionDimming: 1
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
     - _ShowCountyBorders: 0

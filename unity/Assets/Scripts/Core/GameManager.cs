@@ -503,7 +503,8 @@ namespace EconSim.Core
                 yield break;
             }
 
-            mapView?.RunDeferredStartupWork();
+            if (mapView != null)
+                yield return mapView.RunDeferredStartupWork();
 
             if (validateCachedMap)
             {

@@ -11,13 +11,17 @@ float3 ApplyPoliticalModeStyle(float2 uv, float3 politicalColor)
     float3 modeColor = lerp(edgeColor, politicalColor, edgeProximity);
 
     // County border band overlay (thinnest, lightest — drawn first).
-    float countyBorderDist = tex2D(_CountyBorderDistTex, uv).r * 255.0;
-    float countyBorderAA = fwidth(countyBorderDist);
-    float countyBorderFactor = 1.0 - smoothstep(_CountyBorderWidth - countyBorderAA, _CountyBorderWidth + countyBorderAA, countyBorderDist);
-    if (countyBorderFactor > 0.001)
+    // Hide county borders in realm mode (MapMode=1).
+    if (_MapMode >= 2)
     {
-        float3 countyBorderColor = politicalColor * (1.0 - _CountyBorderDarkening);
-        modeColor = lerp(modeColor, countyBorderColor, countyBorderFactor);
+        float countyBorderDist = tex2D(_CountyBorderDistTex, uv).r * 255.0;
+        float countyBorderAA = fwidth(countyBorderDist);
+        float countyBorderFactor = 1.0 - smoothstep(_CountyBorderWidth - countyBorderAA, _CountyBorderWidth + countyBorderAA, countyBorderDist);
+        if (countyBorderFactor > 0.001)
+        {
+            float3 countyBorderColor = politicalColor * (1.0 - _CountyBorderDarkening);
+            modeColor = lerp(modeColor, countyBorderColor, countyBorderFactor);
+        }
     }
 
     // Province border band overlay (thinner, lighter — drawn on top of county borders).
