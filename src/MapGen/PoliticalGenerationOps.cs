@@ -934,25 +934,14 @@ namespace MapGen.Core
             float targetCountyCells)
         {
             float popTarget = Math.Max(1f, targetCountyPopulation);
-            float cellTarget = Math.Max(1f, targetCountyCells);
-
             float popRatio = countyPopulation / popTarget;
-            float cellRatio = countyCellCount / cellTarget;
 
-            float balance = 1f;
+            // Bonus for underpopulated counties (lower priority = expands sooner)
+            float bonus = 1f;
             if (popRatio < 1f)
-                balance *= 0.55f + 0.45f * popRatio;
-            else
-                balance *= 1f + (popRatio - 1f) * 4f;
+                bonus = 0.5f + 0.5f * popRatio; // 0.5 at empty, 1.0 at target
 
-            if (cellRatio > 1f)
-                balance *= 1f + (cellRatio - 1f) * 1.5f;
-
-            // Preserve very high-pop tiny counties as deliberate single-cell hubs.
-            if (countyCellCount <= 2 && popRatio >= 0.9f)
-                balance *= 6f;
-
-            return pathCost * balance;
+            return pathCost * bonus;
         }
 
         static void MergeCountyOrphans(
