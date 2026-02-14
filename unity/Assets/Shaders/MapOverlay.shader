@@ -137,8 +137,8 @@ Shader "EconSim/MapOverlay"
         Tags { "RenderType"="Opaque" "RenderPipeline"="UniversalPipeline" }
         LOD 100
 
-        CGINCLUDE
-            #include "UnityCG.cginc"
+        HLSLINCLUDE
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
             struct appdata
             {
@@ -158,8 +158,10 @@ Shader "EconSim/MapOverlay"
             // Sampler budget note (Metal):
             // Keep total fragment samplers <= 16 for this shader.
             // Overlay uses _CellDataTex to avoid introducing another sampler.
-            sampler2D _HeightmapTex;
-            sampler2D _ReliefNormalTex;
+            TEXTURE2D(_HeightmapTex);
+            SAMPLER(sampler_HeightmapTex);
+            TEXTURE2D(_ReliefNormalTex);
+            SAMPLER(sampler_ReliefNormalTex);
             float4 _HeightmapTex_TexelSize;  // (1/width, 1/height, width, height)
             float _ReliefNormalStrength;
             float _ReliefShadeStrength;
@@ -169,39 +171,50 @@ Shader "EconSim/MapOverlay"
             float _SeaLevel;
             int _UseHeightDisplacement;
 
-            sampler2D _RiverMaskTex;  // River mask (1 = river, 0 = not river)
+            TEXTURE2D(_RiverMaskTex);  // River mask (1 = river, 0 = not river)
+            SAMPLER(sampler_RiverMaskTex);
 
-            sampler2D _PoliticalIdsTex;
-            sampler2D _GeographyBaseTex;
+            TEXTURE2D(_PoliticalIdsTex);
+            SAMPLER(sampler_PoliticalIdsTex);
+            TEXTURE2D(_GeographyBaseTex);
+            SAMPLER(sampler_GeographyBaseTex);
             float4 _GeographyBaseTex_TexelSize;  // (1/width, 1/height, width, height)
-            sampler2D _VegetationTex;
-            sampler2D _CellDataTex; // Legacy compatibility path.
-            sampler2D _ModeColorResolve;
+            TEXTURE2D(_VegetationTex);
+            SAMPLER(sampler_VegetationTex);
+            TEXTURE2D(_CellDataTex); // Legacy compatibility path.
+            SAMPLER(sampler_CellDataTex);
+            TEXTURE2D(_ModeColorResolve);
+            SAMPLER(sampler_ModeColorResolve);
+            TEXTURE2D(_CellToMarketTex);
+            SAMPLER(sampler_CellToMarketTex);
             int _UseModeColorResolve;
             float _OverlayOpacity;
             int _OverlayEnabled;
 
-            sampler2D _RealmPaletteTex;
-            sampler2D _MarketPaletteTex;
-            sampler2D _BiomePaletteTex;
+            TEXTURE2D(_RealmPaletteTex);
+            SAMPLER(sampler_RealmPaletteTex);
+            TEXTURE2D(_MarketPaletteTex);
+            SAMPLER(sampler_MarketPaletteTex);
+            TEXTURE2D(_BiomePaletteTex);
+            SAMPLER(sampler_BiomePaletteTex);
             float _SoilHeightFloor;
             float _SoilBlendRadius;
             float _SoilBlendSharpness;
-            fixed4 _SoilColor0;
-            fixed4 _SoilColor1;
-            fixed4 _SoilColor2;
-            fixed4 _SoilColor3;
-            fixed4 _SoilColor4;
-            fixed4 _SoilColor5;
-            fixed4 _SoilColor6;
-            fixed4 _SoilColor7;
-            fixed4 _VegetationColor0;
-            fixed4 _VegetationColor1;
-            fixed4 _VegetationColor2;
-            fixed4 _VegetationColor3;
-            fixed4 _VegetationColor4;
-            fixed4 _VegetationColor5;
-            fixed4 _VegetationColor6;
+            half4 _SoilColor0;
+            half4 _SoilColor1;
+            half4 _SoilColor2;
+            half4 _SoilColor3;
+            half4 _SoilColor4;
+            half4 _SoilColor5;
+            half4 _SoilColor6;
+            half4 _SoilColor7;
+            half4 _VegetationColor0;
+            half4 _VegetationColor1;
+            half4 _VegetationColor2;
+            half4 _VegetationColor3;
+            half4 _VegetationColor4;
+            half4 _VegetationColor5;
+            half4 _VegetationColor6;
             float _VegetationStippleOpacity;
             float _VegetationStippleScale;
             float _VegetationStippleJitter;
@@ -213,26 +226,31 @@ Shader "EconSim/MapOverlay"
             float _GradientRadius;
             float _GradientEdgeDarkening;
             float _GradientCenterOpacity;
-            sampler2D _RealmBorderDistTex;
+            TEXTURE2D(_RealmBorderDistTex);
+            SAMPLER(sampler_RealmBorderDistTex);
             float _RealmBorderWidth;
             float _RealmBorderDarkening;
-            sampler2D _ProvinceBorderDistTex;
+            TEXTURE2D(_ProvinceBorderDistTex);
+            SAMPLER(sampler_ProvinceBorderDistTex);
             float _ProvinceBorderWidth;
             float _ProvinceBorderDarkening;
-            sampler2D _CountyBorderDistTex;
+            TEXTURE2D(_CountyBorderDistTex);
+            SAMPLER(sampler_CountyBorderDistTex);
             float _CountyBorderWidth;
             float _CountyBorderDarkening;
-            sampler2D _MarketBorderDistTex;
+            TEXTURE2D(_MarketBorderDistTex);
+            SAMPLER(sampler_MarketBorderDistTex);
             float _MarketBorderWidth;
             float _MarketBorderDarkening;
 
-            sampler2D _RoadMaskTex;
+            TEXTURE2D(_RoadMaskTex);
+            SAMPLER(sampler_RoadMaskTex);
             float _PathOpacity;
 
             // Water layer uniforms
-            fixed4 _WaterShallowColor;
-            fixed4 _WaterDeepColor;
-            fixed4 _WaterAbsorption;
+            half4 _WaterShallowColor;
+            half4 _WaterDeepColor;
+            half4 _WaterAbsorption;
             float _WaterOpticalDepth;
             float _WaterDepthExponent;
             float _WaterRefractionStrength;
@@ -256,6 +274,10 @@ Shader "EconSim/MapOverlay"
             float _HoveredMarketId;
             float _HoverIntensity;
 
+            // Bridge legacy sampling calls to SRP texture/sampler macros.
+            #define tex2D(tex, uv) SAMPLE_TEXTURE2D(tex, sampler##tex, uv)
+            #define tex2Dlod(tex, coord) SAMPLE_TEXTURE2D_LOD(tex, sampler##tex, (coord).xy, (coord).w)
+
             v2f vert(appdata v)
             {
                 v2f o;
@@ -269,13 +291,13 @@ Shader "EconSim/MapOverlay"
                     vertex.y = (height - _SeaLevel) * _HeightScale;
                 }
 
-                o.pos = UnityObjectToClipPos(vertex);
+                o.pos = TransformObjectToHClip(vertex.xyz);
                 o.vertexColor = v.color;
                 // Single UV for all textures (Y-up coordinates, unified)
                 o.dataUV = v.texcoord.xy;
 
                 // World UV for shimmer (consistent scale regardless of mesh UVs)
-                float3 worldPos = mul(unity_ObjectToWorld, vertex).xyz;
+                float3 worldPos = TransformObjectToWorld(vertex.xyz);
                 o.worldUV = worldPos.xz * _ShimmerScale;
 
                 return o;
@@ -443,7 +465,7 @@ Shader "EconSim/MapOverlay"
             // Fragment shader: layered compositing
             // ========================================================================
 
-            fixed4 frag(v2f IN) : SV_Target
+            half4 frag(v2f IN) : SV_Target
             {
                 float2 uv = IN.dataUV;
 
@@ -457,7 +479,7 @@ Shader "EconSim/MapOverlay"
 
                 if (_MapMode == 7)
                 {
-                    return fixed4(ComputeChannelInspector(uv, politicalIds, geographyBase), 1);
+                    return half4(ComputeChannelInspector(uv, politicalIds, geographyBase), 1);
                 }
 
                 float marketId = 0.0;
@@ -589,10 +611,10 @@ Shader "EconSim/MapOverlay"
                     finalColor = lerp(finalColor, overlayColor.rgb, overlayAlpha);
                 }
 
-                return fixed4(finalColor, 1);
+                return half4(finalColor, 1);
             }
             // Stencil fragment: marks border band pixels for political and market modes
-            fixed4 frag_stencil(v2f IN) : SV_Target
+            half4 frag_stencil(v2f IN) : SV_Target
             {
                 if (_MapMode >= 1 && _MapMode <= 3)
                 {
@@ -611,19 +633,19 @@ Shader "EconSim/MapOverlay"
                     discard;
                 }
 
-                return fixed4(0, 0, 0, 0);
+                return half4(0, 0, 0, 0);
             }
-        ENDCG
+        ENDHLSL
 
         // Pass 0: Main rendering
         Pass
         {
             Tags { "LightMode"="UniversalForward" }
-            CGPROGRAM
+            HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
             #pragma target 3.5
-            ENDCG
+            ENDHLSL
         }
 
         // Pass 1: Stencil mask for realm border band
@@ -640,11 +662,11 @@ Shader "EconSim/MapOverlay"
                 Pass Replace
             }
 
-            CGPROGRAM
+            HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag_stencil
             #pragma target 3.5
-            ENDCG
+            ENDHLSL
         }
     }
     FallBack "Diffuse"

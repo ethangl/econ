@@ -12,42 +12,41 @@ Shader "EconSim/VertexColorUnlit"
         {
             Tags { "LightMode"="UniversalForward" }
 
-            CGPROGRAM
+            HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog
 
-            #include "UnityCG.cginc"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            struct appdata
+            struct Attributes
             {
-                float4 vertex : POSITION;
+                float4 positionOS : POSITION;
                 float4 color : COLOR;
             };
 
-            struct v2f
+            struct Varyings
             {
-                float4 vertex : SV_POSITION;
+                float4 positionHCS : SV_POSITION;
                 float4 color : COLOR;
-                UNITY_FOG_COORDS(0)
+                float fogFactor : TEXCOORD0;
             };
 
-            v2f vert(appdata v)
+            Varyings vert(Attributes input)
             {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.color = v.color;
-                UNITY_TRANSFER_FOG(o, o.vertex);
-                return o;
+                Varyings output;
+                output.positionHCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.color = input.color;
+                output.fogFactor = ComputeFogFactor(output.positionHCS.z);
+                return output;
             }
 
-            fixed4 frag(v2f i) : SV_Target
+            half4 frag(Varyings input) : SV_Target
             {
-                fixed4 col = i.color;
-                UNITY_APPLY_FOG(i.fogCoord, col);
-                return col;
+                half3 color = MixFog(input.color.rgb, input.fogFactor);
+                return half4(color, input.color.a);
             }
-            ENDCG
+            ENDHLSL
         }
     }
 }
