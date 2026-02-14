@@ -110,7 +110,6 @@ Shader "EconSim/MapOverlayFlat"
                 float4 pos : SV_POSITION;
                 float4 vertexColor : COLOR;
                 float2 dataUV : TEXCOORD0;    // Unified UV for all textures (Y-up coordinates)
-                float2 worldUV : TEXCOORD1;   // World-space UV for consistent shimmer scale
             };
 
             // Sampler budget note (Metal):
@@ -129,7 +128,6 @@ Shader "EconSim/MapOverlayFlat"
             SAMPLER(sampler_PoliticalIdsTex);
             TEXTURE2D(_GeographyBaseTex);
             SAMPLER(sampler_GeographyBaseTex);
-            float4 _GeographyBaseTex_TexelSize;  // (1/width, 1/height, width, height)
             TEXTURE2D(_VegetationTex);
             SAMPLER(sampler_VegetationTex);
             TEXTURE2D(_CellDataTex); // Legacy compatibility path.
@@ -158,10 +156,6 @@ Shader "EconSim/MapOverlayFlat"
             SAMPLER(sampler_RoadMaskTex);
 
             CBUFFER_START(UnityPerMaterial)
-                float _ReliefNormalStrength;
-                float _ReliefShadeStrength;
-                float _ReliefAmbient;
-                float4 _ReliefLightDir;
                 float _HeightScale;
                 float _SeaLevel;
                 int _UseHeightDisplacement;
@@ -169,30 +163,6 @@ Shader "EconSim/MapOverlayFlat"
                 int _UseModeColorResolve;
                 float _OverlayOpacity;
                 int _OverlayEnabled;
-
-                float _SoilHeightFloor;
-                float _SoilBlendRadius;
-                float _SoilBlendSharpness;
-                half4 _SoilColor0;
-                half4 _SoilColor1;
-                half4 _SoilColor2;
-                half4 _SoilColor3;
-                half4 _SoilColor4;
-                half4 _SoilColor5;
-                half4 _SoilColor6;
-                half4 _SoilColor7;
-                half4 _VegetationColor0;
-                half4 _VegetationColor1;
-                half4 _VegetationColor2;
-                half4 _VegetationColor3;
-                half4 _VegetationColor4;
-                half4 _VegetationColor5;
-                half4 _VegetationColor6;
-                float _VegetationStippleOpacity;
-                float _VegetationStippleScale;
-                float _VegetationStippleJitter;
-                float _VegetationCoverageContrast;
-                float _VegetationStippleSoftness;
 
                 int _MapMode;
                 int _DebugView;
@@ -210,17 +180,7 @@ Shader "EconSim/MapOverlayFlat"
 
                 // Water layer uniforms
                 half4 _WaterShallowColor;
-                half4 _WaterDeepColor;
-                half4 _WaterAbsorption;
-                float _WaterOpticalDepth;
-                float _WaterDepthExponent;
-                float _WaterRefractionStrength;
-                float _WaterRefractionScale;
-                float _WaterRefractionSpeed;
                 float _WaterShallowAlpha;
-                float _ShimmerScale;
-                float _ShimmerSpeed;
-                float _ShimmerIntensity;
 
                 float _SelectedRealmId;
                 float _SelectedProvinceId;
@@ -258,170 +218,13 @@ Shader "EconSim/MapOverlayFlat"
                 // Single UV for all textures (Y-up coordinates, unified)
                 o.dataUV = v.texcoord.xy;
 
-                // World UV for shimmer (consistent scale regardless of mesh UVs)
-                float3 worldPos = TransformObjectToWorld(vertex.xyz);
-                o.worldUV = worldPos.xz * _ShimmerScale;
-
                 return o;
             }
 
             #include "MapOverlay.Common.cginc"
+            #define MAP_OVERLAY_DISABLE_WATER_VOLUME 1
             #include "MapOverlay.Composite.cginc"
             #include "MapOverlay.ResolveModes.cginc"
-
-            float3 SoilColorFromId(int soilId)
-            {
-                if (soilId <= 0) return _SoilColor0.rgb;
-                if (soilId == 1) return _SoilColor1.rgb;
-                if (soilId == 2) return _SoilColor2.rgb;
-                if (soilId == 3) return _SoilColor3.rgb;
-                if (soilId == 4) return _SoilColor4.rgb;
-                if (soilId == 5) return _SoilColor5.rgb;
-                if (soilId == 6) return _SoilColor6.rgb;
-                return _SoilColor7.rgb;
-            }
-
-            int DecodeSoilIdFromGeography(float4 geographyBase)
-            {
-                return (int)clamp(round(geographyBase.g * 65535.0), 0.0, 7.0);
-            }
-
-            int DecodeVegetationType(float2 uv)
-            {
-                float vegetationType = tex2D(_VegetationTex, uv).r;
-                return (int)clamp(round(vegetationType * 65535.0), 0.0, 6.0);
-            }
-
-            float DecodeVegetationDensity(float2 uv)
-            {
-                return saturate(tex2D(_VegetationTex, uv).g);
-            }
-
-            float3 VegetationColorFromId(int vegetationId)
-            {
-                if (vegetationId <= 0) return _VegetationColor0.rgb;
-                if (vegetationId == 1) return _VegetationColor1.rgb;
-                if (vegetationId == 2) return _VegetationColor2.rgb;
-                if (vegetationId == 3) return _VegetationColor3.rgb;
-                if (vegetationId == 4) return _VegetationColor4.rgb;
-                if (vegetationId == 5) return _VegetationColor5.rgb;
-                return _VegetationColor6.rgb;
-            }
-
-            float ComputeVegetationStippleMask(float2 uv, float vegetationCoverage, int vegetationType)
-            {
-                float coverage = saturate(vegetationCoverage);
-                if (coverage <= 0.0001)
-                    return 0.0;
-                if (coverage >= 0.9999)
-                    return 1.0;
-
-                float contrast = max(_VegetationCoverageContrast, 0.5);
-                coverage = saturate((coverage - 0.5) * contrast + 0.5);
-
-                float cellSize = max(_VegetationStippleScale, 1.0);
-                float2 texelPos = uv * _GeographyBaseTex_TexelSize.zw;
-                float2 tilePos = texelPos / cellSize;
-                float2 tile = floor(tilePos);
-                float2 local = frac(tilePos) - 0.5;
-
-                float seed = float(vegetationType) * 19.37;
-                float2 jitterRand = float2(
-                    hash2d(tile + float2(17.0 + seed, 59.0 + seed)),
-                    hash2d(tile + float2(83.0 + seed, 29.0 + seed)));
-                float2 jitter = (jitterRand - 0.5) * (0.6 * saturate(_VegetationStippleJitter));
-                local -= jitter;
-
-                float occupancyRand = hash2d(tile + float2(111.0 + seed, 7.0 + seed));
-                float occupancy = saturate(coverage + (occupancyRand - 0.5) * 0.35 * saturate(_VegetationStippleJitter));
-
-                // Area-proportional dot growth with overlap headroom at high density.
-                float radius = 0.72 * sqrt(occupancy);
-                float dist = length(local);
-                float aa = max(fwidth(dist), 1e-4) * max(_VegetationStippleSoftness, 0.5);
-
-                return 1.0 - smoothstep(radius - aa, radius + aa, dist);
-            }
-
-            void AccumulateBlendSoilSample(
-                float2 sampleUv,
-                float weight,
-                inout float w0,
-                inout float w1,
-                inout float w2,
-                inout float w3,
-                inout float w4,
-                inout float w5,
-                inout float w6,
-                inout float w7)
-            {
-                float4 sampleGeo = SampleGeographyBase(sampleUv);
-                if (sampleGeo.a >= 0.5)
-                    return;
-
-                int sampleSoilId = DecodeSoilIdFromGeography(sampleGeo);
-                if (sampleSoilId <= 0) w0 += weight;
-                else if (sampleSoilId == 1) w1 += weight;
-                else if (sampleSoilId == 2) w2 += weight;
-                else if (sampleSoilId == 3) w3 += weight;
-                else if (sampleSoilId == 4) w4 += weight;
-                else if (sampleSoilId == 5) w5 += weight;
-                else if (sampleSoilId == 6) w6 += weight;
-                else w7 += weight;
-            }
-
-            float3 ComputeBlendedSoilColor(float2 uv, int centerSoilId)
-            {
-                float2 texelStep = _GeographyBaseTex_TexelSize.xy * max(_SoilBlendRadius, 0.25);
-                float w0 = 0.0;
-                float w1 = 0.0;
-                float w2 = 0.0;
-                float w3 = 0.0;
-                float w4 = 0.0;
-                float w5 = 0.0;
-                float w6 = 0.0;
-                float w7 = 0.0;
-
-                // Neighborhood accumulation preserving categorical composition.
-                AccumulateBlendSoilSample(uv, 3.0, w0, w1, w2, w3, w4, w5, w6, w7);
-                AccumulateBlendSoilSample(uv + float2(-texelStep.x, 0), 2.0, w0, w1, w2, w3, w4, w5, w6, w7);
-                AccumulateBlendSoilSample(uv + float2(texelStep.x, 0), 2.0, w0, w1, w2, w3, w4, w5, w6, w7);
-                AccumulateBlendSoilSample(uv + float2(0, -texelStep.y), 2.0, w0, w1, w2, w3, w4, w5, w6, w7);
-                AccumulateBlendSoilSample(uv + float2(0, texelStep.y), 2.0, w0, w1, w2, w3, w4, w5, w6, w7);
-                AccumulateBlendSoilSample(uv + float2(-texelStep.x, -texelStep.y), 1.5, w0, w1, w2, w3, w4, w5, w6, w7);
-                AccumulateBlendSoilSample(uv + float2(texelStep.x, -texelStep.y), 1.5, w0, w1, w2, w3, w4, w5, w6, w7);
-                AccumulateBlendSoilSample(uv + float2(-texelStep.x, texelStep.y), 1.5, w0, w1, w2, w3, w4, w5, w6, w7);
-                AccumulateBlendSoilSample(uv + float2(texelStep.x, texelStep.y), 1.5, w0, w1, w2, w3, w4, w5, w6, w7);
-                AccumulateBlendSoilSample(uv + float2(-2.0 * texelStep.x, 0), 1.0, w0, w1, w2, w3, w4, w5, w6, w7);
-                AccumulateBlendSoilSample(uv + float2(2.0 * texelStep.x, 0), 1.0, w0, w1, w2, w3, w4, w5, w6, w7);
-                AccumulateBlendSoilSample(uv + float2(0, -2.0 * texelStep.y), 1.0, w0, w1, w2, w3, w4, w5, w6, w7);
-                AccumulateBlendSoilSample(uv + float2(0, 2.0 * texelStep.y), 1.0, w0, w1, w2, w3, w4, w5, w6, w7);
-
-                float sharpness = max(_SoilBlendSharpness, 0.5);
-                w0 = w0 > 0.0 ? pow(w0, sharpness) : 0.0;
-                w1 = w1 > 0.0 ? pow(w1, sharpness) : 0.0;
-                w2 = w2 > 0.0 ? pow(w2, sharpness) : 0.0;
-                w3 = w3 > 0.0 ? pow(w3, sharpness) : 0.0;
-                w4 = w4 > 0.0 ? pow(w4, sharpness) : 0.0;
-                w5 = w5 > 0.0 ? pow(w5, sharpness) : 0.0;
-                w6 = w6 > 0.0 ? pow(w6, sharpness) : 0.0;
-                w7 = w7 > 0.0 ? pow(w7, sharpness) : 0.0;
-
-                float weightSum = w0 + w1 + w2 + w3 + w4 + w5 + w6 + w7;
-                if (weightSum <= 1e-5)
-                    return SoilColorFromId(centerSoilId);
-
-                float invWeight = 1.0 / weightSum;
-                float3 blendColor = _SoilColor0.rgb * (w0 * invWeight);
-                blendColor += _SoilColor1.rgb * (w1 * invWeight);
-                blendColor += _SoilColor2.rgb * (w2 * invWeight);
-                blendColor += _SoilColor3.rgb * (w3 * invWeight);
-                blendColor += _SoilColor4.rgb * (w4 * invWeight);
-                blendColor += _SoilColor5.rgb * (w5 * invWeight);
-                blendColor += _SoilColor6.rgb * (w6 * invWeight);
-                blendColor += _SoilColor7.rgb * (w7 * invWeight);
-                return blendColor;
-            }
 
             // ========================================================================
             // Fragment shader: layered compositing
@@ -446,7 +249,6 @@ Shader "EconSim/MapOverlayFlat"
 
                 float marketId = 0.0;
 
-                float biomeId = geographyBase.r;
                 bool isCellWater = geographyBase.a >= 0.5;
 
                 float riverMask = tex2D(_RiverMaskTex, IN.dataUV).r;
@@ -459,16 +261,9 @@ Shader "EconSim/MapOverlayFlat"
 
                 // ---- Layer 1: Terrain ----
 
-                float3 terrain;
-                if (_MapMode == 0)
-                {
-                    // Height gradient mode: override terrain with debug viz
-                    terrain = ComputeHeightGradient(isCellWater, height, riverMask);
-                }
-                else
-                {
-                    terrain = ComputeTerrain(uv, isCellWater, biomeId, height);
-                }
+                float3 terrain = _MapMode == 0
+                    ? ComputeHeightGradient(isCellWater, height, riverMask)
+                    : float3(0.0, 0.0, 0.0);
 
                 // ---- Layer 2: Map mode ----
 

@@ -136,28 +136,8 @@ Shader "EconSim/MapOverlayBiome"
             SAMPLER(sampler_VegetationTex);
             TEXTURE2D(_CellDataTex); // Legacy compatibility path.
             SAMPLER(sampler_CellDataTex);
-            TEXTURE2D(_ModeColorResolve);
-            SAMPLER(sampler_ModeColorResolve);
-            TEXTURE2D(_CellToMarketTex);
-            SAMPLER(sampler_CellToMarketTex);
-
-            TEXTURE2D(_RealmPaletteTex);
-            SAMPLER(sampler_RealmPaletteTex);
-            TEXTURE2D(_MarketPaletteTex);
-            SAMPLER(sampler_MarketPaletteTex);
             TEXTURE2D(_BiomePaletteTex);
             SAMPLER(sampler_BiomePaletteTex);
-            TEXTURE2D(_RealmBorderDistTex);
-            SAMPLER(sampler_RealmBorderDistTex);
-            TEXTURE2D(_ProvinceBorderDistTex);
-            SAMPLER(sampler_ProvinceBorderDistTex);
-            TEXTURE2D(_CountyBorderDistTex);
-            SAMPLER(sampler_CountyBorderDistTex);
-            TEXTURE2D(_MarketBorderDistTex);
-            SAMPLER(sampler_MarketBorderDistTex);
-
-            TEXTURE2D(_RoadMaskTex);
-            SAMPLER(sampler_RoadMaskTex);
 
             CBUFFER_START(UnityPerMaterial)
                 float _ReliefNormalStrength;
@@ -168,7 +148,6 @@ Shader "EconSim/MapOverlayBiome"
                 float _SeaLevel;
                 int _UseHeightDisplacement;
 
-                int _UseModeColorResolve;
                 float _OverlayOpacity;
                 int _OverlayEnabled;
 
@@ -198,17 +177,6 @@ Shader "EconSim/MapOverlayBiome"
 
                 int _MapMode;
                 int _DebugView;
-                float _GradientRadius;
-                float _GradientEdgeDarkening;
-                float _RealmBorderWidth;
-                float _RealmBorderDarkening;
-                float _ProvinceBorderWidth;
-                float _ProvinceBorderDarkening;
-                float _CountyBorderWidth;
-                float _CountyBorderDarkening;
-                float _MarketBorderWidth;
-                float _MarketBorderDarkening;
-                float _PathOpacity;
 
                 // Water layer uniforms
                 half4 _WaterShallowColor;
@@ -268,6 +236,7 @@ Shader "EconSim/MapOverlayBiome"
             }
 
             #include "MapOverlay.Common.cginc"
+            #define MAP_OVERLAY_DISABLE_CHANNEL_INSPECTOR 1
             #include "MapOverlay.Composite.cginc"
 
             float3 SoilColorFromId(int soilId)
@@ -440,11 +409,6 @@ Shader "EconSim/MapOverlayBiome"
                 float provinceId = politicalIds.g;
                 float countyId = politicalIds.b;
 
-                if (_MapMode == 7)
-                {
-                    return half4(ComputeChannelInspector(uv, politicalIds, geographyBase), 1);
-                }
-
                 float marketId = 0.0;
 
                 float biomeId = geographyBase.r;
@@ -535,27 +499,11 @@ Shader "EconSim/MapOverlayBiome"
 
                 return half4(finalColor, 1);
             }
-            // Stencil fragment: marks border band pixels for political and market modes
+            // Biome style does not render political/market border-band stencil.
             half4 frag_stencil(v2f IN) : SV_Target
             {
-                if (_MapMode >= 1 && _MapMode <= 3)
-                {
-                    float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
-                    float provinceBorderDist = tex2D(_ProvinceBorderDistTex, IN.dataUV).r * 255.0;
-                    float countyBorderDist = tex2D(_CountyBorderDistTex, IN.dataUV).r * 255.0;
-                    if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth && countyBorderDist >= _CountyBorderWidth) discard;
-                }
-                else if (_MapMode == 4)
-                {
-                    float marketBorderDist = tex2D(_MarketBorderDistTex, IN.dataUV).r * 255.0;
-                    if (marketBorderDist >= _MarketBorderWidth) discard;
-                }
-                else
-                {
-                    discard;
-                }
-
-                return half4(0, 0, 0, 0);
+                discard;
+                return half4(0, 0, 0, 0); // Unreachable; required by some compilers.
             }
         ENDHLSL
 
