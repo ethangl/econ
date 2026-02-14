@@ -77,8 +77,8 @@ namespace EconSim.Renderer
         /// <summary>Event fired when a cell is clicked. Passes cell ID (-1 if clicked on nothing).</summary>
         public event Action<int> OnCellClicked;
 
-        /// <summary>Event fired after selection changes. Passes the selection depth.</summary>
-        public event Action<SelectionDepth> OnSelectionChanged;
+        /// <summary>Event fired after selection changes. Passes the selection scope.</summary>
+        public event Action<SelectionScope> OnSelectionChanged;
 
         private MapData mapData;
         private EconSim.Core.Economy.EconomyState economyState;
@@ -101,13 +101,15 @@ namespace EconSim.Renderer
         private float[] vertexHeights;
 
         // Selection state
-        public enum SelectionDepth { None, Realm, Province, County }
-        private SelectionDepth selectionDepth = SelectionDepth.None;
+        public enum SelectionScope { None, Realm, Province, County }
+        private enum ModeSelectionTarget { Realm, Province, County, Market }
+
+        private SelectionScope selectionScope = SelectionScope.None;
         private int selectedRealmId = -1;
         private int selectedProvinceId = -1;
         private int selectedCountyId = -1;
 
-        public SelectionDepth CurrentSelectionDepth => selectionDepth;
+        public SelectionScope CurrentSelectionScope => selectionScope;
         public int SelectedRealmId => selectedRealmId;
         public int SelectedProvinceId => selectedProvinceId;
         public int SelectedCountyId => selectedCountyId;
@@ -289,6 +291,32 @@ namespace EconSim.Renderer
         private static bool IsPoliticalFamilyMode(MapMode mode)
         {
             return mode == MapMode.Political || mode == MapMode.Province || mode == MapMode.County;
+        }
+
+        private static bool ShouldPreserveSelectionOnModeChange(MapMode previousMode, MapMode nextMode)
+        {
+            return IsPoliticalFamilyMode(previousMode) && IsPoliticalFamilyMode(nextMode);
+        }
+
+        private static ModeSelectionTarget ResolveModeSelectionTarget(MapMode mode)
+        {
+            return mode switch
+            {
+                MapMode.Political => ModeSelectionTarget.Realm,
+                MapMode.Province => ModeSelectionTarget.Province,
+                MapMode.Market => ModeSelectionTarget.Market,
+                _ => ModeSelectionTarget.County
+            };
+        }
+
+        private static SelectionScope ToSelectionScope(ModeSelectionTarget target)
+        {
+            return target switch
+            {
+                ModeSelectionTarget.Realm => SelectionScope.Realm,
+                ModeSelectionTarget.Province => SelectionScope.Province,
+                _ => SelectionScope.County
+            };
         }
 
         private static RenderStyle ResolveRenderStyleForMode(MapMode mode)
@@ -562,17 +590,19 @@ namespace EconSim.Renderer
                 return;
             }
 
-            // Set hover based on current map mode
+            ModeSelectionTarget target = ResolveModeSelectionTarget(currentMode);
+
+            // Set hover based on current mode selection target.
             hasActiveHover = true;
-            switch (currentMode)
+            switch (target)
             {
-                case MapMode.Political:
+                case ModeSelectionTarget.Realm:
                     overlayManager.SetHoveredRealm(cell.RealmId);
                     break;
-                case MapMode.Province:
+                case ModeSelectionTarget.Province:
                     overlayManager.SetHoveredProvince(cell.ProvinceId);
                     break;
-                case MapMode.Market:
+                case ModeSelectionTarget.Market:
                     if (economyState != null && economyState.CellToMarket.TryGetValue(cellId, out int marketId))
                     {
                         overlayManager.SetHoveredMarket(marketId);
@@ -582,8 +612,7 @@ namespace EconSim.Renderer
                         hasActiveHover = false;
                     }
                     break;
-                case MapMode.County:
-                case MapMode.Biomes:
+                case ModeSelectionTarget.County:
                 default:
                     overlayManager.SetHoveredCounty(cell.CountyId);
                     break;
@@ -794,70 +823,60 @@ namespace EconSim.Renderer
                 return;
             }
 
-            // Market mode has its own selection logic.
-            if (currentMode == MapMode.Market)
+            ModeSelectionTarget target = ResolveModeSelectionTarget(currentMode);
+            if (target == ModeSelectionTarget.Market)
             {
                 HandleMarketSelection(cell, cellId);
                 return;
             }
 
-            SelectionDepth depth = ResolveSelectionDepthForMode(currentMode);
-            SelectAtDepth(depth, cell);
+            SelectionScope scope = ToSelectionScope(target);
+            SelectByScope(scope, cell);
 
-            Bounds? selectionBounds = GetBoundsForSelectionDepth(depth, cell);
+            Bounds? selectionBounds = GetBoundsForSelectionScope(scope, cell);
             if (selectionBounds.HasValue && mapCameraController != null)
                 mapCameraController.FocusOn(selectionBounds.Value.center);
         }
 
-        private static SelectionDepth ResolveSelectionDepthForMode(MapMode mode)
+        private Bounds? GetBoundsForSelectionScope(SelectionScope scope, Cell cell)
         {
-            return mode switch
+            return scope switch
             {
-                MapMode.Political => SelectionDepth.Realm,
-                MapMode.Province => SelectionDepth.Province,
-                _ => SelectionDepth.County
-            };
-        }
-
-        private Bounds? GetBoundsForSelectionDepth(SelectionDepth depth, Cell cell)
-        {
-            return depth switch
-            {
-                SelectionDepth.Realm => GetRealmBounds(cell.RealmId),
-                SelectionDepth.Province => GetProvinceBounds(cell.ProvinceId),
-                SelectionDepth.County => GetCountyBounds(cell.CountyId),
+                SelectionScope.Realm => GetRealmBounds(cell.RealmId),
+                SelectionScope.Province => GetProvinceBounds(cell.ProvinceId),
+                SelectionScope.County => GetCountyBounds(cell.CountyId),
                 _ => null
             };
         }
 
         /// <summary>
-        /// Select at a specific depth and update shader uniforms.
+        /// Select at a specific scope and update shader uniforms.
         /// </summary>
-        private void SelectAtDepth(SelectionDepth depth, Cell cell)
+        private void SelectByScope(SelectionScope scope, Cell cell)
         {
-            selectionDepth = depth;
+            selectionScope = scope;
             selectedRealmId = cell.RealmId;
             selectedProvinceId = cell.ProvinceId;
             selectedCountyId = cell.CountyId;
             SetSelectionActive(true);
 
-            // Update shader selection based on depth
+            // Update shader selection based on scope.
             overlayManager.ClearSelection();
-            switch (depth)
+            switch (scope)
             {
-                case SelectionDepth.Realm:
+                case SelectionScope.Realm:
                     overlayManager.SetSelectedRealm(cell.RealmId);
                     break;
-                case SelectionDepth.Province:
+                case SelectionScope.Province:
                     overlayManager.SetSelectedProvince(cell.ProvinceId);
                     break;
-                case SelectionDepth.County:
+                case SelectionScope.County:
                     overlayManager.SetSelectedCounty(cell.CountyId);
                     break;
             }
 
             // Notify listeners
-            OnSelectionChanged?.Invoke(depth);
+            OnSelectionChanged?.Invoke(scope);
         }
 
         /// <summary>
@@ -865,7 +884,7 @@ namespace EconSim.Renderer
         /// </summary>
         private void ClearSelectionState()
         {
-            selectionDepth = SelectionDepth.None;
+            selectionScope = SelectionScope.None;
             selectedRealmId = -1;
             selectedProvinceId = -1;
             selectedCountyId = -1;
@@ -873,7 +892,7 @@ namespace EconSim.Renderer
             overlayManager?.ClearSelection();
 
             // Notify listeners
-            OnSelectionChanged?.Invoke(SelectionDepth.None);
+            OnSelectionChanged?.Invoke(SelectionScope.None);
         }
 
         /// <summary>
@@ -1129,12 +1148,11 @@ namespace EconSim.Renderer
                     SetHeightScaleTargetForMode(mode);
                     overlayManager.SetChannelDebugView(channelDebugView);
                     ApplyOverlayForCurrentMode();
-
-                    // Preserve selection across zoom-driven political mode changes.
-                    bool preserveSelection = IsPoliticalFamilyMode(previousMode) && IsPoliticalFamilyMode(mode);
-                    if (!preserveSelection)
-                        ClearSelectionState();
                 }
+
+                bool preserveSelection = ShouldPreserveSelectionOnModeChange(previousMode, mode);
+                if (!preserveSelection)
+                    ClearSelectionState();
 
                 if (mode == MapMode.Market)
                 {

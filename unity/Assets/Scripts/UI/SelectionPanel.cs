@@ -102,7 +102,7 @@ namespace EconSim.UI
             }
         }
 
-        private void OnSelectionChanged(MapView.SelectionDepth depth)
+        private void OnSelectionChanged(MapView.SelectionScope scope)
         {
             if (_mapView == null) return;
 
@@ -116,16 +116,16 @@ namespace EconSim.UI
                 return;
             }
 
-            // Use the selection depth from MapView.
-            switch (depth)
+            // Use the selection scope from MapView.
+            switch (scope)
             {
-                case MapView.SelectionDepth.Realm:
+                case MapView.SelectionScope.Realm:
                     SelectRealm(_mapView.SelectedRealmId);
                     break;
-                case MapView.SelectionDepth.Province:
+                case MapView.SelectionScope.Province:
                     SelectProvince(_mapView.SelectedProvinceId);
                     break;
-                case MapView.SelectionDepth.County:
+                case MapView.SelectionScope.County:
                     SelectCounty(_mapView.SelectedCountyId);
                     break;
                 default:
