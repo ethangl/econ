@@ -7,8 +7,8 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: MapMaterial
-  m_Shader: {fileID: 4800000, guid: 40d760363ce5541ba9ddc5e6ea85c55b, type: 3}
+  m_Name: MapFlatMaterial
+  m_Shader: {fileID: 4800000, guid: 46b07d097d094fa7b47e754c92986b7b, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -189,16 +189,16 @@ Material:
     - _GradientEdgeDarkening: 0.333
     - _GradientRadius: 5
     - _HalftoneScale: 0.15
-    - _HeightScale: 0.3
+    - _HeightScale: 0
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0
+    - _HoverIntensity: 0.00899245
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
-    - _MapMode: 6
+    - _MapMode: 2
     - _MarketBorderDarkening: 0.688
     - _MarketBorderWidth: 0.25
     - _Metallic: 0
@@ -254,7 +254,7 @@ Material:
     - _SrcBlend: 1
     - _UVSec: 0
     - _UseHeightDisplacement: 1
-    - _UseModeColorResolve: 0
+    - _UseModeColorResolve: 1
     - _VegetationCoverageContrast: 1.3
     - _VegetationStippleJitter: 1
     - _VegetationStippleOpacity: 0.8

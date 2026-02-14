@@ -445,7 +445,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: EconSim::EconSim.Renderer.MapView
   heightScale: 0.2
   cellScale: 0.01
-  terrainMaterial: {fileID: 0}
+  terrainMaterial: {fileID: 2100000, guid: 37e4feaa212c4dd49e04f95a2288f672, type: 2}
+  flatTerrainMaterial: {fileID: 2100000, guid: 37e4feaa212c4dd49e04f95a2288f672, type: 2}
+  biomeTerrainMaterial: {fileID: 2100000, guid: 666d97510569454e8bcf9f8620dd0821, type: 2}
   renderLandOnly: 0
   overlayResolutionMultiplier: 6
   selectionCamera: {fileID: 0}
@@ -478,7 +480,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: df3cf4ab6a2d74d5e9d037d4f6935a7c, type: 2}
+  - {fileID: 2100000, guid: 37e4feaa212c4dd49e04f95a2288f672, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
