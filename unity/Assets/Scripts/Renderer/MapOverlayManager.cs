@@ -121,9 +121,9 @@ public class MapOverlayManager
         private Texture2D vegetationTexture;    // RGFloat: VegetationTypeId, VegetationDensity
 
         /// <summary>
-        /// Compatibility accessor for callers expecting a single cell-data texture.
+        /// Accessor for the political IDs texture (realm/province/county channels).
         /// </summary>
-        public Texture2D CellDataTexture => politicalIdsTexture;
+        public Texture2D PoliticalIdsTexture => politicalIdsTexture;
         private Texture2D cellToMarketTexture;  // R16: CellId -> MarketId mapping (dynamic)
         private Texture2D heightmapTexture;     // RFloat: smoothed height values
         private Texture2D reliefNormalTexture;  // RGBA32: normal map derived from visual height
@@ -3411,9 +3411,9 @@ public class MapOverlayManager
         }
 
         /// <summary>
-        /// Update cell data for a specific cell. Useful for dynamic changes (conquests, etc.).
+        /// Update political IDs for a specific cell. Useful for dynamic changes (conquests, etc.).
         /// </summary>
-        public void UpdateCellData(int cellId, int? newRealmId = null, int? newProvinceId = null, int? newCountyId = null)
+        public void UpdatePoliticalIds(int cellId, int? newRealmId = null, int? newProvinceId = null, int? newCountyId = null)
         {
             if (!mapData.CellById.TryGetValue(cellId, out var cell))
                 return;
