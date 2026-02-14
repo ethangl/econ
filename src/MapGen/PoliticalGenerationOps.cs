@@ -334,6 +334,17 @@ namespace MapGen.Core
                 countyRealm[county] = bestCulture > 0 ? bestCulture : 1;
             }
 
+            // Force capital counties to belong to their capital's realm
+            for (int r = 0; r < pol.Capitals.Length; r++)
+            {
+                int capitalCell = pol.Capitals[r];
+                int realmId = r + 1;
+                if ((uint)capitalCell >= (uint)n) continue;
+                int county = pol.CountyId[capitalCell];
+                if (county > 0 && county < countyRealm.Length)
+                    countyRealm[county] = realmId;
+            }
+
             // Stamp RealmId on all cells based on their county's realm
             pol.RealmCount = pol.CultureCount; // 1:1 culture → realm
             for (int cell = 0; cell < n; cell++)
