@@ -1793,14 +1793,17 @@ public class MapOverlayManager
             terrainMaterial.SetTexture(RoadMaskTexId, roadDistTexture);
 
             // Create cell-to-market texture (16384 cells max, updated when economy is set)
-            cellToMarketTexture = new Texture2D(16384, 1, TextureFormat.RHalf, false);
-            cellToMarketTexture.name = "CellToMarketTexture";
-            cellToMarketTexture.filterMode = FilterMode.Point;
-            cellToMarketTexture.wrapMode = TextureWrapMode.Clamp;
-            // Initialize to 0 (no market)
-            var emptyMarkets = new Color[16384];
-            cellToMarketTexture.SetPixels(emptyMarkets);
-            cellToMarketTexture.Apply();
+            if (cellToMarketTexture == null)
+            {
+                cellToMarketTexture = new Texture2D(16384, 1, TextureFormat.RHalf, false);
+                cellToMarketTexture.name = "CellToMarketTexture";
+                cellToMarketTexture.filterMode = FilterMode.Point;
+                cellToMarketTexture.wrapMode = TextureWrapMode.Clamp;
+                // Initialize to 0 (no market)
+                var emptyMarkets = new Color[16384];
+                cellToMarketTexture.SetPixels(emptyMarkets);
+                cellToMarketTexture.Apply();
+            }
             terrainMaterial.SetTexture(CellToMarketTexId, cellToMarketTexture);
             terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(Elevation.ResolveSeaLevel(mapData.Info), mapData.Info));
             overlayOpacity = Mathf.Clamp01(GetMaterialFloatOr(OverlayOpacityId, DefaultOverlayOpacity));
@@ -1820,6 +1823,19 @@ public class MapOverlayManager
 
             RegenerateModeColorResolveTexture();
             SetOverlay(OverlayLayer.None);
+        }
+
+        /// <summary>
+        /// Swap the backing material while keeping generated textures/state.
+        /// Useful for mode-driven render-style material switches (e.g., Flat/Biome).
+        /// </summary>
+        public void RebindMaterial(Material material)
+        {
+            if (material == null || ReferenceEquals(terrainMaterial, material))
+                return;
+
+            terrainMaterial = material;
+            ApplyTexturesToMaterial();
         }
 
         public OverlayLayer CurrentOverlay => currentOverlayLayer;

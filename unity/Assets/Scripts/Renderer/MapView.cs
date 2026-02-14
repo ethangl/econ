@@ -20,7 +20,9 @@ namespace EconSim.Renderer
         [SerializeField] private float heightScale = 15f;
         [SerializeField] private float cellScale = 0.01f;  // Scale from map data pixels to Unity units
         public float CellScale => cellScale;
-        [SerializeField] private Material terrainMaterial;
+        [SerializeField] private Material terrainMaterial; // Legacy fallback when style-specific materials are unset.
+        [SerializeField] private Material flatTerrainMaterial;
+        [SerializeField] private Material biomeTerrainMaterial;
         [SerializeField] private bool renderLandOnly = false;
         private bool showRealmCapitalMarkers = true;
         private bool showMarketLocationMarkers = true;
@@ -30,6 +32,14 @@ namespace EconSim.Renderer
 
         // Map mode (not serialized - always starts in Political per CLAUDE.md guidance)
         private MapMode currentMode = MapMode.Political;
+
+        private enum RenderStyle
+        {
+            Flat = 0,
+            Biome = 1
+        }
+
+        private RenderStyle currentRenderStyle = RenderStyle.Flat;
 
         [Header("Shader Overlays")]
         private bool useShaderOverlays = true;
@@ -280,6 +290,57 @@ namespace EconSim.Renderer
         private static bool IsPoliticalFamilyMode(MapMode mode)
         {
             return mode == MapMode.Political || mode == MapMode.Province || mode == MapMode.County;
+        }
+
+        private static RenderStyle ResolveRenderStyleForMode(MapMode mode)
+        {
+            return mode == MapMode.Biomes ? RenderStyle.Biome : RenderStyle.Flat;
+        }
+
+        private Material ResolveRenderStyleMaterial(RenderStyle style)
+        {
+            if (style == RenderStyle.Biome && biomeTerrainMaterial != null)
+                return biomeTerrainMaterial;
+            if (style == RenderStyle.Flat && flatTerrainMaterial != null)
+                return flatTerrainMaterial;
+            if (terrainMaterial != null)
+                return terrainMaterial;
+            return meshRenderer != null ? meshRenderer.sharedMaterial : null;
+        }
+
+        private void ApplyRenderMaterialForMode(MapMode mode)
+        {
+            if (meshRenderer == null)
+                return;
+
+            RenderStyle style = ResolveRenderStyleForMode(mode);
+            Material styleMaterial = ResolveRenderStyleMaterial(style);
+            if (styleMaterial == null)
+                return;
+
+            currentRenderStyle = style;
+            meshRenderer.sharedMaterial = styleMaterial;
+        }
+
+        private void EnsureRenderStyleForMode(MapMode mode)
+        {
+            RenderStyle style = ResolveRenderStyleForMode(mode);
+            if (style == currentRenderStyle)
+                return;
+
+            Material styleMaterial = ResolveRenderStyleMaterial(style);
+            if (styleMaterial == null)
+                return;
+
+            currentRenderStyle = style;
+            if (meshRenderer != null)
+                meshRenderer.sharedMaterial = styleMaterial;
+
+            overlayManager?.RebindMaterial(styleMaterial);
+            overlayManager?.SetHeightDisplacementEnabled(useGridMesh);
+            overlayManager?.SetHeightScale(currentAnimatedHeightScale);
+            if (mapData != null)
+                overlayManager?.SetSeaLevel(Elevation.ResolveSeaLevel(mapData.Info));
         }
 
         private float ResolveHeightScaleForMode(MapMode mode)
@@ -672,8 +733,8 @@ namespace EconSim.Renderer
             if (!useShaderOverlays || mapData == null)
                 return;
 
-            // Get the material from the MeshRenderer if not set in Inspector
-            Material mat = terrainMaterial;
+            currentRenderStyle = ResolveRenderStyleForMode(currentMode);
+            Material mat = ResolveRenderStyleMaterial(currentRenderStyle);
             if (mat == null && meshRenderer != null)
             {
                 mat = meshRenderer.sharedMaterial;
@@ -681,6 +742,11 @@ namespace EconSim.Renderer
 
             if (mat == null)
                 return;
+
+            if (meshRenderer != null)
+            {
+                meshRenderer.sharedMaterial = mat;
+            }
 
             overlayManager = new MapOverlayManager(
                 mapData,
@@ -1132,6 +1198,7 @@ namespace EconSim.Renderer
 
                 if (useShaderOverlays && overlayManager != null)
                 {
+                    EnsureRenderStyleForMode(mode);
                     overlayManager.SetMapMode(mode);
                     SetHeightScaleTargetForMode(mode);
                     overlayManager.SetChannelDebugView(channelDebugView);
@@ -1574,10 +1641,7 @@ namespace EconSim.Renderer
 
             meshFilter.mesh = mesh;
 
-            if (terrainMaterial != null)
-            {
-                meshRenderer.sharedMaterial = terrainMaterial;
-            }
+            ApplyRenderMaterialForMode(currentMode);
 
             CenterMap();
         }
@@ -1636,10 +1700,7 @@ namespace EconSim.Renderer
 
             meshFilter.mesh = mesh;
 
-            if (terrainMaterial != null)
-            {
-                meshRenderer.sharedMaterial = terrainMaterial;
-            }
+            ApplyRenderMaterialForMode(currentMode);
 
             // Center the map
             CenterMap();
