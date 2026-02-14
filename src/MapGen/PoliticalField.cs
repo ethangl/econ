@@ -11,6 +11,9 @@ namespace MapGen.Core
         public int[] LandmassId; // -1 for water
         public int LandmassCount;
 
+        public int[] CultureId;
+        public int CultureCount;
+
         public int[] RealmId;
         public int[] ProvinceId;
         public int[] CountyId;
@@ -28,6 +31,7 @@ namespace MapGen.Core
             int n = mesh.CellCount;
 
             LandmassId = new int[n];
+            CultureId = new int[n];
             RealmId = new int[n];
             ProvinceId = new int[n];
             CountyId = new int[n];
