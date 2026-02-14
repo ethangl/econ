@@ -107,7 +107,6 @@ namespace EconSim.Core.Economy
                     LocationCellId = accessCellId,
                     Name = $"{dir} Trade Route",
                     Type = MarketType.OffMap,
-                    SuitabilityScore = 0,
                     OffMapGoodIds = new HashSet<string>(offMapGoods),
                     OffMapPriceMultiplier = priceMultiplier
                 };

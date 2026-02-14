@@ -60,12 +60,6 @@ namespace EconSim.Core.Economy
         public Dictionary<string, MarketGoodState> Goods { get; set; } = new Dictionary<string, MarketGoodState>();
 
         /// <summary>
-        /// Suitability score that was computed when placing this market.
-        /// Higher = better location.
-        /// </summary>
-        public float SuitabilityScore { get; set; }
-
-        /// <summary>
         /// For OffMap markets: good IDs that this market supplies from off-map.
         /// Null/empty for non-OffMap markets.
         /// </summary>
