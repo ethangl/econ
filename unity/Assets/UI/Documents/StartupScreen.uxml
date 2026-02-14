@@ -6,7 +6,7 @@
             <ui:IntegerField name="seed-field" label="Seed" value="12345" class="startup-field" />
             <ui:IntegerField name="cellcount-field" label="Cells" value="100000" class="startup-field" />
             <ui:FloatField name="aspect-ratio-field" label="Aspect Ratio" value="1.5" class="startup-field" />
-            <ui:FloatField name="latitude-field" label="Latitude South" value="-50" class="startup-field" />
+            <ui:FloatField name="latitude-field" label="Latitude" value="50" class="startup-field" />
             <ui:VisualElement name="startup-buttons" class="startup-buttons">
                 <ui:Button name="generate-button" text="Generate New" class="startup-button" />
                 <ui:Button name="load-last-map-button" text="Load Last Map" class="startup-button startup-button-secondary" />

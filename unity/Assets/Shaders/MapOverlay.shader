@@ -17,6 +17,10 @@ Shader "EconSim/MapOverlay"
         _RiverMaskTex ("River Mask", 2D) = "black" {}
 
         // Split core textures (M3-S1)
+        // Sampler budget note:
+        // Metal compiles this shader with a strict fragment sampler limit (16).
+        // Do not add new fragment-sampled textures casually.
+        // Overlay composition intentionally reuses _CellDataTex, and marketId is packed in _ModeColorResolve.a.
         _PoliticalIdsTex ("Political IDs", 2D) = "black" {}
         _GeographyBaseTex ("Geography Base", 2D) = "black" {}
         _VegetationTex ("Vegetation Data", 2D) = "black" {}
@@ -26,6 +30,8 @@ Shader "EconSim/MapOverlay"
         // Resolved mode color texture (M3-S3)
         _ModeColorResolve ("Mode Color Resolve", 2D) = "black" {}
         _UseModeColorResolve ("Use Mode Color Resolve", Int) = 1
+        _OverlayOpacity ("Overlay Opacity", Range(0, 1)) = 0.65
+        _OverlayEnabled ("Overlay Enabled", Int) = 0
 
         // Cell to market mapping (dynamic, updated when economy changes)
         _CellToMarketTex ("Cell To Market", 2D) = "black" {}
@@ -149,6 +155,9 @@ Shader "EconSim/MapOverlay"
                 float2 worldUV : TEXCOORD1;   // World-space UV for consistent shimmer scale
             };
 
+            // Sampler budget note (Metal):
+            // Keep total fragment samplers <= 16 for this shader.
+            // Overlay uses _CellDataTex to avoid introducing another sampler.
             sampler2D _HeightmapTex;
             sampler2D _ReliefNormalTex;
             float4 _HeightmapTex_TexelSize;  // (1/width, 1/height, width, height)
@@ -169,8 +178,8 @@ Shader "EconSim/MapOverlay"
             sampler2D _CellDataTex; // Legacy compatibility path.
             sampler2D _ModeColorResolve;
             int _UseModeColorResolve;
-
-            sampler2D _CellToMarketTex;  // 16384x1 texture mapping cellId -> marketId
+            float _OverlayOpacity;
+            int _OverlayEnabled;
 
             sampler2D _RealmPaletteTex;
             sampler2D _MarketPaletteTex;
@@ -451,7 +460,7 @@ Shader "EconSim/MapOverlay"
                     return fixed4(ComputeChannelInspector(uv, politicalIds, geographyBase), 1);
                 }
 
-                float marketId = LookupMarketIdFromCounty(countyId);
+                float marketId = 0.0;
 
                 float biomeId = geographyBase.r;
                 int soilId = DecodeSoilIdFromGeography(geographyBase);
@@ -507,11 +516,14 @@ Shader "EconSim/MapOverlay"
                 float4 mapMode;
                 if (_UseModeColorResolve > 0)
                 {
-                    float3 resolvedBase = tex2D(_ModeColorResolve, uv).rgb;
+                    float4 resolvedMode = tex2D(_ModeColorResolve, uv);
+                    float3 resolvedBase = resolvedMode.rgb;
+                    marketId = resolvedMode.a;
                     mapMode = ComputeMapModeFromResolvedBase(uv, isCellWater, isRiver, height, resolvedBase);
                 }
                 else
                 {
+                    marketId = 0.0;
                     mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId);
                 }
                 float3 afterMapMode = lerp(terrain, mapMode.rgb, mapMode.a);
@@ -568,6 +580,13 @@ Shader "EconSim/MapOverlay"
                     float3 gray = ToGrayscale(finalColor);
                     finalColor = lerp(finalColor, gray, _SelectionDesaturation);
                     finalColor *= _SelectionDimming;
+                }
+
+                if (_OverlayEnabled > 0 && !isWater)
+                {
+                    float4 overlayColor = tex2D(_CellDataTex, uv);
+                    float overlayAlpha = saturate(_OverlayOpacity * overlayColor.a);
+                    finalColor = lerp(finalColor, overlayColor.rgb, overlayAlpha);
                 }
 
                 return fixed4(finalColor, 1);

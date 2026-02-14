@@ -125,6 +125,31 @@ namespace EconSim.Renderer
             "Market Access"
         };
 
+        private static readonly MapOverlayManager.OverlayLayer[] NoOverlayCycle =
+        {
+            MapOverlayManager.OverlayLayer.None
+        };
+
+        private static readonly MapOverlayManager.OverlayLayer[] PoliticalOverlayCycle =
+        {
+            MapOverlayManager.OverlayLayer.None,
+            MapOverlayManager.OverlayLayer.PopulationDensity
+        };
+
+        private static readonly Dictionary<MapMode, MapOverlayManager.OverlayLayer[]> OverlayCyclesByScope =
+            new Dictionary<MapMode, MapOverlayManager.OverlayLayer[]>
+            {
+                { MapMode.Political, PoliticalOverlayCycle },
+                { MapMode.Market, NoOverlayCycle },
+                { MapMode.Biomes, NoOverlayCycle },
+                { MapMode.ChannelInspector, NoOverlayCycle },
+                { MapMode.TransportCost, NoOverlayCycle },
+                { MapMode.MarketAccess, NoOverlayCycle }
+            };
+
+        private readonly Dictionary<MapMode, MapOverlayManager.OverlayLayer> selectedOverlayByScope =
+            new Dictionary<MapMode, MapOverlayManager.OverlayLayer>();
+
         [Header("Debug Tooling")]
         private bool showIdProbe = false;
         private KeyCode cycleDebugChannelKey = KeyCode.O;
@@ -166,9 +191,16 @@ namespace EconSim.Renderer
             // Map mode selection with number keys.
             if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1))
             {
-                MapMode politicalBandMode = ResolveZoomDrivenPoliticalMode();
-                SetMapMode(politicalBandMode);
-                Debug.Log($"Map mode: {ModeNames[(int)politicalBandMode]} (1, zoom-driven)");
+                if (IsPoliticalFamilyMode(currentMode))
+                {
+                    CycleOverlayForMode(currentMode, "1");
+                }
+                else
+                {
+                    MapMode politicalBandMode = ResolveZoomDrivenPoliticalMode();
+                    SetMapMode(politicalBandMode);
+                    Debug.Log($"Map mode: {ModeNames[(int)politicalBandMode]} (1, zoom-driven)");
+                }
             }
             else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2))
             {
@@ -242,6 +274,72 @@ namespace EconSim.Renderer
         private static bool IsPoliticalFamilyMode(MapMode mode)
         {
             return mode == MapMode.Political || mode == MapMode.Province || mode == MapMode.County;
+        }
+
+        private static MapMode ResolveOverlayScope(MapMode mode)
+        {
+            return IsPoliticalFamilyMode(mode) ? MapMode.Political : mode;
+        }
+
+        private static MapOverlayManager.OverlayLayer[] GetOverlayCycle(MapMode mode)
+        {
+            MapMode scope = ResolveOverlayScope(mode);
+            if (OverlayCyclesByScope.TryGetValue(scope, out MapOverlayManager.OverlayLayer[] cycle) &&
+                cycle != null &&
+                cycle.Length > 0)
+            {
+                return cycle;
+            }
+
+            return NoOverlayCycle;
+        }
+
+        private void CycleOverlayForMode(MapMode mode, string triggerKey)
+        {
+            if (overlayManager == null)
+                return;
+
+            MapMode scope = ResolveOverlayScope(mode);
+            MapOverlayManager.OverlayLayer[] cycle = GetOverlayCycle(scope);
+            if (cycle.Length <= 1)
+            {
+                overlayManager.SetOverlay(cycle[0]);
+                return;
+            }
+
+            if (!selectedOverlayByScope.TryGetValue(scope, out MapOverlayManager.OverlayLayer currentOverlay))
+                currentOverlay = overlayManager.CurrentOverlay;
+
+            int currentIndex = Array.IndexOf(cycle, currentOverlay);
+            if (currentIndex < 0)
+                currentIndex = 0;
+
+            int nextIndex = (currentIndex + 1) % cycle.Length;
+            MapOverlayManager.OverlayLayer nextOverlay = cycle[nextIndex];
+            selectedOverlayByScope[scope] = nextOverlay;
+            overlayManager.SetOverlay(nextOverlay);
+
+            Debug.Log($"Overlay: {nextOverlay} ({triggerKey})");
+        }
+
+        private void ApplyOverlayForCurrentMode()
+        {
+            if (overlayManager == null)
+                return;
+
+            MapMode scope = ResolveOverlayScope(currentMode);
+            MapOverlayManager.OverlayLayer[] cycle = GetOverlayCycle(scope);
+            if (cycle == null || cycle.Length == 0)
+                return;
+
+            if (!selectedOverlayByScope.TryGetValue(scope, out MapOverlayManager.OverlayLayer selectedOverlay))
+                selectedOverlay = cycle[0];
+
+            if (Array.IndexOf(cycle, selectedOverlay) < 0)
+                selectedOverlay = cycle[0];
+
+            selectedOverlayByScope[scope] = selectedOverlay;
+            overlayManager.SetOverlay(selectedOverlay);
         }
 
         private MapMode ResolveZoomDrivenPoliticalMode()
@@ -560,6 +658,7 @@ namespace EconSim.Renderer
             overlayManager.SetMapMode(currentMode);
             overlayManager.SetChannelDebugView(channelDebugView);
             overlayManager.RefreshPathStyleFromMaterial();
+            ApplyOverlayForCurrentMode();
         }
 
         /// <summary>
@@ -995,6 +1094,7 @@ namespace EconSim.Renderer
                 {
                     overlayManager.SetMapMode(mode);
                     overlayManager.SetChannelDebugView(channelDebugView);
+                    ApplyOverlayForCurrentMode();
 
                     // Clear drill-down selection when changing modes
                     ClearDrillDownSelection();

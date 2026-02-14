@@ -100,7 +100,7 @@ namespace EconSim.UI
             var gameManager = EconSim.Core.GameManager.Instance;
             if (gameManager != null)
             {
-                float latitudeSouth = _latitudeField?.value ?? -50f;
+                float latitudeSouth = _latitudeField?.value ?? 50f;
                 var config = new MapGenConfig
                 {
                     Seed = _seedField?.value ?? 12345,
