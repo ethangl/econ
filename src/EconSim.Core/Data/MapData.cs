@@ -218,6 +218,7 @@ namespace EconSim.Core.Data
         public int SoilId;             // MapGen.Core.SoilType ordinal (0-7)
         public int VegetationTypeId;   // MapGen.Core.VegetationType ordinal (0-6)
         public float VegetationDensity; // 0..1
+        public float MovementCost;     // Per-cell transport difficulty (biome + slope)
         public bool IsLand;
         public int CoastDistance;       // + for land (dist to coast), - for water
         public int FeatureId;           // Index into Features (ocean, lake, island, etc.)

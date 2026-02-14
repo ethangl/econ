@@ -42,7 +42,6 @@ namespace EconSim.Core.Transport
     public class TransportGraph
     {
         private readonly MapData _mapData;
-        private readonly Dictionary<int, Biome> _biomeById;
 
         // Cache for computed paths (from -> to -> result)
         private readonly Dictionary<(int, int), PathResult> _pathCache;
@@ -51,15 +50,15 @@ namespace EconSim.Core.Transport
         // Road state for applying road bonuses (set after economy initialization)
         private RoadState _roadState;
 
-        // Default movement cost if biome not found
-        private const float DefaultMovementCost = 1.0f;
+        // Default movement cost if per-cell data missing
+        private const float DefaultMovementCost = 10.0f;
 
         // River crossing bonus (multiplier < 1 means easier)
         private const float RiverCrossingBonus = 0.8f;
 
         // Sea transport costs
-        private const float SeaMovementCost = 0.15f;   // ~7x cheaper than base land
-        private const float PortTransitionCost = 3.0f; // Cost to load/unload at port
+        private const float SeaMovementCost = 3.5f;    // ~5-6x cheaper than flat grassland
+        private const float PortTransitionCost = 12.0f; // Loading/unloading cargo is expensive and slow
 
         // Impassable threshold (cells with cost >= this are blocked)
         private const float ImpassableThreshold = 100f;
@@ -73,13 +72,6 @@ namespace EconSim.Core.Transport
             _maxCacheSize = maxCacheSize;
             _pathCache = new Dictionary<(int, int), PathResult>();
             _distanceNormalizationKm = WorldScale.ResolveDistanceNormalizationKm(mapData.Info);
-
-            // Build biome lookup
-            _biomeById = new Dictionary<int, Biome>();
-            foreach (var biome in mapData.Biomes)
-            {
-                _biomeById[biome.Id] = biome;
-            }
         }
 
         /// <summary>
@@ -95,7 +87,7 @@ namespace EconSim.Core.Transport
 
         /// <summary>
         /// Get the movement cost for entering a cell.
-        /// Based on biome and terrain features.
+        /// Uses per-cell cost from BiomeGenerationOps (incorporates biome type + slope).
         /// </summary>
         public float GetCellMovementCost(Cell cell)
         {
@@ -103,30 +95,10 @@ namespace EconSim.Core.Transport
             if (!cell.IsLand)
                 return SeaMovementCost;
 
-            float baseCost = DefaultMovementCost;
+            float baseCost = cell.MovementCost > 0 ? cell.MovementCost : DefaultMovementCost;
 
-            // Use biome movement cost if available (catalog already stores runtime-scaled values).
-            if (_biomeById.TryGetValue(cell.BiomeId, out var biome) && biome.MovementCost > 0)
-            {
-                baseCost = biome.MovementCost;
-                // Clamp to reasonable range
-                baseCost = Math.Max(1f, Math.Min(baseCost, 20f));
-            }
-
-            // Altitude modifier: movement difficulty ramps up from 1500m and becomes impassable above 3000m.
-            float elevationMetersAboveSeaLevel = Elevation.GetMetersAboveSeaLevel(cell, _mapData.Info);
-            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeImpassableMeters)
-            {
+            if (baseCost >= ImpassableThreshold)
                 return ImpassableThreshold;
-            }
-
-            if (elevationMetersAboveSeaLevel > Elevation.HumanAltitudeEffectStartMeters)
-            {
-                float altitudeMetersCapped = Math.Min(elevationMetersAboveSeaLevel, Elevation.HumanAltitudeImpassableMeters);
-                float altitudeT = (altitudeMetersCapped - Elevation.HumanAltitudeEffectStartMeters) /
-                    Math.Max(1f, Elevation.HumanAltitudeEffectSpanMeters);
-                baseCost += (MaxPassableAltitudeCost - baseCost) * altitudeT;
-            }
 
             return baseCost;
         }
