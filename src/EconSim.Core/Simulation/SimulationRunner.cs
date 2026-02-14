@@ -252,8 +252,6 @@ namespace EconSim.Core.Simulation
                     int locationCellId = reader.ReadInt32();
                     string name = reader.ReadString();
                     int typeRaw = reader.ReadInt32();
-                    float suitabilityScore = reader.ReadSingle();
-
                     if (marketId < 0)
                         continue;
 
@@ -270,8 +268,7 @@ namespace EconSim.Core.Simulation
                         Id = marketId,
                         LocationCellId = locationCellId,
                         Name = string.IsNullOrWhiteSpace(name) ? $"Market {marketId}" : name,
-                        Type = type,
-                        SuitabilityScore = suitabilityScore
+                        Type = type
                     };
 
                     int zoneEntryCount = reader.ReadInt32();
@@ -444,7 +441,6 @@ namespace EconSim.Core.Simulation
                     writer.Write(market.LocationCellId);
                     writer.Write(market.Name ?? string.Empty);
                     writer.Write((int)market.Type);
-                    writer.Write(market.SuitabilityScore);
                     int zoneEntryCount = market.Type == MarketType.Black
                         ? 0
                         : (market.ZoneCellCosts?.Count ?? 0);
@@ -549,18 +545,24 @@ namespace EconSim.Core.Simulation
             // Initialize the black market first (ID 0, no physical location)
             InitializeBlackMarket();
 
-            var usedCells = new HashSet<int>();
-            var usedRealms = new HashSet<int>();
-            int marketCount = _mapData.Realms.Count;
-
-            for (int i = 0; i < marketCount; i++)
+            // One market per realm, located at the realm capital.
+            for (int i = 0; i < _mapData.Realms.Count; i++)
             {
-                int cellId = MarketPlacer.FindBestMarketLocation(
-                    _mapData, _state.Transport, _state.Economy,
-                    excludeCells: usedCells,
-                    excludeRealms: usedRealms);
+                var realm = _mapData.Realms[i];
+                if (realm.Id <= 0) continue;
 
-                if (cellId < 0) break;
+                // Find the capital burg's cell; fall back to the realm's center cell.
+                int cellId = -1;
+                if (realm.CapitalBurgId > 0)
+                {
+                    var capitalBurg = _mapData.Burgs.Find(b => b.Id == realm.CapitalBurgId);
+                    if (capitalBurg != null)
+                        cellId = capitalBurg.CellId;
+                }
+                if (cellId < 0)
+                    cellId = realm.CenterCellId;
+                if (cellId < 0 || !_mapData.CellById.ContainsKey(cellId))
+                    continue;
 
                 var cell = _mapData.CellById[cellId];
                 var burg = cell.HasBurg
@@ -571,23 +573,15 @@ namespace EconSim.Core.Simulation
                 {
                     Id = i + 1,
                     LocationCellId = cellId,
-                    Name = burg?.Name ?? $"Market {i + 1}",
-                    SuitabilityScore = MarketPlacer.ComputeSuitability(cell, _mapData, _state.Transport, _state.Economy)
+                    Name = burg?.Name ?? realm.Name
                 };
 
                 InitializeMarketGoods(market);
 
-                // Compute zone using world-scale normalized transport budget.
                 MarketPlacer.ComputeMarketZone(market, _mapData, _state.Transport, maxTransportCost: _marketZoneMaxTransportCost);
                 _state.Economy.Markets[market.Id] = market;
 
-                usedCells.Add(cellId);
-                usedRealms.Add(cell.RealmId);
-
-                var realmName = _mapData.RealmById.TryGetValue(cell.RealmId, out var realm)
-                    ? realm.Name
-                    : "Unknown";
-                SimLog.Log("Market", $"Placed market '{market.Name}' at cell {cellId} in {realmName} (score: {market.SuitabilityScore:F1})");
+                SimLog.Log("Market", $"Placed market '{market.Name}' at cell {cellId} in {realm.Name}");
             }
 
             // Place off-map virtual markets at map edges
@@ -652,8 +646,7 @@ namespace EconSim.Core.Simulation
                 Id = EconomyState.BlackMarketId,
                 LocationCellId = -1,  // No physical location
                 Name = "Black Market",
-                Type = MarketType.Black,
-                SuitabilityScore = 0
+                Type = MarketType.Black
             };
 
             InitializeMarketGoods(blackMarket);
