@@ -100,7 +100,7 @@ namespace EconSim.Renderer
         // Vertex heights (computed by averaging neighboring cells)
         private float[] vertexHeights;
 
-        // Drill-down selection state
+        // Selection state
         public enum SelectionDepth { None, Realm, Province, County }
         private SelectionDepth selectionDepth = SelectionDepth.None;
         private int selectedRealmId = -1;
@@ -776,127 +776,58 @@ namespace EconSim.Renderer
             // Clear selection if clicked on nothing
             if (cellId < 0)
             {
-                ClearDrillDownSelection();
+                ClearSelectionState();
                 return;
             }
 
             // Get the cell to look up its realm/province
             if (!mapData.CellById.TryGetValue(cellId, out var cell))
             {
-                ClearDrillDownSelection();
+                ClearSelectionState();
                 return;
             }
 
             // Water cells have no meaningful realm/province/county - clear selection
             if (!cell.IsLand)
             {
-                ClearDrillDownSelection();
+                ClearSelectionState();
                 return;
             }
 
-            // Market mode has its own selection logic (no drill-down)
+            // Market mode has its own selection logic.
             if (currentMode == MapMode.Market)
             {
                 HandleMarketSelection(cell, cellId);
                 return;
             }
 
-            // Non-political overlays - just select county, no drill-down
-            if (currentMode == MapMode.Biomes ||
-                currentMode == MapMode.TransportCost ||
-                currentMode == MapMode.MarketAccess)
-            {
-                SelectAtDepth(SelectionDepth.County, cell);
-                return;
-            }
+            SelectionDepth depth = ResolveSelectionDepthForMode(currentMode);
+            SelectAtDepth(depth, cell);
 
-            // Political modes (Political, Province, County) - use drill-down logic
-            HandleDrillDownSelection(cell);
+            Bounds? selectionBounds = GetBoundsForSelectionDepth(depth, cell);
+            if (selectionBounds.HasValue && mapCameraController != null)
+                mapCameraController.FocusOn(selectionBounds.Value.center);
         }
 
-        /// <summary>
-        /// Drill-down selection: clicking same entity drills deeper, clicking outside resets.
-        /// </summary>
-        private void HandleDrillDownSelection(Cell cell)
+        private static SelectionDepth ResolveSelectionDepthForMode(MapMode mode)
         {
-            Bounds? selectionBounds = null;
-
-            switch (selectionDepth)
+            return mode switch
             {
-                case SelectionDepth.None:
-                    // No selection yet - select realm
-                    SelectAtDepth(SelectionDepth.Realm, cell);
-                    selectionBounds = GetRealmBounds(cell.RealmId);
-                    break;
+                MapMode.Political => SelectionDepth.Realm,
+                MapMode.Province => SelectionDepth.Province,
+                _ => SelectionDepth.County
+            };
+        }
 
-                case SelectionDepth.Realm:
-                    if (cell.RealmId == selectedRealmId)
-                    {
-                        // Clicking same realm - drill down to province
-                        SelectAtDepth(SelectionDepth.Province, cell);
-                        selectionBounds = GetProvinceBounds(cell.ProvinceId);
-                    }
-                    else
-                    {
-                        // Clicking different realm - select new realm
-                        SelectAtDepth(SelectionDepth.Realm, cell);
-                        selectionBounds = GetRealmBounds(cell.RealmId);
-                    }
-                    break;
-
-                case SelectionDepth.Province:
-                    if (cell.ProvinceId == selectedProvinceId)
-                    {
-                        // Clicking same province - drill down to county
-                        SelectAtDepth(SelectionDepth.County, cell);
-                        selectionBounds = GetCountyBounds(cell.CountyId);
-                    }
-                    else if (cell.RealmId == selectedRealmId)
-                    {
-                        // Clicking different province in same realm - select new province
-                        SelectAtDepth(SelectionDepth.Province, cell);
-                        selectionBounds = GetProvinceBounds(cell.ProvinceId);
-                    }
-                    else
-                    {
-                        // Clicking different realm - reset to realm level
-                        SelectAtDepth(SelectionDepth.Realm, cell);
-                        selectionBounds = GetRealmBounds(cell.RealmId);
-                    }
-                    break;
-
-                case SelectionDepth.County:
-                    if (cell.CountyId == selectedCountyId)
-                    {
-                        // Already at deepest level, clicking same county - do nothing
-                        return;
-                    }
-                    else if (cell.ProvinceId == selectedProvinceId)
-                    {
-                        // Clicking different county in same province - select new county
-                        SelectAtDepth(SelectionDepth.County, cell);
-                        selectionBounds = GetCountyBounds(cell.CountyId);
-                    }
-                    else if (cell.RealmId == selectedRealmId)
-                    {
-                        // Clicking different province in same realm - go back to province level
-                        SelectAtDepth(SelectionDepth.Province, cell);
-                        selectionBounds = GetProvinceBounds(cell.ProvinceId);
-                    }
-                    else
-                    {
-                        // Clicking different realm - reset to realm level
-                        SelectAtDepth(SelectionDepth.Realm, cell);
-                        selectionBounds = GetRealmBounds(cell.RealmId);
-                    }
-                    break;
-            }
-
-            // Pan camera to selection without changing zoom
-            if (selectionBounds.HasValue && mapCameraController != null)
+        private Bounds? GetBoundsForSelectionDepth(SelectionDepth depth, Cell cell)
+        {
+            return depth switch
             {
-                mapCameraController.FocusOn(selectionBounds.Value.center);
-            }
+                SelectionDepth.Realm => GetRealmBounds(cell.RealmId),
+                SelectionDepth.Province => GetProvinceBounds(cell.ProvinceId),
+                SelectionDepth.County => GetCountyBounds(cell.CountyId),
+                _ => null
+            };
         }
 
         /// <summary>
@@ -930,9 +861,9 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
-        /// Clear drill-down selection state.
+        /// Clear current selection state.
         /// </summary>
-        private void ClearDrillDownSelection()
+        private void ClearSelectionState()
         {
             selectionDepth = SelectionDepth.None;
             selectedRealmId = -1;
@@ -946,7 +877,7 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
-        /// Handle market mode selection (no drill-down).
+        /// Handle market mode selection.
         /// </summary>
         private void HandleMarketSelection(Cell cell, int cellId)
         {
@@ -1187,6 +1118,7 @@ namespace EconSim.Renderer
         {
             if (currentMode != mode)
             {
+                MapMode previousMode = currentMode;
                 currentMode = mode;
                 UpdateColors();
 
@@ -1198,8 +1130,10 @@ namespace EconSim.Renderer
                     overlayManager.SetChannelDebugView(channelDebugView);
                     ApplyOverlayForCurrentMode();
 
-                    // Clear drill-down selection when changing modes
-                    ClearDrillDownSelection();
+                    // Preserve selection across zoom-driven political mode changes.
+                    bool preserveSelection = IsPoliticalFamilyMode(previousMode) && IsPoliticalFamilyMode(mode);
+                    if (!preserveSelection)
+                        ClearSelectionState();
                 }
 
                 if (mode == MapMode.Market)

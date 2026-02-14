@@ -116,7 +116,7 @@ namespace EconSim.UI
                 return;
             }
 
-            // Use the drill-down selection depth from MapView
+            // Use the selection depth from MapView.
             switch (depth)
             {
                 case MapView.SelectionDepth.Realm:
