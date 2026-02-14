@@ -16,6 +16,13 @@ This repository contains:
 3. Press Play.
 4. Use the startup panel to generate a map.
 
+## Rendering Pipeline
+
+- This project uses **Universal Render Pipeline (URP)**.
+- Active pipeline asset:
+  - `unity/Assets/Materials/EconSimURP.asset`
+- The project is no longer configured for Built-in Render Pipeline.
+
 ## Keyboard Controls
 
 Full control reference:
