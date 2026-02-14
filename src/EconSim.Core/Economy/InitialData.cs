@@ -4,7 +4,7 @@ namespace EconSim.Core.Economy
 {
     /// <summary>
     /// Initial good and facility definitions for the v1 economy.
-    /// Ten production chains: Food, Tools, Jewelry, Furniture, Clothing, Dairy, Leatherwork, Copperwork, Sugar, Spices.
+    /// Ten production chains: Food, Tools, Jewelry, Furniture, Clothing (4-tier), Dairy, Leatherwork, Copperwork, Sugar, Spices.
     /// </summary>
     public static class InitialData
     {
@@ -44,7 +44,7 @@ namespace EconSim.Core.Economy
                 Inputs = new List<GoodInput> { new GoodInput("wheat", 2) },
                 FacilityType = "mill",
                 ProcessingTicks = 1,
-                DecayRate = 0.01f,  // 1% per day - processed, absorbs moisture
+                DecayRate = 0.003f,  // 0.3% per day - stored flour lasts months
                 TheftRisk = 0.4f,  // Processed, more valuable
                 BasePrice = 3.0f   // 2 wheat (2.0) + processing
             });
@@ -59,7 +59,7 @@ namespace EconSim.Core.Economy
                 ProcessingTicks = 1,
                 NeedCategory = NeedCategory.Basic,
                 BaseConsumption = 0.01f,  // 0.01 bread per person per day
-                DecayRate = 0.05f,  // 5% per day - highly perishable
+                DecayRate = 0.25f,  // 25% per day - stale in 3-4 days
                 TheftRisk = 0.1f,  // Perishable, hard to fence
                 BasePrice = 5.0f   // Basic staple, modest markup
             });
@@ -205,7 +205,7 @@ namespace EconSim.Core.Economy
                 BasePrice = 12.0f // 2 lumber (6.0) + crafting
             });
             // =============================================
-            // CHAIN 5: Clothing (Sheep → Wool → Clothes)
+            // CHAIN 5: Clothing (Sheep → Wool → Cloth → Clothes)
             // =============================================
 
             registry.Register(new GoodDef
@@ -227,11 +227,24 @@ namespace EconSim.Core.Economy
                 Name = "Wool",
                 Category = GoodCategory.Refined,
                 Inputs = new List<GoodInput> { new GoodInput("sheep", 2) },
-                FacilityType = "spinning_mill",
+                FacilityType = "shearing_shed",
                 ProcessingTicks = 1,
-                DecayRate = 0.002f,  // 0.2% per day - raw fiber, slight degradation
+                DecayRate = 0.002f,  // 0.2% per day - raw fleece, slight degradation
                 TheftRisk = 0.3f,
-                BasePrice = 3.0f  // 2 sheep (2.0) + processing
+                BasePrice = 3.0f  // 2 sheep (2.0) + shearing
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "cloth",
+                Name = "Cloth",
+                Category = GoodCategory.Refined,
+                Inputs = new List<GoodInput> { new GoodInput("wool", 2) },
+                FacilityType = "spinning_mill",
+                ProcessingTicks = 2,
+                DecayRate = 0.001f,  // 0.1% per day - woven fabric, very durable
+                TheftRisk = 0.4f,
+                BasePrice = 8.0f  // 2 wool (6.0) + spinning/weaving
             });
 
             registry.Register(new GoodDef
@@ -239,33 +252,28 @@ namespace EconSim.Core.Economy
                 Id = "clothes",
                 Name = "Clothes",
                 Category = GoodCategory.Finished,
-                Inputs = new List<GoodInput> { new GoodInput("wool", 1) },
+                Inputs = new List<GoodInput> { new GoodInput("cloth", 1) },
                 FacilityType = "tailor",
                 ProcessingTicks = 1,
                 NeedCategory = NeedCategory.Basic,
                 BaseConsumption = 0.005f,  // Lower than bread - clothes last longer
                 DecayRate = 0.001f,  // 0.1% per day - wears slowly
                 TheftRisk = 0.5f,  // Portable, useful
-                BasePrice = 6.0f  // Basic need, modest markup
+                BasePrice = 12.0f  // 1 cloth (8.0) + tailoring
             });
             // =============================================
-            // CHAIN 7: Leatherwork (Deer → Leather → Shoes)
+            // CHAIN 7: Leatherwork (Hides → Leather → Shoes)
             // =============================================
 
             registry.Register(new GoodDef
             {
-                Id = "deer",
-                Name = "Deer",
+                Id = "hides",
+                Name = "Hides",
                 Category = GoodCategory.Raw,
-                HarvestMethod = "hunting",
-                TerrainAffinity = new List<string> {
-                    "Temperate deciduous forest",
-                    "Temperate rainforest",
-                    "Tropical seasonal forest",
-                    "Taiga"
-                },
-                BaseYield = 4f,  // Hunting is less productive than herding
-                DecayRate = 0f,
+                HarvestMethod = "herding",
+                TerrainAffinity = new List<string> { "Grassland", "Steppe", "Highland" },
+                BaseYield = 4f,
+                DecayRate = 0.01f,  // 1% per day - raw hides need salting/drying
                 TheftRisk = 0.1f,
                 BasePrice = 1.0f
             });
@@ -275,12 +283,12 @@ namespace EconSim.Core.Economy
                 Id = "leather",
                 Name = "Leather",
                 Category = GoodCategory.Refined,
-                Inputs = new List<GoodInput> { new GoodInput("deer", 2) },
+                Inputs = new List<GoodInput> { new GoodInput("hides", 2) },
                 FacilityType = "tannery",
                 ProcessingTicks = 2,  // Tanning takes time
                 DecayRate = 0.001f,  // 0.1% per day - cured hide, very durable
                 TheftRisk = 0.4f,
-                BasePrice = 4.0f  // 2 deer (2.0) + tanning
+                BasePrice = 4.0f  // 2 hides (2.0) + tanning
             });
 
             registry.Register(new GoodDef
@@ -408,6 +416,7 @@ namespace EconSim.Core.Economy
                 Inputs = new List<GoodInput> { new GoodInput("sugarcane", 3) },
                 FacilityType = "sugar_press",
                 ProcessingTicks = 1,
+                // Pure intermediate — must be refined into sugar before use
                 DecayRate = 0.06f,  // 6% per day - ferments quickly
                 TheftRisk = 0.1f,
                 BasePrice = 4.0f  // 3 sugarcane (3.0) + pressing
@@ -430,7 +439,7 @@ namespace EconSim.Core.Economy
 
             // =============================================
             // CHAIN 6: Dairy (Goats → Milk → Cheese)
-            // Milk is also directly consumable (Basic need)
+            // Milk is a pure intermediate (perishable, must be processed into cheese)
             // =============================================
 
             registry.Register(new GoodDef
@@ -454,8 +463,7 @@ namespace EconSim.Core.Economy
                 Inputs = new List<GoodInput> { new GoodInput("goats", 2) },
                 FacilityType = "dairy",
                 ProcessingTicks = 1,
-                NeedCategory = NeedCategory.Basic,  // Directly consumable
-                BaseConsumption = 0.005f,  // Modest direct consumption
+                // Pure intermediate — historically consumed same-day or processed into cheese
                 DecayRate = 0.08f,  // 8% per day - highly perishable
                 TheftRisk = 0.1f,  // Perishable, low fence value
                 BasePrice = 3.0f
@@ -471,7 +479,7 @@ namespace EconSim.Core.Economy
                 ProcessingTicks = 2,
                 NeedCategory = NeedCategory.Comfort,
                 BaseConsumption = 0.002f,
-                DecayRate = 0.01f,  // 1% per day - lasts much longer than milk
+                DecayRate = 0.003f,  // 0.3% per day - hard aged cheese lasts months
                 TheftRisk = 0.3f,
                 BasePrice = 8.0f  // 2 milk (6.0) + aging/processing
             });
@@ -582,19 +590,14 @@ namespace EconSim.Core.Economy
 
             registry.Register(new FacilityDef
             {
-                Id = "hunting_lodge",
-                Name = "Hunting Lodge",
-                OutputGoodId = "deer",
+                Id = "hide_farm",
+                Name = "Hide Farm",
+                OutputGoodId = "hides",
                 LaborRequired = 3,
                 LaborType = LaborType.Unskilled,
                 BaseThroughput = 4f,
                 IsExtraction = true,
-                TerrainRequirements = new List<string> {
-                    "Temperate deciduous forest",
-                    "Temperate rainforest",
-                    "Tropical seasonal forest",
-                    "Taiga"
-                }
+                TerrainRequirements = new List<string> { "Grassland", "Steppe", "Highland" }
             });
 
             registry.Register(new FacilityDef
@@ -792,12 +795,23 @@ namespace EconSim.Core.Economy
 
             registry.Register(new FacilityDef
             {
+                Id = "shearing_shed",
+                Name = "Shearing Shed",
+                OutputGoodId = "wool",
+                LaborRequired = 2,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 4f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
                 Id = "spinning_mill",
                 Name = "Spinning Mill",
-                OutputGoodId = "wool",
+                OutputGoodId = "cloth",
                 LaborRequired = 3,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 4f,
+                BaseThroughput = 3f,
                 IsExtraction = false
             });
 
