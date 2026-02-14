@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
@@ -16,7 +17,9 @@ namespace EconSim.Core.Simulation
     public class SimulationRunner : ISimulation
     {
         private const int BootstrapCacheVersion = 7;
+        private const int BootstrapCacheHeaderMagic = unchecked((int)0xEC0A571C);
         private const string BootstrapCacheFileName = "simulation_bootstrap.bin";
+        private static readonly int BootstrapCacheSchemaHash = ComputeBootstrapCacheSchemaHash();
 
         private readonly MapData _mapData;
         private readonly SimulationState _state;
@@ -223,7 +226,21 @@ namespace EconSim.Core.Simulation
                 if (version != BootstrapCacheVersion)
                     return false;
 
-                int rootSeed = reader.ReadInt32();
+                int rootSeed;
+                int markerOrRootSeed = reader.ReadInt32();
+                if (markerOrRootSeed == BootstrapCacheHeaderMagic)
+                {
+                    int schemaHash = reader.ReadInt32();
+                    if (schemaHash != BootstrapCacheSchemaHash)
+                        return false;
+                    rootSeed = reader.ReadInt32();
+                }
+                else
+                {
+                    // Legacy v7 cache files did not include header magic/schema hash.
+                    rootSeed = markerOrRootSeed;
+                }
+
                 int mapGenSeed = reader.ReadInt32();
                 int economySeed = reader.ReadInt32();
                 int countyCount = reader.ReadInt32();
@@ -425,79 +442,115 @@ namespace EconSim.Core.Simulation
                 using var writer = new BinaryWriter(stream);
 
                 writer.Write(BootstrapCacheVersion);
-                writer.Write(_cacheRootSeed);
-                writer.Write(_cacheMapGenSeed);
-                writer.Write(_cacheEconomySeed);
-                writer.Write(_mapData?.Counties?.Count ?? 0);
-                writer.Write(_mapData?.Cells?.Count ?? 0);
-                writer.Write(_mapData?.Info?.World != null ? _mapData.Info.World.LatitudeSouth : float.NaN);
-                writer.Write(_mapData?.Info?.World != null ? _mapData.Info.World.LatitudeNorth : float.NaN);
-                writer.Write(staticNetworkBuilt);
-
-                writer.Write(_state.Economy.Markets.Count);
-                foreach (var market in _state.Economy.Markets.Values)
-                {
-                    writer.Write(market.Id);
-                    writer.Write(market.LocationCellId);
-                    writer.Write(market.Name ?? string.Empty);
-                    writer.Write((int)market.Type);
-                    int zoneEntryCount = market.Type == MarketType.Black
-                        ? 0
-                        : (market.ZoneCellCosts?.Count ?? 0);
-                    writer.Write(zoneEntryCount);
-                    if (zoneEntryCount > 0)
-                    {
-                        foreach (var zoneEntry in market.ZoneCellCosts)
-                        {
-                            writer.Write(zoneEntry.Key);
-                            writer.Write(zoneEntry.Value);
-                        }
-                    }
-
-                    // OffMap market metadata
-                    if (market.Type == MarketType.OffMap)
-                    {
-                        writer.Write(market.OffMapPriceMultiplier);
-                        int goodCount = market.OffMapGoodIds?.Count ?? 0;
-                        writer.Write(goodCount);
-                        if (market.OffMapGoodIds != null)
-                        {
-                            foreach (var goodId in market.OffMapGoodIds)
-                                writer.Write(goodId);
-                        }
-                    }
-                }
-
-                writer.Write(_state.Economy.CountyToMarket.Count);
-                foreach (var kvp in _state.Economy.CountyToMarket)
-                {
-                    writer.Write(kvp.Key);
-                    writer.Write(kvp.Value);
-                }
-
-                writer.Write(_state.Economy.Roads.PathThreshold);
-                writer.Write(_state.Economy.Roads.RoadThreshold);
-
-                if (staticNetworkBuilt)
-                {
-                    writer.Write(_state.Economy.Roads.EdgeTraffic.Count);
-                    foreach (var kvp in _state.Economy.Roads.EdgeTraffic)
-                    {
-                        writer.Write(kvp.Key.Item1);
-                        writer.Write(kvp.Key.Item2);
-                        writer.Write(kvp.Value);
-                    }
-                }
-                else
-                {
-                    writer.Write(0);
-                }
+                writer.Write(BootstrapCacheHeaderMagic);
+                writer.Write(BootstrapCacheSchemaHash);
+                WriteBootstrapCachePayload(writer, staticNetworkBuilt);
 
                 SimLog.Log("Bootstrap", $"Saved simulation bootstrap cache: {_bootstrapCachePath}");
             }
             catch (Exception ex)
             {
                 SimLog.Log("Bootstrap", $"Failed to save simulation bootstrap cache: {ex.Message}");
+            }
+        }
+
+        private void WriteBootstrapCachePayload(BinaryWriter writer, bool staticNetworkBuilt)
+        {
+            writer.Write(_cacheRootSeed);
+            writer.Write(_cacheMapGenSeed);
+            writer.Write(_cacheEconomySeed);
+            writer.Write(_mapData?.Counties?.Count ?? 0);
+            writer.Write(_mapData?.Cells?.Count ?? 0);
+            writer.Write(_mapData?.Info?.World != null ? _mapData.Info.World.LatitudeSouth : float.NaN);
+            writer.Write(_mapData?.Info?.World != null ? _mapData.Info.World.LatitudeNorth : float.NaN);
+            writer.Write(staticNetworkBuilt);
+
+            writer.Write(_state.Economy.Markets.Count);
+            foreach (var market in _state.Economy.Markets.Values)
+            {
+                writer.Write(market.Id);
+                writer.Write(market.LocationCellId);
+                writer.Write(market.Name ?? string.Empty);
+                writer.Write((int)market.Type);
+                int zoneEntryCount = market.Type == MarketType.Black
+                    ? 0
+                    : (market.ZoneCellCosts?.Count ?? 0);
+                writer.Write(zoneEntryCount);
+                if (zoneEntryCount > 0)
+                {
+                    foreach (var zoneEntry in market.ZoneCellCosts)
+                    {
+                        writer.Write(zoneEntry.Key);
+                        writer.Write(zoneEntry.Value);
+                    }
+                }
+
+                // OffMap market metadata
+                if (market.Type == MarketType.OffMap)
+                {
+                    writer.Write(market.OffMapPriceMultiplier);
+                    int goodCount = market.OffMapGoodIds?.Count ?? 0;
+                    writer.Write(goodCount);
+                    if (market.OffMapGoodIds != null)
+                    {
+                        foreach (var goodId in market.OffMapGoodIds)
+                            writer.Write(goodId);
+                    }
+                }
+            }
+
+            writer.Write(_state.Economy.CountyToMarket.Count);
+            foreach (var kvp in _state.Economy.CountyToMarket)
+            {
+                writer.Write(kvp.Key);
+                writer.Write(kvp.Value);
+            }
+
+            writer.Write(_state.Economy.Roads.PathThreshold);
+            writer.Write(_state.Economy.Roads.RoadThreshold);
+
+            if (staticNetworkBuilt)
+            {
+                writer.Write(_state.Economy.Roads.EdgeTraffic.Count);
+                foreach (var kvp in _state.Economy.Roads.EdgeTraffic)
+                {
+                    writer.Write(kvp.Key.Item1);
+                    writer.Write(kvp.Key.Item2);
+                    writer.Write(kvp.Value);
+                }
+            }
+            else
+            {
+                writer.Write(0);
+            }
+        }
+
+        private static int ComputeBootstrapCacheSchemaHash()
+        {
+            MethodInfo payloadWriter = typeof(SimulationRunner).GetMethod(
+                nameof(WriteBootstrapCachePayload),
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            if (payloadWriter == null)
+                return 0;
+
+            MethodBody body = payloadWriter.GetMethodBody();
+            if (body == null)
+                return 0;
+
+            byte[] ilBytes = body.GetILAsByteArray();
+            if (ilBytes == null || ilBytes.Length == 0)
+                return 0;
+
+            unchecked
+            {
+                uint hash = 2166136261u;
+                for (int i = 0; i < ilBytes.Length; i++)
+                {
+                    hash ^= ilBytes[i];
+                    hash *= 16777619u;
+                }
+
+                return (int)hash;
             }
         }
 
