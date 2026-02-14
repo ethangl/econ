@@ -334,14 +334,17 @@ namespace MapGen.Core
                 countyRealm[county] = bestCulture > 0 ? bestCulture : 1;
             }
 
-            // Force capital counties to belong to their capital's realm
+            // Force capital counties to belong to their capital's realm.
+            // First-write wins: if two capitals share a county (rare, after merges),
+            // the earlier capital keeps the county and the later one falls back to majority vote.
+            var anchoredCounties = new HashSet<int>();
             for (int r = 0; r < pol.Capitals.Length; r++)
             {
                 int capitalCell = pol.Capitals[r];
                 int realmId = r + 1;
                 if ((uint)capitalCell >= (uint)n) continue;
                 int county = pol.CountyId[capitalCell];
-                if (county > 0 && county < countyRealm.Length)
+                if (county > 0 && county < countyRealm.Length && anchoredCounties.Add(county))
                     countyRealm[county] = realmId;
             }
 
@@ -439,6 +442,17 @@ namespace MapGen.Core
                     realmCounties[realm].Add(county);
                     realmCellCount[realm] += countyCellCount[county];
                 }
+            }
+
+            // Build county→cells index once (O(N)) for efficient stamping
+            var countyCells = new List<int>[countyCount + 1];
+            for (int i = 1; i <= countyCount; i++)
+                countyCells[i] = new List<int>();
+            for (int cell = 0; cell < n; cell++)
+            {
+                int c = pol.CountyId[cell];
+                if (c > 0 && c <= countyCount)
+                    countyCells[c].Add(cell);
             }
 
             // Per-realm province assignment via competitive Dijkstra on county graph
@@ -555,7 +569,7 @@ namespace MapGen.Core
                 for (int s = 0; s < seedCounties.Count; s++)
                     remap[s + 1] = nextProvince++;
 
-                // Stamp ProvinceId on all cells via county membership
+                // Stamp ProvinceId on all cells via county→cells index (O(cells) total)
                 for (int ci = 0; ci < counties.Count; ci++)
                 {
                     int county = counties[ci];
@@ -564,13 +578,9 @@ namespace MapGen.Core
                     if (!remap.TryGetValue(local, out int globalProv))
                         globalProv = remap.Count > 0 ? nextProvince - 1 : nextProvince++;
 
-                    // Stamp all cells in this county
-                    // (iterate global array — county membership is sparse)
-                    for (int cell = 0; cell < n; cell++)
-                    {
-                        if (pol.CountyId[cell] == county)
-                            provinceIds[cell] = globalProv;
-                    }
+                    var cells = countyCells[county];
+                    for (int j = 0; j < cells.Count; j++)
+                        provinceIds[cells[j]] = globalProv;
                 }
             }
 
