@@ -47,7 +47,7 @@ public class MapOverlayManager
         }
 
         // Shader property IDs (cached for performance)
-        private static readonly int CellDataTexId = Shader.PropertyToID("_CellDataTex");
+        private static readonly int OverlayTexId = Shader.PropertyToID("_OverlayTex");
         private static readonly int PoliticalIdsTexId = Shader.PropertyToID("_PoliticalIdsTex");
         private static readonly int GeographyBaseTexId = Shader.PropertyToID("_GeographyBaseTex");
         private static readonly int VegetationTexId = Shader.PropertyToID("_VegetationTex");
@@ -1752,7 +1752,7 @@ public class MapOverlayManager
             styleMaterial.SetTexture(PoliticalIdsTexId, politicalIdsTexture);
             styleMaterial.SetTexture(GeographyBaseTexId, geographyBaseTexture);
             styleMaterial.SetTexture(VegetationTexId, vegetationTexture);
-            styleMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
+            styleMaterial.SetTexture(OverlayTexId, politicalIdsTexture);
             styleMaterial.SetTexture(HeightmapTexId, heightmapTexture);
             styleMaterial.SetTexture(ReliefNormalTexId, reliefNormalTexture);
             styleMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
@@ -1872,7 +1872,7 @@ public class MapOverlayManager
 
             if (currentOverlayLayer == OverlayLayer.None)
             {
-                styleMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
+                styleMaterial.SetTexture(OverlayTexId, politicalIdsTexture);
                 styleMaterial.SetInt(OverlayEnabledId, 0);
                 return;
             }
@@ -1880,12 +1880,12 @@ public class MapOverlayManager
             Texture2D overlayTexture = GetOrCreateOverlayTexture(currentOverlayLayer);
             if (overlayTexture == null)
             {
-                styleMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
+                styleMaterial.SetTexture(OverlayTexId, politicalIdsTexture);
                 styleMaterial.SetInt(OverlayEnabledId, 0);
                 return;
             }
 
-            styleMaterial.SetTexture(CellDataTexId, overlayTexture);
+            styleMaterial.SetTexture(OverlayTexId, overlayTexture);
             styleMaterial.SetInt(OverlayEnabledId, 1);
         }
 
@@ -2959,7 +2959,9 @@ public class MapOverlayManager
         /// </summary>
         public void SetPathStyle(float dashLength, float gapLength, float width)
         {
-            if (styleMaterial == null) return;
+            if (!SupportsPathStyle())
+                return;
+
             float clampedDash = Mathf.Max(0.1f, dashLength);
             float clampedGap = Mathf.Max(0.1f, gapLength);
             float clampedWidth = Mathf.Max(0.2f, width);
@@ -3013,13 +3015,21 @@ public class MapOverlayManager
         /// </summary>
         public void RefreshPathStyleFromMaterial()
         {
-            if (styleMaterial == null)
+            if (!SupportsPathStyle())
                 return;
 
             float dash = GetMaterialFloatOr(PathDashLengthId, 1.8f);
             float gap = GetMaterialFloatOr(PathGapLengthId, 2.4f);
             float width = GetMaterialFloatOr(PathWidthId, 0.8f);
             SetPathStyle(dash, gap, width);
+        }
+
+        private bool SupportsPathStyle()
+        {
+            return styleMaterial != null &&
+                   styleMaterial.HasProperty(PathDashLengthId) &&
+                   styleMaterial.HasProperty(PathGapLengthId) &&
+                   styleMaterial.HasProperty(PathWidthId);
         }
 
         private byte[] GenerateRoadMaskPixels()

@@ -49,7 +49,9 @@ Core textures:
 - `_ModeColorResolve` (`RGBA32`, `gridWidth x gridHeight`)
   - resolved base map color for active overlay family (political-family or market)
   - style controls (gradient, borders, path opacity) are applied in shader composite, not baked into resolve output
-- `_CellDataTex` remains a compatibility alias bound to political IDs (no separate generation/update path).
+- `_OverlayTex` (`RGBAFloat`, `gridWidth x gridHeight`)
+  - default binding: political IDs (same payload as `_PoliticalIdsTex`)
+  - overlay binding: active overlay layer texture when `_OverlayEnabled = 1`
 
 Supporting textures include:
 

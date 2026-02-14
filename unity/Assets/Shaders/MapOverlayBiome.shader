@@ -20,12 +20,11 @@ Shader "EconSim/MapOverlayBiome"
         // Sampler budget note:
         // Metal compiles this shader with a strict fragment sampler limit (16).
         // Do not add new fragment-sampled textures casually.
-        // Overlay composition intentionally reuses _CellDataTex.
+        // Overlay composition uses _OverlayTex.
         _PoliticalIdsTex ("Political IDs", 2D) = "black" {}
         _GeographyBaseTex ("Geography Base", 2D) = "black" {}
         _VegetationTex ("Vegetation Data", 2D) = "black" {}
-        // Legacy packed texture kept for migration compatibility.
-        _CellDataTex ("Cell Data (Legacy)", 2D) = "black" {}
+        _OverlayTex ("Overlay Layer", 2D) = "black" {}
 
         _OverlayOpacity ("Overlay Opacity", Range(0, 1)) = 0.65
         _OverlayEnabled ("Overlay Enabled", Int) = 0
@@ -117,7 +116,7 @@ Shader "EconSim/MapOverlayBiome"
 
             // Sampler budget note (Metal):
             // Keep total fragment samplers <= 16 for this shader.
-            // Overlay uses _CellDataTex to avoid introducing another sampler.
+            // Overlay uses _OverlayTex to avoid introducing another sampler.
             TEXTURE2D(_HeightmapTex);
             SAMPLER(sampler_HeightmapTex);
             TEXTURE2D(_ReliefNormalTex);
@@ -134,8 +133,8 @@ Shader "EconSim/MapOverlayBiome"
             float4 _GeographyBaseTex_TexelSize;  // (1/width, 1/height, width, height)
             TEXTURE2D(_VegetationTex);
             SAMPLER(sampler_VegetationTex);
-            TEXTURE2D(_CellDataTex); // Legacy compatibility path.
-            SAMPLER(sampler_CellDataTex);
+            TEXTURE2D(_OverlayTex);
+            SAMPLER(sampler_OverlayTex);
             TEXTURE2D(_BiomePaletteTex);
             SAMPLER(sampler_BiomePaletteTex);
 
@@ -492,18 +491,12 @@ Shader "EconSim/MapOverlayBiome"
 
                 if (_OverlayEnabled > 0 && !isWater)
                 {
-                    float4 overlayColor = tex2D(_CellDataTex, uv);
+                    float4 overlayColor = tex2D(_OverlayTex, uv);
                     float overlayAlpha = saturate(_OverlayOpacity * overlayColor.a);
                     finalColor = lerp(finalColor, overlayColor.rgb, overlayAlpha);
                 }
 
                 return half4(finalColor, 1);
-            }
-            // Biome style does not render political/market border-band stencil.
-            half4 frag_stencil(v2f IN) : SV_Target
-            {
-                discard;
-                return half4(0, 0, 0, 0); // Unreachable; required by some compilers.
             }
         ENDHLSL
 
@@ -518,26 +511,6 @@ Shader "EconSim/MapOverlayBiome"
             ENDHLSL
         }
 
-        // Pass 1: Stencil mask for realm border band
-        Pass
-        {
-            Tags { "LightMode"="SRPDefaultUnlit" }
-            ColorMask 0
-            ZWrite Off
-            ZTest LEqual
-            Stencil
-            {
-                Ref 1
-                Comp Always
-                Pass Replace
-            }
-
-            HLSLPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag_stencil
-            #pragma target 3.5
-            ENDHLSL
-        }
     }
     FallBack "Diffuse"
     CustomEditor "EconSim.Editor.MapOverlayShaderGUI"

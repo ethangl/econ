@@ -161,7 +161,7 @@ namespace EconSim.Editor
             ("_ReliefNormalTex", "Relief Normal"),
             ("_RiverMaskTex", "River Mask"),
             ("_ModeColorResolve", "Mode Color Resolve"),
-            ("_CellDataTex", "Cell Data (Legacy)"),
+            ("_OverlayTex", "Overlay Layer"),
             ("_CellToMarketTex", "Cell To Market"),
             ("_RealmPaletteTex", "Realm Palette"),
             ("_MarketPaletteTex", "Market Palette"),

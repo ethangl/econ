@@ -15,12 +15,11 @@ Shader "EconSim/MapOverlayFlat"
         // Sampler budget note:
         // Metal compiles this shader with a strict fragment sampler limit (16).
         // Do not add new fragment-sampled textures casually.
-        // Overlay composition intentionally reuses _CellDataTex, and marketId is packed in _ModeColorResolve.a.
+        // Overlay composition uses _OverlayTex, and marketId is packed in _ModeColorResolve.a.
         _PoliticalIdsTex ("Political IDs", 2D) = "black" {}
         _GeographyBaseTex ("Geography Base", 2D) = "black" {}
         _VegetationTex ("Vegetation Data", 2D) = "black" {}
-        // Legacy packed texture kept for migration compatibility.
-        _CellDataTex ("Cell Data (Legacy)", 2D) = "black" {}
+        _OverlayTex ("Overlay Layer", 2D) = "black" {}
 
         // Resolved mode color texture (M3-S3)
         _ModeColorResolve ("Mode Color Resolve", 2D) = "black" {}
@@ -114,7 +113,7 @@ Shader "EconSim/MapOverlayFlat"
 
             // Sampler budget note (Metal):
             // Keep total fragment samplers <= 16 for this shader.
-            // Overlay uses _CellDataTex to avoid introducing another sampler.
+            // Overlay uses _OverlayTex to avoid introducing another sampler.
             TEXTURE2D(_HeightmapTex);
             SAMPLER(sampler_HeightmapTex);
             TEXTURE2D(_ReliefNormalTex);
@@ -130,8 +129,8 @@ Shader "EconSim/MapOverlayFlat"
             SAMPLER(sampler_GeographyBaseTex);
             TEXTURE2D(_VegetationTex);
             SAMPLER(sampler_VegetationTex);
-            TEXTURE2D(_CellDataTex); // Legacy compatibility path.
-            SAMPLER(sampler_CellDataTex);
+            TEXTURE2D(_OverlayTex);
+            SAMPLER(sampler_OverlayTex);
             TEXTURE2D(_ModeColorResolve);
             SAMPLER(sampler_ModeColorResolve);
             TEXTURE2D(_CellToMarketTex);
@@ -357,7 +356,7 @@ Shader "EconSim/MapOverlayFlat"
 
                 if (_OverlayEnabled > 0 && !isWater)
                 {
-                    float4 overlayColor = tex2D(_CellDataTex, uv);
+                    float4 overlayColor = tex2D(_OverlayTex, uv);
                     float overlayAlpha = saturate(_OverlayOpacity * overlayColor.a);
                     finalColor = lerp(finalColor, overlayColor.rgb, overlayAlpha);
                 }

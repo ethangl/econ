@@ -25,7 +25,7 @@ This playbook is for `MapOverlayFlat.shader` / `MapOverlayBiome.shader` + `MapOv
 
 Supporting generated textures:
 
-- `_CellDataTex`
+- `_OverlayTex`
 - `_HeightmapTex`
 - `_RiverMaskTex`
 - `_RealmPaletteTex`
@@ -60,7 +60,7 @@ Supporting generated textures:
 
 Likely causes:
 
-- bad ID decode from `_CellDataTex`
+- bad ID decode from `_PoliticalIdsTex`
 - palette lookup mismatch
 - precision/hue-shifting transform in shader path
 
@@ -168,14 +168,14 @@ Use the built-in runtime tooling:
 
 - Press `0` to enter **Channel Inspector** mode.
 - Press `O` to cycle channel views:
-  - `CellData R/G/B/A`
+  - `PoliticalIds R/G/B/A`
   - `Realm/Province/County/Market border distance`
   - `River mask`
   - `Heightmap`
   - `Road mask`
 - Press `P` to toggle the on-screen **ID Probe**.
   - Probe shows decoded `realm/province/county/market` IDs under cursor.
-  - Probe shows normalized channel values matching `_CellDataTex` packing.
+  - Probe shows normalized channel values matching `_PoliticalIdsTex` packing.
 
 In material Inspector (`MapOverlayShaderGUI`):
 
