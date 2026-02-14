@@ -177,7 +177,7 @@ Material:
     - _CoastGradientIntensity: 0
     - _CoastGradientRadius: 15
     - _CoastlineBorderWidth: 2
-    - _CountyBorderDarkening: 0.25
+    - _CountyBorderDarkening: 0.353
     - _CountyBorderWidth: 0.05
     - _Cutoff: 0.5
     - _DebugView: 0
@@ -194,12 +194,12 @@ Material:
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.000016896985
+    - _HoverIntensity: 0
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
-    - _MapMode: 2
+    - _MapMode: 1
     - _MarketBorderDarkening: 0.688
     - _MarketBorderWidth: 0.25
     - _Metallic: 0
@@ -209,7 +209,7 @@ Material:
     - _PathDashLength: 0.1
     - _PathGapLength: 1.5
     - _PathOpacity: 0.75
-    - _PathWidth: 0.5
+    - _PathWidth: 0.81
     - _PoliticalCenterOpacity: 0.222
     - _PoliticalEdgeDarkening: 0.777
     - _PoliticalEdgeOpacity: 0.8
@@ -229,10 +229,10 @@ Material:
     - _SelectedCountyId: -1
     - _SelectedMarketId: -1
     - _SelectedProvinceId: -1
-    - _SelectedRealmId: 0.00009155413
+    - _SelectedRealmId: -1
     - _SelectionBorderWidth: 3
-    - _SelectionDesaturation: 0.8
-    - _SelectionDimming: 0.25
+    - _SelectionDesaturation: 0
+    - _SelectionDimming: 1
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
     - _ShimmerIntensity: 0.2

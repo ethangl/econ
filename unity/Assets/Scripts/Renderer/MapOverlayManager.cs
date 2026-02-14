@@ -17,6 +17,12 @@ namespace EconSim.Renderer
     /// </summary>
 public class MapOverlayManager
 {
+        public enum OverlayLayer
+        {
+            None = 0,
+            PopulationDensity = 1
+        }
+
         public enum ChannelDebugView
         {
             PoliticalIdsR = 0,
@@ -47,6 +53,8 @@ public class MapOverlayManager
         private static readonly int VegetationTexId = Shader.PropertyToID("_VegetationTex");
         private static readonly int ModeColorResolveTexId = Shader.PropertyToID("_ModeColorResolve");
         private static readonly int UseModeColorResolveId = Shader.PropertyToID("_UseModeColorResolve");
+        private static readonly int OverlayOpacityId = Shader.PropertyToID("_OverlayOpacity");
+        private static readonly int OverlayEnabledId = Shader.PropertyToID("_OverlayEnabled");
         private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
         private static readonly int ReliefNormalTexId = Shader.PropertyToID("_ReliefNormalTex");
         private static readonly int RiverMaskTexId = Shader.PropertyToID("_RiverMaskTex");
@@ -164,6 +172,8 @@ public class MapOverlayManager
         private readonly Dictionary<MapView.MapMode, Texture2D> modeColorResolveCacheByMode = new Dictionary<MapView.MapMode, Texture2D>();
         private readonly Dictionary<MapView.MapMode, int> modeColorResolveCacheRevisionByMode = new Dictionary<MapView.MapMode, int>();
         private readonly Dictionary<MapView.MapMode, int> modeColorResolveRevisionByKey = new Dictionary<MapView.MapMode, int>();
+        private readonly Dictionary<OverlayLayer, Texture2D> overlayTextureCacheByLayer = new Dictionary<OverlayLayer, Texture2D>();
+        private OverlayLayer currentOverlayLayer = OverlayLayer.None;
 
         // Spatial lookup grid: maps data pixel coordinates to cell IDs
         private int[] spatialGrid;
@@ -210,6 +220,8 @@ public class MapOverlayManager
         private static readonly Color HeatHighColor = new Color(0.98f, 0.82f, 0.22f);
         private static readonly Color HeatExtremeColor = new Color(0.82f, 0.20f, 0.18f);
         private static readonly Color HeatMissingColor = new Color(0.25f, 0.25f, 0.25f);
+        private const float DefaultOverlayOpacity = 0.65f;
+        private float overlayOpacity = DefaultOverlayOpacity;
         private const float ProvinceHueShiftDegrees = 6f;
         private const float ProvinceSaturationShift = 0.06f;
         private const float ProvinceValueShift = 0.06f;
@@ -1792,6 +1804,9 @@ public class MapOverlayManager
             cellToMarketTexture.Apply();
             terrainMaterial.SetTexture(CellToMarketTexId, cellToMarketTexture);
             terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(Elevation.ResolveSeaLevel(mapData.Info), mapData.Info));
+            overlayOpacity = Mathf.Clamp01(GetMaterialFloatOr(OverlayOpacityId, DefaultOverlayOpacity));
+            terrainMaterial.SetFloat(OverlayOpacityId, overlayOpacity);
+            terrainMaterial.SetInt(OverlayEnabledId, 0);
 
             // Water layer properties are set via shader defaults + material Inspector
             // (not overwritten here so Inspector tweaks persist)
@@ -1805,6 +1820,58 @@ public class MapOverlayManager
             ClearHover();
 
             RegenerateModeColorResolveTexture();
+            SetOverlay(OverlayLayer.None);
+        }
+
+        public OverlayLayer CurrentOverlay => currentOverlayLayer;
+
+        public void SetOverlay(OverlayLayer layer)
+        {
+            if (currentOverlayLayer == layer)
+                return;
+
+            currentOverlayLayer = layer;
+            ApplyOverlayToMaterial();
+        }
+
+        public float OverlayOpacity => overlayOpacity;
+
+        public void SetOverlayOpacity(float opacity)
+        {
+            float clamped = Mathf.Clamp01(opacity);
+            if (Mathf.Abs(overlayOpacity - clamped) < 0.0001f)
+                return;
+
+            overlayOpacity = clamped;
+            if (terrainMaterial != null)
+                terrainMaterial.SetFloat(OverlayOpacityId, overlayOpacity);
+        }
+
+        private void ApplyOverlayToMaterial()
+        {
+            if (terrainMaterial == null)
+                return;
+
+            overlayOpacity = Mathf.Clamp01(GetMaterialFloatOr(OverlayOpacityId, overlayOpacity));
+            terrainMaterial.SetFloat(OverlayOpacityId, overlayOpacity);
+
+            if (currentOverlayLayer == OverlayLayer.None)
+            {
+                terrainMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
+                terrainMaterial.SetInt(OverlayEnabledId, 0);
+                return;
+            }
+
+            Texture2D overlayTexture = GetOrCreateOverlayTexture(currentOverlayLayer);
+            if (overlayTexture == null)
+            {
+                terrainMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
+                terrainMaterial.SetInt(OverlayEnabledId, 0);
+                return;
+            }
+
+            terrainMaterial.SetTexture(CellDataTexId, overlayTexture);
+            terrainMaterial.SetInt(OverlayEnabledId, 1);
         }
 
         /// <summary>
@@ -2154,14 +2221,14 @@ public class MapOverlayManager
                     if (float.IsNaN(value) || float.IsInfinity(value))
                     {
                         Color missing = HeatMissingColor;
-                        missing.a = 1f;
+                        missing.a = ResolveNormalizedMarketId(cell, cellId);
                         resolved[i] = missing;
                         continue;
                     }
 
                     float normalized = Mathf.Clamp01((value - minValue) / range);
                     Color heat = EvaluateHeatColor(normalized);
-                    heat.a = 1f;
+                    heat.a = ResolveNormalizedMarketId(cell, cellId);
                     resolved[i] = heat;
                 }
             }
@@ -2195,7 +2262,7 @@ public class MapOverlayManager
                             economyState.CountyToMarket.TryGetValue(cell.CountyId, out marketId);
 
                         Color marketColor = LookupPaletteColor(marketPalette, marketId);
-                        marketColor.a = 1f;
+                        marketColor.a = marketId <= 0 ? 0f : marketId / 65535f;
                         resolved[i] = marketColor;
                     }
                     else
@@ -2225,7 +2292,7 @@ public class MapOverlayManager
                                 }
                             }
                         }
-                        politicalColor.a = 1f;
+                        politicalColor.a = ResolveNormalizedMarketId(cell, cellId);
                         resolved[i] = politicalColor;
                     }
                 }
@@ -2613,6 +2680,23 @@ public class MapOverlayManager
             return market.ZoneCellCosts.TryGetValue(cellId, out cost);
         }
 
+        private float ResolveNormalizedMarketId(Cell cell, int cellId)
+        {
+            if (cell == null || economyState == null)
+                return 0f;
+
+            int marketId = 0;
+            if (economyState.CountyToMarket != null)
+                economyState.CountyToMarket.TryGetValue(cell.CountyId, out marketId);
+            if (marketId <= 0 && economyState.CellToMarket != null)
+                economyState.CellToMarket.TryGetValue(cellId, out marketId);
+
+            if (marketId <= 0)
+                return 0f;
+
+            return marketId / 65535f;
+        }
+
         private static Color EvaluateHeatColor(float t)
         {
             t = Mathf.Clamp01(t);
@@ -2621,6 +2705,103 @@ public class MapOverlayManager
             if (t <= 0.66f)
                 return Color.Lerp(HeatMidColor, HeatHighColor, (t - 0.33f) / 0.33f);
             return Color.Lerp(HeatHighColor, HeatExtremeColor, (t - 0.66f) / 0.34f);
+        }
+
+        private Texture2D GetOrCreateOverlayTexture(OverlayLayer layer)
+        {
+            if (layer == OverlayLayer.None)
+                return null;
+
+            if (overlayTextureCacheByLayer.TryGetValue(layer, out Texture2D cached) && cached != null)
+            {
+                if (cached.width == gridWidth && cached.height == gridHeight)
+                    return cached;
+
+                DestroyTexture(cached);
+                overlayTextureCacheByLayer.Remove(layer);
+            }
+
+            Texture2D texture = layer switch
+            {
+                OverlayLayer.PopulationDensity => GeneratePopulationDensityOverlayTexture(),
+                _ => null
+            };
+
+            if (texture != null)
+                overlayTextureCacheByLayer[layer] = texture;
+
+            return texture;
+        }
+
+        private Texture2D GeneratePopulationDensityOverlayTexture()
+        {
+            var texture = new Texture2D(gridWidth, gridHeight, TextureFormat.RGBA32, false);
+            texture.name = "OverlayPopulationDensity";
+            texture.filterMode = FilterMode.Bilinear;
+            texture.wrapMode = TextureWrapMode.Clamp;
+
+            int size = gridWidth * gridHeight;
+            var pixels = new Color32[size];
+            if (spatialGrid == null || spatialGrid.Length != size || mapData?.Counties == null || mapData.Counties.Count == 0)
+            {
+                texture.SetPixels32(pixels);
+                texture.Apply();
+                return texture;
+            }
+
+            float areaPerLandCellKm2 = 1f;
+            if (mapData.Info?.World != null && mapData.Info.World.MapAreaKm2 > 0f && mapData.Info.LandCells > 0)
+                areaPerLandCellKm2 = mapData.Info.World.MapAreaKm2 / mapData.Info.LandCells;
+
+            var countyLogDensityById = new Dictionary<int, float>(mapData.Counties.Count);
+            float minLogDensity = float.MaxValue;
+            float maxLogDensity = float.MinValue;
+
+            for (int i = 0; i < mapData.Counties.Count; i++)
+            {
+                County county = mapData.Counties[i];
+                if (county == null || county.Id <= 0 || county.CellCount <= 0)
+                    continue;
+
+                float countyAreaKm2 = Mathf.Max(0.001f, county.CellCount * areaPerLandCellKm2);
+                float density = Mathf.Max(0f, county.TotalPopulation) / countyAreaKm2;
+                float logDensity = Mathf.Log(1f + density);
+                countyLogDensityById[county.Id] = logDensity;
+                minLogDensity = Mathf.Min(minLogDensity, logDensity);
+                maxLogDensity = Mathf.Max(maxLogDensity, logDensity);
+            }
+
+            bool hasRange = countyLogDensityById.Count > 0 && maxLogDensity > minLogDensity + 1e-5f;
+            Color[] riverPixels = riverMaskTexture != null ? riverMaskTexture.GetPixels() : null;
+
+            for (int i = 0; i < size; i++)
+            {
+                int cellId = spatialGrid[i];
+                if (cellId < 0 || cellId >= cellIsLandById.Length || !cellIsLandById[cellId])
+                    continue;
+
+                if (riverPixels != null && i < riverPixels.Length && riverPixels[i].r > 0.5f)
+                    continue;
+
+                int countyId = (cellId >= 0 && cellId < cellCountyIdById.Length) ? cellCountyIdById[cellId] : 0;
+                if (countyId <= 0 || !countyLogDensityById.TryGetValue(countyId, out float logDensity))
+                    continue;
+
+                float normalized = hasRange
+                    ? Mathf.Clamp01((logDensity - minLogDensity) / Mathf.Max(1e-5f, maxLogDensity - minLogDensity))
+                    : 0f;
+                Color overlayColor = EvaluateHeatColor(normalized);
+                pixels[i] = new Color32(
+                    (byte)Mathf.RoundToInt(overlayColor.r * 255f),
+                    (byte)Mathf.RoundToInt(overlayColor.g * 255f),
+                    (byte)Mathf.RoundToInt(overlayColor.b * 255f),
+                    255);
+            }
+
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            TextureDebugger.SaveTexture(texture, "overlay_population_density");
+            return texture;
         }
 
         private void PrewarmOverlayModeResolveCache(MapView.MapMode mode)
@@ -3328,6 +3509,8 @@ public class MapOverlayManager
             AddTextureForDestroy(texturesToDestroy, modeColorResolveTexture);
             foreach (var cachedResolve in modeColorResolveCacheByMode.Values)
                 AddTextureForDestroy(texturesToDestroy, cachedResolve);
+            foreach (var overlayTexture in overlayTextureCacheByLayer.Values)
+                AddTextureForDestroy(texturesToDestroy, overlayTexture);
 
             foreach (var texture in texturesToDestroy)
                 DestroyTexture(texture);
@@ -3335,6 +3518,7 @@ public class MapOverlayManager
             modeColorResolveCacheByMode.Clear();
             modeColorResolveCacheRevisionByMode.Clear();
             modeColorResolveRevisionByKey.Clear();
+            overlayTextureCacheByLayer.Clear();
 
             politicalIdsTexture = null;
             geographyBaseTexture = null;

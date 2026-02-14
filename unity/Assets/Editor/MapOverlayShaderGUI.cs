@@ -72,6 +72,7 @@ namespace EconSim.Editor
             ("_GradientRadius", "Gradient Radius (pixels)"),
             ("_GradientEdgeDarkening", "Gradient Edge Darkening"),
             ("_GradientCenterOpacity", "Gradient Center Opacity"),
+            ("_OverlayOpacity", "Overlay Opacity"),
         };
 
         private static readonly (string name, string label)[] MarketRenderingProps = new[]
@@ -185,6 +186,7 @@ namespace EconSim.Editor
             "_HoverIntensity",
             "_MapMode",
             "_UseModeColorResolve",
+            "_OverlayEnabled",
             "_UseHeightDisplacement",
             "_HeightScale",
             "_SeaLevel",

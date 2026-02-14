@@ -30,9 +30,7 @@ float NormalizeLandHeight(float height)
 
 float LookupMarketIdFromCounty(float countyId)
 {
-    float countyIdRaw = countyId * 65535.0;
-    float marketU = (clamp(round(countyIdRaw), 0, 16383) + 0.5) / 16384.0;
-    return tex2D(_CellToMarketTex, float2(marketU, 0.5)).r;
+    return 0.0;
 }
 
 bool IdEquals(float lhs, float rhs)
