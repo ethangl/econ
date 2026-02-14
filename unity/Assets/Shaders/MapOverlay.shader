@@ -163,13 +163,6 @@ Shader "EconSim/MapOverlay"
             TEXTURE2D(_ReliefNormalTex);
             SAMPLER(sampler_ReliefNormalTex);
             float4 _HeightmapTex_TexelSize;  // (1/width, 1/height, width, height)
-            float _ReliefNormalStrength;
-            float _ReliefShadeStrength;
-            float _ReliefAmbient;
-            float4 _ReliefLightDir;
-            float _HeightScale;
-            float _SeaLevel;
-            int _UseHeightDisplacement;
 
             TEXTURE2D(_RiverMaskTex);  // River mask (1 = river, 0 = not river)
             SAMPLER(sampler_RiverMaskTex);
@@ -187,9 +180,6 @@ Shader "EconSim/MapOverlay"
             SAMPLER(sampler_ModeColorResolve);
             TEXTURE2D(_CellToMarketTex);
             SAMPLER(sampler_CellToMarketTex);
-            int _UseModeColorResolve;
-            float _OverlayOpacity;
-            int _OverlayEnabled;
 
             TEXTURE2D(_RealmPaletteTex);
             SAMPLER(sampler_RealmPaletteTex);
@@ -197,82 +187,97 @@ Shader "EconSim/MapOverlay"
             SAMPLER(sampler_MarketPaletteTex);
             TEXTURE2D(_BiomePaletteTex);
             SAMPLER(sampler_BiomePaletteTex);
-            float _SoilHeightFloor;
-            float _SoilBlendRadius;
-            float _SoilBlendSharpness;
-            half4 _SoilColor0;
-            half4 _SoilColor1;
-            half4 _SoilColor2;
-            half4 _SoilColor3;
-            half4 _SoilColor4;
-            half4 _SoilColor5;
-            half4 _SoilColor6;
-            half4 _SoilColor7;
-            half4 _VegetationColor0;
-            half4 _VegetationColor1;
-            half4 _VegetationColor2;
-            half4 _VegetationColor3;
-            half4 _VegetationColor4;
-            half4 _VegetationColor5;
-            half4 _VegetationColor6;
-            float _VegetationStippleOpacity;
-            float _VegetationStippleScale;
-            float _VegetationStippleJitter;
-            float _VegetationCoverageContrast;
-            float _VegetationStippleSoftness;
-
-            int _MapMode;
-            int _DebugView;
-            float _GradientRadius;
-            float _GradientEdgeDarkening;
-            float _GradientCenterOpacity;
             TEXTURE2D(_RealmBorderDistTex);
             SAMPLER(sampler_RealmBorderDistTex);
-            float _RealmBorderWidth;
-            float _RealmBorderDarkening;
             TEXTURE2D(_ProvinceBorderDistTex);
             SAMPLER(sampler_ProvinceBorderDistTex);
-            float _ProvinceBorderWidth;
-            float _ProvinceBorderDarkening;
             TEXTURE2D(_CountyBorderDistTex);
             SAMPLER(sampler_CountyBorderDistTex);
-            float _CountyBorderWidth;
-            float _CountyBorderDarkening;
             TEXTURE2D(_MarketBorderDistTex);
             SAMPLER(sampler_MarketBorderDistTex);
-            float _MarketBorderWidth;
-            float _MarketBorderDarkening;
 
             TEXTURE2D(_RoadMaskTex);
             SAMPLER(sampler_RoadMaskTex);
-            float _PathOpacity;
 
-            // Water layer uniforms
-            half4 _WaterShallowColor;
-            half4 _WaterDeepColor;
-            half4 _WaterAbsorption;
-            float _WaterOpticalDepth;
-            float _WaterDepthExponent;
-            float _WaterRefractionStrength;
-            float _WaterRefractionScale;
-            float _WaterRefractionSpeed;
-            float _WaterShallowAlpha;
-            float _ShimmerScale;
-            float _ShimmerSpeed;
-            float _ShimmerIntensity;
+            CBUFFER_START(UnityPerMaterial)
+                float _ReliefNormalStrength;
+                float _ReliefShadeStrength;
+                float _ReliefAmbient;
+                float4 _ReliefLightDir;
+                float _HeightScale;
+                float _SeaLevel;
+                int _UseHeightDisplacement;
 
-            float _SelectedRealmId;
-            float _SelectedProvinceId;
-            float _SelectedCountyId;
-            float _SelectedMarketId;
-            float _SelectionDimming;
-            float _SelectionDesaturation;
+                int _UseModeColorResolve;
+                float _OverlayOpacity;
+                int _OverlayEnabled;
 
-            float _HoveredRealmId;
-            float _HoveredProvinceId;
-            float _HoveredCountyId;
-            float _HoveredMarketId;
-            float _HoverIntensity;
+                float _SoilHeightFloor;
+                float _SoilBlendRadius;
+                float _SoilBlendSharpness;
+                half4 _SoilColor0;
+                half4 _SoilColor1;
+                half4 _SoilColor2;
+                half4 _SoilColor3;
+                half4 _SoilColor4;
+                half4 _SoilColor5;
+                half4 _SoilColor6;
+                half4 _SoilColor7;
+                half4 _VegetationColor0;
+                half4 _VegetationColor1;
+                half4 _VegetationColor2;
+                half4 _VegetationColor3;
+                half4 _VegetationColor4;
+                half4 _VegetationColor5;
+                half4 _VegetationColor6;
+                float _VegetationStippleOpacity;
+                float _VegetationStippleScale;
+                float _VegetationStippleJitter;
+                float _VegetationCoverageContrast;
+                float _VegetationStippleSoftness;
+
+                int _MapMode;
+                int _DebugView;
+                float _GradientRadius;
+                float _GradientEdgeDarkening;
+                float _GradientCenterOpacity;
+                float _RealmBorderWidth;
+                float _RealmBorderDarkening;
+                float _ProvinceBorderWidth;
+                float _ProvinceBorderDarkening;
+                float _CountyBorderWidth;
+                float _CountyBorderDarkening;
+                float _MarketBorderWidth;
+                float _MarketBorderDarkening;
+                float _PathOpacity;
+
+                // Water layer uniforms
+                half4 _WaterShallowColor;
+                half4 _WaterDeepColor;
+                half4 _WaterAbsorption;
+                float _WaterOpticalDepth;
+                float _WaterDepthExponent;
+                float _WaterRefractionStrength;
+                float _WaterRefractionScale;
+                float _WaterRefractionSpeed;
+                float _WaterShallowAlpha;
+                float _ShimmerScale;
+                float _ShimmerSpeed;
+                float _ShimmerIntensity;
+
+                float _SelectedRealmId;
+                float _SelectedProvinceId;
+                float _SelectedCountyId;
+                float _SelectedMarketId;
+                float _SelectionDimming;
+                float _SelectionDesaturation;
+
+                float _HoveredRealmId;
+                float _HoveredProvinceId;
+                float _HoveredCountyId;
+                float _HoveredMarketId;
+                float _HoverIntensity;
+            CBUFFER_END
 
             // Bridge legacy sampling calls to SRP texture/sampler macros.
             #define tex2D(tex, uv) SAMPLE_TEXTURE2D(tex, sampler##tex, uv)

@@ -45,8 +45,10 @@ Shader "EconSim/VertexColorTerrain"
                 half fogFactor : TEXCOORD2;
             };
 
-            half _Glossiness;
-            half _Metallic;
+            CBUFFER_START(UnityPerMaterial)
+                half _Glossiness;
+                half _Metallic;
+            CBUFFER_END
 
             Varyings vert(Attributes input)
             {
