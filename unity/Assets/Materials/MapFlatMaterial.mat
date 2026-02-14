@@ -139,10 +139,6 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
-    - _ReliefNormalTex:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
     - _RiverMaskTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -186,26 +182,26 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _GradientEdgeDarkening: 0.333
+    - _GradientEdgeDarkening: 0.176
     - _GradientRadius: 5
     - _HalftoneScale: 0.15
     - _HeightScale: 0
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.00899245
+    - _HoverIntensity: 4e-45
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
-    - _MapMode: 2
+    - _MapMode: 1
     - _MarketBorderDarkening: 0.688
     - _MarketBorderWidth: 0.25
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
-    - _OverlayEnabled: 0
-    - _OverlayOpacity: 0.65
+    - _OverlayEnabled: 1
+    - _OverlayOpacity: 0.8
     - _Parallax: 0.02
     - _PathDashLength: 0.1
     - _PathGapLength: 1.5
@@ -217,11 +213,8 @@ Material:
     - _PoliticalGradientRadius: 64
     - _ProvinceBorderDarkening: 0.4
     - _ProvinceBorderWidth: 0.1
-    - _RealmBorderDarkening: 0.75
-    - _RealmBorderWidth: 0.25
-    - _ReliefAmbient: 0.333
-    - _ReliefNormalStrength: 0.5
-    - _ReliefShadeStrength: 0.333
+    - _RealmBorderDarkening: 0.5
+    - _RealmBorderWidth: 0.3
     - _RiverDarken: 1
     - _RiverDepth: 0.5
     - _RoadWidth: 0.045
@@ -232,22 +225,16 @@ Material:
     - _SelectedProvinceId: -1
     - _SelectedRealmId: -1
     - _SelectionBorderWidth: 3
-    - _SelectionDesaturation: 0
-    - _SelectionDimming: 1
+    - _SelectionDesaturation: 4e-45
+    - _SelectionDimming: 0.9999998
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
-    - _ShimmerIntensity: 0.2
-    - _ShimmerScale: 4
-    - _ShimmerSpeed: 4
     - _ShowCountyBorders: 0
     - _ShowMarketBorders: 0
     - _ShowProvinceBorders: 0
     - _ShowRealmBorders: 0
     - _SmoothnessTextureChannel: 0
-    - _SoilBlendRadius: 3
-    - _SoilBlendSharpness: 3
     - _SoilBlurRadius: 3
-    - _SoilHeightFloor: 0.05
     - _SoilTerrainOverlayOpacity: 0
     - _SoilTintStrength: 0.181
     - _SpecularHighlights: 1
@@ -255,20 +242,10 @@ Material:
     - _UVSec: 0
     - _UseHeightDisplacement: 1
     - _UseModeColorResolve: 1
-    - _VegetationCoverageContrast: 1.3
-    - _VegetationStippleJitter: 1
-    - _VegetationStippleOpacity: 0.8
-    - _VegetationStippleScale: 3
-    - _VegetationStippleSoftness: 2.5
     - _WaterDeepAlpha: 1
-    - _WaterDepthExponent: 0.4
     - _WaterDepthRange: 1
     - _WaterGradientRadius: 11
-    - _WaterOpticalDepth: 6
-    - _WaterRefractionScale: 0.1
-    - _WaterRefractionSpeed: 0.1
-    - _WaterRefractionStrength: 0.02
-    - _WaterShallowAlpha: 0.822
+    - _WaterShallowAlpha: 1
     - _ZWrite: 1
     m_Colors:
     - _CoastlineBorderColor: {r: 0.02, g: 0.049999982, b: 0.14999998, a: 1}
@@ -279,25 +256,7 @@ Material:
     - _MarketBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
     - _ProvinceBorderColor: {r: 0, g: 0, b: 0, a: 0.87058824}
     - _RealmBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
-    - _ReliefLightDir: {r: 0.4, g: 0.85, b: 0.3, a: 0}
     - _SelectionBorderColor: {r: 1, g: 0.9, b: 0.1999999, a: 0}
-    - _SoilColor0: {r: 0.9647059, g: 0.9470588, b: 0.92941177, a: 1}
-    - _SoilColor1: {r: 1, g: 0.90849674, b: 0.78039217, a: 1}
-    - _SoilColor2: {r: 0.7, g: 0.68, b: 0.65, a: 1}
-    - _SoilColor3: {r: 0.54999995, g: 0.41999996, b: 0.27999997, a: 1}
-    - _SoilColor4: {r: 0.88, g: 0.78, b: 0.58, a: 1}
-    - _SoilColor5: {r: 0.82, g: 0.41999996, b: 0.24999997, a: 1}
-    - _SoilColor6: {r: 0.62, g: 0.58, b: 0.47999996, a: 1}
-    - _SoilColor7: {r: 0.37999994, g: 0.32999998, b: 0.26999995, a: 1}
-    - _VegetationColor0: {r: 0, g: 0, b: 0, a: 1}
-    - _VegetationColor1: {r: 0.52, g: 0.62, b: 0.43999997, a: 1}
-    - _VegetationColor2: {r: 0.47999996, g: 0.63, b: 0.26999995, a: 1}
-    - _VegetationColor3: {r: 0.40999997, g: 0.52, b: 0.24999997, a: 1}
-    - _VegetationColor4: {r: 0.26999995, g: 0.45, b: 0.18999997, a: 1}
-    - _VegetationColor5: {r: 0.16999996, g: 0.32999998, b: 0.19999996, a: 1}
-    - _VegetationColor6: {r: 0.17999998, g: 0.36999997, b: 0.13999996, a: 1}
-    - _WaterAbsorption: {r: 2.2, g: 0.9, b: 0.34999996, a: 1}
-    - _WaterDeepColor: {r: 0, g: 0, b: 0, a: 1}
-    - _WaterShallowColor: {r: 0, g: 0.15131578, b: 0.24999997, a: 1}
+    - _WaterShallowColor: {r: 0.94, g: 0.88986665, b: 0.7896, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

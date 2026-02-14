@@ -20,25 +20,17 @@ Shader "EconSim/MapOverlayBiome"
         // Sampler budget note:
         // Metal compiles this shader with a strict fragment sampler limit (16).
         // Do not add new fragment-sampled textures casually.
-        // Overlay composition intentionally reuses _CellDataTex, and marketId is packed in _ModeColorResolve.a.
+        // Overlay composition intentionally reuses _CellDataTex.
         _PoliticalIdsTex ("Political IDs", 2D) = "black" {}
         _GeographyBaseTex ("Geography Base", 2D) = "black" {}
         _VegetationTex ("Vegetation Data", 2D) = "black" {}
         // Legacy packed texture kept for migration compatibility.
         _CellDataTex ("Cell Data (Legacy)", 2D) = "black" {}
 
-        // Resolved mode color texture (M3-S3)
-        _ModeColorResolve ("Mode Color Resolve", 2D) = "black" {}
-        _UseModeColorResolve ("Use Mode Color Resolve", Int) = 1
         _OverlayOpacity ("Overlay Opacity", Range(0, 1)) = 0.65
         _OverlayEnabled ("Overlay Enabled", Int) = 0
 
-        // Cell to market mapping (dynamic, updated when economy changes)
-        _CellToMarketTex ("Cell To Market", 2D) = "black" {}
-
-        // Color palettes (256 entries each)
-        _RealmPaletteTex ("Realm Palette", 2D) = "white" {}
-        _MarketPaletteTex ("Market Palette", 2D) = "white" {}
+        // Biome palette (kept for shared terrain helper compatibility).
         _BiomePaletteTex ("Biome Palette", 2D) = "white" {}
 
         // Selection highlight (only one should be >= 0 at a time)
@@ -85,37 +77,6 @@ Shader "EconSim/MapOverlayBiome"
         // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 6=biomes, 7=channel inspector, 8=local transport, 9=market transport
         _MapMode ("Map Mode", Int) = 0
         _DebugView ("Debug View", Int) = 0
-
-        // Gradient fill style (edge-to-center fade for political/market modes)
-        _GradientRadius ("Gradient Radius (pixels)", Range(5, 100)) = 40
-        _GradientEdgeDarkening ("Gradient Edge Darkening", Range(0, 1)) = 0.5
-
-        // Realm border (world-space, in texels of data texture)
-        _RealmBorderDistTex ("Realm Border Distance", 2D) = "white" {}
-        _RealmBorderWidth ("Realm Border Width", Range(0, 4)) = 1
-        _RealmBorderDarkening ("Realm Border Darkening", Range(0, 1)) = 0.5
-
-        // Province border (thinner, lighter than realm)
-        _ProvinceBorderDistTex ("Province Border Distance", 2D) = "white" {}
-        _ProvinceBorderWidth ("Province Border Width", Range(0, 4)) = 0.7
-        _ProvinceBorderDarkening ("Province Border Darkening", Range(0, 1)) = 0.35
-
-        // County border (thinnest, lightest)
-        _CountyBorderDistTex ("County Border Distance", 2D) = "white" {}
-        _CountyBorderWidth ("County Border Width", Range(0, 4)) = 0.5
-        _CountyBorderDarkening ("County Border Darkening", Range(0, 1)) = 0.25
-
-        // Market zone border (same style as realm borders)
-        _MarketBorderDistTex ("Market Border Distance", 2D) = "white" {}
-        _MarketBorderWidth ("Market Border Width", Range(0, 4)) = 1
-        _MarketBorderDarkening ("Market Border Darkening", Range(0, 1)) = 0.5
-
-        // Path overlay (market mode only, direct mask: 0=no path, 1=path)
-        _RoadMaskTex ("Road Mask", 2D) = "black" {}
-        _PathOpacity ("Path Opacity", Range(0, 1)) = 0.75
-        _PathDashLength ("Path Dash Length", Range(0.1, 20)) = 1.8
-        _PathGapLength ("Path Gap Length", Range(0.1, 20)) = 2.4
-        _PathWidth ("Path Width", Range(0.2, 4)) = 0.8
 
         // Water layer properties
         _WaterShallowColor ("Shallow Water Color", Color) = (0.25, 0.55, 0.65, 1)

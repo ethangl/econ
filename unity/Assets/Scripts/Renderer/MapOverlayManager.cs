@@ -108,7 +108,7 @@ public class MapOverlayManager
 
         private MapData mapData;
         private EconomyState economyState;
-        private Material terrainMaterial;
+        private Material styleMaterial;
 
         // Resolution multiplier for higher quality borders
         private int resolutionMultiplier;
@@ -287,17 +287,17 @@ public class MapOverlayManager
         /// Create overlay manager with specified resolution multiplier.
         /// </summary>
         /// <param name="mapData">Map data source</param>
-        /// <param name="terrainMaterial">Material to apply textures to</param>
+        /// <param name="styleMaterial">Material to apply textures to</param>
         /// <param name="resolutionMultiplier">Multiplier for data texture resolution (1=base, 2=2x, 3=3x). Higher = smoother borders but more memory.</param>
         public MapOverlayManager(
             MapData mapData,
-            Material terrainMaterial,
+            Material styleMaterial,
             int resolutionMultiplier = 2,
             string overlayTextureCacheDirectory = null,
             bool preferCachedOverlayTextures = false)
         {
             this.mapData = mapData;
-            this.terrainMaterial = terrainMaterial;
+            this.styleMaterial = styleMaterial;
             this.resolutionMultiplier = Mathf.Clamp(resolutionMultiplier, 1, 8);
             this.overlayTextureCacheDirectory = overlayTextureCacheDirectory;
 
@@ -1747,21 +1747,21 @@ public class MapOverlayManager
         /// </summary>
         private void ApplyTexturesToMaterial()
         {
-            if (terrainMaterial == null) return;
+            if (styleMaterial == null) return;
 
-            terrainMaterial.SetTexture(PoliticalIdsTexId, politicalIdsTexture);
-            terrainMaterial.SetTexture(GeographyBaseTexId, geographyBaseTexture);
-            terrainMaterial.SetTexture(VegetationTexId, vegetationTexture);
-            terrainMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
-            terrainMaterial.SetTexture(HeightmapTexId, heightmapTexture);
-            terrainMaterial.SetTexture(ReliefNormalTexId, reliefNormalTexture);
-            terrainMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
-            terrainMaterial.SetTexture(RealmPaletteTexId, realmPaletteTexture);
-            terrainMaterial.SetTexture(MarketPaletteTexId, marketPaletteTexture);
-            terrainMaterial.SetTexture(BiomePaletteTexId, biomePaletteTexture);
-            terrainMaterial.SetTexture(RealmBorderDistTexId, realmBorderDistTexture);
-            terrainMaterial.SetTexture(ProvinceBorderDistTexId, provinceBorderDistTexture);
-            terrainMaterial.SetTexture(CountyBorderDistTexId, countyBorderDistTexture);
+            styleMaterial.SetTexture(PoliticalIdsTexId, politicalIdsTexture);
+            styleMaterial.SetTexture(GeographyBaseTexId, geographyBaseTexture);
+            styleMaterial.SetTexture(VegetationTexId, vegetationTexture);
+            styleMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
+            styleMaterial.SetTexture(HeightmapTexId, heightmapTexture);
+            styleMaterial.SetTexture(ReliefNormalTexId, reliefNormalTexture);
+            styleMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
+            styleMaterial.SetTexture(RealmPaletteTexId, realmPaletteTexture);
+            styleMaterial.SetTexture(MarketPaletteTexId, marketPaletteTexture);
+            styleMaterial.SetTexture(BiomePaletteTexId, biomePaletteTexture);
+            styleMaterial.SetTexture(RealmBorderDistTexId, realmBorderDistTexture);
+            styleMaterial.SetTexture(ProvinceBorderDistTexId, provinceBorderDistTexture);
+            styleMaterial.SetTexture(CountyBorderDistTexId, countyBorderDistTexture);
 
             // Create market border dist texture (initially all-white = no borders, regenerated when economy is set).
             if (marketBorderDistTexture == null)
@@ -1777,7 +1777,7 @@ public class MapOverlayManager
                 marketBorderDistTexture.LoadRawTextureData(whitePixels);
                 marketBorderDistTexture.Apply();
             }
-            terrainMaterial.SetTexture(MarketBorderDistTexId, marketBorderDistTexture);
+            styleMaterial.SetTexture(MarketBorderDistTexId, marketBorderDistTexture);
 
             // Create road mask texture (initially all-black = no roads, regenerated when road state is set).
             if (roadDistTexture == null)
@@ -1790,7 +1790,7 @@ public class MapOverlayManager
                 // R8 textures initialize to 0 (black = no roads), just apply.
                 roadDistTexture.Apply();
             }
-            terrainMaterial.SetTexture(RoadMaskTexId, roadDistTexture);
+            styleMaterial.SetTexture(RoadMaskTexId, roadDistTexture);
 
             // Create cell-to-market texture (16384 cells max, updated when economy is set)
             if (cellToMarketTexture == null)
@@ -1804,18 +1804,18 @@ public class MapOverlayManager
                 cellToMarketTexture.SetPixels(emptyMarkets);
                 cellToMarketTexture.Apply();
             }
-            terrainMaterial.SetTexture(CellToMarketTexId, cellToMarketTexture);
-            terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(Elevation.ResolveSeaLevel(mapData.Info), mapData.Info));
+            styleMaterial.SetTexture(CellToMarketTexId, cellToMarketTexture);
+            styleMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(Elevation.ResolveSeaLevel(mapData.Info), mapData.Info));
             overlayOpacity = Mathf.Clamp01(GetMaterialFloatOr(OverlayOpacityId, DefaultOverlayOpacity));
-            terrainMaterial.SetFloat(OverlayOpacityId, overlayOpacity);
-            terrainMaterial.SetInt(OverlayEnabledId, 0);
+            styleMaterial.SetFloat(OverlayOpacityId, overlayOpacity);
+            styleMaterial.SetInt(OverlayEnabledId, 0);
 
             // Water layer properties are set via shader defaults + material Inspector
             // (not overwritten here so Inspector tweaks persist)
 
             // Default to political mode
-            terrainMaterial.SetInt(MapModeId, 1);
-            terrainMaterial.SetInt(DebugViewId, (int)ChannelDebugView.PoliticalIdsR);
+            styleMaterial.SetInt(MapModeId, 1);
+            styleMaterial.SetInt(DebugViewId, (int)ChannelDebugView.PoliticalIdsR);
 
             // Clear any persisted selection/hover from previous play session
             ClearSelection();
@@ -1831,10 +1831,10 @@ public class MapOverlayManager
         /// </summary>
         public void RebindMaterial(Material material)
         {
-            if (material == null || ReferenceEquals(terrainMaterial, material))
+            if (material == null || ReferenceEquals(styleMaterial, material))
                 return;
 
-            terrainMaterial = material;
+            styleMaterial = material;
             ApplyTexturesToMaterial();
         }
 
@@ -1858,35 +1858,35 @@ public class MapOverlayManager
                 return;
 
             overlayOpacity = clamped;
-            if (terrainMaterial != null)
-                terrainMaterial.SetFloat(OverlayOpacityId, overlayOpacity);
+            if (styleMaterial != null)
+                styleMaterial.SetFloat(OverlayOpacityId, overlayOpacity);
         }
 
         private void ApplyOverlayToMaterial()
         {
-            if (terrainMaterial == null)
+            if (styleMaterial == null)
                 return;
 
             overlayOpacity = Mathf.Clamp01(GetMaterialFloatOr(OverlayOpacityId, overlayOpacity));
-            terrainMaterial.SetFloat(OverlayOpacityId, overlayOpacity);
+            styleMaterial.SetFloat(OverlayOpacityId, overlayOpacity);
 
             if (currentOverlayLayer == OverlayLayer.None)
             {
-                terrainMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
-                terrainMaterial.SetInt(OverlayEnabledId, 0);
+                styleMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
+                styleMaterial.SetInt(OverlayEnabledId, 0);
                 return;
             }
 
             Texture2D overlayTexture = GetOrCreateOverlayTexture(currentOverlayLayer);
             if (overlayTexture == null)
             {
-                terrainMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
-                terrainMaterial.SetInt(OverlayEnabledId, 0);
+                styleMaterial.SetTexture(CellDataTexId, politicalIdsTexture);
+                styleMaterial.SetInt(OverlayEnabledId, 0);
                 return;
             }
 
-            terrainMaterial.SetTexture(CellDataTexId, overlayTexture);
-            terrainMaterial.SetInt(OverlayEnabledId, 1);
+            styleMaterial.SetTexture(CellDataTexId, overlayTexture);
+            styleMaterial.SetInt(OverlayEnabledId, 1);
         }
 
         /// <summary>
@@ -2129,7 +2129,7 @@ public class MapOverlayManager
 
         private bool TryBindCachedModeColorResolveTexture(MapView.MapMode mode)
         {
-            if (terrainMaterial == null)
+            if (styleMaterial == null)
                 return false;
 
             MapView.MapMode cacheKey = ResolveCacheKeyForMode(mode);
@@ -2147,19 +2147,19 @@ public class MapOverlayManager
             }
 
             modeColorResolveTexture = cached;
-            terrainMaterial.SetTexture(ModeColorResolveTexId, cached);
-            terrainMaterial.SetInt(UseModeColorResolveId, 1);
+            styleMaterial.SetTexture(ModeColorResolveTexId, cached);
+            styleMaterial.SetInt(UseModeColorResolveId, 1);
             return true;
         }
 
         private void RegenerateModeColorResolveTexture()
         {
-            if (terrainMaterial == null || mapData == null || spatialGrid == null)
+            if (styleMaterial == null || mapData == null || spatialGrid == null)
                 return;
 
             if (!IsModeResolveOverlay(currentMapMode))
             {
-                terrainMaterial.SetInt(UseModeColorResolveId, 0);
+                styleMaterial.SetInt(UseModeColorResolveId, 0);
                 return;
             }
 
@@ -2315,8 +2315,8 @@ public class MapOverlayManager
 
             modeColorResolveTexture.SetPixels(resolved);
             modeColorResolveTexture.Apply();
-            terrainMaterial.SetTexture(ModeColorResolveTexId, modeColorResolveTexture);
-            terrainMaterial.SetInt(UseModeColorResolveId, 1);
+            styleMaterial.SetTexture(ModeColorResolveTexId, modeColorResolveTexture);
+            styleMaterial.SetInt(UseModeColorResolveId, 1);
             MapView.MapMode cacheKey = ResolveCacheKeyForMode(currentMapMode);
             modeColorResolveCacheRevisionByMode[cacheKey] = GetModeColorResolveRevision(cacheKey);
             TextureDebugger.SaveTexture(modeColorResolveTexture, "mode_color_resolve");
@@ -2821,7 +2821,7 @@ public class MapOverlayManager
 
         private void PrewarmOverlayModeResolveCache(MapView.MapMode mode)
         {
-            if (!IsModeResolveOverlay(mode) || terrainMaterial == null)
+            if (!IsModeResolveOverlay(mode) || styleMaterial == null)
                 return;
 
             MapView.MapMode cacheKey = ResolveCacheKeyForMode(mode);
@@ -2843,7 +2843,7 @@ public class MapOverlayManager
             }
             else
             {
-                terrainMaterial.SetInt(UseModeColorResolveId, 0);
+                styleMaterial.SetInt(UseModeColorResolveId, 0);
             }
         }
 
@@ -2959,14 +2959,14 @@ public class MapOverlayManager
         /// </summary>
         public void SetPathStyle(float dashLength, float gapLength, float width)
         {
-            if (terrainMaterial == null) return;
+            if (styleMaterial == null) return;
             float clampedDash = Mathf.Max(0.1f, dashLength);
             float clampedGap = Mathf.Max(0.1f, gapLength);
             float clampedWidth = Mathf.Max(0.2f, width);
 
-            terrainMaterial.SetFloat(PathDashLengthId, clampedDash);
-            terrainMaterial.SetFloat(PathGapLengthId, clampedGap);
-            terrainMaterial.SetFloat(PathWidthId, clampedWidth);
+            styleMaterial.SetFloat(PathDashLengthId, clampedDash);
+            styleMaterial.SetFloat(PathGapLengthId, clampedGap);
+            styleMaterial.SetFloat(PathWidthId, clampedWidth);
 
             bool styleChanged =
                 !Mathf.Approximately(cachedPathDashLength, clampedDash) ||
@@ -3013,7 +3013,7 @@ public class MapOverlayManager
         /// </summary>
         public void RefreshPathStyleFromMaterial()
         {
-            if (terrainMaterial == null)
+            if (styleMaterial == null)
                 return;
 
             float dash = GetMaterialFloatOr(PathDashLengthId, 1.8f);
@@ -3133,13 +3133,13 @@ public class MapOverlayManager
 
         private float GetMaterialFloatOr(int propertyId, float fallback)
         {
-            if (terrainMaterial == null)
+            if (styleMaterial == null)
                 return fallback;
 
-            if (!terrainMaterial.HasProperty(propertyId))
+            if (!styleMaterial.HasProperty(propertyId))
                 return fallback;
 
-            float value = terrainMaterial.GetFloat(propertyId);
+            float value = styleMaterial.GetFloat(propertyId);
             return float.IsNaN(value) || float.IsInfinity(value) ? fallback : value;
         }
 
@@ -3150,7 +3150,7 @@ public class MapOverlayManager
         /// </summary>
         public void SetMapMode(MapView.MapMode mode)
         {
-            if (terrainMaterial == null) return;
+            if (styleMaterial == null) return;
             bool modeChanged = currentMapMode != mode;
             currentMapMode = mode;
             if (mode == MapView.MapMode.Market)
@@ -3188,11 +3188,11 @@ public class MapOverlayManager
                     break;
             }
 
-            terrainMaterial.SetInt(MapModeId, shaderMode);
+            styleMaterial.SetInt(MapModeId, shaderMode);
 
             if (!IsModeResolveOverlay(mode))
             {
-                terrainMaterial.SetInt(UseModeColorResolveId, 0);
+                styleMaterial.SetInt(UseModeColorResolveId, 0);
                 return;
             }
 
@@ -3204,8 +3204,8 @@ public class MapOverlayManager
 
         public void SetChannelDebugView(ChannelDebugView debugView)
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetInt(DebugViewId, (int)debugView);
+            if (styleMaterial == null) return;
+            styleMaterial.SetInt(DebugViewId, (int)debugView);
         }
 
         /// <summary>
@@ -3214,8 +3214,8 @@ public class MapOverlayManager
         /// </summary>
         public void SetHeightDisplacementEnabled(bool enabled)
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetInt(UseHeightDisplacementId, enabled ? 1 : 0);
+            if (styleMaterial == null) return;
+            styleMaterial.SetInt(UseHeightDisplacementId, enabled ? 1 : 0);
         }
 
         /// <summary>
@@ -3223,8 +3223,8 @@ public class MapOverlayManager
         /// </summary>
         public void SetHeightScale(float scale)
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(HeightScaleId, scale);
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(HeightScaleId, scale);
         }
 
         /// <summary>
@@ -3232,8 +3232,8 @@ public class MapOverlayManager
         /// </summary>
         public void SetSeaLevel(float seaLevelAbsoluteHeight)
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(seaLevelAbsoluteHeight, mapData.Info));
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(seaLevelAbsoluteHeight, mapData.Info));
         }
 
         /// <summary>
@@ -3241,11 +3241,11 @@ public class MapOverlayManager
         /// </summary>
         public void ClearSelection()
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SelectedRealmIdId, -1f);
-            terrainMaterial.SetFloat(SelectedProvinceIdId, -1f);
-            terrainMaterial.SetFloat(SelectedCountyIdId, -1f);
-            terrainMaterial.SetFloat(SelectedMarketIdId, -1f);
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(SelectedRealmIdId, -1f);
+            styleMaterial.SetFloat(SelectedProvinceIdId, -1f);
+            styleMaterial.SetFloat(SelectedCountyIdId, -1f);
+            styleMaterial.SetFloat(SelectedMarketIdId, -1f);
         }
 
         /// <summary>
@@ -3254,12 +3254,12 @@ public class MapOverlayManager
         /// </summary>
         public void SetSelectedRealm(int realmId)
         {
-            if (terrainMaterial == null) return;
+            if (styleMaterial == null) return;
             float normalizedId = realmId < 0 ? -1f : realmId / 65535f;
-            terrainMaterial.SetFloat(SelectedRealmIdId, normalizedId);
-            terrainMaterial.SetFloat(SelectedProvinceIdId, -1f);
-            terrainMaterial.SetFloat(SelectedCountyIdId, -1f);
-            terrainMaterial.SetFloat(SelectedMarketIdId, -1f);
+            styleMaterial.SetFloat(SelectedRealmIdId, normalizedId);
+            styleMaterial.SetFloat(SelectedProvinceIdId, -1f);
+            styleMaterial.SetFloat(SelectedCountyIdId, -1f);
+            styleMaterial.SetFloat(SelectedMarketIdId, -1f);
         }
 
         /// <summary>
@@ -3268,12 +3268,12 @@ public class MapOverlayManager
         /// </summary>
         public void SetSelectedProvince(int provinceId)
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SelectedRealmIdId, -1f);
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(SelectedRealmIdId, -1f);
             float normalizedId = provinceId < 0 ? -1f : provinceId / 65535f;
-            terrainMaterial.SetFloat(SelectedProvinceIdId, normalizedId);
-            terrainMaterial.SetFloat(SelectedCountyIdId, -1f);
-            terrainMaterial.SetFloat(SelectedMarketIdId, -1f);
+            styleMaterial.SetFloat(SelectedProvinceIdId, normalizedId);
+            styleMaterial.SetFloat(SelectedCountyIdId, -1f);
+            styleMaterial.SetFloat(SelectedMarketIdId, -1f);
         }
 
         /// <summary>
@@ -3283,12 +3283,12 @@ public class MapOverlayManager
         /// </summary>
         public void SetSelectedCounty(int countyId)
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SelectedRealmIdId, -1f);
-            terrainMaterial.SetFloat(SelectedProvinceIdId, -1f);
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(SelectedRealmIdId, -1f);
+            styleMaterial.SetFloat(SelectedProvinceIdId, -1f);
             float normalizedId = countyId < 0 ? -1f : countyId / 65535f;
-            terrainMaterial.SetFloat(SelectedCountyIdId, normalizedId);
-            terrainMaterial.SetFloat(SelectedMarketIdId, -1f);
+            styleMaterial.SetFloat(SelectedCountyIdId, normalizedId);
+            styleMaterial.SetFloat(SelectedMarketIdId, -1f);
         }
 
         /// <summary>
@@ -3297,12 +3297,12 @@ public class MapOverlayManager
         /// </summary>
         public void SetSelectedMarket(int marketId)
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SelectedRealmIdId, -1f);
-            terrainMaterial.SetFloat(SelectedProvinceIdId, -1f);
-            terrainMaterial.SetFloat(SelectedCountyIdId, -1f);
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(SelectedRealmIdId, -1f);
+            styleMaterial.SetFloat(SelectedProvinceIdId, -1f);
+            styleMaterial.SetFloat(SelectedCountyIdId, -1f);
             float normalizedId = marketId < 0 ? -1f : marketId / 65535f;
-            terrainMaterial.SetFloat(SelectedMarketIdId, normalizedId);
+            styleMaterial.SetFloat(SelectedMarketIdId, normalizedId);
         }
 
         /// <summary>
@@ -3310,11 +3310,11 @@ public class MapOverlayManager
         /// </summary>
         public void ClearHover()
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(HoveredRealmIdId, -1f);
-            terrainMaterial.SetFloat(HoveredProvinceIdId, -1f);
-            terrainMaterial.SetFloat(HoveredCountyIdId, -1f);
-            terrainMaterial.SetFloat(HoveredMarketIdId, -1f);
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(HoveredRealmIdId, -1f);
+            styleMaterial.SetFloat(HoveredProvinceIdId, -1f);
+            styleMaterial.SetFloat(HoveredCountyIdId, -1f);
+            styleMaterial.SetFloat(HoveredMarketIdId, -1f);
         }
 
         /// <summary>
@@ -3323,12 +3323,12 @@ public class MapOverlayManager
         /// </summary>
         public void SetHoveredRealm(int realmId)
         {
-            if (terrainMaterial == null) return;
+            if (styleMaterial == null) return;
             float normalizedId = realmId < 0 ? -1f : realmId / 65535f;
-            terrainMaterial.SetFloat(HoveredRealmIdId, normalizedId);
-            terrainMaterial.SetFloat(HoveredProvinceIdId, -1f);
-            terrainMaterial.SetFloat(HoveredCountyIdId, -1f);
-            terrainMaterial.SetFloat(HoveredMarketIdId, -1f);
+            styleMaterial.SetFloat(HoveredRealmIdId, normalizedId);
+            styleMaterial.SetFloat(HoveredProvinceIdId, -1f);
+            styleMaterial.SetFloat(HoveredCountyIdId, -1f);
+            styleMaterial.SetFloat(HoveredMarketIdId, -1f);
         }
 
         /// <summary>
@@ -3337,12 +3337,12 @@ public class MapOverlayManager
         /// </summary>
         public void SetHoveredProvince(int provinceId)
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(HoveredRealmIdId, -1f);
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(HoveredRealmIdId, -1f);
             float normalizedId = provinceId < 0 ? -1f : provinceId / 65535f;
-            terrainMaterial.SetFloat(HoveredProvinceIdId, normalizedId);
-            terrainMaterial.SetFloat(HoveredCountyIdId, -1f);
-            terrainMaterial.SetFloat(HoveredMarketIdId, -1f);
+            styleMaterial.SetFloat(HoveredProvinceIdId, normalizedId);
+            styleMaterial.SetFloat(HoveredCountyIdId, -1f);
+            styleMaterial.SetFloat(HoveredMarketIdId, -1f);
         }
 
         /// <summary>
@@ -3351,12 +3351,12 @@ public class MapOverlayManager
         /// </summary>
         public void SetHoveredCounty(int countyId)
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(HoveredRealmIdId, -1f);
-            terrainMaterial.SetFloat(HoveredProvinceIdId, -1f);
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(HoveredRealmIdId, -1f);
+            styleMaterial.SetFloat(HoveredProvinceIdId, -1f);
             float normalizedId = countyId < 0 ? -1f : countyId / 65535f;
-            terrainMaterial.SetFloat(HoveredCountyIdId, normalizedId);
-            terrainMaterial.SetFloat(HoveredMarketIdId, -1f);
+            styleMaterial.SetFloat(HoveredCountyIdId, normalizedId);
+            styleMaterial.SetFloat(HoveredMarketIdId, -1f);
         }
 
         /// <summary>
@@ -3365,12 +3365,12 @@ public class MapOverlayManager
         /// </summary>
         public void SetHoveredMarket(int marketId)
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(HoveredRealmIdId, -1f);
-            terrainMaterial.SetFloat(HoveredProvinceIdId, -1f);
-            terrainMaterial.SetFloat(HoveredCountyIdId, -1f);
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(HoveredRealmIdId, -1f);
+            styleMaterial.SetFloat(HoveredProvinceIdId, -1f);
+            styleMaterial.SetFloat(HoveredCountyIdId, -1f);
             float normalizedId = marketId < 0 ? -1f : marketId / 65535f;
-            terrainMaterial.SetFloat(HoveredMarketIdId, normalizedId);
+            styleMaterial.SetFloat(HoveredMarketIdId, normalizedId);
         }
 
         /// <summary>
@@ -3378,8 +3378,8 @@ public class MapOverlayManager
         /// </summary>
         public void SetSelectionDimming(float dimming)
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SelectionDimmingId, Mathf.Clamp01(dimming));
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(SelectionDimmingId, Mathf.Clamp01(dimming));
         }
 
         /// <summary>
@@ -3387,8 +3387,8 @@ public class MapOverlayManager
         /// </summary>
         public void SetSelectionDesaturation(float desaturation)
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(SelectionDesaturationId, Mathf.Clamp01(desaturation));
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(SelectionDesaturationId, Mathf.Clamp01(desaturation));
         }
 
         /// <summary>
@@ -3396,8 +3396,8 @@ public class MapOverlayManager
         /// </summary>
         public void SetHoverIntensity(float intensity)
         {
-            if (terrainMaterial == null) return;
-            terrainMaterial.SetFloat(HoverIntensityId, Mathf.Clamp01(intensity));
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(HoverIntensityId, Mathf.Clamp01(intensity));
         }
 
         /// <summary>

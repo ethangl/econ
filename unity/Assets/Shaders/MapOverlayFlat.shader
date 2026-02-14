@@ -4,11 +4,6 @@ Shader "EconSim/MapOverlayFlat"
     {
         // Heightmap for terrain (Phase 6)
         _HeightmapTex ("Heightmap", 2D) = "gray" {}
-        _ReliefNormalTex ("Relief Normal", 2D) = "bump" {}
-        _ReliefNormalStrength ("Relief Normal Strength", Range(0, 1)) = 0.75
-        _ReliefShadeStrength ("Relief Shade Strength", Range(0, 1)) = 0.28
-        _ReliefAmbient ("Relief Ambient", Range(0, 1)) = 0.65
-        _ReliefLightDir ("Relief Light Direction", Vector) = (0.4, 0.85, 0.3, 0)
         _HeightScale ("Height Scale", Float) = 0.2
         _SeaLevel ("Sea Level (Normalized)", Float) = 0.2
         _UseHeightDisplacement ("Use Height Displacement", Int) = 0
@@ -56,32 +51,6 @@ Shader "EconSim/MapOverlayFlat"
         _HoveredMarketId ("Hovered Market ID (normalized)", Float) = -1
         _HoverIntensity ("Hover Intensity", Range(0, 1)) = 0
 
-        // Biomes overlay (mode 6, vertex-blended)
-        _SoilHeightFloor ("Soil Height Floor", Range(0, 1)) = 0
-        _SoilBlendRadius ("Soil Blend Radius (texels)", Range(0.25, 6)) = 1.0
-        _SoilBlendSharpness ("Soil Blend Sharpness", Range(0.5, 6)) = 1.4
-        _SoilColor0 ("Permafrost", Color) = (0.80, 0.85, 0.90, 1)
-        _SoilColor1 ("Saline", Color) = (0.92, 0.90, 0.82, 1)
-        _SoilColor2 ("Lithosol", Color) = (0.70, 0.68, 0.65, 1)
-        _SoilColor3 ("Alluvial", Color) = (0.55, 0.42, 0.28, 1)
-        _SoilColor4 ("Aridisol", Color) = (0.88, 0.78, 0.58, 1)
-        _SoilColor5 ("Laterite", Color) = (0.82, 0.42, 0.25, 1)
-        _SoilColor6 ("Podzol", Color) = (0.62, 0.58, 0.48, 1)
-        _SoilColor7 ("Chernozem", Color) = (0.38, 0.33, 0.27, 1)
-
-        _VegetationStippleOpacity ("Vegetation Stipple Opacity", Range(0, 1)) = 0.8
-        _VegetationStippleScale ("Vegetation Stipple Scale (texels)", Range(1, 12)) = 3
-        _VegetationStippleJitter ("Vegetation Stipple Jitter", Range(0, 1)) = 0.4
-        _VegetationCoverageContrast ("Vegetation Coverage Contrast", Range(0.5, 2)) = 1
-        _VegetationStippleSoftness ("Vegetation Stipple Softness", Range(0.5, 2.5)) = 1
-        _VegetationColor0 ("Vegetation None", Color) = (0.0, 0.0, 0.0, 1)
-        _VegetationColor1 ("Vegetation Lichen/Moss", Color) = (0.52, 0.62, 0.44, 1)
-        _VegetationColor2 ("Vegetation Grass", Color) = (0.48, 0.63, 0.27, 1)
-        _VegetationColor3 ("Vegetation Shrub", Color) = (0.41, 0.52, 0.25, 1)
-        _VegetationColor4 ("Vegetation Deciduous", Color) = (0.27, 0.45, 0.19, 1)
-        _VegetationColor5 ("Vegetation Coniferous", Color) = (0.17, 0.33, 0.20, 1)
-        _VegetationColor6 ("Vegetation Broadleaf", Color) = (0.18, 0.37, 0.14, 1)
-
         // Map mode: 0=height gradient, 1=political, 2=province, 3=county, 4=market, 6=biomes, 7=channel inspector, 8=local transport, 9=market transport
         _MapMode ("Map Mode", Int) = 0
         _DebugView ("Debug View", Int) = 0
@@ -119,17 +88,7 @@ Shader "EconSim/MapOverlayFlat"
 
         // Water layer properties
         _WaterShallowColor ("Shallow Water Color", Color) = (0.25, 0.55, 0.65, 1)
-        _WaterDeepColor ("Deep Water Color", Color) = (0.06, 0.12, 0.25, 1)
-        _WaterAbsorption ("Water Absorption (RGB)", Color) = (2.2, 0.9, 0.35, 1)
-        _WaterOpticalDepth ("Water Optical Depth", Range(0.1, 8)) = 3.0
-        _WaterDepthExponent ("Water Depth Exponent", Range(0.2, 3)) = 1.35
-        _WaterRefractionStrength ("Seabed Refraction", Range(0, 0.02)) = 0.0035
-        _WaterRefractionScale ("Refraction Scale", Float) = 0.035
-        _WaterRefractionSpeed ("Refraction Speed", Float) = 0.02
         _WaterShallowAlpha ("River Alpha", Range(0, 1)) = 0.5
-        _ShimmerScale ("Shimmer Scale", Float) = 0.02
-        _ShimmerSpeed ("Shimmer Speed", Float) = 0.03
-        _ShimmerIntensity ("Shimmer Intensity", Range(0, 0.2)) = 0.08
     }
     SubShader
     {
