@@ -220,7 +220,7 @@ namespace EconSim.UI
             foreach (var county in _economy.Counties.Values)
             {
                 totalPop += county.Population.Total;
-                totalWorkers += county.Population.WorkingAge;
+                totalWorkers += county.Population.LaborEligible;
                 totalEmployed += county.Population.EmployedUnskilled + county.Population.EmployedSkilled;
                 totalFacilities += county.FacilityIds?.Count ?? 0;
             }
