@@ -243,7 +243,7 @@ namespace EconSim.Core.Economy
             // Track which counties have extraction facilities (for co-locating processing)
             var extractionCounties = new Dictionary<string, List<int>>(); // output good -> countyIds with facilities
 
-            // Place extraction facilities (one per ~10 resource counties)
+            // Place extraction facilities (one per ~3 resource counties)
             foreach (var facilityDef in economy.FacilityDefs.ExtractionFacilities)
             {
                 if (!resourceCounties.TryGetValue(facilityDef.OutputGoodId, out var candidates))
@@ -254,7 +254,7 @@ namespace EconSim.Core.Economy
 
                 extractionCounties[facilityDef.OutputGoodId] = new List<int>();
 
-                int toPlace = Math.Max(1, candidates.Count / 10);
+                int toPlace = candidates.Count;
                 int placed = 0;
                 var candidatesCopy = new List<int>(candidates);
 
@@ -313,17 +313,17 @@ namespace EconSim.Core.Economy
                 }
 
                 facilityCounties[facilityId] = new List<int>();
-                int toPlace = Math.Max(1, candidates.Count / 10);
-                for (int i = 0; i < toPlace; i++)
+                int placed = 0;
+                foreach (var countyId in candidates)
                 {
-                    int countyId = candidates[_random.Next(candidates.Count)];
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
 
                     economy.CreateFacility(facilityId, cellId);
                     facilityCounties[facilityId].Add(countyId);
+                    placed++;
                 }
-                SimLog.Log("Economy", $"  {facilityId}: placed {toPlace} in {sourceGood} counties");
+                SimLog.Log("Economy", $"  {facilityId}: placed {placed} in {sourceGood} counties");
             }
 
             // Stage 2: Secondary processors - place where primary processors are

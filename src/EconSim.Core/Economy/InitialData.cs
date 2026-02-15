@@ -498,7 +498,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "wheat",
                 LaborRequired = 5,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 10f,
+                BaseThroughput = 20f,
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Grassland", "Savanna" }
             });
@@ -635,7 +635,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "flour",
                 LaborRequired = 3,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 5f,
+                BaseThroughput = 10f,
                 IsExtraction = false
             });
 
@@ -646,7 +646,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "bread",
                 LaborRequired = 2,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 5f,
+                BaseThroughput = 10f,
                 IsExtraction = false
             });
 
