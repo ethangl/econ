@@ -20,7 +20,12 @@ namespace EconSim.Core.Economy
         public static void RegisterGoods(GoodRegistry registry)
         {
             // =============================================
-            // CHAIN 1: Food (Wheat → Flour → Bread)
+            // CHAIN 1: Food (Grain → Flour → Food)
+            // Multiple grain types feed into this chain from different biomes:
+            //   Grain (wheat): Grassland, Savanna
+            //   Rye: Steppe, Taiga
+            //   Barley: Highland, Steppe
+            //   Rice: Tropical forests (skips flour, goes directly to food)
             // =============================================
 
             registry.Register(new GoodDef
@@ -38,6 +43,45 @@ namespace EconSim.Core.Economy
 
             registry.Register(new GoodDef
             {
+                Id = "rye",
+                Name = "Rye",
+                Category = GoodCategory.Raw,
+                HarvestMethod = "farming",
+                TerrainAffinity = new List<string> { "Steppe", "Taiga" },
+                BaseYield = 8f,     // Hardy but less productive than wheat
+                DecayRate = 0.005f,
+                TheftRisk = 0.3f,
+                BasePrice = 1.0f
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "barley",
+                Name = "Barley",
+                Category = GoodCategory.Raw,
+                HarvestMethod = "farming",
+                TerrainAffinity = new List<string> { "Highland", "Steppe" },
+                BaseYield = 6f,     // Grows in harsh conditions, lower yield
+                DecayRate = 0.005f,
+                TheftRisk = 0.3f,
+                BasePrice = 1.0f
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "rice_grain",
+                Name = "Rice",
+                Category = GoodCategory.Raw,
+                HarvestMethod = "farming",
+                TerrainAffinity = new List<string> { "Tropical seasonal forest", "Tropical rainforest" },
+                BaseYield = 12f,    // Rice paddies are very productive
+                DecayRate = 0.005f,
+                TheftRisk = 0.3f,
+                BasePrice = 1.0f
+            });
+
+            registry.Register(new GoodDef
+            {
                 Id = "flour",
                 Name = "Flour",
                 Category = GoodCategory.Refined,
@@ -46,7 +90,7 @@ namespace EconSim.Core.Economy
                 ProcessingTicks = 1,
                 DecayRate = 0.003f,  // 0.3% per day - stored flour lasts months
                 TheftRisk = 0.4f,  // Processed, more valuable
-                BasePrice = 3.0f   // 2 wheat (2.0) + processing
+                BasePrice = 3.0f   // 2 grain (2.0) + processing
             });
 
             registry.Register(new GoodDef
@@ -60,7 +104,7 @@ namespace EconSim.Core.Economy
                 NeedCategory = NeedCategory.Basic,
                 BaseConsumption = 0.01f,  // 0.01 bread per person per day
                 DecayRate = 0.25f,  // 25% per day - stale in 3-4 days
-                TheftRisk = 0.1f,  // Perishable, hard to fence
+                TheftRisk = 0f,
                 BasePrice = 5.0f   // Basic staple, modest markup
             });
 
@@ -480,7 +524,7 @@ namespace EconSim.Core.Economy
                 NeedCategory = NeedCategory.Comfort,
                 BaseConsumption = 0.002f,
                 DecayRate = 0.003f,  // 0.3% per day - hard aged cheese lasts months
-                TheftRisk = 0.3f,
+                TheftRisk = 0f,
                 BasePrice = 8.0f  // 2 milk (6.0) + aging/processing
             });
         }
@@ -501,6 +545,42 @@ namespace EconSim.Core.Economy
                 BaseThroughput = 20f,
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Grassland", "Savanna" }
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "rye_farm",
+                Name = "Rye Farm",
+                OutputGoodId = "rye",
+                LaborRequired = 5,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 20f,
+                IsExtraction = true,
+                TerrainRequirements = new List<string> { "Steppe", "Taiga" }
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "barley_farm",
+                Name = "Barley Farm",
+                OutputGoodId = "barley",
+                LaborRequired = 5,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 20f,
+                IsExtraction = true,
+                TerrainRequirements = new List<string> { "Highland", "Steppe" }
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "rice_paddy",
+                Name = "Rice Paddy",
+                OutputGoodId = "rice_grain",
+                LaborRequired = 6,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 20f,
+                IsExtraction = true,
+                TerrainRequirements = new List<string> { "Tropical seasonal forest", "Tropical rainforest" }
             });
 
             registry.Register(new FacilityDef
@@ -641,12 +721,48 @@ namespace EconSim.Core.Economy
 
             registry.Register(new FacilityDef
             {
+                Id = "rye_mill",
+                Name = "Rye Mill",
+                OutputGoodId = "flour",
+                LaborRequired = 3,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 10f,
+                IsExtraction = false,
+                InputOverrides = new List<GoodInput> { new GoodInput("rye", 2) }
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "barley_mill",
+                Name = "Barley Mill",
+                OutputGoodId = "flour",
+                LaborRequired = 3,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 10f,
+                IsExtraction = false,
+                InputOverrides = new List<GoodInput> { new GoodInput("barley", 2) }
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "rice_mill",
+                Name = "Rice Mill",
+                OutputGoodId = "bread",
+                LaborRequired = 3,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 10f,
+                IsExtraction = false,
+                InputOverrides = new List<GoodInput> { new GoodInput("rice_grain", 2) }
+            });
+
+            registry.Register(new FacilityDef
+            {
                 Id = "bakery",
                 Name = "Bakery",
                 OutputGoodId = "bread",
                 LaborRequired = 2,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 10f,
+                BaseThroughput = 30f,
                 IsExtraction = false
             });
 

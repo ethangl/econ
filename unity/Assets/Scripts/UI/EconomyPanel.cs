@@ -24,10 +24,10 @@ namespace EconSim.UI
         private Button _tabProduction;
         private Button _tabTrade;
 
-        // Tab content
-        private VisualElement _contentOverview;
-        private VisualElement _contentProduction;
-        private VisualElement _contentTrade;
+        // Tab content (ScrollViews for overflow)
+        private ScrollView _contentOverview;
+        private ScrollView _contentProduction;
+        private ScrollView _contentTrade;
 
         // Overview labels
         private Label _populationLabel;
@@ -104,9 +104,9 @@ namespace EconSim.UI
             _tabTrade = _root.Q<Button>("tab-trade");
 
             // Tab content
-            _contentOverview = _root.Q<VisualElement>("tab-content-overview");
-            _contentProduction = _root.Q<VisualElement>("tab-content-production");
-            _contentTrade = _root.Q<VisualElement>("tab-content-trade");
+            _contentOverview = _root.Q<ScrollView>("tab-content-overview");
+            _contentProduction = _root.Q<ScrollView>("tab-content-production");
+            _contentTrade = _root.Q<ScrollView>("tab-content-trade");
 
             // Overview labels
             _populationLabel = _root.Q<Label>("econ-population");

@@ -46,6 +46,13 @@ namespace EconSim.Core.Economy
         /// </summary>
         public bool IsExtraction;
 
+        /// <summary>
+        /// Optional: override the output good's default Inputs for this facility.
+        /// Allows multiple facility types to produce the same good from different inputs
+        /// (e.g. rye_mill produces flour from rye instead of grain).
+        /// </summary>
+        public List<GoodInput> InputOverrides;
+
         public bool HasTerrainRequirement => TerrainRequirements != null && TerrainRequirements.Count > 0;
     }
 

@@ -148,9 +148,10 @@ namespace EconSim.Core.Simulation.Systems
             float throughput = facility.GetThroughput(def);
             int maxBatches = (int)throughput;
 
-            // Limit by available inputs
+            // Limit by available inputs (facility can override the good's default inputs)
+            var inputs = def.InputOverrides ?? goodDef.Inputs;
             int possibleBatches = maxBatches;
-            foreach (var input in goodDef.Inputs)
+            foreach (var input in inputs)
             {
                 float available = county.Stockpile.Get(input.GoodId);
                 int canMake = (int)(available / input.Quantity);
@@ -161,7 +162,7 @@ namespace EconSim.Core.Simulation.Systems
             if (possibleBatches <= 0) return;
 
             // Consume inputs
-            foreach (var input in goodDef.Inputs)
+            foreach (var input in inputs)
             {
                 county.Stockpile.Remove(input.GoodId, input.Quantity * possibleBatches);
             }

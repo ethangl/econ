@@ -229,6 +229,7 @@
     right: 10px;
     bottom: 10px;
     width: 280px;
+    max-height: 70%;
     padding: 12px;
 }
 
@@ -269,6 +270,7 @@
 
 .tab-content {
     min-height: 100px;
+    overflow: hidden;
 }
 
 .tab-content.hidden {

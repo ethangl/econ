@@ -238,12 +238,14 @@ namespace EconSim.Core.Economy
                 }
             }
 
+            const int FacilitiesPerCounty = 3;
+
             SimLog.Log("Economy", "Placing extraction facilities:");
 
             // Track which counties have extraction facilities (for co-locating processing)
             var extractionCounties = new Dictionary<string, List<int>>(); // output good -> countyIds with facilities
 
-            // Place extraction facilities (one per ~3 resource counties)
+            // Place extraction facilities (multiple per eligible county)
             foreach (var facilityDef in economy.FacilityDefs.ExtractionFacilities)
             {
                 if (!resourceCounties.TryGetValue(facilityDef.OutputGoodId, out var candidates))
@@ -253,29 +255,21 @@ namespace EconSim.Core.Economy
                 }
 
                 extractionCounties[facilityDef.OutputGoodId] = new List<int>();
-
-                int toPlace = candidates.Count;
                 int placed = 0;
-                var candidatesCopy = new List<int>(candidates);
 
-                for (int i = 0; i < toPlace && candidatesCopy.Count > 0; i++)
+                foreach (var countyId in candidates)
                 {
-                    int countyId = candidatesCopy[_random.Next(candidatesCopy.Count)];
-
-                    // Find a cell in this county that has the resource
                     int cellId = FindCellWithResource(countyId, facilityDef.OutputGoodId, mapData, cellResources);
-                    if (cellId < 0)
-                    {
-                        candidatesCopy.Remove(countyId);
-                        continue;
-                    }
+                    if (cellId < 0) continue;
 
-                    economy.CreateFacility(facilityDef.Id, cellId);
+                    for (int j = 0; j < FacilitiesPerCounty; j++)
+                    {
+                        economy.CreateFacility(facilityDef.Id, cellId);
+                        placed++;
+                    }
                     extractionCounties[facilityDef.OutputGoodId].Add(countyId);
-                    candidatesCopy.Remove(countyId);
-                    placed++;
                 }
-                SimLog.Log("Economy", $"  {facilityDef.Id}: placed {placed} (from {candidates.Count} candidates)");
+                SimLog.Log("Economy", $"  {facilityDef.Id}: placed {placed} in {candidates.Count} candidates");
             }
 
             // Place processing facilities in stages
@@ -288,6 +282,9 @@ namespace EconSim.Core.Economy
             var primaryProcessors = new Dictionary<string, string>
             {
                 { "mill", "wheat" },
+                { "rye_mill", "rye" },
+                { "barley_mill", "barley" },
+                { "rice_mill", "rice_grain" },
                 { "sugar_press", "sugarcane" },
                 { "spice_house", "spice_plants" },
                 { "smelter", "iron_ore" },
@@ -319,51 +316,66 @@ namespace EconSim.Core.Economy
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
 
-                    economy.CreateFacility(facilityId, cellId);
+                    for (int j = 0; j < FacilitiesPerCounty; j++)
+                    {
+                        economy.CreateFacility(facilityId, cellId);
+                        placed++;
+                    }
                     facilityCounties[facilityId].Add(countyId);
-                    placed++;
                 }
                 SimLog.Log("Economy", $"  {facilityId}: placed {placed} in {sourceGood} counties");
             }
 
             // Stage 2: Secondary processors - place where primary processors are
-            var secondaryProcessors = new Dictionary<string, string>
+            // Value is a list of upstream facilities (bakery goes wherever any flour mill is)
+            var secondaryProcessors = new Dictionary<string, List<string>>
             {
-                { "bakery", "mill" },
-                { "sugar_refinery", "sugar_press" },
-                { "smithy", "smelter" },
-                { "coppersmith", "copper_smelter" },
-                { "jeweler", "refinery" },
-                { "workshop", "sawmill" },
-                { "spinning_mill", "shearing_shed" },
-                { "cobbler", "tannery" },
-                { "creamery", "dairy" }
+                { "bakery", new List<string> { "mill", "rye_mill", "barley_mill" } },
+                { "sugar_refinery", new List<string> { "sugar_press" } },
+                { "smithy", new List<string> { "smelter" } },
+                { "coppersmith", new List<string> { "copper_smelter" } },
+                { "jeweler", new List<string> { "refinery" } },
+                { "workshop", new List<string> { "sawmill" } },
+                { "spinning_mill", new List<string> { "shearing_shed" } },
+                { "cobbler", new List<string> { "tannery" } },
+                { "creamery", new List<string> { "dairy" } }
             };
 
             foreach (var kvp in secondaryProcessors)
             {
                 var facilityId = kvp.Key;
-                var upstreamFacility = kvp.Value;
+                var upstreamFacilities = kvp.Value;
                 var facilityDef = economy.FacilityDefs.Get(facilityId);
                 if (facilityDef == null) continue;
 
-                if (!facilityCounties.TryGetValue(upstreamFacility, out var candidates) || candidates.Count == 0)
+                // Union all counties from all upstream facility types
+                var allCandidates = new HashSet<int>();
+                foreach (var upstream in upstreamFacilities)
                 {
-                    SimLog.Log("Economy", $"  {facilityId}: no counties with {upstreamFacility}");
+                    if (facilityCounties.TryGetValue(upstream, out var counties))
+                        allCandidates.UnionWith(counties);
+                }
+
+                if (allCandidates.Count == 0)
+                {
+                    SimLog.Log("Economy", $"  {facilityId}: no counties with upstream facilities");
                     continue;
                 }
 
                 facilityCounties[facilityId] = new List<int>();
-
-                // Place in ALL counties that have the upstream processor
-                foreach (var countyId in candidates)
+                int placed = 0;
+                foreach (var countyId in allCandidates)
                 {
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
-                    economy.CreateFacility(facilityId, cellId);
+                    for (int j = 0; j < FacilitiesPerCounty; j++)
+                    {
+                        economy.CreateFacility(facilityId, cellId);
+                        placed++;
+                    }
                     facilityCounties[facilityId].Add(countyId);
                 }
-                SimLog.Log("Economy", $"  {facilityId}: placed {candidates.Count} (co-located with {upstreamFacility})");
+                SimLog.Log("Economy", $"  {facilityId}: placed {placed} in {allCandidates.Count} counties");
             }
 
             // Stage 3: Tertiary processors - place where secondary processors are
@@ -385,14 +397,18 @@ namespace EconSim.Core.Economy
                     continue;
                 }
 
-                // Place in ALL counties that have the upstream processor
+                int placed = 0;
                 foreach (var countyId in candidates)
                 {
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
-                    economy.CreateFacility(facilityId, cellId);
+                    for (int j = 0; j < FacilitiesPerCounty; j++)
+                    {
+                        economy.CreateFacility(facilityId, cellId);
+                        placed++;
+                    }
                 }
-                SimLog.Log("Economy", $"  {facilityId}: placed {candidates.Count} (co-located with {upstreamFacility})");
+                SimLog.Log("Economy", $"  {facilityId}: placed {placed} in {candidates.Count} counties");
             }
 
             SimLog.Log("Economy", $"Total facilities: {economy.Facilities.Count}");
