@@ -296,8 +296,7 @@ namespace MapGen.Core
                     ? (alt / config.MaxElevationMeters) * 100f
                     : 0f;
                 float coastSaltProxy = biome.CoastDistance[i] <= 0 ? 1f
-                    : (biome.CoastDistance[i] <= 1 ? 0.45f
-                    : (biome.CoastDistance[i] <= 2 ? 0.25f : 0f));
+                    : (biome.CoastDistance[i] <= 1 ? 0.45f : 0f);
                 float slope = biome.Slope[i];
                 float slopeForSoil = Clamp01(slope * slopeScale);
                 float flux = cellFlux[i];
