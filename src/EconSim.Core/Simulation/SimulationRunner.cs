@@ -166,6 +166,7 @@ namespace EconSim.Core.Simulation
             RegisterSystem(new OffMapSupplySystem());
             RegisterSystem(new TradeSystem());
             RegisterSystem(new TheftSystem());
+            RegisterSystem(new MigrationSystem());
         }
 
         /// <summary>
