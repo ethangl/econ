@@ -540,8 +540,8 @@ namespace EconSim.Core.Simulation.Systems
                     goodState.Price = Math.Max(minPrice, Math.Min(maxPrice,
                         goodState.Price * (1f + priceChange)));
 
-                    // Record trade volume
-                    goodState.LastTradeVolume = Math.Min(supply, demand);
+                    // Record trade volume (amount actually purchased from this market)
+                    goodState.LastTradeVolume = goodState.SupplyOffered - supply;
                 }
                 else
                 {

@@ -34,7 +34,7 @@ Generate a fresh map and run the simulation for N months. Enters play mode if ne
 {
   "action": "generate_and_run",
   "seed": 2202,
-  "cellCount": 5000,
+  "cellCount": 100000,
   "template": "Continents",
   "months": 6
 }
