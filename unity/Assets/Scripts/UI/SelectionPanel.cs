@@ -318,7 +318,7 @@ namespace EconSim.UI
                 if (_economy != null && _economy.Counties.TryGetValue(cell.Id, out var countyEcon))
                 {
                     totalPop += countyEcon.Population.Total;
-                    totalWorkers += countyEcon.Population.WorkingAge;
+                    totalWorkers += countyEcon.Population.LaborEligible;
                     totalEmployed += countyEcon.Population.EmployedUnskilled + countyEcon.Population.EmployedSkilled;
                 }
                 else
@@ -384,7 +384,7 @@ namespace EconSim.UI
                 if (_economy != null && _economy.Counties.TryGetValue(cell.Id, out var countyEcon))
                 {
                     totalPop += countyEcon.Population.Total;
-                    totalWorkers += countyEcon.Population.WorkingAge;
+                    totalWorkers += countyEcon.Population.LaborEligible;
                     totalEmployed += countyEcon.Population.EmployedUnskilled + countyEcon.Population.EmployedSkilled;
                 }
                 else
@@ -460,7 +460,7 @@ namespace EconSim.UI
             {
                 var pop = countyEcon.Population;
                 SetLabel(_popTotal, pop.Total.ToString("N0"));
-                SetLabel(_popWorkers, pop.WorkingAge.ToString("N0"));
+                SetLabel(_popWorkers, pop.LaborEligible.ToString("N0"));
                 int employed = pop.EmployedUnskilled + pop.EmployedSkilled;
                 SetLabel(_popEmployed, employed.ToString("N0"));
 

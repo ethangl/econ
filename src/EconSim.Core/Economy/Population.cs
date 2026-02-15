@@ -47,7 +47,7 @@ namespace EconSim.Core.Economy
         public Estate Estate;
         public int Count;
 
-        public PopulationCohort(AgeBracket age, SkillLevel skill, int count, Estate estate = Estate.Landed)
+        public PopulationCohort(AgeBracket age, SkillLevel skill, int count, Estate estate)
         {
             Age = age;
             Skill = skill;
@@ -127,6 +127,9 @@ namespace EconSim.Core.Economy
             }
         }
 
+        /// <summary>Total labor-eligible population (unskilled + skilled pools).</summary>
+        public int LaborEligible => TotalUnskilled + TotalSkilled;
+
         /// <summary>Unskilled workers not currently employed.</summary>
         public int IdleUnskilled => Math.Max(0, TotalUnskilled - EmployedUnskilled);
 
@@ -200,9 +203,9 @@ namespace EconSim.Core.Economy
             int artisans = (int)(working * 0.20f);
             int merchants = working - landed - laborers - artisans;
 
-            // Young/elderly have no estate distinction yet — default to Landed
-            pop.Cohorts.Add(new PopulationCohort(AgeBracket.Young, SkillLevel.None, young));
-            pop.Cohorts.Add(new PopulationCohort(AgeBracket.Elderly, SkillLevel.None, elderly));
+            // Young/elderly have no estate distinction yet — use Landed placeholder.
+            pop.Cohorts.Add(new PopulationCohort(AgeBracket.Young, SkillLevel.None, young, Estate.Landed));
+            pop.Cohorts.Add(new PopulationCohort(AgeBracket.Elderly, SkillLevel.None, elderly, Estate.Landed));
 
             // Working commoners by estate
             pop.Cohorts.Add(new PopulationCohort(AgeBracket.Working, SkillLevel.Unskilled, landed, Estate.Landed));
