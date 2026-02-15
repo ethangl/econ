@@ -133,6 +133,7 @@ namespace EconSim.Editor
         [MenuItem("Tools/EconDebug/Cancel")]
         public static void CancelMenu()
         {
+            StopActiveRun();
             CleanupAll();
             WriteStatus("idle", "Cancelled");
         }
@@ -162,6 +163,7 @@ namespace EconSim.Editor
                     break;
 
                 case "cancel":
+                    StopActiveRun();
                     CleanupAll();
                     WriteStatus("idle", "Cancelled");
                     break;
@@ -192,18 +194,22 @@ namespace EconSim.Editor
             };
 
             WritePending(pending);
+            RestoreFromPending(pending);
+            EditorApplication.update -= OnUpdate;
+            EditorApplication.update += OnUpdate;
 
-            if (EditorApplication.isPlaying && GameManager.Instance != null)
+            if (EditorApplication.isPlaying)
             {
-                // Already in play mode — generate immediately
-                RestoreFromPending(pending);
-                DoGenerate();
-                EditorApplication.update -= OnUpdate;
-                EditorApplication.update += OnUpdate;
+                // Already in play mode — generate now if GameManager is ready,
+                // otherwise let update loop wait for it.
+                WriteStatus("starting", $"Preparing run (seed={seed}, {months}mo)...");
+                if (GameManager.Instance != null)
+                    DoGenerate();
             }
             else
             {
-                // Enter play mode; [InitializeOnLoad] picks up pending after domain reload
+                // Enter play mode and keep update callback for domain-reload-disabled flows.
+                _state = BridgeState.WaitingForPlayMode;
                 WriteStatus("starting", $"Entering play mode (seed={seed}, {months}mo)...");
                 EditorApplication.isPlaying = true;
             }
@@ -336,6 +342,18 @@ namespace EconSim.Editor
             _pendingConfig = null;
             EditorApplication.update -= OnUpdate;
             if (File.Exists(PendingPath)) File.Delete(PendingPath);
+        }
+
+        static void StopActiveRun()
+        {
+            if (_state != BridgeState.Running)
+                return;
+            if (!EditorApplication.isPlaying || GameManager.Instance?.Simulation == null)
+                return;
+
+            var sim = GameManager.Instance.Simulation;
+            sim.IsPaused = true;
+            sim.TimeScale = SimulationConfig.Speed.Normal;
         }
 
         // ── Status ─────────────────────────────────────────────────
