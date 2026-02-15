@@ -238,8 +238,6 @@ namespace EconSim.Core.Economy
                 }
             }
 
-            const int FacilitiesPerCounty = 3;
-
             SimLog.Log("Economy", "Placing extraction facilities:");
 
             // Track which counties have extraction facilities (for co-locating processing)
@@ -262,7 +260,8 @@ namespace EconSim.Core.Economy
                     int cellId = FindCellWithResource(countyId, facilityDef.OutputGoodId, mapData, cellResources);
                     if (cellId < 0) continue;
 
-                    for (int j = 0; j < FacilitiesPerCounty; j++)
+                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    for (int j = 0; j < count; j++)
                     {
                         economy.CreateFacility(facilityDef.Id, cellId);
                         placed++;
@@ -316,7 +315,8 @@ namespace EconSim.Core.Economy
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
 
-                    for (int j = 0; j < FacilitiesPerCounty; j++)
+                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    for (int j = 0; j < count; j++)
                     {
                         economy.CreateFacility(facilityId, cellId);
                         placed++;
@@ -368,7 +368,8 @@ namespace EconSim.Core.Economy
                 {
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
-                    for (int j = 0; j < FacilitiesPerCounty; j++)
+                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    for (int j = 0; j < count; j++)
                     {
                         economy.CreateFacility(facilityId, cellId);
                         placed++;
@@ -402,7 +403,8 @@ namespace EconSim.Core.Economy
                 {
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
-                    for (int j = 0; j < FacilitiesPerCounty; j++)
+                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    for (int j = 0; j < count; j++)
                     {
                         economy.CreateFacility(facilityId, cellId);
                         placed++;
@@ -497,6 +499,25 @@ namespace EconSim.Core.Economy
                 }
             }
             return -1;
+        }
+
+        /// <summary>
+        /// Compute how many facilities of a given type to place in a county,
+        /// scaling with the relevant worker pool (unskilled or skilled).
+        /// Formula: 1 facility per (ScaleFactor * LaborRequired) workers of the matching type.
+        /// A median ~200-pop county gets ~3 farms (labor=20), matching prior defaults.
+        /// </summary>
+        private static int ComputeFacilityCount(CountyPopulation pop, FacilityDef def)
+        {
+            const float ScaleFactor = 3f;
+            const int MaxPerType = 50;
+
+            int workerPool = def.LaborType == LaborType.Unskilled
+                ? pop.TotalUnskilled
+                : pop.TotalSkilled;
+
+            int count = (int)(workerPool / (def.LaborRequired * ScaleFactor));
+            return Math.Max(1, Math.Min(MaxPerType, count));
         }
 
         /// <summary>

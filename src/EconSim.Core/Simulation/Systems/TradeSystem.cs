@@ -176,6 +176,17 @@ namespace EconSim.Core.Simulation.Systems
             // Get transport efficiency for this county-market pair (using seat cell)
             float transportEfficiency = GetTransportEfficiency(seatCellId, market);
 
+            // Sell export buffer contents unconditionally (extraction output earmarked for market)
+            foreach (var item in county.ExportBuffer.All)
+            {
+                float amount = item.Value;
+                if (amount < 0.01f) continue;
+                var good = economy.Goods.Get(item.Key);
+                if (good == null) continue;
+                SellToMarket(county, market, good, amount, transportEfficiency, totalSold, totalStolen, fromExportBuffer: true);
+            }
+            county.ExportBuffer.Clear();
+
             // For each good the county has or needs
             foreach (var good in economy.Goods.All)
             {
@@ -273,13 +284,17 @@ namespace EconSim.Core.Simulation.Systems
             float excess,
             float transportEfficiency,
             Dictionary<string, float> totalSold,
-            Dictionary<string, float> totalStolen)
+            Dictionary<string, float> totalStolen,
+            bool fromExportBuffer = false)
         {
-            float toSell = excess * SellRatio;
+            // Export buffer sells everything; normal surplus sells a fraction
+            float toSell = fromExportBuffer ? excess : excess * SellRatio;
             if (toSell < 0.01f) return;
 
-            // Remove from county stockpile
-            county.Stockpile.Remove(good.Id, toSell);
+            // Export buffer goods are already removed (buffer cleared after loop);
+            // normal surplus removes from county stockpile
+            if (!fromExportBuffer)
+                county.Stockpile.Remove(good.Id, toSell);
 
             // Amount that arrives at market (reduced by transport costs)
             float arriving = toSell * transportEfficiency;
