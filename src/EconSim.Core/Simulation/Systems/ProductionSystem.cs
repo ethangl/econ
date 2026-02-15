@@ -138,7 +138,11 @@ namespace EconSim.Core.Simulation.Systems
         {
             var county = economy.GetCounty(facility.CountyId);
             var goodDef = economy.Goods.Get(def.OutputGoodId);
-            if (goodDef == null || goodDef.Inputs == null) return;
+            if (goodDef == null) return;
+
+            // Facility-specific recipe overrides take precedence over the good's default inputs.
+            var inputs = def.InputOverrides ?? goodDef.Inputs;
+            if (inputs == null || inputs.Count == 0) return;
 
             // Allocate workers
             AllocateWorkers(county, facility, def);
@@ -148,9 +152,9 @@ namespace EconSim.Core.Simulation.Systems
             float throughput = facility.GetThroughput(def);
             int maxBatches = (int)throughput;
 
-            // Limit by available inputs
+            // Limit by available inputs (facility can override the good's default inputs)
             int possibleBatches = maxBatches;
-            foreach (var input in goodDef.Inputs)
+            foreach (var input in inputs)
             {
                 float available = county.Stockpile.Get(input.GoodId);
                 int canMake = (int)(available / input.Quantity);
@@ -161,7 +165,7 @@ namespace EconSim.Core.Simulation.Systems
             if (possibleBatches <= 0) return;
 
             // Consume inputs
-            foreach (var input in goodDef.Inputs)
+            foreach (var input in inputs)
             {
                 county.Stockpile.Remove(input.GoodId, input.Quantity * possibleBatches);
             }

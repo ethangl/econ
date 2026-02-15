@@ -408,6 +408,95 @@ namespace EconSim.Tests
             }
         }
 
+        [Test]
+        public void OffMapMarketPlacer_RespectsAlternateInputRecipes_WhenDeterminingOnMapProduction()
+        {
+            var mapData = BuildOffMapPlacementMap();
+
+            var economy = new EconomyState();
+            InitialData.RegisterAll(economy);
+            economy.Counties[1] = new CountyEconomy(1);
+            economy.Counties[1].Resources["rye"] = 1f;
+
+            var transport = new TransportGraph(mapData);
+            var result = OffMapMarketPlacer.Place(
+                mapData,
+                economy,
+                transport,
+                nextMarketId: 10,
+                marketZoneMaxTransportCost: 100f);
+
+            Assert.That(result.Markets.Count, Is.GreaterThan(0), "Expected at least one off-map market to be placed.");
+            foreach (var market in result.Markets)
+            {
+                Assert.That(market.OffMapGoodIds.Contains("flour"), Is.False,
+                    "Flour should be treated as on-map producible via rye_mill input override.");
+                Assert.That(market.OffMapGoodIds.Contains("bread"), Is.False,
+                    "Bread should be treated as on-map producible when flour is reachable via alternate recipes.");
+            }
+        }
+
+        [Test]
+        public void ProductionSystem_UsesFacilityInputOverride_WhenGoodDefaultInputsAreMissing()
+        {
+            var economy = new EconomyState();
+            economy.Goods.Register(new GoodDef
+            {
+                Id = "wheat",
+                Name = "Wheat",
+                Category = GoodCategory.Raw
+            });
+            economy.Goods.Register(new GoodDef
+            {
+                Id = "alt_food",
+                Name = "Alt Food",
+                Category = GoodCategory.Refined,
+                Inputs = null
+            });
+            economy.FacilityDefs.Register(new FacilityDef
+            {
+                Id = "alt_mill",
+                Name = "Alt Mill",
+                OutputGoodId = "alt_food",
+                LaborRequired = 1,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 2f,
+                IsExtraction = false,
+                InputOverrides = new List<GoodInput> { new GoodInput("wheat", 1) }
+            });
+
+            var county = new CountyEconomy(1)
+            {
+                Population = CountyPopulation.FromTotal(1000)
+            };
+            county.Stockpile.Add("wheat", 10f);
+            economy.Counties[1] = county;
+
+            var facility = new Facility
+            {
+                Id = 1,
+                TypeId = "alt_mill",
+                CountyId = 1,
+                CellId = 1
+            };
+            economy.Facilities[facility.Id] = facility;
+            county.FacilityIds.Add(facility.Id);
+
+            var state = new SimulationState
+            {
+                Economy = economy
+            };
+
+            var system = new ProductionSystem();
+            system.Initialize(state, null);
+            system.Tick(state, null);
+
+            Assert.That(county.Stockpile.Get("alt_food"), Is.GreaterThan(0f),
+                "Processing should run from facility override inputs even when good default inputs are null.");
+            Assert.That(county.Stockpile.Get("wheat"), Is.LessThan(10f),
+                "Input goods should be consumed when production succeeds.");
+        }
+
         private static MapData BuildLinearMap()
         {
             var mapData = new MapData

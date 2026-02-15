@@ -96,7 +96,7 @@
             </ui:VisualElement>
 
             <!-- Tab content: Overview -->
-            <ui:VisualElement name="tab-content-overview" class="tab-content">
+            <ui:ScrollView name="tab-content-overview" class="tab-content">
                 <ui:VisualElement class="stat-row">
                     <ui:Label text="Population" />
                     <ui:Label name="econ-population" text="0" />
@@ -117,17 +117,17 @@
                     <ui:Label text="Markets" />
                     <ui:Label name="econ-markets" text="0" />
                 </ui:VisualElement>
-            </ui:VisualElement>
+            </ui:ScrollView>
 
             <!-- Tab content: Production -->
-            <ui:VisualElement name="tab-content-production" class="tab-content hidden">
+            <ui:ScrollView name="tab-content-production" class="tab-content hidden">
                 <ui:VisualElement name="production-list" />
-            </ui:VisualElement>
+            </ui:ScrollView>
 
             <!-- Tab content: Trade -->
-            <ui:VisualElement name="tab-content-trade" class="tab-content hidden">
+            <ui:ScrollView name="tab-content-trade" class="tab-content hidden">
                 <ui:VisualElement name="trade-list" />
-            </ui:VisualElement>
+            </ui:ScrollView>
         </ui:VisualElement>
 
         <!-- Time Control Panel (top right, horizontal) -->

@@ -16,7 +16,7 @@ namespace EconSim.Core.Simulation
     /// </summary>
     public class SimulationRunner : ISimulation
     {
-        private const int BootstrapCacheVersion = 7;
+        private const int BootstrapCacheVersion = 8;
         private const int BootstrapCacheHeaderMagic = unchecked((int)0xEC0A571C);
         private const string BootstrapCacheFileName = "simulation_bootstrap.bin";
         private static readonly int BootstrapCacheSchemaHash = ComputeBootstrapCacheSchemaHash();
@@ -166,6 +166,7 @@ namespace EconSim.Core.Simulation
             RegisterSystem(new OffMapSupplySystem());
             RegisterSystem(new TradeSystem());
             RegisterSystem(new TheftSystem());
+            RegisterSystem(new MigrationSystem());
         }
 
         /// <summary>
