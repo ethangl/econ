@@ -24,6 +24,16 @@ namespace EconSim.Core.Economy
     }
 
     /// <summary>
+    /// Social estate for population cohorts.
+    /// </summary>
+    public enum Estate
+    {
+        Commoners,  // Peasants, burghers, laborers, craftsmen
+        Clergy,     // Church officials, monks, priests
+        Nobility    // Lords, knights, landed gentry
+    }
+
+    /// <summary>
     /// A population cohort within a county.
     /// </summary>
     [Serializable]
@@ -31,18 +41,20 @@ namespace EconSim.Core.Economy
     {
         public AgeBracket Age;
         public SkillLevel Skill;
+        public Estate Estate;
         public int Count;
 
-        public PopulationCohort(AgeBracket age, SkillLevel skill, int count)
+        public PopulationCohort(AgeBracket age, SkillLevel skill, int count, Estate estate = Estate.Commoners)
         {
             Age = age;
             Skill = skill;
+            Estate = estate;
             Count = count;
         }
 
         public bool CanWork => Age == AgeBracket.Working;
-        public bool CanDoUnskilled => CanWork && (Skill == SkillLevel.Unskilled || Skill == SkillLevel.Skilled);
-        public bool CanDoSkilled => CanWork && Skill == SkillLevel.Skilled;
+        public bool CanDoUnskilled => CanWork && Estate == Estate.Commoners && (Skill == SkillLevel.Unskilled || Skill == SkillLevel.Skilled);
+        public bool CanDoSkilled => CanWork && Estate == Estate.Commoners && Skill == SkillLevel.Skilled;
     }
 
     /// <summary>
@@ -92,7 +104,7 @@ namespace EconSim.Core.Economy
                 int sum = 0;
                 foreach (var c in Cohorts)
                 {
-                    if (c.Skill == SkillLevel.Unskilled) sum += c.Count;
+                    if (c.CanDoUnskilled && c.Skill == SkillLevel.Unskilled) sum += c.Count;
                 }
                 return sum;
             }
@@ -106,7 +118,7 @@ namespace EconSim.Core.Economy
                 int sum = 0;
                 foreach (var c in Cohorts)
                 {
-                    if (c.Skill == SkillLevel.Skilled) sum += c.Count;
+                    if (c.CanDoSkilled) sum += c.Count;
                 }
                 return sum;
             }
@@ -117,6 +129,17 @@ namespace EconSim.Core.Economy
 
         /// <summary>Skilled workers not currently employed.</summary>
         public int IdleSkilled => Math.Max(0, TotalSkilled - EmployedSkilled);
+
+        /// <summary>Population count for a given estate.</summary>
+        public int GetEstatePopulation(Estate estate)
+        {
+            int sum = 0;
+            foreach (var c in Cohorts)
+            {
+                if (c.Estate == estate) sum += c.Count;
+            }
+            return sum;
+        }
 
         /// <summary>
         /// Try to allocate workers for a facility.
@@ -157,12 +180,17 @@ namespace EconSim.Core.Economy
             int total = Math.Max(50, (int)totalPopulation);
             var pop = new CountyPopulation();
 
-            // Age distribution: ~20% young, ~65% working, ~15% elderly
-            int young = (int)(total * 0.20f);
-            int elderly = (int)(total * 0.15f);
-            int working = total - young - elderly;
+            // Carve out clergy (~2%) and nobility (~3%) as working-age, SkillLevel.None
+            int clergy = (int)(total * 0.02f);
+            int nobility = (int)(total * 0.03f);
+            int commoners = total - clergy - nobility;
 
-            // Skill distribution of working pop: ~70% unskilled, ~30% skilled
+            // Age distribution of commoners: ~20% young, ~65% working, ~15% elderly
+            int young = (int)(commoners * 0.20f);
+            int elderly = (int)(commoners * 0.15f);
+            int working = commoners - young - elderly;
+
+            // Skill distribution of working commoners: ~70% unskilled, ~30% skilled
             // (increased skilled ratio so processing facilities can staff)
             int skilled = (int)(working * 0.30f);
             int unskilled = working - skilled;
@@ -171,6 +199,8 @@ namespace EconSim.Core.Economy
             pop.Cohorts.Add(new PopulationCohort(AgeBracket.Working, SkillLevel.Unskilled, unskilled));
             pop.Cohorts.Add(new PopulationCohort(AgeBracket.Working, SkillLevel.Skilled, skilled));
             pop.Cohorts.Add(new PopulationCohort(AgeBracket.Elderly, SkillLevel.None, elderly));
+            pop.Cohorts.Add(new PopulationCohort(AgeBracket.Working, SkillLevel.None, clergy, Estate.Clergy));
+            pop.Cohorts.Add(new PopulationCohort(AgeBracket.Working, SkillLevel.None, nobility, Estate.Nobility));
 
             return pop;
         }
