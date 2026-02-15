@@ -14,6 +14,9 @@ namespace EconSim.Core.Simulation.Systems
         public string Name => "Production";
         public int TickInterval => 1;
 
+        // Fraction of extraction output sent to market export buffer (rest stays local for processing)
+        private const float ExportFraction = 0.3f;
+
         // Debug: track production this tick for logging
         private Dictionary<string, float> _producedThisTick = new Dictionary<string, float>();
         private const int LogInterval = 30; // Log every 30 days (monthly)
@@ -129,8 +132,13 @@ namespace EconSim.Core.Simulation.Systems
             float throughput = facility.GetThroughput(def);
             float produced = throughput * abundance;
 
-            // Add to county stockpile
-            county.Stockpile.Add(def.OutputGoodId, produced);
+            // Split output: fraction goes to export buffer for market sale,
+            // rest stays in local stockpile for processing facilities
+            float forExport = produced * ExportFraction;
+            float forLocal = produced - forExport;
+
+            county.Stockpile.Add(def.OutputGoodId, forLocal);
+            county.ExportBuffer.Add(def.OutputGoodId, forExport);
             TrackProduction(def.OutputGoodId, produced);
         }
 
