@@ -234,92 +234,91 @@ namespace EconSim.Core.Economy
                 }
             }
 
-            // Expand to full chains: if raw is available, refined and finished are too
-            var allAvailable = new HashSet<string>(availableRaw);
-            foreach (var good in economy.Goods.All)
-            {
-                if (good.Inputs == null || good.Inputs.Count == 0) continue;
-                // Check if all inputs are available
-                bool allInputsAvailable = true;
-                foreach (var input in good.Inputs)
-                {
-                    if (!allAvailable.Contains(input.GoodId))
-                    {
-                        allInputsAvailable = false;
-                        break;
-                    }
-                }
-                if (allInputsAvailable)
-                    allAvailable.Add(good.Id);
-            }
+            var recipesByGood = BuildInputRecipes(economy);
 
-            // Do a second pass for 3-tier chains (raw→refined→finished)
-            foreach (var good in economy.Goods.All)
-            {
-                if (allAvailable.Contains(good.Id)) continue;
-                if (good.Inputs == null || good.Inputs.Count == 0) continue;
-                bool allInputsAvailable = true;
-                foreach (var input in good.Inputs)
-                {
-                    if (!allAvailable.Contains(input.GoodId))
-                    {
-                        allInputsAvailable = false;
-                        break;
-                    }
-                }
-                if (allInputsAvailable)
-                    allAvailable.Add(good.Id);
-            }
+            // Expand to full chains using any valid recipe for each good
+            var allAvailable = ExpandAvailableGoods(availableRaw, recipesByGood);
+            var onMapProducible = ExpandAvailableGoods(onMapGoods, recipesByGood);
 
             // Filter to only goods NOT producible on-map
             var result = new HashSet<string>();
             foreach (var goodId in allAvailable)
             {
-                if (!onMapGoods.Contains(goodId))
-                {
-                    // For chain goods, check if the raw source is on-map
-                    // Only include if the raw resource itself is missing
-                    var good = economy.Goods.Get(goodId);
-                    if (good == null) continue;
-
-                    if (good.Category == GoodCategory.Raw)
-                    {
-                        result.Add(goodId);
-                    }
-                    else
-                    {
-                        // Refined/finished: include if any input's raw source is not on-map
-                        if (HasMissingRawSource(good, economy, onMapGoods))
-                            result.Add(goodId);
-                    }
-                }
+                if (!onMapProducible.Contains(goodId))
+                    result.Add(goodId);
             }
 
             return result;
         }
 
-        /// <summary>
-        /// Check if a refined/finished good has any input whose ultimate raw source is not on the map.
-        /// </summary>
-        static bool HasMissingRawSource(GoodDef good, EconomyState economy, HashSet<string> onMapGoods)
+        private static Dictionary<string, List<List<GoodInput>>> BuildInputRecipes(EconomyState economy)
         {
-            if (good.Inputs == null) return false;
-            foreach (var input in good.Inputs)
+            var recipesByGood = new Dictionary<string, List<List<GoodInput>>>();
+
+            foreach (var good in economy.Goods.All)
+                AddRecipe(recipesByGood, good.Id, good.Inputs);
+
+            foreach (var facility in economy.FacilityDefs.All)
+                AddRecipe(recipesByGood, facility.OutputGoodId, facility.InputOverrides);
+
+            return recipesByGood;
+        }
+
+        private static void AddRecipe(
+            Dictionary<string, List<List<GoodInput>>> recipesByGood,
+            string outputGoodId,
+            List<GoodInput> inputs)
+        {
+            if (string.IsNullOrWhiteSpace(outputGoodId) || inputs == null || inputs.Count == 0)
+                return;
+
+            if (!recipesByGood.TryGetValue(outputGoodId, out var recipes))
             {
-                var inputGood = economy.Goods.Get(input.GoodId);
-                if (inputGood == null) continue;
-                if (inputGood.Category == GoodCategory.Raw)
-                {
-                    if (!onMapGoods.Contains(inputGood.Id))
-                        return true;
-                }
-                else
-                {
-                    if (HasMissingRawSource(inputGood, economy, onMapGoods))
-                        return true;
-                }
+                recipes = new List<List<GoodInput>>();
+                recipesByGood[outputGoodId] = recipes;
             }
-            return false;
+
+            recipes.Add(inputs);
+        }
+
+        private static HashSet<string> ExpandAvailableGoods(
+            HashSet<string> seedGoods,
+            Dictionary<string, List<List<GoodInput>>> recipesByGood)
+        {
+            var available = new HashSet<string>(seedGoods);
+            bool changed;
+            do
+            {
+                changed = false;
+                foreach (var kvp in recipesByGood)
+                {
+                    if (available.Contains(kvp.Key))
+                        continue;
+
+                    foreach (var inputs in kvp.Value)
+                    {
+                        if (AreInputsAvailable(inputs, available))
+                        {
+                            available.Add(kvp.Key);
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+            } while (changed);
+
+            return available;
+        }
+
+        private static bool AreInputsAvailable(List<GoodInput> inputs, HashSet<string> availableGoods)
+        {
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                if (!availableGoods.Contains(inputs[i].GoodId))
+                    return false;
+            }
+
+            return true;
         }
 
         /// <summary>
