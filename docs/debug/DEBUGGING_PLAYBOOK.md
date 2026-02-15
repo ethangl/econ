@@ -8,7 +8,7 @@ Use this as the first stop when a bug appears in map generation, rendering, econ
 
 For rendering/shader-specific deep dives, see:
 
-- `docs/SHADER_OVERLAY_DEBUGGING.md`
+- `docs/debug/SHADER_OVERLAY_DEBUGGING.md`
 
 ---
 
@@ -89,7 +89,7 @@ After isolated fix works:
 
 Start with:
 
-- `docs/SHADER_OVERLAY_DEBUGGING.md`
+- `docs/debug/SHADER_OVERLAY_DEBUGGING.md`
 
 Typical causes:
 

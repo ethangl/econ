@@ -1,7 +1,7 @@
 # Philosophy & Overview
 
 See also: [Startup Performance Notes](./STARTUP_PERFORMANCE.md)
-See also: [Render Performance Baseline](./RENDER_PERFORMANCE_BASELINE.md)
+See also: [Render Performance Baseline](./debug/RENDER_PERFORMANCE_BASELINE.md)
 
 ## Goals
 
@@ -40,28 +40,28 @@ Any world generator must produce a `MapData` that satisfies this contract:
 
 ### Required Data
 
-| Component     | Fields                                               | Used By                            |
-| ------------- | ---------------------------------------------------- | ---------------------------------- |
-| **MapInfo**   | Width, Height, Seed, TotalCells, LandCells, World.* | Rendering, coordinate systems      |
-| **Cells**     | Id, Center, VertexIndices, NeighborIds               | Mesh generation, pathfinding       |
+| Component     | Fields                                                                    | Used By                            |
+| ------------- | ------------------------------------------------------------------------- | ---------------------------------- |
+| **MapInfo**   | Width, Height, Seed, TotalCells, LandCells, World.\*                      | Rendering, coordinate systems      |
+| **Cells**     | Id, Center, VertexIndices, NeighborIds                                    | Mesh generation, pathfinding       |
 |               | SeaRelativeElevation, HasSeaRelativeElevation, BiomeId, IsLand, FeatureId | Terrain rendering, transport costs |
-|               | RealmId, ProvinceId, CountyId                        | Political display, borders         |
-|               | Population                                           | County grouping, economy           |
-| **Vertices**  | Vec2 positions                                       | Voronoi polygon rendering          |
-| **Realms**    | Id, Name, Color, ProvinceIds                         | Political mode, borders            |
-| **Provinces** | Id, Name, RealmId, CellIds                           | Province mode, grouping            |
-| **Rivers**    | Id, CellPath, Width, Discharge                       | River rendering, transport         |
-| **Biomes**    | Id, Name, Color, Habitability, MovementCost          | Terrain colors, pathfinding        |
-| **Features**  | Id, Type (ocean/lake/island)                         | Water detection, transport         |
+|               | RealmId, ProvinceId, CountyId                                             | Political display, borders         |
+|               | Population                                                                | County grouping, economy           |
+| **Vertices**  | Vec2 positions                                                            | Voronoi polygon rendering          |
+| **Realms**    | Id, Name, Color, ProvinceIds                                              | Political mode, borders            |
+| **Provinces** | Id, Name, RealmId, CellIds                                                | Province mode, grouping            |
+| **Rivers**    | Id, CellPath, Width, Discharge                                            | River rendering, transport         |
+| **Biomes**    | Id, Name, Color, Habitability, MovementCost                               | Terrain colors, pathfinding        |
+| **Features**  | Id, Type (ocean/lake/island)                                              | Water detection, transport         |
 
 ### Derived Data (computed after load)
 
-| Component           | Computed By              | Notes                      |
-| ------------------- | ------------------------ | -------------------------- |
-| **Counties**        | MapGen political pipeline + adapter | Grouped before runtime simulation |
-| **Lookup tables**   | `MapData.BuildLookups()` | CellById, RealmById, ProvinceById, CountyById, etc. |
-| **Markets**         | `MarketPlacer`           | Trade zones                |
-| **Transport graph** | `TransportGraph`         | Pathfinding weights        |
+| Component           | Computed By                         | Notes                                               |
+| ------------------- | ----------------------------------- | --------------------------------------------------- |
+| **Counties**        | MapGen political pipeline + adapter | Grouped before runtime simulation                   |
+| **Lookup tables**   | `MapData.BuildLookups()`            | CellById, RealmById, ProvinceById, CountyById, etc. |
+| **Markets**         | `MarketPlacer`                      | Trade zones                                         |
+| **Transport graph** | `TransportGraph`                    | Pathfinding weights                                 |
 
 ### Invariants
 
@@ -102,10 +102,10 @@ Cell scale is emitted via `MapInfo.World.CellSizeKm` and defaults to `2.5 km` un
 
 Since cell size is fixed, map dimensions follow from cell count and aspect ratio:
 
-| Input        | Example | Notes                          |
-| ------------ | ------- | ------------------------------ |
-| Cell count   | 20,000  | Controls map complexity/detail |
-| Aspect ratio | 16:9    | Controls map shape             |
+| Input        | Example | Notes                           |
+| ------------ | ------- | ------------------------------- |
+| Cell count   | 20,000  | Controls map complexity/detail  |
+| Aspect ratio | 16:9    | Controls map shape              |
 | Cell size    | 2.5 km  | Default (~1.5 mi), configurable |
 
 **Derivation:**
