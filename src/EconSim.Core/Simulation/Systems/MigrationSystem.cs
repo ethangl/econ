@@ -22,6 +22,8 @@ namespace EconSim.Core.Simulation.Systems
         private const float CulturalAffinityForeign = 0.2f;
         private const int MinMigrationPop = 1;
         private const float MerchantFixedPush = 0.1f;
+        private const string FoodGoodId = "bread";
+        private const float FoodDaysSupplyBase = 30f; // Days of food = no push/full pull
 
         // Estate mobility weights
         private static readonly Dictionary<Estate, float> EstateMobility = new Dictionary<Estate, float>
@@ -124,7 +126,7 @@ namespace EconSim.Core.Simulation.Systems
                     int estatePop = pop.GetEstatePopulation(estate);
                     if (estatePop < 2) continue;
 
-                    float pushScore = GetPushScore(pop, estate);
+                    float pushScore = GetPushScore(countyEcon, estate);
                     if (pushScore <= 0f) continue;
 
                     int migrants = (int)(estatePop * BaseMigrationRate * mobility * pushScore);
@@ -150,45 +152,61 @@ namespace EconSim.Core.Simulation.Systems
             }
         }
 
-        private float GetPushScore(CountyPopulation pop, Estate estate)
+        private float GetFoodDaysSupply(CountyEconomy county)
+        {
+            int pop = county.Population.Total;
+            if (pop <= 0) return FoodDaysSupplyBase;
+            float dailyDemand = pop * 0.01f; // bread BaseConsumption
+            if (dailyDemand <= 0f) return FoodDaysSupplyBase;
+            return county.Stockpile.Get(FoodGoodId) / dailyDemand;
+        }
+
+        private float GetPushScore(CountyEconomy county, Estate estate)
         {
             if (estate == Estate.Merchants)
                 return MerchantFixedPush;
 
+            var pop = county.Population;
+            float foodPush = Math.Max(0f, 1f - GetFoodDaysSupply(county) / FoodDaysSupplyBase);
+
             if (estate == Estate.Laborers)
             {
                 int total = pop.TotalUnskilled;
-                if (total <= 0) return 0f;
-                return (float)pop.IdleUnskilled / total;
+                float idlePush = total > 0 ? (float)pop.IdleUnskilled / total : 0f;
+                return Math.Max(idlePush, foodPush);
             }
 
             if (estate == Estate.Artisans)
             {
                 int total = pop.TotalSkilled;
-                if (total <= 0) return 0f;
-                return (float)pop.IdleSkilled / total;
+                float idlePush = total > 0 ? (float)pop.IdleSkilled / total : 0f;
+                return Math.Max(idlePush, foodPush);
             }
 
             return 0f;
         }
 
-        private float GetPullScore(CountyPopulation pop, Estate estate)
+        private float GetPullScore(CountyEconomy county, Estate estate)
         {
             if (estate == Estate.Merchants)
-                return 1f; // merchants always pulled toward trade
+                return 1f;
+
+            var pop = county.Population;
+            // Floor at 0.2 so food scarcity dampens but never vetoes migration
+            float foodPull = 0.2f + 0.8f * Math.Min(1f, GetFoodDaysSupply(county) / FoodDaysSupplyBase);
 
             if (estate == Estate.Laborers)
             {
                 int total = pop.TotalUnskilled;
-                if (total <= 0) return 1f; // no workers = high demand
-                return 1f - (float)pop.IdleUnskilled / total;
+                float empPull = total > 0 ? 1f - (float)pop.IdleUnskilled / total : 1f;
+                return empPull * foodPull;
             }
 
             if (estate == Estate.Artisans)
             {
                 int total = pop.TotalSkilled;
-                if (total <= 0) return 1f;
-                return 1f - (float)pop.IdleSkilled / total;
+                float empPull = total > 0 ? 1f - (float)pop.IdleSkilled / total : 1f;
+                return empPull * foodPull;
             }
 
             return 0f;
@@ -210,7 +228,7 @@ namespace EconSim.Core.Simulation.Systems
             {
                 var (destId, cost) = candidates[i];
 
-                float pull = GetPullScore(economy.Counties[destId].Population, estate);
+                float pull = GetPullScore(economy.Counties[destId], estate);
                 float distanceDecay = 1f / (1f + cost / DistanceDecayScale);
 
                 int destCulture = _countyToCulture.TryGetValue(destId, out int dc) ? dc : -2;
