@@ -8,38 +8,24 @@ namespace MapGen.Core
     /// </summary>
     public static class HeightmapTerrainOps
     {
+        // Reference cell count for continuous power scaling.
+        // BFS blobs/lines need more hops on denser meshes to cover the same
+        // physical area.  Power scales as p0^sqrt(N0/N) so that the physical
+        // radius of a feature is resolution-independent.
+        const int RefCellCount = 40000;
+        const float RefBlobPower = 0.993f;
+        const float RefLinePower = 0.84f;
+
         static float GetBlobPower(int cellCount)
         {
-            if (cellCount <= 1000) return 0.93f;
-            if (cellCount <= 2000) return 0.95f;
-            if (cellCount <= 5000) return 0.97f;
-            if (cellCount <= 10000) return 0.98f;
-            if (cellCount <= 20000) return 0.99f;
-            if (cellCount <= 30000) return 0.991f;
-            if (cellCount <= 40000) return 0.993f;
-            if (cellCount <= 50000) return 0.994f;
-            if (cellCount <= 60000) return 0.995f;
-            if (cellCount <= 70000) return 0.9955f;
-            if (cellCount <= 80000) return 0.996f;
-            if (cellCount <= 90000) return 0.9964f;
-            return 0.9973f;
+            if (cellCount <= 0) return RefBlobPower;
+            return (float)Math.Pow(RefBlobPower, Math.Sqrt((double)RefCellCount / cellCount));
         }
 
         static float GetLinePower(int cellCount)
         {
-            if (cellCount <= 1000) return 0.75f;
-            if (cellCount <= 2000) return 0.77f;
-            if (cellCount <= 5000) return 0.79f;
-            if (cellCount <= 10000) return 0.81f;
-            if (cellCount <= 20000) return 0.82f;
-            if (cellCount <= 30000) return 0.83f;
-            if (cellCount <= 40000) return 0.84f;
-            if (cellCount <= 50000) return 0.86f;
-            if (cellCount <= 60000) return 0.87f;
-            if (cellCount <= 70000) return 0.88f;
-            if (cellCount <= 80000) return 0.91f;
-            if (cellCount <= 90000) return 0.92f;
-            return 0.93f;
+            if (cellCount <= 0) return RefLinePower;
+            return (float)Math.Pow(RefLinePower, Math.Sqrt((double)RefCellCount / cellCount));
         }
 
         static float ShapeUnitMeters(ElevationField field)
