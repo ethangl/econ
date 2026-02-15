@@ -40,12 +40,11 @@ namespace EconSim.Core.Simulation.Systems
         };
 
         private Dictionary<int, int> _countyToCulture;
-        private MapData _mapData;
+        // Precomputed reachable counties per source county: countyId → [(destCountyId, cost)]
+        private Dictionary<int, List<(int countyId, float cost)>> _reachableCache;
 
         public void Initialize(SimulationState state, MapData mapData)
         {
-            _mapData = mapData;
-
             // Build county → culture lookup: county.RealmId → realm.CultureId
             _countyToCulture = new Dictionary<int, int>();
             if (mapData.Counties != null)
@@ -58,13 +57,41 @@ namespace EconSim.Core.Simulation.Systems
                 }
             }
 
-            SimLog.Log("Migration", $"Migration system initialized, {_countyToCulture.Count} counties mapped to cultures");
+            // Precompute reachable counties for each county seat
+            _reachableCache = new Dictionary<int, List<(int, float)>>();
+            var economy = state.Economy;
+            var transport = state.Transport;
+            foreach (var countyEcon in economy.Counties.Values)
+            {
+                int countyId = countyEcon.CountyId;
+                if (!mapData.CountyById.TryGetValue(countyId, out var county))
+                    continue;
+
+                var reachableCells = transport.FindReachable(county.SeatCellId, MaxTransportCost);
+                var bestCost = new Dictionary<int, float>();
+                foreach (var kvp in reachableCells)
+                {
+                    if (!economy.CellToCounty.TryGetValue(kvp.Key, out int cId))
+                        continue;
+                    if (cId == countyId) continue;
+                    if (!economy.Counties.ContainsKey(cId)) continue;
+                    if (!bestCost.TryGetValue(cId, out float existing) || kvp.Value < existing)
+                        bestCost[cId] = kvp.Value;
+                }
+
+                var candidates = new List<(int, float)>(bestCost.Count);
+                foreach (var kvp in bestCost)
+                    candidates.Add((kvp.Key, kvp.Value));
+
+                _reachableCache[countyId] = candidates;
+            }
+
+            SimLog.Log("Migration", $"Migration system initialized, {_countyToCulture.Count} counties, {_reachableCache.Count} reachability maps cached");
         }
 
         public void Tick(SimulationState state, MapData mapData)
         {
             var economy = state.Economy;
-            var transport = state.Transport;
             int totalMigrants = 0;
             int totalEvents = 0;
 
@@ -73,8 +100,21 @@ namespace EconSim.Core.Simulation.Systems
                 var pop = countyEcon.Population;
                 int countyId = countyEcon.CountyId;
 
-                if (!mapData.CountyById.TryGetValue(countyId, out var county))
+                if (!_reachableCache.TryGetValue(countyId, out var cached))
                     continue;
+
+                // Filter cached candidates to those with working population
+                List<(int countyId, float cost)> candidates = null;
+                foreach (var (destId, cost) in cached)
+                {
+                    if (economy.Counties.TryGetValue(destId, out var destEcon)
+                        && destEcon.Population.WorkingAge > 0)
+                    {
+                        candidates ??= new List<(int, float)>();
+                        candidates.Add((destId, cost));
+                    }
+                }
+                if (candidates == null) continue;
 
                 foreach (var kvp in EstateMobility)
                 {
@@ -82,7 +122,7 @@ namespace EconSim.Core.Simulation.Systems
                     float mobility = kvp.Value;
 
                     int estatePop = pop.GetEstatePopulation(estate);
-                    if (estatePop < 2) continue; // need at least 2 to leave 1 behind
+                    if (estatePop < 2) continue;
 
                     float pushScore = GetPushScore(pop, estate);
                     if (pushScore <= 0f) continue;
@@ -90,15 +130,8 @@ namespace EconSim.Core.Simulation.Systems
                     int migrants = (int)(estatePop * BaseMigrationRate * mobility * pushScore);
                     if (migrants < MinMigrationPop) continue;
 
-                    // Don't empty a county — leave at least 1
                     migrants = Math.Min(migrants, estatePop - 1);
 
-                    // Find reachable counties
-                    var reachableCells = transport.FindReachable(county.SeatCellId, MaxTransportCost);
-                    var candidates = BuildCandidates(reachableCells, economy, countyId);
-                    if (candidates.Count == 0) continue;
-
-                    // Score and distribute
                     int moved = DistributeMigrants(
                         migrants, estate, countyId, candidates, economy);
 
@@ -159,38 +192,6 @@ namespace EconSim.Core.Simulation.Systems
             }
 
             return 0f;
-        }
-
-        /// <summary>
-        /// Convert reachable cells to unique candidate counties with min transport cost.
-        /// </summary>
-        private List<(int countyId, float cost)> BuildCandidates(
-            Dictionary<int, float> reachableCells,
-            EconomyState economy,
-            int sourceCountyId)
-        {
-            var bestCost = new Dictionary<int, float>();
-
-            foreach (var kvp in reachableCells)
-            {
-                if (!economy.CellToCounty.TryGetValue(kvp.Key, out int cId))
-                    continue;
-                if (cId == sourceCountyId) continue;
-                if (!economy.Counties.ContainsKey(cId)) continue;
-
-                if (!bestCost.TryGetValue(cId, out float existing) || kvp.Value < existing)
-                    bestCost[cId] = kvp.Value;
-            }
-
-            var result = new List<(int, float)>(bestCost.Count);
-            foreach (var kvp in bestCost)
-            {
-                // Exclude counties with no working population
-                if (economy.Counties[kvp.Key].Population.WorkingAge > 0)
-                    result.Add((kvp.Key, kvp.Value));
-            }
-
-            return result;
         }
 
         private int DistributeMigrants(
