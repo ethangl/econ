@@ -548,10 +548,14 @@ namespace MapGen.Core
             if (path.Count == 0)
                 return;
 
+            // Scale width by sqrt(cellCount / refCellCount) so straits stay proportional
+            int scaledWidth = (int)Math.Round(desiredWidth * Math.Sqrt(cellCount / 40000.0));
+            if (scaledWidth < 1) scaledWidth = 1;
+
             var used = new bool[cellCount];
             var ring = new List<int>(path);
 
-            for (int i = 0; i < desiredWidth; i++)
+            for (int i = 0; i < scaledWidth; i++)
             {
                 var nextRing = new List<int>();
                 foreach (int r in ring)
