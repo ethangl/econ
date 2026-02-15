@@ -42,6 +42,26 @@
     padding: 0 10px;
 }
 
+#new-map-button {
+    height: 24px;
+    font-size: 11px;
+    background-color: rgb(50, 50, 55);
+    border-color: rgb(70, 70, 75);
+    border-width: 1px;
+    border-radius: 3px;
+    color: rgb(200, 200, 200);
+    margin-right: 12px;
+    padding: 0 8px;
+}
+
+#new-map-button:hover {
+    background-color: rgb(60, 60, 70);
+}
+
+#new-map-button:active {
+    background-color: rgb(40, 40, 50);
+}
+
 #date-label {
     font-size: 13px;
     -unity-font-style: bold;

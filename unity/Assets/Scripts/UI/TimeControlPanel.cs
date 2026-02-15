@@ -45,18 +45,20 @@ namespace EconSim.UI
         {
             if (EconSim.Core.GameManager.IsMapReady)
                 StartCoroutine(Initialize());
-            else
-                EconSim.Core.GameManager.OnMapReady += OnMapReady;
         }
 
-        private void OnDestroy()
+        private void OnEnable()
+        {
+            EconSim.Core.GameManager.OnMapReady += OnMapReady;
+        }
+
+        private void OnDisable()
         {
             EconSim.Core.GameManager.OnMapReady -= OnMapReady;
         }
 
         private void OnMapReady()
         {
-            EconSim.Core.GameManager.OnMapReady -= OnMapReady;
             StartCoroutine(Initialize());
         }
 
@@ -120,6 +122,13 @@ namespace EconSim.UI
             _slowerButton?.RegisterCallback<ClickEvent>(evt => DecreaseSpeed());
             _pauseButton?.RegisterCallback<ClickEvent>(evt => TogglePause());
             _fasterButton?.RegisterCallback<ClickEvent>(evt => IncreaseSpeed());
+
+            var newMapButton = root.Q<Button>("new-map-button");
+            newMapButton?.RegisterCallback<ClickEvent>(evt =>
+            {
+                var startup = FindObjectOfType<StartupScreenPanel>();
+                if (startup != null) startup.Show();
+            });
 
             UpdateSpeedLabel();
         }
