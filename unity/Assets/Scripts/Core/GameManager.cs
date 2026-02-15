@@ -290,6 +290,7 @@ namespace EconSim.Core
         private void HandleInput()
         {
             if (_simulation == null) return;
+            if (EconSim.UI.StartupScreenPanel.IsOpen) return;
 
             // Backspace: Toggle pause
             if (Input.GetKeyDown(KeyCode.Backspace))

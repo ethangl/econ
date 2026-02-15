@@ -205,6 +205,9 @@ namespace EconSim.Renderer
         {
             overlayManager?.RefreshPathStyleFromMaterial();
 
+            // Suppress hotkeys while startup screen is open.
+            if (EconSim.UI.StartupScreenPanel.IsOpen) return;
+
             // Map mode selection with number keys.
             if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1))
             {

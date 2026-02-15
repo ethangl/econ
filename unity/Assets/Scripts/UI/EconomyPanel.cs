@@ -131,6 +131,8 @@ namespace EconSim.UI
 
         private void Update()
         {
+            if (StartupScreenPanel.IsOpen) return;
+
             // Toggle with hotkey
             if (Input.GetKeyDown(_toggleKey))
             {

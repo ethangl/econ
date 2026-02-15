@@ -132,6 +132,7 @@
 
         <!-- Time Control Panel (top right, horizontal) -->
         <ui:VisualElement name="time-control-panel" class="panel">
+            <ui:Button name="new-map-button" text="New Map" />
             <ui:Label name="date-label" text="Y1 M1 D1" />
             <ui:VisualElement name="speed-controls">
                 <ui:Button name="slower-button" text="-" />

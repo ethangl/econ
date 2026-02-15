@@ -27,6 +27,9 @@ namespace EconSim.UI
         private FloatField _latitudeField;
         private bool _isLoading;
 
+        /// <summary>True while the startup overlay is visible (suppresses hotkeys).</summary>
+        public static bool IsOpen { get; private set; } = true;
+
         private static readonly List<string> TemplateNames =
             Enum.GetNames(typeof(HeightmapTemplateType)).ToList();
 
@@ -167,12 +170,24 @@ namespace EconSim.UI
             Hide();
         }
 
+        public void Show()
+        {
+            if (_overlay != null)
+            {
+                _overlay.style.display = DisplayStyle.Flex;
+            }
+            IsOpen = true;
+            EnableButtons();
+            SetStatus("");
+        }
+
         private void Hide()
         {
             if (_overlay != null)
             {
                 _overlay.style.display = DisplayStyle.None;
             }
+            IsOpen = false;
         }
 
         private void SetStatus(string message)
