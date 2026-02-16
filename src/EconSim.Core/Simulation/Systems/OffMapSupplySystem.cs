@@ -58,13 +58,9 @@ namespace EconSim.Core.Simulation.Systems
                 _inventoryByGoodBuffer.Clear();
                 foreach (var offMapGoodId in market.OffMapGoodIds)
                 {
-                    if (!market.TryGetInventoryLots(offMapGoodId, out var lots))
-                        continue;
-
-                    float inventory = 0f;
-                    for (int i = 0; i < lots.Count; i++)
-                        inventory += lots[i].Quantity;
-                    _inventoryByGoodBuffer[offMapGoodId] = inventory;
+                    float inventory = market.GetTotalInventory(offMapGoodId);
+                    if (inventory > 0f)
+                        _inventoryByGoodBuffer[offMapGoodId] = inventory;
                 }
 
                 int sellerId = MarketOrderIds.MakeOffMapSellerId(market.Id);

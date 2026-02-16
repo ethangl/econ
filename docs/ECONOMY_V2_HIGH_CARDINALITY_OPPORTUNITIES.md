@@ -22,6 +22,25 @@ Optional third argument prints more top drift rows:
 scripts/compare_econ_dumps.sh <bench.json> <candidate.json> 20
 ```
 
+For repeated A/B runs, use the multi-run comparer to reduce incidental noise:
+
+```bash
+scripts/compare_econ_dump_sets.sh "unity/debug/econ/bench/*.json" "unity/debug/econ/candidate/*.json"
+```
+
+Optional third argument prints more top per-system drift rows:
+
+```bash
+scripts/compare_econ_dump_sets.sh "unity/debug/econ/bench/*.json" "unity/debug/econ/candidate/*.json" 12
+```
+
+Capture each finished run into a timestamped set first:
+
+```bash
+scripts/archive_econ_dump.sh bench
+scripts/archive_econ_dump.sh candidate
+```
+
 The script reports:
 
 - Summary deltas (population, facilities, supply/demand/volume, money metrics)
@@ -117,7 +136,7 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 
 ### Priority A (high impact, moderate risk)
 
-1. Aggregate market demand/supply books (`Partially completed`)
+1. Aggregate market demand/supply books (`Completed`)
 
 - Replace per-order/per-lot scanning with aggregated books per good, optionally with seller/buyer buckets.
 - Keep FIFO only where gameplay requires it; otherwise clear against aggregate liquidity.
@@ -168,15 +187,15 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 ## Suggested Execution Order
 
 1. Instrument cardinality and per-system tick times on a large map baseline.
-   Status: `Completed` (timing instrumentation + dump output + compare script updates).
+   Status: `Completed`
 2. Implement facility clustering by `(countyId, facilityType)` with behavior parity tests.
-   Status: `Not started`.
+   Status: `Not started`
 3. Introduce dense good indexing in `Stockpile` and market records.
-   Status: `Not started`.
+   Status: `Not started`
 4. Replace per-order/per-lot market clearing with aggregated books.
-   Status: `Partial` (good-grouped books implemented; full aggregation model still pending).
+   Status: `Completed`
 5. Shift runtime zone and migration logic to county-level representations.
-   Status: `Not started`.
+   Status: `Not started`
 
 ## Acceptance Metrics
 
