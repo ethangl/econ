@@ -59,14 +59,28 @@ namespace EconSim.Core.Economy
         public Dictionary<string, MarketGoodState> Goods { get; set; } = new Dictionary<string, MarketGoodState>();
 
         /// <summary>
-        /// Pending buy orders grouped by good ID.
+        /// Pending buy orders grouped by good ID and (day,buyer) key.
+        /// These are not tradable until promoted at market tick start.
         /// </summary>
-        public Dictionary<string, List<BuyOrder>> PendingBuyOrdersByGood { get; } = new Dictionary<string, List<BuyOrder>>();
+        public Dictionary<string, Dictionary<long, BuyOrder>> PendingBuyOrdersByGood { get; } = new Dictionary<string, Dictionary<long, BuyOrder>>();
 
         /// <summary>
-        /// Consignment lots grouped by good ID.
+        /// Tradable buy orders grouped by good ID and buyer ID.
+        /// Cleared during the market tick and reset after clearing.
         /// </summary>
-        public Dictionary<string, List<ConsignmentLot>> InventoryLotsByGood { get; } = new Dictionary<string, List<ConsignmentLot>>();
+        public Dictionary<string, Dictionary<int, BuyOrder>> TradableBuyOrdersByGood { get; } = new Dictionary<string, Dictionary<int, BuyOrder>>();
+
+        /// <summary>
+        /// Pending consignment lots grouped by good ID and (day,seller) key.
+        /// These are not tradable until promoted at market tick start.
+        /// </summary>
+        public Dictionary<string, Dictionary<long, ConsignmentLot>> PendingInventoryByGood { get; } = new Dictionary<string, Dictionary<long, ConsignmentLot>>();
+
+        /// <summary>
+        /// Tradable inventory grouped by good ID and seller ID.
+        /// Quantities represent stock available in the current clearing pass.
+        /// </summary>
+        public Dictionary<string, Dictionary<int, float>> TradableInventoryByGood { get; } = new Dictionary<string, Dictionary<int, float>>();
 
         /// <summary>
         /// Number of pending buy orders across all books.
@@ -101,12 +115,30 @@ namespace EconSim.Core.Economy
 
             if (!PendingBuyOrdersByGood.TryGetValue(order.GoodId, out var book))
             {
-                book = new List<BuyOrder>();
+                book = new Dictionary<long, BuyOrder>();
                 PendingBuyOrdersByGood[order.GoodId] = book;
             }
 
-            book.Add(order);
-            PendingBuyOrderCount++;
+            long key = ComposeEntryKey(order.DayPosted, order.BuyerId);
+            if (book.TryGetValue(key, out var existing))
+            {
+                float existingQty = existing.Quantity;
+                float totalQty = existingQty + order.Quantity;
+                if (totalQty > 0f)
+                {
+                    existing.TransportCost =
+                        (existing.TransportCost * existingQty + order.TransportCost * order.Quantity) / totalQty;
+                }
+
+                existing.Quantity = totalQty;
+                existing.MaxSpend += order.MaxSpend;
+                book[key] = existing;
+            }
+            else
+            {
+                book[key] = order;
+                PendingBuyOrderCount++;
+            }
         }
 
         /// <summary>
@@ -119,86 +151,382 @@ namespace EconSim.Core.Economy
             if (string.IsNullOrWhiteSpace(lot.GoodId))
                 return;
 
-            if (!InventoryLotsByGood.TryGetValue(lot.GoodId, out var book))
+            if (!PendingInventoryByGood.TryGetValue(lot.GoodId, out var book))
             {
-                book = new List<ConsignmentLot>();
-                InventoryLotsByGood[lot.GoodId] = book;
+                book = new Dictionary<long, ConsignmentLot>();
+                PendingInventoryByGood[lot.GoodId] = book;
             }
 
-            book.Add(lot);
-            InventoryLotCount++;
-        }
-
-        /// <summary>
-        /// Try get pending orders for a given good.
-        /// </summary>
-        public bool TryGetPendingOrders(string goodId, out List<BuyOrder> orders)
-        {
-            return PendingBuyOrdersByGood.TryGetValue(goodId, out orders);
-        }
-
-        /// <summary>
-        /// Try get inventory lots for a given good.
-        /// </summary>
-        public bool TryGetInventoryLots(string goodId, out List<ConsignmentLot> lots)
-        {
-            return InventoryLotsByGood.TryGetValue(goodId, out lots);
-        }
-
-        /// <summary>
-        /// Remove stale pending orders and tiny inventory lots.
-        /// </summary>
-        public void CullBooks(int currentDay, float lotCullThreshold)
-        {
-            PendingBuyOrderCount = CullOrders(PendingBuyOrdersByGood, currentDay, lotCullThreshold);
-            InventoryLotCount = CullLots(InventoryLotsByGood, lotCullThreshold);
-        }
-
-        private static int CullOrders(
-            Dictionary<string, List<BuyOrder>> books,
-            int currentDay,
-            float lotCullThreshold)
-        {
-            int total = 0;
-            var empty = new List<string>();
-
-            foreach (var kvp in books)
+            long key = ComposeEntryKey(lot.DayListed, lot.SellerId);
+            if (book.TryGetValue(key, out var existing))
             {
-                var list = kvp.Value;
-                list.RemoveAll(o => o.DayPosted < currentDay || o.Quantity <= lotCullThreshold);
-                if (list.Count == 0)
-                    empty.Add(kvp.Key);
-                else
-                    total += list.Count;
+                existing.Quantity += lot.Quantity;
+                book[key] = existing;
+            }
+            else
+            {
+                book[key] = lot;
+                InventoryLotCount++;
+            }
+        }
+
+        /// <summary>
+        /// Promote pending orders/lots from previous days into tradable books.
+        /// </summary>
+        public void PromotePendingBooks(int currentDay)
+        {
+            PromotePendingOrders(currentDay);
+            PromotePendingInventory(currentDay);
+            RecountBooks();
+        }
+
+        /// <summary>
+        /// Clear tradable orders after market clearing.
+        /// </summary>
+        public void ClearTradableOrders()
+        {
+            TradableBuyOrdersByGood.Clear();
+            RecountBooks();
+        }
+
+        /// <summary>
+        /// Apply decay to inventory for a good in both pending and tradable books.
+        /// </summary>
+        public void ApplyDecayForGood(string goodId, float decayRate, float lotCullThreshold)
+        {
+            if (decayRate <= 0f || string.IsNullOrWhiteSpace(goodId))
+                return;
+
+            float keep = Math.Max(0f, 1f - decayRate);
+
+            if (PendingInventoryByGood.TryGetValue(goodId, out var pending))
+            {
+                var remove = new List<long>();
+                var updates = new List<KeyValuePair<long, ConsignmentLot>>();
+                foreach (var kvp in pending)
+                {
+                    var lot = kvp.Value;
+                    if (lot.Quantity <= lotCullThreshold)
+                    {
+                        remove.Add(kvp.Key);
+                        continue;
+                    }
+
+                    lot.Quantity *= keep;
+                    if (lot.Quantity <= lotCullThreshold)
+                        remove.Add(kvp.Key);
+                    else
+                        updates.Add(new KeyValuePair<long, ConsignmentLot>(kvp.Key, lot));
+                }
+
+                for (int i = 0; i < updates.Count; i++)
+                    pending[updates[i].Key] = updates[i].Value;
+                for (int i = 0; i < remove.Count; i++)
+                    pending.Remove(remove[i]);
+                if (pending.Count == 0)
+                    PendingInventoryByGood.Remove(goodId);
             }
 
-            for (int i = 0; i < empty.Count; i++)
-                books.Remove(empty[i]);
+            if (TradableInventoryByGood.TryGetValue(goodId, out var tradable))
+            {
+                var remove = new List<int>();
+                var updates = new List<KeyValuePair<int, float>>();
+                foreach (var kvp in tradable)
+                {
+                    float quantity = kvp.Value * keep;
+                    if (quantity <= lotCullThreshold)
+                        remove.Add(kvp.Key);
+                    else
+                        updates.Add(new KeyValuePair<int, float>(kvp.Key, quantity));
+                }
+
+                for (int i = 0; i < updates.Count; i++)
+                    tradable[updates[i].Key] = updates[i].Value;
+                for (int i = 0; i < remove.Count; i++)
+                    tradable.Remove(remove[i]);
+                if (tradable.Count == 0)
+                    TradableInventoryByGood.Remove(goodId);
+            }
+
+            RecountBooks();
+        }
+
+        /// <summary>
+        /// Try get tradable orders for a given good.
+        /// </summary>
+        public bool TryGetTradableOrders(string goodId, out Dictionary<int, BuyOrder> orders)
+        {
+            return TradableBuyOrdersByGood.TryGetValue(goodId, out orders);
+        }
+
+        /// <summary>
+        /// Try get tradable inventory for a given good.
+        /// </summary>
+        public bool TryGetTradableInventory(string goodId, out Dictionary<int, float> inventoryBySeller)
+        {
+            return TradableInventoryByGood.TryGetValue(goodId, out inventoryBySeller);
+        }
+
+        /// <summary>
+        /// Total inventory (pending + tradable) for a good.
+        /// </summary>
+        public float GetTotalInventory(string goodId)
+        {
+            float total = 0f;
+
+            if (PendingInventoryByGood.TryGetValue(goodId, out var pending))
+            {
+                foreach (var kvp in pending)
+                    total += kvp.Value.Quantity;
+            }
+
+            if (TradableInventoryByGood.TryGetValue(goodId, out var tradable))
+            {
+                foreach (var kvp in tradable)
+                    total += kvp.Value;
+            }
 
             return total;
         }
 
-        private static int CullLots(
-            Dictionary<string, List<ConsignmentLot>> books,
-            float lotCullThreshold)
+        /// <summary>
+        /// Tradable supply for a good.
+        /// </summary>
+        public float GetTradableSupply(string goodId)
         {
-            int total = 0;
-            var empty = new List<string>();
+            float total = 0f;
+            if (!TradableInventoryByGood.TryGetValue(goodId, out var tradable))
+                return 0f;
 
-            foreach (var kvp in books)
+            foreach (var kvp in tradable)
+                total += kvp.Value;
+            return total;
+        }
+
+        /// <summary>
+        /// Tradable demand for a good.
+        /// </summary>
+        public float GetTradableDemand(string goodId)
+        {
+            float total = 0f;
+            if (!TradableBuyOrdersByGood.TryGetValue(goodId, out var tradable))
+                return 0f;
+
+            foreach (var kvp in tradable)
+                total += kvp.Value.Quantity;
+            return total;
+        }
+
+        /// <summary>
+        /// Remove tiny entries from all books.
+        /// </summary>
+        public void CullBooks(float lotCullThreshold)
+        {
+            CullOrderBook(PendingBuyOrdersByGood, lotCullThreshold);
+            CullOrderBook(TradableBuyOrdersByGood, lotCullThreshold);
+            CullPendingInventory(lotCullThreshold);
+            CullTradableInventory(lotCullThreshold);
+            RecountBooks();
+        }
+
+        private void PromotePendingOrders(int currentDay)
+        {
+            var emptyGoods = new List<string>();
+
+            foreach (var byGood in PendingBuyOrdersByGood)
             {
-                var list = kvp.Value;
-                list.RemoveAll(l => l.Quantity <= lotCullThreshold);
-                if (list.Count == 0)
-                    empty.Add(kvp.Key);
-                else
-                    total += list.Count;
+                string goodId = byGood.Key;
+                var pending = byGood.Value;
+                var promotedKeys = new List<long>();
+                Dictionary<int, BuyOrder> tradable = null;
+
+                foreach (var entry in pending)
+                {
+                    var order = entry.Value;
+                    if (order.DayPosted >= currentDay)
+                        continue;
+
+                    if (tradable == null)
+                    {
+                        if (!TradableBuyOrdersByGood.TryGetValue(goodId, out tradable))
+                        {
+                            tradable = new Dictionary<int, BuyOrder>();
+                            TradableBuyOrdersByGood[goodId] = tradable;
+                        }
+                    }
+
+                    MergeTradableOrder(tradable, order);
+                    promotedKeys.Add(entry.Key);
+                }
+
+                for (int i = 0; i < promotedKeys.Count; i++)
+                    pending.Remove(promotedKeys[i]);
+
+                if (pending.Count == 0)
+                    emptyGoods.Add(goodId);
             }
 
-            for (int i = 0; i < empty.Count; i++)
-                books.Remove(empty[i]);
+            for (int i = 0; i < emptyGoods.Count; i++)
+                PendingBuyOrdersByGood.Remove(emptyGoods[i]);
+        }
 
-            return total;
+        private void PromotePendingInventory(int currentDay)
+        {
+            var emptyGoods = new List<string>();
+
+            foreach (var byGood in PendingInventoryByGood)
+            {
+                string goodId = byGood.Key;
+                var pending = byGood.Value;
+                var promotedKeys = new List<long>();
+                Dictionary<int, float> tradable = null;
+
+                foreach (var entry in pending)
+                {
+                    var lot = entry.Value;
+                    if (lot.DayListed >= currentDay)
+                        continue;
+
+                    if (tradable == null)
+                    {
+                        if (!TradableInventoryByGood.TryGetValue(goodId, out tradable))
+                        {
+                            tradable = new Dictionary<int, float>();
+                            TradableInventoryByGood[goodId] = tradable;
+                        }
+                    }
+
+                    tradable.TryGetValue(lot.SellerId, out float quantity);
+                    tradable[lot.SellerId] = quantity + lot.Quantity;
+                    promotedKeys.Add(entry.Key);
+                }
+
+                for (int i = 0; i < promotedKeys.Count; i++)
+                    pending.Remove(promotedKeys[i]);
+
+                if (pending.Count == 0)
+                    emptyGoods.Add(goodId);
+            }
+
+            for (int i = 0; i < emptyGoods.Count; i++)
+                PendingInventoryByGood.Remove(emptyGoods[i]);
+        }
+
+        private static void MergeTradableOrder(Dictionary<int, BuyOrder> tradable, BuyOrder order)
+        {
+            if (tradable.TryGetValue(order.BuyerId, out var existing))
+            {
+                float existingQty = existing.Quantity;
+                float totalQty = existingQty + order.Quantity;
+                if (totalQty > 0f)
+                {
+                    existing.TransportCost =
+                        (existing.TransportCost * existingQty + order.TransportCost * order.Quantity) / totalQty;
+                }
+
+                existing.Quantity = totalQty;
+                existing.MaxSpend += order.MaxSpend;
+                existing.DayPosted = Math.Min(existing.DayPosted, order.DayPosted);
+                tradable[order.BuyerId] = existing;
+            }
+            else
+            {
+                tradable[order.BuyerId] = order;
+            }
+        }
+
+        private static void CullOrderBook<T>(Dictionary<string, Dictionary<T, BuyOrder>> byGood, float lotCullThreshold)
+        {
+            var emptyGoods = new List<string>();
+            foreach (var goodEntry in byGood)
+            {
+                var book = goodEntry.Value;
+                var removeKeys = new List<T>();
+                foreach (var entry in book)
+                {
+                    if (entry.Value.Quantity <= lotCullThreshold || entry.Value.MaxSpend <= 0f)
+                        removeKeys.Add(entry.Key);
+                }
+
+                for (int i = 0; i < removeKeys.Count; i++)
+                    book.Remove(removeKeys[i]);
+
+                if (book.Count == 0)
+                    emptyGoods.Add(goodEntry.Key);
+            }
+
+            for (int i = 0; i < emptyGoods.Count; i++)
+                byGood.Remove(emptyGoods[i]);
+        }
+
+        private void CullPendingInventory(float lotCullThreshold)
+        {
+            var emptyGoods = new List<string>();
+            foreach (var goodEntry in PendingInventoryByGood)
+            {
+                var book = goodEntry.Value;
+                var removeKeys = new List<long>();
+                foreach (var entry in book)
+                {
+                    if (entry.Value.Quantity <= lotCullThreshold)
+                        removeKeys.Add(entry.Key);
+                }
+
+                for (int i = 0; i < removeKeys.Count; i++)
+                    book.Remove(removeKeys[i]);
+
+                if (book.Count == 0)
+                    emptyGoods.Add(goodEntry.Key);
+            }
+
+            for (int i = 0; i < emptyGoods.Count; i++)
+                PendingInventoryByGood.Remove(emptyGoods[i]);
+        }
+
+        private void CullTradableInventory(float lotCullThreshold)
+        {
+            var emptyGoods = new List<string>();
+            foreach (var goodEntry in TradableInventoryByGood)
+            {
+                var book = goodEntry.Value;
+                var removeKeys = new List<int>();
+                foreach (var entry in book)
+                {
+                    if (entry.Value <= lotCullThreshold)
+                        removeKeys.Add(entry.Key);
+                }
+
+                for (int i = 0; i < removeKeys.Count; i++)
+                    book.Remove(removeKeys[i]);
+
+                if (book.Count == 0)
+                    emptyGoods.Add(goodEntry.Key);
+            }
+
+            for (int i = 0; i < emptyGoods.Count; i++)
+                TradableInventoryByGood.Remove(emptyGoods[i]);
+        }
+
+        private void RecountBooks()
+        {
+            int orderCount = 0;
+            foreach (var kvp in PendingBuyOrdersByGood)
+                orderCount += kvp.Value.Count;
+            foreach (var kvp in TradableBuyOrdersByGood)
+                orderCount += kvp.Value.Count;
+            PendingBuyOrderCount = orderCount;
+
+            int inventoryCount = 0;
+            foreach (var kvp in PendingInventoryByGood)
+                inventoryCount += kvp.Value.Count;
+            foreach (var kvp in TradableInventoryByGood)
+                inventoryCount += kvp.Value.Count;
+            InventoryLotCount = inventoryCount;
+        }
+
+        private static long ComposeEntryKey(int day, int actorId)
+        {
+            return ((long)day << 32) | (uint)actorId;
         }
     }
 

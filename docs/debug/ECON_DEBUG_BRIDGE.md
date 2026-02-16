@@ -38,6 +38,54 @@ Optional third arg controls how many top drifts to print:
 scripts/compare_econ_dumps.sh <bench.json> <candidate.json> 20
 ```
 
+### Comparing multiple runs (noise-resistant)
+
+Use this when you have repeated A/B runs and want median/p95 deltas instead of single-run noise:
+
+```bash
+scripts/compare_econ_dump_sets.sh "unity/debug/econ/bench/*.json" "unity/debug/econ/candidate/*.json"
+```
+
+Optional third arg controls how many top system drifts to print:
+
+```bash
+scripts/compare_econ_dump_sets.sh "unity/debug/econ/bench/*.json" "unity/debug/econ/candidate/*.json" 12
+```
+
+The script reports:
+
+- Identity consistency across runs (`day`, `economySeed`, counties/markets/facilities)
+- Mean/median/p95 deltas for tick timing, key summary metrics, and per-system `avgMs`
+- Top per-system median drift by absolute percentage
+
+### Repeated A/B capture workflow
+
+Archive the current dump immediately after each run:
+
+```bash
+scripts/archive_econ_dump.sh bench
+scripts/archive_econ_dump.sh candidate
+```
+
+Then compare all collected runs:
+
+```bash
+scripts/compare_econ_dump_sets.sh "unity/debug/econ/bench/*.json" "unity/debug/econ/candidate/*.json" 12
+```
+
+Single command sequence (example):
+
+```bash
+# after benchmark run completes
+scripts/archive_econ_dump.sh bench
+
+# switch branch, rerun same seed/settings
+scripts/archive_econ_dump.sh candidate
+
+# aggregate comparison
+scripts/compare_econ_dump_sets.sh "unity/debug/econ/bench/*.json" "unity/debug/econ/candidate/*.json" 12
+```
+
 ## Commands
 
 ### generate_and_run

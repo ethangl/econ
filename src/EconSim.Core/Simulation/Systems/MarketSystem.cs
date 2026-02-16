@@ -34,32 +34,25 @@ namespace EconSim.Core.Simulation.Systems
 
             foreach (var market in economy.Markets.Values)
             {
+                market.PromotePendingBooks(state.CurrentDay);
                 ApplyDecay(economy, market);
                 ClearMarket(state, economy, market, dayIndex);
 
-                // Remove all eligible orders (filled or partial). Remaining orders are posted today.
-                market.CullBooks(state.CurrentDay, LotCullThreshold);
+                // Tradable orders are one-shot daily books; keep only newly posted pending books.
+                market.ClearTradableOrders();
+                market.CullBooks(LotCullThreshold);
             }
         }
 
         private void ApplyDecay(EconomyState economy, Market market)
         {
-            foreach (var kvp in market.InventoryLotsByGood)
+            foreach (var goodState in market.Goods.Values)
             {
-                var good = economy.Goods.Get(kvp.Key);
+                var good = economy.Goods.Get(goodState.GoodId);
                 if (good == null || good.DecayRate <= 0f)
                     continue;
 
-                var lots = kvp.Value;
-                for (int i = 0; i < lots.Count; i++)
-                {
-                    var lot = lots[i];
-                    if (lot.Quantity <= LotCullThreshold)
-                        continue;
-
-                    lot.Quantity *= Math.Max(0f, 1f - good.DecayRate);
-                    lots[i] = lot;
-                }
+                market.ApplyDecayForGood(goodState.GoodId, good.DecayRate, LotCullThreshold);
             }
         }
 
@@ -74,57 +67,23 @@ namespace EconSim.Core.Simulation.Systems
             _eligibleDemandByGood.Clear();
             _eligibleSupplyByGood.Clear();
 
-            foreach (var lotsEntry in market.InventoryLotsByGood)
-            {
-                string goodId = lotsEntry.Key;
-                var lots = lotsEntry.Value;
-                float totalInventory = 0f;
-                float eligibleSupply = 0f;
-
-                for (int i = 0; i < lots.Count; i++)
-                {
-                    var lot = lots[i];
-                    if (lot.Quantity <= 0f)
-                        continue;
-
-                    totalInventory += lot.Quantity;
-                    if (lot.DayListed < currentDay && lot.Quantity > LotCullThreshold)
-                        eligibleSupply += lot.Quantity;
-                }
-
-                if (totalInventory > 0f)
-                    _totalInventoryByGood[goodId] = totalInventory;
-                if (eligibleSupply > 0f)
-                    _eligibleSupplyByGood[goodId] = eligibleSupply;
-            }
-
-            foreach (var ordersEntry in market.PendingBuyOrdersByGood)
-            {
-                string goodId = ordersEntry.Key;
-                var orders = ordersEntry.Value;
-                float demand = 0f;
-
-                for (int i = 0; i < orders.Count; i++)
-                {
-                    var order = orders[i];
-                    if (order.DayPosted >= currentDay || order.Quantity <= LotCullThreshold)
-                        continue;
-                    demand += order.Quantity;
-                }
-
-                if (demand > 0f)
-                    _eligibleDemandByGood[goodId] = demand;
-            }
-
             foreach (var goodState in market.Goods.Values)
             {
-                goodState.Supply = _totalInventoryByGood.TryGetValue(goodState.GoodId, out float inventory)
-                    ? inventory
-                    : 0f;
+                float inventory = market.GetTotalInventory(goodState.GoodId);
+                if (inventory > 0f)
+                    _totalInventoryByGood[goodState.GoodId] = inventory;
+
+                float supply = market.GetTradableSupply(goodState.GoodId);
+                if (supply > 0f)
+                    _eligibleSupplyByGood[goodState.GoodId] = supply;
+
+                float demand = market.GetTradableDemand(goodState.GoodId);
+                if (demand > 0f)
+                    _eligibleDemandByGood[goodState.GoodId] = demand;
+
+                goodState.Supply = inventory;
                 goodState.SupplyOffered = goodState.Supply;
-                goodState.Demand = _eligibleDemandByGood.TryGetValue(goodState.GoodId, out float demand)
-                    ? demand
-                    : 0f;
+                goodState.Demand = demand;
                 goodState.LastTradeVolume = 0f;
                 goodState.Revenue = 0f;
             }
@@ -132,9 +91,9 @@ namespace EconSim.Core.Simulation.Systems
             foreach (var demandEntry in _eligibleDemandByGood)
             {
                 string goodId = demandEntry.Key;
-                if (!market.TryGetInventoryLots(goodId, out var lots) || lots.Count == 0)
+                if (!market.TryGetTradableInventory(goodId, out var sellers) || sellers.Count == 0)
                     continue;
-                if (!market.TryGetPendingOrders(goodId, out var orders) || orders.Count == 0)
+                if (!market.TryGetTradableOrders(goodId, out var orders) || orders.Count == 0)
                     continue;
                 if (!market.Goods.TryGetValue(goodId, out var goodState))
                     continue;
@@ -150,10 +109,10 @@ namespace EconSim.Core.Simulation.Systems
                 float buyerFillRatio = totalDemand > 0f ? plannedTraded / totalDemand : 0f;
                 float actualDemandFilled = 0f;
 
-                for (int i = 0; i < orders.Count; i++)
+                foreach (var orderEntry in orders)
                 {
-                    var order = orders[i];
-                    if (order.DayPosted >= currentDay || order.Quantity <= LotCullThreshold)
+                    var order = orderEntry.Value;
+                    if (order.Quantity <= LotCullThreshold)
                         continue;
 
                     float desiredQty = order.Quantity * buyerFillRatio;
@@ -206,64 +165,49 @@ namespace EconSim.Core.Simulation.Systems
                 if (actualDemandFilled <= 0f)
                     continue;
 
-                // FIFO lot resolution: lots are usually already in list-order by listing day.
-                if (!IsFifoOrdered(lots))
-                {
-                    lots.Sort((left, right) =>
-                    {
-                        int dayCmp = left.DayListed.CompareTo(right.DayListed);
-                        return dayCmp;
-                    });
-                }
+                float soldTarget = Math.Min(actualDemandFilled, totalSupply);
+                if (soldTarget <= LotCullThreshold)
+                    continue;
 
-                float remaining = actualDemandFilled;
+                float remainingSold = soldTarget;
+                float remainingSupply = totalSupply;
                 float sellerRevenue = 0f;
-                for (int i = 0; i < lots.Count; i++)
+                var sellerIds = new List<int>(sellers.Keys);
+                for (int i = 0; i < sellerIds.Count; i++)
                 {
-                    if (remaining <= LotCullThreshold)
+                    int sellerId = sellerIds[i];
+                    if (!sellers.TryGetValue(sellerId, out float sellerQty) || sellerQty <= LotCullThreshold)
+                        continue;
+
+                    if (remainingSold <= LotCullThreshold || remainingSupply <= 0f)
                         break;
 
-                    var lot = lots[i];
-                    if (lot.DayListed >= currentDay || lot.Quantity <= LotCullThreshold)
-                        continue;
+                    float sold;
+                    bool isLast = i == sellerIds.Count - 1;
+                    if (isLast)
+                    {
+                        sold = Math.Min(sellerQty, remainingSold);
+                    }
+                    else
+                    {
+                        float proportional = remainingSold * (sellerQty / remainingSupply);
+                        sold = Math.Min(sellerQty, proportional);
+                    }
 
-                    float sold = Math.Min(lot.Quantity, remaining);
-                    if (sold <= 0f)
-                        continue;
-
-                    lot.Quantity -= sold;
-                    lots[i] = lot;
-                    remaining -= sold;
+                    sellers[sellerId] = Math.Max(0f, sellerQty - sold);
+                    remainingSold -= sold;
+                    remainingSupply -= sellerQty;
 
                     float payout = sold * goodState.Price;
-                    CreditSellerRevenue(economy, market, lot.SellerId, payout, dayIndex, currentDay);
+                    CreditSellerRevenue(economy, market, sellerId, payout, dayIndex, currentDay);
                     sellerRevenue += payout;
                 }
 
-                float traded = Math.Max(0f, actualDemandFilled - remaining);
+                float traded = Math.Max(0f, soldTarget - remainingSold);
                 goodState.Supply = Math.Max(0f, goodState.Supply - traded);
                 goodState.LastTradeVolume = traded;
                 goodState.Revenue = sellerRevenue;
             }
-        }
-
-        private static bool IsFifoOrdered(List<ConsignmentLot> lots)
-        {
-            if (lots.Count < 2)
-                return true;
-
-            int prevDay = lots[0].DayListed;
-
-            for (int i = 1; i < lots.Count; i++)
-            {
-                int day = lots[i].DayListed;
-                if (day < prevDay)
-                    return false;
-
-                prevDay = day;
-            }
-
-            return true;
         }
 
         private static void CreditSellerRevenue(EconomyState economy, Market market, int sellerId, float amount, int dayIndex, int currentDay)
