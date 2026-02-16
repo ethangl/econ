@@ -467,8 +467,7 @@ namespace EconSim.Editor
 
                 foreach (var item in ce.Stockpile.All)
                 {
-                    var good = econ.Goods.Get(item.Key);
-                    if (good != null)
+                    if (TryResolveGood(econ, item.Key, out var good))
                         totalStockpileValue += item.Value * good.BasePrice;
                 }
 
@@ -669,7 +668,7 @@ namespace EconSim.Editor
                 // Stockpile
                 j.Key("stockpile"); j.ObjOpen();
                 foreach (var item in ce.Stockpile.All.OrderBy(i => i.Key))
-                    j.KV(item.Key, item.Value);
+                    j.KV(NormalizeGoodKey(econ, item.Key), item.Value);
                 j.ObjClose();
 
                 // Unmet demand
@@ -708,12 +707,12 @@ namespace EconSim.Editor
 
                     j.Key("inputs"); j.ObjOpen();
                     foreach (var item in f.InputBuffer.All)
-                        j.KV(item.Key, item.Value);
+                        j.KV(NormalizeGoodKey(econ, item.Key), item.Value);
                     j.ObjClose();
 
                     j.Key("outputs"); j.ObjOpen();
                     foreach (var item in f.OutputBuffer.All)
-                        j.KV(item.Key, item.Value);
+                        j.KV(NormalizeGoodKey(econ, item.Key), item.Value);
                     j.ObjClose();
 
                     j.ObjClose();
@@ -724,6 +723,27 @@ namespace EconSim.Editor
             }
 
             j.ArrClose();
+        }
+
+        static bool TryResolveGood(EconomyState econ, string goodKey, out GoodDef good)
+        {
+            good = econ.Goods.Get(goodKey);
+            if (good != null)
+                return true;
+
+            if (int.TryParse(goodKey, NumberStyles.Integer, CultureInfo.InvariantCulture, out int runtimeId))
+            {
+                good = econ.Goods.GetByRuntimeId(runtimeId);
+                if (good != null)
+                    return true;
+            }
+
+            return false;
+        }
+
+        static string NormalizeGoodKey(EconomyState econ, string goodKey)
+        {
+            return TryResolveGood(econ, goodKey, out var good) ? good.Id : goodKey;
         }
 
         static void WriteRoads(JW j, EconomyState econ)

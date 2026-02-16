@@ -80,6 +80,7 @@ namespace EconSim.Core.Economy
             {
                 var countyEcon = new CountyEconomy(countyData.Id);
                 countyEcon.Population = CountyPopulation.FromTotal(countyData.TotalPopulation);
+                countyEcon.Stockpile.BindGoods(Goods);
                 Counties[countyData.Id] = countyEcon;
             }
         }
@@ -94,6 +95,8 @@ namespace EconSim.Core.Economy
                 county = new CountyEconomy(countyId);
                 Counties[countyId] = county;
             }
+
+            county.Stockpile.BindGoods(Goods);
             return county;
         }
 
@@ -125,6 +128,7 @@ namespace EconSim.Core.Economy
                 CellId = cellId,
                 CountyId = countyId
             };
+            facility.BindGoods(Goods);
 
             Facilities[facility.Id] = facility;
 

@@ -30,9 +30,11 @@ namespace EconSim.Core.Simulation.Systems
         private const int V2InactiveExtractionRecheckDays = 3;
 
         private readonly Dictionary<string, float> _producedThisTick = new Dictionary<string, float>();
-        private readonly List<KeyValuePair<string, float>> _outputGoodsBuffer = new List<KeyValuePair<string, float>>(8);
+        private readonly List<KeyValuePair<int, float>> _outputGoodsBuffer = new List<KeyValuePair<int, float>>(8);
+        private readonly List<int> _inputRuntimeIdsBuffer = new List<int>(8);
         private readonly Dictionary<int, int> _availableUnskilledByCounty = new Dictionary<int, int>();
         private readonly Dictionary<int, int> _availableSkilledByCounty = new Dictionary<int, int>();
+        private readonly Dictionary<string, int> _goodRuntimeIdCache = new Dictionary<string, int>();
 
         public void Initialize(SimulationState state, MapData mapData)
         {
@@ -164,7 +166,11 @@ namespace EconSim.Core.Simulation.Systems
             float transportCost = ResolveCountyTransportCost(mapData, market, facility.CountyId);
             float sellEfficiency = 1f / (1f + transportCost * V2TransportLossRate);
 
-            if (!market.Goods.TryGetValue(def.OutputGoodId, out var outputMarket))
+            int outputRuntimeId = ResolveRuntimeId(economy.Goods, def.OutputGoodId);
+            if (outputRuntimeId < 0)
+                return;
+
+            if (!market.TryGetGoodState(outputRuntimeId, out var outputMarket))
                 return;
 
             float outputPrice = outputMarket.Price;
@@ -178,9 +184,13 @@ namespace EconSim.Core.Simulation.Systems
             {
                 foreach (var input in inputs)
                 {
-                    float inputPrice = market.Goods.TryGetValue(input.GoodId, out var inputMarket)
+                    int inputRuntimeId = ResolveRuntimeId(economy.Goods, input.GoodId);
+                    if (inputRuntimeId < 0)
+                        continue;
+
+                    float inputPrice = market.TryGetGoodState(inputRuntimeId, out var inputMarket)
                         ? inputMarket.Price
-                        : economy.Goods.Get(input.GoodId)?.BasePrice ?? 0f;
+                        : economy.Goods.GetByRuntimeId(inputRuntimeId)?.BasePrice ?? 0f;
 
                     hypoInputCost += inputPrice * input.Quantity * def.BaseThroughput * (1f + transportCost * V2TransportFeeRate);
                 }
@@ -292,12 +302,15 @@ namespace EconSim.Core.Simulation.Systems
 
             float subsistence = produced * V2SubsistenceFraction;
             float forMarket = produced - subsistence;
+            int outputRuntimeId = ResolveRuntimeId(economy.Goods, def.OutputGoodId);
+            if (outputRuntimeId < 0)
+                return;
 
             if (subsistence > 0f)
-                county.Stockpile.Add(def.OutputGoodId, subsistence);
+                county.Stockpile.Add(outputRuntimeId, subsistence);
 
             if (forMarket > 0f)
-                facility.OutputBuffer.Add(def.OutputGoodId, forMarket);
+                facility.OutputBuffer.Add(outputRuntimeId, forMarket);
 
             TrackProduction(def.OutputGoodId, produced);
         }
@@ -306,6 +319,9 @@ namespace EconSim.Core.Simulation.Systems
         {
             var outputGood = economy.Goods.Get(def.OutputGoodId);
             if (outputGood == null)
+                return;
+            int outputRuntimeId = outputGood.RuntimeId;
+            if (outputRuntimeId < 0)
                 return;
 
             var inputs = def.InputOverrides ?? outputGood.Inputs;
@@ -316,10 +332,21 @@ namespace EconSim.Core.Simulation.Systems
             if (throughput <= 0f)
                 return;
 
-            float possibleBatches = throughput;
-            foreach (var input in inputs)
+            _inputRuntimeIdsBuffer.Clear();
+            for (int i = 0; i < inputs.Count; i++)
             {
-                float available = facility.InputBuffer.Get(input.GoodId);
+                int inputRuntimeId = ResolveRuntimeId(economy.Goods, inputs[i].GoodId);
+                if (inputRuntimeId < 0)
+                    return;
+                _inputRuntimeIdsBuffer.Add(inputRuntimeId);
+            }
+
+            float possibleBatches = throughput;
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                var input = inputs[i];
+                int inputRuntimeId = _inputRuntimeIdsBuffer[i];
+                float available = facility.InputBuffer.Get(inputRuntimeId);
                 float canMake = available / input.Quantity;
                 if (canMake < possibleBatches)
                     possibleBatches = canMake;
@@ -328,12 +355,14 @@ namespace EconSim.Core.Simulation.Systems
             if (possibleBatches <= 0.001f)
                 return;
 
-            foreach (var input in inputs)
+            for (int i = 0; i < inputs.Count; i++)
             {
-                facility.InputBuffer.Remove(input.GoodId, input.Quantity * possibleBatches);
+                var input = inputs[i];
+                int inputRuntimeId = _inputRuntimeIdsBuffer[i];
+                facility.InputBuffer.Remove(inputRuntimeId, input.Quantity * possibleBatches);
             }
 
-            facility.OutputBuffer.Add(def.OutputGoodId, possibleBatches);
+            facility.OutputBuffer.Add(outputRuntimeId, possibleBatches);
             TrackProduction(def.OutputGoodId, possibleBatches);
         }
 
@@ -354,21 +383,25 @@ namespace EconSim.Core.Simulation.Systems
 
             var county = economy.GetCounty(facility.CountyId);
             _outputGoodsBuffer.Clear();
-            foreach (var kvp in facility.OutputBuffer.All)
+            foreach (var kvp in facility.OutputBuffer.AllRuntime)
             {
                 _outputGoodsBuffer.Add(kvp);
             }
 
             foreach (var kvp in _outputGoodsBuffer)
             {
-                string goodId = kvp.Key;
+                int goodRuntimeId = kvp.Key;
                 float quantity = kvp.Value;
                 if (quantity <= 0.001f)
                     continue;
+                if (!economy.Goods.TryGetByRuntimeId(goodRuntimeId, out var good))
+                    continue;
 
-                float marketPrice = market.Goods.TryGetValue(goodId, out var marketGood)
+                string goodId = good.Id;
+
+                float marketPrice = market.TryGetGoodState(goodRuntimeId, out var marketGood)
                     ? marketGood.Price
-                    : economy.Goods.Get(goodId)?.BasePrice ?? 0f;
+                    : good.BasePrice;
 
                 float haulingFee = quantity * marketPrice * transportCost * V2TransportFeeRate;
                 if (haulingFee > 0f && facility.Treasury < haulingFee)
@@ -385,7 +418,7 @@ namespace EconSim.Core.Simulation.Systems
                 if (arrived <= 0.001f)
                     continue;
 
-                facility.OutputBuffer.Remove(goodId, quantity);
+                facility.OutputBuffer.Remove(goodRuntimeId, quantity);
                 facility.Treasury -= haulingFee;
                 county.Population.Treasury += haulingFee;
 
@@ -393,6 +426,7 @@ namespace EconSim.Core.Simulation.Systems
                 {
                     SellerId = facility.Id,
                     GoodId = goodId,
+                    GoodRuntimeId = goodRuntimeId,
                     Quantity = arrived,
                     DayListed = state.CurrentDay
                 });
@@ -427,6 +461,21 @@ namespace EconSim.Core.Simulation.Systems
             if (!_producedThisTick.ContainsKey(goodId))
                 _producedThisTick[goodId] = 0;
             _producedThisTick[goodId] += amount;
+        }
+
+        private int ResolveRuntimeId(GoodRegistry goods, string goodId)
+        {
+            if (string.IsNullOrWhiteSpace(goodId))
+                return -1;
+
+            if (_goodRuntimeIdCache.TryGetValue(goodId, out int cached))
+                return cached;
+
+            int runtimeId = goods != null && goods.TryGetRuntimeId(goodId, out int resolved)
+                ? resolved
+                : -1;
+            _goodRuntimeIdCache[goodId] = runtimeId;
+            return runtimeId;
         }
     }
 }

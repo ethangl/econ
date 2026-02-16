@@ -57,30 +57,31 @@ namespace EconSim.Core.Economy
         /// Current market state for each good: supply, demand, price.
         /// </summary>
         public Dictionary<string, MarketGoodState> Goods { get; set; } = new Dictionary<string, MarketGoodState>();
+        [NonSerialized] private readonly Dictionary<int, MarketGoodState> _goodsByRuntimeId = new Dictionary<int, MarketGoodState>();
 
         /// <summary>
-        /// Pending buy orders grouped by good ID and (day,buyer) key.
+        /// Pending buy orders grouped by good runtime ID and (day,buyer) key.
         /// These are not tradable until promoted at market tick start.
         /// </summary>
-        public Dictionary<string, Dictionary<long, BuyOrder>> PendingBuyOrdersByGood { get; } = new Dictionary<string, Dictionary<long, BuyOrder>>();
+        public Dictionary<int, Dictionary<long, BuyOrder>> PendingBuyOrdersByGood { get; } = new Dictionary<int, Dictionary<long, BuyOrder>>();
 
         /// <summary>
-        /// Tradable buy orders grouped by good ID and buyer ID.
+        /// Tradable buy orders grouped by good runtime ID and buyer ID.
         /// Cleared during the market tick and reset after clearing.
         /// </summary>
-        public Dictionary<string, Dictionary<int, BuyOrder>> TradableBuyOrdersByGood { get; } = new Dictionary<string, Dictionary<int, BuyOrder>>();
+        public Dictionary<int, Dictionary<int, BuyOrder>> TradableBuyOrdersByGood { get; } = new Dictionary<int, Dictionary<int, BuyOrder>>();
 
         /// <summary>
-        /// Pending consignment lots grouped by good ID and (day,seller) key.
+        /// Pending consignment lots grouped by good runtime ID and (day,seller) key.
         /// These are not tradable until promoted at market tick start.
         /// </summary>
-        public Dictionary<string, Dictionary<long, ConsignmentLot>> PendingInventoryByGood { get; } = new Dictionary<string, Dictionary<long, ConsignmentLot>>();
+        public Dictionary<int, Dictionary<long, ConsignmentLot>> PendingInventoryByGood { get; } = new Dictionary<int, Dictionary<long, ConsignmentLot>>();
 
         /// <summary>
-        /// Tradable inventory grouped by good ID and seller ID.
+        /// Tradable inventory grouped by good runtime ID and seller ID.
         /// Quantities represent stock available in the current clearing pass.
         /// </summary>
-        public Dictionary<string, Dictionary<int, float>> TradableInventoryByGood { get; } = new Dictionary<string, Dictionary<int, float>>();
+        public Dictionary<int, Dictionary<int, float>> TradableInventoryByGood { get; } = new Dictionary<int, Dictionary<int, float>>();
 
         /// <summary>
         /// Number of pending buy orders across all books.
@@ -103,6 +104,48 @@ namespace EconSim.Core.Economy
         /// </summary>
         public float OffMapPriceMultiplier { get; set; } = 1f;
 
+        [NonSerialized] private GoodRegistry _goodsRegistry;
+
+        /// <summary>
+        /// Bind this market to the active good registry so book keys can use dense runtime IDs.
+        /// </summary>
+        public void BindGoods(GoodRegistry goodsRegistry)
+        {
+            _goodsRegistry = goodsRegistry;
+            RebuildRuntimeGoodIndex();
+        }
+
+        /// <summary>
+        /// Rebuild runtime-id lookup for market good state.
+        /// Call after mutating <see cref="Goods"/>.
+        /// </summary>
+        public void RebuildRuntimeGoodIndex()
+        {
+            _goodsByRuntimeId.Clear();
+            foreach (var goodState in Goods.Values)
+            {
+                if (goodState == null)
+                    continue;
+
+                int runtimeId = goodState.RuntimeId >= 0
+                    ? goodState.RuntimeId
+                    : ResolveRuntimeIdForRead(goodState.GoodId);
+                if (runtimeId < 0)
+                    continue;
+
+                goodState.RuntimeId = runtimeId;
+                _goodsByRuntimeId[runtimeId] = goodState;
+            }
+        }
+
+        /// <summary>
+        /// Try get market good state by dense runtime ID.
+        /// </summary>
+        public bool TryGetGoodState(int goodRuntimeId, out MarketGoodState goodState)
+        {
+            return _goodsByRuntimeId.TryGetValue(goodRuntimeId, out goodState);
+        }
+
         /// <summary>
         /// Append a pending buy order to this market's order books.
         /// </summary>
@@ -110,13 +153,15 @@ namespace EconSim.Core.Economy
         {
             if (order.Quantity <= 0f)
                 return;
-            if (string.IsNullOrWhiteSpace(order.GoodId))
+            int goodRuntimeId = ResolveRuntimeIdForWrite(order.GoodId, order.GoodRuntimeId ?? -1);
+            if (goodRuntimeId < 0)
                 return;
+            order.GoodRuntimeId = goodRuntimeId;
 
-            if (!PendingBuyOrdersByGood.TryGetValue(order.GoodId, out var book))
+            if (!PendingBuyOrdersByGood.TryGetValue(goodRuntimeId, out var book))
             {
                 book = new Dictionary<long, BuyOrder>();
-                PendingBuyOrdersByGood[order.GoodId] = book;
+                PendingBuyOrdersByGood[goodRuntimeId] = book;
             }
 
             long key = ComposeEntryKey(order.DayPosted, order.BuyerId);
@@ -148,13 +193,15 @@ namespace EconSim.Core.Economy
         {
             if (lot.Quantity <= 0f)
                 return;
-            if (string.IsNullOrWhiteSpace(lot.GoodId))
+            int goodRuntimeId = ResolveRuntimeIdForWrite(lot.GoodId, lot.GoodRuntimeId ?? -1);
+            if (goodRuntimeId < 0)
                 return;
+            lot.GoodRuntimeId = goodRuntimeId;
 
-            if (!PendingInventoryByGood.TryGetValue(lot.GoodId, out var book))
+            if (!PendingInventoryByGood.TryGetValue(goodRuntimeId, out var book))
             {
                 book = new Dictionary<long, ConsignmentLot>();
-                PendingInventoryByGood[lot.GoodId] = book;
+                PendingInventoryByGood[goodRuntimeId] = book;
             }
 
             long key = ComposeEntryKey(lot.DayListed, lot.SellerId);
@@ -194,12 +241,24 @@ namespace EconSim.Core.Economy
         /// </summary>
         public void ApplyDecayForGood(string goodId, float decayRate, float lotCullThreshold)
         {
-            if (decayRate <= 0f || string.IsNullOrWhiteSpace(goodId))
+            int goodRuntimeId = ResolveRuntimeIdForRead(goodId);
+            if (goodRuntimeId < 0)
+                return;
+
+            ApplyDecayForGood(goodRuntimeId, decayRate, lotCullThreshold);
+        }
+
+        /// <summary>
+        /// Apply decay to inventory for a good runtime ID in both pending and tradable books.
+        /// </summary>
+        public void ApplyDecayForGood(int goodRuntimeId, float decayRate, float lotCullThreshold)
+        {
+            if (decayRate <= 0f || goodRuntimeId < 0)
                 return;
 
             float keep = Math.Max(0f, 1f - decayRate);
 
-            if (PendingInventoryByGood.TryGetValue(goodId, out var pending))
+            if (PendingInventoryByGood.TryGetValue(goodRuntimeId, out var pending))
             {
                 var remove = new List<long>();
                 var updates = new List<KeyValuePair<long, ConsignmentLot>>();
@@ -224,10 +283,10 @@ namespace EconSim.Core.Economy
                 for (int i = 0; i < remove.Count; i++)
                     pending.Remove(remove[i]);
                 if (pending.Count == 0)
-                    PendingInventoryByGood.Remove(goodId);
+                    PendingInventoryByGood.Remove(goodRuntimeId);
             }
 
-            if (TradableInventoryByGood.TryGetValue(goodId, out var tradable))
+            if (TradableInventoryByGood.TryGetValue(goodRuntimeId, out var tradable))
             {
                 var remove = new List<int>();
                 var updates = new List<KeyValuePair<int, float>>();
@@ -245,7 +304,7 @@ namespace EconSim.Core.Economy
                 for (int i = 0; i < remove.Count; i++)
                     tradable.Remove(remove[i]);
                 if (tradable.Count == 0)
-                    TradableInventoryByGood.Remove(goodId);
+                    TradableInventoryByGood.Remove(goodRuntimeId);
             }
 
             RecountBooks();
@@ -256,7 +315,22 @@ namespace EconSim.Core.Economy
         /// </summary>
         public bool TryGetTradableOrders(string goodId, out Dictionary<int, BuyOrder> orders)
         {
-            return TradableBuyOrdersByGood.TryGetValue(goodId, out orders);
+            int goodRuntimeId = ResolveRuntimeIdForRead(goodId);
+            if (goodRuntimeId < 0)
+            {
+                orders = null;
+                return false;
+            }
+
+            return TryGetTradableOrders(goodRuntimeId, out orders);
+        }
+
+        /// <summary>
+        /// Try get tradable orders for a given good runtime ID.
+        /// </summary>
+        public bool TryGetTradableOrders(int goodRuntimeId, out Dictionary<int, BuyOrder> orders)
+        {
+            return TradableBuyOrdersByGood.TryGetValue(goodRuntimeId, out orders);
         }
 
         /// <summary>
@@ -264,7 +338,22 @@ namespace EconSim.Core.Economy
         /// </summary>
         public bool TryGetTradableInventory(string goodId, out Dictionary<int, float> inventoryBySeller)
         {
-            return TradableInventoryByGood.TryGetValue(goodId, out inventoryBySeller);
+            int goodRuntimeId = ResolveRuntimeIdForRead(goodId);
+            if (goodRuntimeId < 0)
+            {
+                inventoryBySeller = null;
+                return false;
+            }
+
+            return TryGetTradableInventory(goodRuntimeId, out inventoryBySeller);
+        }
+
+        /// <summary>
+        /// Try get tradable inventory for a given good runtime ID.
+        /// </summary>
+        public bool TryGetTradableInventory(int goodRuntimeId, out Dictionary<int, float> inventoryBySeller)
+        {
+            return TradableInventoryByGood.TryGetValue(goodRuntimeId, out inventoryBySeller);
         }
 
         /// <summary>
@@ -272,15 +361,24 @@ namespace EconSim.Core.Economy
         /// </summary>
         public float GetTotalInventory(string goodId)
         {
+            int goodRuntimeId = ResolveRuntimeIdForRead(goodId);
+            return goodRuntimeId >= 0 ? GetTotalInventory(goodRuntimeId) : 0f;
+        }
+
+        /// <summary>
+        /// Total inventory (pending + tradable) for a good runtime ID.
+        /// </summary>
+        public float GetTotalInventory(int goodRuntimeId)
+        {
             float total = 0f;
 
-            if (PendingInventoryByGood.TryGetValue(goodId, out var pending))
+            if (PendingInventoryByGood.TryGetValue(goodRuntimeId, out var pending))
             {
                 foreach (var kvp in pending)
                     total += kvp.Value.Quantity;
             }
 
-            if (TradableInventoryByGood.TryGetValue(goodId, out var tradable))
+            if (TradableInventoryByGood.TryGetValue(goodRuntimeId, out var tradable))
             {
                 foreach (var kvp in tradable)
                     total += kvp.Value;
@@ -294,8 +392,17 @@ namespace EconSim.Core.Economy
         /// </summary>
         public float GetTradableSupply(string goodId)
         {
+            int goodRuntimeId = ResolveRuntimeIdForRead(goodId);
+            return goodRuntimeId >= 0 ? GetTradableSupply(goodRuntimeId) : 0f;
+        }
+
+        /// <summary>
+        /// Tradable supply for a good runtime ID.
+        /// </summary>
+        public float GetTradableSupply(int goodRuntimeId)
+        {
             float total = 0f;
-            if (!TradableInventoryByGood.TryGetValue(goodId, out var tradable))
+            if (!TradableInventoryByGood.TryGetValue(goodRuntimeId, out var tradable))
                 return 0f;
 
             foreach (var kvp in tradable)
@@ -308,8 +415,17 @@ namespace EconSim.Core.Economy
         /// </summary>
         public float GetTradableDemand(string goodId)
         {
+            int goodRuntimeId = ResolveRuntimeIdForRead(goodId);
+            return goodRuntimeId >= 0 ? GetTradableDemand(goodRuntimeId) : 0f;
+        }
+
+        /// <summary>
+        /// Tradable demand for a good runtime ID.
+        /// </summary>
+        public float GetTradableDemand(int goodRuntimeId)
+        {
             float total = 0f;
-            if (!TradableBuyOrdersByGood.TryGetValue(goodId, out var tradable))
+            if (!TradableBuyOrdersByGood.TryGetValue(goodRuntimeId, out var tradable))
                 return 0f;
 
             foreach (var kvp in tradable)
@@ -331,11 +447,11 @@ namespace EconSim.Core.Economy
 
         private void PromotePendingOrders(int currentDay)
         {
-            var emptyGoods = new List<string>();
+            var emptyGoods = new List<int>();
 
             foreach (var byGood in PendingBuyOrdersByGood)
             {
-                string goodId = byGood.Key;
+                int goodRuntimeId = byGood.Key;
                 var pending = byGood.Value;
                 var promotedKeys = new List<long>();
                 Dictionary<int, BuyOrder> tradable = null;
@@ -348,10 +464,10 @@ namespace EconSim.Core.Economy
 
                     if (tradable == null)
                     {
-                        if (!TradableBuyOrdersByGood.TryGetValue(goodId, out tradable))
+                        if (!TradableBuyOrdersByGood.TryGetValue(goodRuntimeId, out tradable))
                         {
                             tradable = new Dictionary<int, BuyOrder>();
-                            TradableBuyOrdersByGood[goodId] = tradable;
+                            TradableBuyOrdersByGood[goodRuntimeId] = tradable;
                         }
                     }
 
@@ -363,7 +479,7 @@ namespace EconSim.Core.Economy
                     pending.Remove(promotedKeys[i]);
 
                 if (pending.Count == 0)
-                    emptyGoods.Add(goodId);
+                    emptyGoods.Add(goodRuntimeId);
             }
 
             for (int i = 0; i < emptyGoods.Count; i++)
@@ -372,11 +488,11 @@ namespace EconSim.Core.Economy
 
         private void PromotePendingInventory(int currentDay)
         {
-            var emptyGoods = new List<string>();
+            var emptyGoods = new List<int>();
 
             foreach (var byGood in PendingInventoryByGood)
             {
-                string goodId = byGood.Key;
+                int goodRuntimeId = byGood.Key;
                 var pending = byGood.Value;
                 var promotedKeys = new List<long>();
                 Dictionary<int, float> tradable = null;
@@ -389,10 +505,10 @@ namespace EconSim.Core.Economy
 
                     if (tradable == null)
                     {
-                        if (!TradableInventoryByGood.TryGetValue(goodId, out tradable))
+                        if (!TradableInventoryByGood.TryGetValue(goodRuntimeId, out tradable))
                         {
                             tradable = new Dictionary<int, float>();
-                            TradableInventoryByGood[goodId] = tradable;
+                            TradableInventoryByGood[goodRuntimeId] = tradable;
                         }
                     }
 
@@ -405,7 +521,7 @@ namespace EconSim.Core.Economy
                     pending.Remove(promotedKeys[i]);
 
                 if (pending.Count == 0)
-                    emptyGoods.Add(goodId);
+                    emptyGoods.Add(goodRuntimeId);
             }
 
             for (int i = 0; i < emptyGoods.Count; i++)
@@ -435,9 +551,9 @@ namespace EconSim.Core.Economy
             }
         }
 
-        private static void CullOrderBook<T>(Dictionary<string, Dictionary<T, BuyOrder>> byGood, float lotCullThreshold)
+        private static void CullOrderBook<T>(Dictionary<int, Dictionary<T, BuyOrder>> byGood, float lotCullThreshold)
         {
-            var emptyGoods = new List<string>();
+            var emptyGoods = new List<int>();
             foreach (var goodEntry in byGood)
             {
                 var book = goodEntry.Value;
@@ -461,7 +577,7 @@ namespace EconSim.Core.Economy
 
         private void CullPendingInventory(float lotCullThreshold)
         {
-            var emptyGoods = new List<string>();
+            var emptyGoods = new List<int>();
             foreach (var goodEntry in PendingInventoryByGood)
             {
                 var book = goodEntry.Value;
@@ -485,7 +601,7 @@ namespace EconSim.Core.Economy
 
         private void CullTradableInventory(float lotCullThreshold)
         {
-            var emptyGoods = new List<string>();
+            var emptyGoods = new List<int>();
             foreach (var goodEntry in TradableInventoryByGood)
             {
                 var book = goodEntry.Value;
@@ -524,6 +640,39 @@ namespace EconSim.Core.Economy
             InventoryLotCount = inventoryCount;
         }
 
+        /// <summary>
+        /// Resolve a good ID to a runtime ID for market book keys.
+        /// </summary>
+        public int ResolveGoodRuntimeId(string goodId)
+        {
+            return ResolveRuntimeIdForRead(goodId);
+        }
+
+        private int ResolveRuntimeIdForRead(string goodId)
+        {
+            if (string.IsNullOrWhiteSpace(goodId))
+                return -1;
+
+            if (_goodsRegistry != null && _goodsRegistry.TryGetRuntimeId(goodId, out int registryRuntimeId))
+                return registryRuntimeId;
+
+            return -1;
+        }
+
+        private int ResolveRuntimeIdForWrite(string goodId, int hintRuntimeId)
+        {
+            if (hintRuntimeId >= 0)
+                return hintRuntimeId;
+
+            if (!string.IsNullOrWhiteSpace(goodId))
+            {
+                if (_goodsRegistry != null && _goodsRegistry.TryGetRuntimeId(goodId, out int registryRuntimeId))
+                    return registryRuntimeId;
+            }
+
+            return -1;
+        }
+
         private static long ComposeEntryKey(int day, int actorId)
         {
             return ((long)day << 32) | (uint)actorId;
@@ -537,9 +686,14 @@ namespace EconSim.Core.Economy
     public class MarketGoodState
     {
         /// <summary>
-        /// Good type ID.
-        /// </summary>
+         /// Good type ID.
+         /// </summary>
         public string GoodId { get; set; }
+
+        /// <summary>
+        /// Dense runtime ID for this good.
+        /// </summary>
+        public int RuntimeId { get; set; } = -1;
 
         /// <summary>
         /// Total quantity available for purchase (remaining after trades).

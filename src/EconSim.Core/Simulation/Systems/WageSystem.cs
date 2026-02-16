@@ -127,8 +127,10 @@ namespace EconSim.Core.Simulation.Systems
                 {
                     if (good.NeedCategory != NeedCategory.Basic)
                         continue;
+                    if (good.RuntimeId < 0)
+                        continue;
 
-                    if (!market.Goods.TryGetValue(good.Id, out var marketGood))
+                    if (!market.TryGetGoodState(good.RuntimeId, out var marketGood))
                         continue;
 
                     marketBasket += marketGood.Price * good.BaseConsumption;

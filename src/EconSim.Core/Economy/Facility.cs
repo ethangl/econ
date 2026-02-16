@@ -69,6 +69,15 @@ namespace EconSim.Core.Economy
         }
 
         /// <summary>
+        /// Bind facility stockpiles to the active good registry for dense runtime-ID paths.
+        /// </summary>
+        public void BindGoods(GoodRegistry goods)
+        {
+            InputBuffer?.BindGoods(goods);
+            OutputBuffer?.BindGoods(goods);
+        }
+
+        /// <summary>
         /// Calculate current efficiency based on staffing.
         /// Formula: (workers / required)^α where α < 1 gives diminishing returns.
         /// </summary>

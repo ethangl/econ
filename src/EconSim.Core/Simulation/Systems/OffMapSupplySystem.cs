@@ -11,10 +11,10 @@ namespace EconSim.Core.Simulation.Systems
     /// Only replenishes goods that the off-map market is configured to supply
     /// (those with inflated BasePrice from OffMapMarketPlacer).
     /// </summary>
-    public class OffMapSupplySystem : ITickSystem
-    {
-        public string Name => "OffMapSupply";
-        private readonly Dictionary<string, float> _inventoryByGoodBuffer = new Dictionary<string, float>();
+        public class OffMapSupplySystem : ITickSystem
+        {
+            public string Name => "OffMapSupply";
+            private readonly Dictionary<int, float> _inventoryByGoodBuffer = new Dictionary<int, float>();
 
         public int TickInterval => SimulationConfig.Intervals.Daily;
 
@@ -58,15 +58,21 @@ namespace EconSim.Core.Simulation.Systems
                 _inventoryByGoodBuffer.Clear();
                 foreach (var offMapGoodId in market.OffMapGoodIds)
                 {
-                    float inventory = market.GetTotalInventory(offMapGoodId);
+                    if (!state.Economy.Goods.TryGetRuntimeId(offMapGoodId, out int runtimeId))
+                        continue;
+
+                    float inventory = market.GetTotalInventory(runtimeId);
                     if (inventory > 0f)
-                        _inventoryByGoodBuffer[offMapGoodId] = inventory;
+                        _inventoryByGoodBuffer[runtimeId] = inventory;
                 }
 
                 int sellerId = MarketOrderIds.MakeOffMapSellerId(market.Id);
                 foreach (var goodId in market.OffMapGoodIds)
                 {
-                    _inventoryByGoodBuffer.TryGetValue(goodId, out float inventory);
+                    if (!state.Economy.Goods.TryGetRuntimeId(goodId, out int runtimeId))
+                        continue;
+
+                    _inventoryByGoodBuffer.TryGetValue(runtimeId, out float inventory);
 
                     if (inventory >= TargetSupply)
                         continue;
@@ -76,6 +82,7 @@ namespace EconSim.Core.Simulation.Systems
                     {
                         SellerId = sellerId,
                         GoodId = goodId,
+                        GoodRuntimeId = runtimeId,
                         Quantity = needed,
                         DayListed = dayListed
                     });
