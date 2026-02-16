@@ -7,24 +7,68 @@ Implements the market-mediated monetary economy defined in `ECONOMY_V2.md`. Each
 - **Feature flag**: `SimulationConfig.UseEconomyV2` gates system registration. V1 continues to work untouched.
 - **Additive first**: new systems are added alongside V1 systems. V1 systems are only removed from the registration path, not deleted, until V2 is stable.
 - **Test-per-issue**: each issue includes unit tests for its core logic, runnable without the full simulation.
+- **Determinism first**: seed plumbing and RNG ownership land before behavior changes so V2 runs are replayable.
 - **Data model lands first**: all struct/field additions go in before any behavioral changes.
 
 ## Dependency Graph
 
 ```
-Issue 1 (Data Model + Flag)
-  ├── Issue 2 (MarketSystem)
-  ├── Issue 3 (ProductionSystem V2)
-  ├── Issue 4 (OrderSystem)
-  ├── Issue 5 (WageSystem)
-  ├── Issue 6 (PriceSystem)
-  └── Issue 7 (LaborSystem)
-        └── all of 2-7 ──► Issue 8 (Bootstrap V2)
-                              └── Issue 9 (Integration + Cutover)
-                                    └── Issue 10 (Telemetry + Debug)
+Issue 0 (Deterministic Seed Hooks)
+  └── Issue 1 (Data Model + Flag)
+        ├── Issue 2 (MarketSystem)
+        ├── Issue 3 (ProductionSystem V2)
+        ├── Issue 4 (OrderSystem)
+        ├── Issue 5 (WageSystem)
+        ├── Issue 6 (PriceSystem)
+        └── Issue 7 (LaborSystem)
+              └── all of 2-7 ──► Issue 7.5 (Interim Integration Harness)
+                                    └── Issue 8 (Bootstrap V2)
+                                          └── Issue 9 (Integration + Cutover)
+                                                └── Issue 10 (Telemetry + Debug)
 ```
 
-Issues 2-7 depend only on Issue 1 and can be developed in any order (or in parallel). Issues 8-10 are sequential.
+Issues 2-7 depend on Issues 0-1 and can be developed in any order (or in parallel). Issue 7.5 gates Issue 8 so core systems can be tested together before bootstrap lands. Issues 8-10 are sequential.
+
+---
+
+## Issue 0: Deterministic Seed Hooks
+
+Define deterministic RNG ownership and replay checks for V2 runs. No economy behavior changes.
+
+### Changes
+
+**RNG ownership and sources**
+
+- Add a dedicated economy RNG stream (`SimulationState.EconomyRng`) initialized once at simulation startup.
+- Seed source order:
+  1. `SimulationConfig.EconomySeed` when explicitly set.
+  2. Fallback to world/map seed when `EconomySeed` is unset.
+- Prohibit direct randomness from `new Random()`, `Random.Shared`, or `UnityEngine.Random` inside economy systems.
+
+**Seed plumbing**
+
+- Thread the chosen economy seed through initialization so every V2 system uses the same deterministic RNG context.
+- Store/log the effective economy seed in simulation metadata and debug output so replays can be reproduced exactly.
+- Add deterministic tie-break helpers (seeded ordering/shuffle) for any logic that would otherwise depend on unstable collection iteration order.
+
+**Replay acceptance criteria**
+
+- Same map seed + same economy seed + same config must produce identical day-by-day economy fingerprints for at least 30 days.
+- Fingerprint must include, at minimum: market prices, inventory/order counts, county treasuries, facility treasuries, assigned workers, `InputBuffer`, `OutputBuffer`, and county stockpile totals.
+- Changing only economy seed should change at least one daily fingerprint within the first 7 days (unless the scenario has no stochastic branches).
+
+### Tests
+
+- Unit: fixed-seed economy RNG stream yields stable number sequences.
+- Unit: deterministic tie-break helper returns stable ordering for fixed seed.
+- Integration: 30-day replay equality test with identical seeds/config.
+- Integration: seed sensitivity test with different `EconomySeed` values.
+
+### Done When
+
+- Effective economy seed is visible in debug/telemetry output.
+- No economy system uses non-deterministic/global RNG sources.
+- Replay tests pass for deterministic and seed-sensitivity cases.
 
 ---
 
@@ -574,6 +618,51 @@ New weekly system that replaces the per-tick greedy worker allocation.
 
 ---
 
+## Issue 7.5: Interim Integration Harness
+
+Add a fixture-based integration harness to validate Issues 2-7 together before bootstrap is implemented.
+
+### New Test Harness Files
+
+- `Tests/Fixtures/EconomyV2FixtureBuilder.cs`
+- `Tests/Integration/EconomyV2InterimHarnessTests.cs`
+
+### Harness Scope
+
+- Build deterministic, minimal economies directly from fixtures (no bootstrap path) with:
+  - seeded county/facility treasuries
+  - seeded market `PendingBuyOrders`
+  - seeded market `Inventory` consignment lots
+  - seeded facility `InputBuffer` and `OutputBuffer`
+  - fixed worker assignments and wage rates when needed
+- Support table-driven fixture inputs so scenarios are concise and comparable across test runs.
+- Use Issue 0 deterministic seed plumbing so harness runs are replayable.
+
+### Required Scenarios
+
+1. **Clearing + pricing loop**: orders/lots clear, prices adjust, no treasury violations.
+2. **Production -> consignment -> market**: processing/extraction produce expected lots and trades across multiple days.
+3. **Wages + labor friction**: wage debt produces distressed exits; weekly labor reallocation responds to wage ranking.
+4. **Subsistence + order waterfall**: stockpile conversion reduces basic demand and preserves budget priority.
+5. **OffMap invariants in V2 registration context**: OffMap pricing stays fixed while legitimate markets move.
+
+### Acceptance Criteria
+
+- A 14-day harness run executes Issues 2-7 in production tick order without bootstrap and without exceptions.
+- Core invariants hold in every scenario:
+  - no negative market inventory quantities
+  - no negative treasuries except explicitly asserted wage-debt edge cases
+  - price bounds remain within `[0.25x, 4x]` for legitimate markets
+  - one-day lag rules (`DayPosted`, `DayListed`) are always respected
+- Harness output includes compact per-day snapshots (price, treasury split, demand/supply/trade) to speed triage before Issue 8.
+
+### Done When
+
+- CI runs the interim harness suite independently of bootstrap tests.
+- Regressions in Issues 2-7 can be diagnosed from harness snapshots without requiring full-world initialization.
+
+---
+
 ## Issue 8: Bootstrap V2
 
 Seeds the economy with money, inventory, and orders so tick 1 has real trade.
@@ -819,12 +908,14 @@ After a 90-day run on a standard Continents map (seed 12345, 10k cells):
 | `Simulation/Systems/WageSystem.cs`   | 5     |
 | `Simulation/Systems/PriceSystem.cs`  | 6     |
 | `Simulation/Systems/LaborSystem.cs`  | 7     |
+| `Tests/Fixtures/EconomyV2FixtureBuilder.cs` | 7.5   |
+| `Tests/Integration/EconomyV2InterimHarnessTests.cs` | 7.5   |
 
 ### Modified Files
 
 | File                             | Issues | Changes                               |
 | -------------------------------- | ------ | ------------------------------------- |
-| `SimulationConfig.cs`            | 1      | Add `UseEconomyV2` flag               |
+| `SimulationConfig.cs`            | 0, 1   | Add `EconomySeed` controls + `UseEconomyV2` flag |
 | `Facility.cs`                    | 1      | Treasury, wage, tracking fields       |
 | `Population.cs`                  | 1      | Treasury field                        |
 | `Market.cs`                      | 1      | PendingBuyOrders, Inventory lists     |
@@ -832,10 +923,10 @@ After a 90-day run on a standard Continents map (seed 12345, 10k cells):
 | `InitialData.cs`                 | 1      | NeedCategory + BaseConsumption tuning |
 | `ProductionSystem.cs`            | 3      | V2 code path                          |
 | `EconomyInitializer.cs`          | 8      | V2 bootstrap                          |
-| `SimulationRunner.cs`            | 9      | V2 system registration                |
-| `SimulationState.cs`             | 5, 10  | SubsistenceWage, telemetry            |
+| `SimulationRunner.cs`            | 0, 9   | Economy seed initialization + V2 system registration |
+| `SimulationState.cs`             | 0, 5, 10 | EconomyRng/seed metadata, subsistence wage, telemetry |
 | `OffMapSupplySystem.cs`          | 9      | ConsignmentLot creation               |
-| `EconDebugBridge.cs`             | 10     | V2 dump format                        |
+| `EconDebugBridge.cs`             | 0, 10  | Seed metadata + V2 dump format        |
 
 ### Untouched V1 Files (kept for V1 mode)
 
