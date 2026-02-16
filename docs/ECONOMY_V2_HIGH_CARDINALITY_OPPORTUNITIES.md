@@ -190,10 +190,11 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 - Move from many heap objects to compact arrays/struct-of-arrays for hot fields.
 - Best done after cluster model stabilizes.
 
-2. Adaptive cadence for low-activity actors
+2. Adaptive cadence for low-activity actors (`Completed`)
 
 - Increase tick interval for persistently idle clusters/markets with bounded error.
 - Requires clear gameplay tolerance for delayed response.
+- Branch note: `ProductionSystem` now increases inactive-facility recheck periods as dormancy grows (base, 2x, 4x) while preserving activation economics.
 
 ## Suggested Execution Order
 

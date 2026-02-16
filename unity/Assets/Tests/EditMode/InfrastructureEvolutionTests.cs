@@ -661,6 +661,36 @@ namespace EconSim.Tests
                 "County 10 should reach county 30 via county graph traversal.");
         }
 
+        [Test]
+        public void ProductionSystem_InactiveFacilityRecheckCadence_ExpandsWithDormancy()
+        {
+            MethodInfo method = typeof(ProductionSystem).GetMethod(
+                "ShouldEvaluateInactiveFacility",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(method, Is.Not.Null, "Could not find ProductionSystem.ShouldEvaluateInactiveFacility via reflection.");
+
+            var facility = new Facility
+            {
+                Id = 5,
+                IsActive = false
+            };
+
+            // Early dormancy uses base non-extraction period (7); day 12 hits phase 5.
+            facility.InactiveDays = 10;
+            bool early = (bool)method.Invoke(null, new object[] { 12, facility, false });
+            Assert.That(early, Is.True);
+
+            // Medium dormancy doubles period (14); same day no longer hits phase 5.
+            facility.InactiveDays = 40;
+            bool medium = (bool)method.Invoke(null, new object[] { 12, facility, false });
+            Assert.That(medium, Is.False);
+
+            // Long dormancy should continue to evaluate less frequently.
+            facility.InactiveDays = 150;
+            bool longDormant = (bool)method.Invoke(null, new object[] { 12, facility, false });
+            Assert.That(longDormant, Is.False);
+        }
+
         private static MapData BuildLinearMap()
         {
             var mapData = new MapData
