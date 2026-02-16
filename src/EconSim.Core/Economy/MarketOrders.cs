@@ -13,6 +13,7 @@ namespace EconSim.Core.Economy
         // Facility IDs are positive. Population buyers are encoded as negative county IDs.
         public int BuyerId;
         public string GoodId;
+        public int? GoodRuntimeId;
         public float Quantity;
         public float MaxSpend;
         public float TransportCost;
@@ -40,6 +41,7 @@ namespace EconSim.Core.Economy
         // Facility IDs are positive. Synthetic sellers use reserved negative IDs.
         public int SellerId;
         public string GoodId;
+        public int? GoodRuntimeId;
         public float Quantity;
         public int DayListed;
     }

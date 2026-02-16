@@ -698,6 +698,7 @@ namespace EconSim.Core.Simulation
 
         private void InitializeMarketGoods(Market market)
         {
+            market.BindGoods(_state.Economy.Goods);
             market.Goods.Clear();
             bool isOffMap = market.Type == MarketType.OffMap;
 
@@ -712,6 +713,7 @@ namespace EconSim.Core.Simulation
                 market.Goods[good.Id] = new MarketGoodState
                 {
                     GoodId = good.Id,
+                    RuntimeId = good.RuntimeId,
                     BasePrice = price,
                     Price = price,
                     Supply = 0,

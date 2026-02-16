@@ -30,9 +30,11 @@ namespace EconSim.Core.Simulation.Systems
         private const int V2InactiveExtractionRecheckDays = 3;
 
         private readonly Dictionary<string, float> _producedThisTick = new Dictionary<string, float>();
-        private readonly List<KeyValuePair<string, float>> _outputGoodsBuffer = new List<KeyValuePair<string, float>>(8);
+        private readonly List<KeyValuePair<int, float>> _outputGoodsBuffer = new List<KeyValuePair<int, float>>(8);
+        private readonly List<KeyValuePair<string, float>> _outputGoodsFallbackBuffer = new List<KeyValuePair<string, float>>(4);
         private readonly Dictionary<int, int> _availableUnskilledByCounty = new Dictionary<int, int>();
         private readonly Dictionary<int, int> _availableSkilledByCounty = new Dictionary<int, int>();
+        private readonly Dictionary<string, int> _goodRuntimeIdCache = new Dictionary<string, int>();
 
         public void Initialize(SimulationState state, MapData mapData)
         {
@@ -292,12 +294,23 @@ namespace EconSim.Core.Simulation.Systems
 
             float subsistence = produced * V2SubsistenceFraction;
             float forMarket = produced - subsistence;
+            int outputRuntimeId = ResolveRuntimeId(economy.Goods, def.OutputGoodId);
 
             if (subsistence > 0f)
-                county.Stockpile.Add(def.OutputGoodId, subsistence);
+            {
+                if (outputRuntimeId >= 0)
+                    county.Stockpile.Add(outputRuntimeId, subsistence);
+                else
+                    county.Stockpile.Add(def.OutputGoodId, subsistence);
+            }
 
             if (forMarket > 0f)
-                facility.OutputBuffer.Add(def.OutputGoodId, forMarket);
+            {
+                if (outputRuntimeId >= 0)
+                    facility.OutputBuffer.Add(outputRuntimeId, forMarket);
+                else
+                    facility.OutputBuffer.Add(def.OutputGoodId, forMarket);
+            }
 
             TrackProduction(def.OutputGoodId, produced);
         }
@@ -307,6 +320,7 @@ namespace EconSim.Core.Simulation.Systems
             var outputGood = economy.Goods.Get(def.OutputGoodId);
             if (outputGood == null)
                 return;
+            int outputRuntimeId = outputGood.RuntimeId;
 
             var inputs = def.InputOverrides ?? outputGood.Inputs;
             if (inputs == null || inputs.Count == 0)
@@ -319,7 +333,10 @@ namespace EconSim.Core.Simulation.Systems
             float possibleBatches = throughput;
             foreach (var input in inputs)
             {
-                float available = facility.InputBuffer.Get(input.GoodId);
+                int inputRuntimeId = ResolveRuntimeId(economy.Goods, input.GoodId);
+                float available = inputRuntimeId >= 0
+                    ? facility.InputBuffer.Get(inputRuntimeId)
+                    : facility.InputBuffer.Get(input.GoodId);
                 float canMake = available / input.Quantity;
                 if (canMake < possibleBatches)
                     possibleBatches = canMake;
@@ -330,10 +347,17 @@ namespace EconSim.Core.Simulation.Systems
 
             foreach (var input in inputs)
             {
-                facility.InputBuffer.Remove(input.GoodId, input.Quantity * possibleBatches);
+                int inputRuntimeId = ResolveRuntimeId(economy.Goods, input.GoodId);
+                if (inputRuntimeId >= 0)
+                    facility.InputBuffer.Remove(inputRuntimeId, input.Quantity * possibleBatches);
+                else
+                    facility.InputBuffer.Remove(input.GoodId, input.Quantity * possibleBatches);
             }
 
-            facility.OutputBuffer.Add(def.OutputGoodId, possibleBatches);
+            if (outputRuntimeId >= 0)
+                facility.OutputBuffer.Add(outputRuntimeId, possibleBatches);
+            else
+                facility.OutputBuffer.Add(def.OutputGoodId, possibleBatches);
             TrackProduction(def.OutputGoodId, possibleBatches);
         }
 
@@ -354,12 +378,65 @@ namespace EconSim.Core.Simulation.Systems
 
             var county = economy.GetCounty(facility.CountyId);
             _outputGoodsBuffer.Clear();
-            foreach (var kvp in facility.OutputBuffer.All)
+            foreach (var kvp in facility.OutputBuffer.AllRuntime)
             {
                 _outputGoodsBuffer.Add(kvp);
             }
 
             foreach (var kvp in _outputGoodsBuffer)
+            {
+                int goodRuntimeId = kvp.Key;
+                float quantity = kvp.Value;
+                if (quantity <= 0.001f)
+                    continue;
+                if (!economy.Goods.TryGetByRuntimeId(goodRuntimeId, out var good))
+                    continue;
+
+                string goodId = good.Id;
+
+                float marketPrice = market.Goods.TryGetValue(goodId, out var marketGood)
+                    ? marketGood.Price
+                    : economy.Goods.Get(goodId)?.BasePrice ?? 0f;
+
+                float haulingFee = quantity * marketPrice * transportCost * V2TransportFeeRate;
+                if (haulingFee > 0f && facility.Treasury < haulingFee)
+                {
+                    float scale = facility.Treasury / haulingFee;
+                    quantity *= scale;
+                    haulingFee = facility.Treasury;
+                }
+
+                if (quantity <= 0.001f)
+                    continue;
+
+                float arrived = quantity * efficiency;
+                if (arrived <= 0.001f)
+                    continue;
+
+                facility.OutputBuffer.Remove(goodRuntimeId, quantity);
+                facility.Treasury -= haulingFee;
+                county.Population.Treasury += haulingFee;
+
+                market.AddInventoryLot(new ConsignmentLot
+                {
+                    SellerId = facility.Id,
+                    GoodId = goodId,
+                    GoodRuntimeId = goodRuntimeId,
+                    Quantity = arrived,
+                    DayListed = state.CurrentDay
+                });
+            }
+
+            // Fallback for unresolved string-only entries, which can exist before a stockpile is bound.
+            _outputGoodsFallbackBuffer.Clear();
+            foreach (var kvp in facility.OutputBuffer.All)
+            {
+                if (economy.Goods.TryGetRuntimeId(kvp.Key, out _))
+                    continue;
+                _outputGoodsFallbackBuffer.Add(kvp);
+            }
+
+            foreach (var kvp in _outputGoodsFallbackBuffer)
             {
                 string goodId = kvp.Key;
                 float quantity = kvp.Value;
@@ -393,6 +470,7 @@ namespace EconSim.Core.Simulation.Systems
                 {
                     SellerId = facility.Id,
                     GoodId = goodId,
+                    GoodRuntimeId = null,
                     Quantity = arrived,
                     DayListed = state.CurrentDay
                 });
@@ -427,6 +505,21 @@ namespace EconSim.Core.Simulation.Systems
             if (!_producedThisTick.ContainsKey(goodId))
                 _producedThisTick[goodId] = 0;
             _producedThisTick[goodId] += amount;
+        }
+
+        private int ResolveRuntimeId(GoodRegistry goods, string goodId)
+        {
+            if (string.IsNullOrWhiteSpace(goodId))
+                return -1;
+
+            if (_goodRuntimeIdCache.TryGetValue(goodId, out int cached))
+                return cached;
+
+            int runtimeId = goods != null && goods.TryGetRuntimeId(goodId, out int resolved)
+                ? resolved
+                : -1;
+            _goodRuntimeIdCache[goodId] = runtimeId;
+            return runtimeId;
         }
     }
 }

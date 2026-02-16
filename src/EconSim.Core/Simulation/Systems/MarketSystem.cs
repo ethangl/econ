@@ -13,9 +13,10 @@ namespace EconSim.Core.Simulation.Systems
     {
         private const float BuyerTransportFeeRate = 0.005f;
         private const float LotCullThreshold = 0.01f;
-        private readonly Dictionary<string, float> _totalInventoryByGood = new Dictionary<string, float>();
-        private readonly Dictionary<string, float> _eligibleDemandByGood = new Dictionary<string, float>();
-        private readonly Dictionary<string, float> _eligibleSupplyByGood = new Dictionary<string, float>();
+        private readonly Dictionary<int, float> _totalInventoryByGood = new Dictionary<int, float>();
+        private readonly Dictionary<int, float> _eligibleDemandByGood = new Dictionary<int, float>();
+        private readonly Dictionary<int, float> _eligibleSupplyByGood = new Dictionary<int, float>();
+        private readonly Dictionary<int, MarketGoodState> _goodStateByRuntimeId = new Dictionary<int, MarketGoodState>();
 
         public string Name => "Market";
         public int TickInterval => SimulationConfig.Intervals.Daily;
@@ -66,20 +67,39 @@ namespace EconSim.Core.Simulation.Systems
             _totalInventoryByGood.Clear();
             _eligibleDemandByGood.Clear();
             _eligibleSupplyByGood.Clear();
+            _goodStateByRuntimeId.Clear();
 
             foreach (var goodState in market.Goods.Values)
             {
-                float inventory = market.GetTotalInventory(goodState.GoodId);
-                if (inventory > 0f)
-                    _totalInventoryByGood[goodState.GoodId] = inventory;
+                int goodRuntimeId = goodState.RuntimeId >= 0
+                    ? goodState.RuntimeId
+                    : market.ResolveGoodRuntimeId(goodState.GoodId);
+                float inventory;
+                float supply;
+                float demand;
 
-                float supply = market.GetTradableSupply(goodState.GoodId);
-                if (supply > 0f)
-                    _eligibleSupplyByGood[goodState.GoodId] = supply;
+                if (goodRuntimeId >= 0)
+                {
+                    _goodStateByRuntimeId[goodRuntimeId] = goodState;
 
-                float demand = market.GetTradableDemand(goodState.GoodId);
-                if (demand > 0f)
-                    _eligibleDemandByGood[goodState.GoodId] = demand;
+                    inventory = market.GetTotalInventory(goodRuntimeId);
+                    if (inventory > 0f)
+                        _totalInventoryByGood[goodRuntimeId] = inventory;
+
+                    supply = market.GetTradableSupply(goodRuntimeId);
+                    if (supply > 0f)
+                        _eligibleSupplyByGood[goodRuntimeId] = supply;
+
+                    demand = market.GetTradableDemand(goodRuntimeId);
+                    if (demand > 0f)
+                        _eligibleDemandByGood[goodRuntimeId] = demand;
+                }
+                else
+                {
+                    inventory = market.GetTotalInventory(goodState.GoodId);
+                    supply = market.GetTradableSupply(goodState.GoodId);
+                    demand = market.GetTradableDemand(goodState.GoodId);
+                }
 
                 goodState.Supply = inventory;
                 goodState.SupplyOffered = goodState.Supply;
@@ -90,16 +110,16 @@ namespace EconSim.Core.Simulation.Systems
 
             foreach (var demandEntry in _eligibleDemandByGood)
             {
-                string goodId = demandEntry.Key;
-                if (!market.TryGetTradableInventory(goodId, out var sellers) || sellers.Count == 0)
+                int goodRuntimeId = demandEntry.Key;
+                if (!market.TryGetTradableInventory(goodRuntimeId, out var sellers) || sellers.Count == 0)
                     continue;
-                if (!market.TryGetTradableOrders(goodId, out var orders) || orders.Count == 0)
+                if (!market.TryGetTradableOrders(goodRuntimeId, out var orders) || orders.Count == 0)
                     continue;
-                if (!market.Goods.TryGetValue(goodId, out var goodState))
+                if (!_goodStateByRuntimeId.TryGetValue(goodRuntimeId, out var goodState))
                     continue;
 
                 float totalDemand = demandEntry.Value;
-                if (!_eligibleSupplyByGood.TryGetValue(goodId, out float totalSupply))
+                if (!_eligibleSupplyByGood.TryGetValue(goodRuntimeId, out float totalSupply))
                     continue;
 
                 float plannedTraded = Math.Min(totalDemand, totalSupply);
@@ -147,7 +167,10 @@ namespace EconSim.Core.Simulation.Systems
                         facilityBuyer.BeginDayMetrics(currentDay);
                         facilityBuyer.Treasury -= gross;
                         facilityBuyer.AddInputCostForDay(dayIndex, gross);
-                        facilityBuyer.InputBuffer.Add(goodId, desiredQty);
+                        if (goodRuntimeId >= 0)
+                            facilityBuyer.InputBuffer.Add(goodRuntimeId, desiredQty);
+                        else
+                            facilityBuyer.InputBuffer.Add(goodState.GoodId, desiredQty);
                     }
                     else
                     {

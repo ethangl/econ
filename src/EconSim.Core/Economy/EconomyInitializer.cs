@@ -195,6 +195,7 @@ namespace EconSim.Core.Economy
                     {
                         SellerId = seedSellerId,
                         GoodId = goodId,
+                        GoodRuntimeId = good.RuntimeId,
                         Quantity = weeklyDemand * 2f,
                         DayListed = 0
                     });
@@ -232,6 +233,7 @@ namespace EconSim.Core.Economy
                     {
                         BuyerId = populationBuyerId,
                         GoodId = good.Id,
+                        GoodRuntimeId = good.RuntimeId,
                         Quantity = quantity,
                         MaxSpend = Math.Min(maxSpend, county.Population.Treasury),
                         TransportCost = transportCost,
@@ -275,6 +277,7 @@ namespace EconSim.Core.Economy
                         {
                             BuyerId = facility.Id,
                             GoodId = input.GoodId,
+                            GoodRuntimeId = economy.Goods.TryGetRuntimeId(input.GoodId, out int runtimeId) ? runtimeId : (int?)null,
                             Quantity = quantity,
                             MaxSpend = maxSpend,
                             TransportCost = transportCost,

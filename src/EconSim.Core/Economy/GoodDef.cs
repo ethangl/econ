@@ -47,6 +47,11 @@ namespace EconSim.Core.Economy
     public class GoodDef
     {
         public string Id;
+        /// <summary>
+        /// Dense runtime identifier assigned by <see cref="GoodRegistry"/>.
+        /// Stable for a given initialization sequence and used by int-keyed hot paths.
+        /// </summary>
+        public int RuntimeId = -1;
         public string Name;
         public GoodCategory Category;
 
@@ -106,9 +111,26 @@ namespace EconSim.Core.Economy
     public class GoodRegistry
     {
         private readonly Dictionary<string, GoodDef> _goods = new Dictionary<string, GoodDef>();
+        private readonly Dictionary<string, int> _runtimeIdByGoodId = new Dictionary<string, int>();
+        private readonly List<GoodDef> _goodsByRuntimeId = new List<GoodDef>();
 
         public void Register(GoodDef good)
         {
+            if (good == null || string.IsNullOrWhiteSpace(good.Id))
+                throw new ArgumentException("GoodDef and GoodDef.Id are required for registration.");
+
+            if (_runtimeIdByGoodId.TryGetValue(good.Id, out int existingRuntimeId))
+            {
+                good.RuntimeId = existingRuntimeId;
+                _goods[good.Id] = good;
+                _goodsByRuntimeId[existingRuntimeId] = good;
+                return;
+            }
+
+            int runtimeId = _goodsByRuntimeId.Count;
+            good.RuntimeId = runtimeId;
+            _runtimeIdByGoodId[good.Id] = runtimeId;
+            _goodsByRuntimeId.Add(good);
             _goods[good.Id] = good;
         }
 
@@ -116,6 +138,34 @@ namespace EconSim.Core.Economy
         {
             return _goods.TryGetValue(id, out var good) ? good : null;
         }
+
+        public bool TryGetRuntimeId(string id, out int runtimeId)
+        {
+            return _runtimeIdByGoodId.TryGetValue(id, out runtimeId);
+        }
+
+        public GoodDef GetByRuntimeId(int runtimeId)
+        {
+            return runtimeId >= 0 && runtimeId < _goodsByRuntimeId.Count
+                ? _goodsByRuntimeId[runtimeId]
+                : null;
+        }
+
+        public bool TryGetByRuntimeId(int runtimeId, out GoodDef good)
+        {
+            if (runtimeId >= 0 && runtimeId < _goodsByRuntimeId.Count)
+            {
+                good = _goodsByRuntimeId[runtimeId];
+                return true;
+            }
+
+            good = null;
+            return false;
+        }
+
+        public IReadOnlyList<GoodDef> Dense => _goodsByRuntimeId;
+
+        public int RuntimeCount => _goodsByRuntimeId.Count;
 
         public IEnumerable<GoodDef> All => _goods.Values;
 

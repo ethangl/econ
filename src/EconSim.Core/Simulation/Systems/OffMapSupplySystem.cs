@@ -76,6 +76,7 @@ namespace EconSim.Core.Simulation.Systems
                     {
                         SellerId = sellerId,
                         GoodId = goodId,
+                        GoodRuntimeId = state.Economy.Goods.TryGetRuntimeId(goodId, out int runtimeId) ? runtimeId : (int?)null,
                         Quantity = needed,
                         DayListed = dayListed
                     });
