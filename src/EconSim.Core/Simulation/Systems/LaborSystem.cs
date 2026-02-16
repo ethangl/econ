@@ -13,6 +13,8 @@ namespace EconSim.Core.Simulation.Systems
     {
         private const float ReconsiderationRate = 0.15f;
         private const float SwitchThreshold = 1.10f;
+        private const float RebalanceWageTolerance = 0.98f;
+        private const float RebalanceFillGap = 0.35f;
         private const int DistressedDebtDays = 60;
         private const float DistressedRetentionRatio = 0.75f;
 
@@ -94,10 +96,26 @@ namespace EconSim.Core.Simulation.Systems
                 active.Add(pair);
             }
 
-            active.Sort(
-                DeterministicHelpers.WithStableTieBreak<(Facility facility, FacilityDef def), int>(
-                    (a, b) => b.facility.WageRate.CompareTo(a.facility.WageRate),
-                    pair => pair.facility.Id));
+            active.Sort((a, b) =>
+            {
+                int wageCmp = b.facility.WageRate.CompareTo(a.facility.WageRate);
+                if (wageCmp != 0)
+                    return wageCmp;
+
+                float aFill = GetFillRatio(a.facility, a.def);
+                float bFill = GetFillRatio(b.facility, b.def);
+                int fillCmp = aFill.CompareTo(bFill); // Less-staffed facilities get priority.
+                if (fillCmp != 0)
+                    return fillCmp;
+
+                // When wages/fill are equal, favor lower labor requirements so scarce labor
+                // can seed more facilities instead of concentrating in a few.
+                int reqCmp = a.def.LaborRequired.CompareTo(b.def.LaborRequired);
+                if (reqCmp != 0)
+                    return reqCmp;
+
+                return a.facility.Id.CompareTo(b.facility.Id);
+            });
 
             int totalWorkers = laborType == LaborType.Unskilled
                 ? county.Population.TotalUnskilled
@@ -120,7 +138,7 @@ namespace EconSim.Core.Simulation.Systems
                     if (assigned <= 0)
                         continue;
 
-                    if (!HasBetterOption(pair.facility.WageRate, active))
+                    if (!HasBetterOption(pair, active))
                         continue;
 
                     int remaining = reconsiderTarget - reconsidered;
@@ -155,13 +173,31 @@ namespace EconSim.Core.Simulation.Systems
             }
         }
 
-        private static bool HasBetterOption(float currentWage, List<(Facility facility, FacilityDef def)> facilities)
+        private static bool HasBetterOption(
+            (Facility facility, FacilityDef def) current,
+            List<(Facility facility, FacilityDef def)> facilities)
         {
+            float currentWage = current.facility.WageRate;
             float threshold = currentWage * SwitchThreshold;
+            float currentFill = GetFillRatio(current.facility, current.def);
+
             for (int i = 0; i < facilities.Count; i++)
             {
-                if (facilities[i].facility.WageRate > threshold)
+                var candidate = facilities[i];
+                if (candidate.facility.Id == current.facility.Id)
+                    continue;
+
+                if (candidate.facility.WageRate > threshold)
                     return true;
+
+                // If wages are near-parity, still allow movement toward much emptier facilities
+                // so labor doesn't deadlock into arbitrary early assignments.
+                if (candidate.facility.WageRate >= currentWage * RebalanceWageTolerance)
+                {
+                    float candidateFill = GetFillRatio(candidate.facility, candidate.def);
+                    if (candidateFill + RebalanceFillGap < currentFill)
+                        return true;
+                }
             }
 
             return false;
@@ -177,6 +213,14 @@ namespace EconSim.Core.Simulation.Systems
             }
 
             return sum;
+        }
+
+        private static float GetFillRatio(Facility facility, FacilityDef def)
+        {
+            if (def.LaborRequired <= 0)
+                return 1f;
+
+            return (float)facility.AssignedWorkers / def.LaborRequired;
         }
     }
 }

@@ -609,7 +609,11 @@ namespace EconSim.Core.Economy
                 {
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
-                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    int laborLimitedCount = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    int count = ComputeInputConstrainedFacilityCount(economy, countyId, facilityDef, laborLimitedCount);
+                    if (count <= 0)
+                        continue;
+
                     for (int j = 0; j < count; j++)
                     {
                         economy.CreateFacility(facilityId, cellId);
@@ -644,7 +648,11 @@ namespace EconSim.Core.Economy
                 {
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
-                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    int laborLimitedCount = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    int count = ComputeInputConstrainedFacilityCount(economy, countyId, facilityDef, laborLimitedCount);
+                    if (count <= 0)
+                        continue;
+
                     for (int j = 0; j < count; j++)
                     {
                         economy.CreateFacility(facilityId, cellId);
@@ -759,6 +767,65 @@ namespace EconSim.Core.Economy
 
             int count = (int)(workerPool / (def.LaborRequired * ScaleFactor));
             return Math.Max(1, Math.Min(MaxPerType, count));
+        }
+
+        private static int ComputeInputConstrainedFacilityCount(
+            EconomyState economy,
+            int countyId,
+            FacilityDef targetDef,
+            int laborLimitedCount)
+        {
+            if (laborLimitedCount <= 0)
+                return 0;
+
+            var outputGood = economy.Goods.Get(targetDef.OutputGoodId);
+            var inputs = targetDef.InputOverrides ?? outputGood?.Inputs;
+            if (inputs == null || inputs.Count == 0)
+                return laborLimitedCount;
+
+            var county = economy.GetCounty(countyId);
+            if (county == null)
+                return laborLimitedCount;
+
+            float maxThroughputFromInputs = float.MaxValue;
+            bool hasInputConstraint = false;
+
+            foreach (var input in inputs)
+            {
+                if (input.Quantity <= 0f)
+                    continue;
+
+                float localInputPerDay = 0f;
+                foreach (int facilityId in county.FacilityIds)
+                {
+                    if (!economy.Facilities.TryGetValue(facilityId, out var facility))
+                        continue;
+
+                    var producerDef = economy.FacilityDefs.Get(facility.TypeId);
+                    if (producerDef == null || producerDef.OutputGoodId != input.GoodId)
+                        continue;
+
+                    localInputPerDay += producerDef.BaseThroughput;
+                }
+
+                hasInputConstraint = true;
+                if (localInputPerDay <= 0f)
+                    return 0;
+
+                float inputLimitedThroughput = localInputPerDay / input.Quantity;
+                if (inputLimitedThroughput < maxThroughputFromInputs)
+                    maxThroughputFromInputs = inputLimitedThroughput;
+            }
+
+            if (!hasInputConstraint || maxThroughputFromInputs == float.MaxValue)
+                return laborLimitedCount;
+
+            float targetThroughput = Math.Max(0.0001f, targetDef.BaseThroughput);
+            int inputLimitedCount = (int)Math.Ceiling(maxThroughputFromInputs / targetThroughput);
+            if (inputLimitedCount <= 0)
+                return 0;
+
+            return Math.Max(1, Math.Min(laborLimitedCount, inputLimitedCount));
         }
 
         /// <summary>

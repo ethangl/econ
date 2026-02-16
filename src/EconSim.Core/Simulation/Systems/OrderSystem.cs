@@ -212,7 +212,12 @@ namespace EconSim.Core.Simulation.Systems
                     if (!market.Goods.TryGetValue(input.GoodId, out var marketGood))
                         continue;
 
-                    float needed = input.Quantity * def.BaseThroughput;
+                    // Demand inputs based on current staffed throughput, not max design throughput.
+                    float currentThroughput = facility.GetThroughput(def);
+                    if (currentThroughput <= 0f)
+                        continue;
+
+                    float needed = input.Quantity * currentThroughput;
                     float have = facility.InputBuffer.Get(input.GoodId);
                     float toBuy = Math.Max(0f, needed - have);
                     if (toBuy <= 0.0001f)

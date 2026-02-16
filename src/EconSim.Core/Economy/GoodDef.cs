@@ -30,9 +30,9 @@ namespace EconSim.Core.Economy
     public struct GoodInput
     {
         public string GoodId;
-        public int Quantity;
+        public float Quantity;
 
-        public GoodInput(string goodId, int quantity)
+        public GoodInput(string goodId, float quantity)
         {
             GoodId = goodId;
             Quantity = quantity;
