@@ -39,8 +39,10 @@ namespace EconSim.Core.Simulation.Systems
             state.SubsistenceWage = Clamp(rawSubsistence, min, max);
 
             int dayIndex = state.CurrentDay % 7;
-            foreach (var facility in economy.Facilities.Values)
+            var facilities = economy.GetFacilitiesDense();
+            for (int i = 0; i < facilities.Count; i++)
             {
+                var facility = facilities[i];
                 var def = economy.FacilityDefs.Get(facility.TypeId);
                 if (def == null || !facility.IsActive)
                     continue;

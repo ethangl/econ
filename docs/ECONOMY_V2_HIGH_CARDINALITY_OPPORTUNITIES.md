@@ -189,6 +189,8 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 
 - Move from many heap objects to compact arrays/struct-of-arrays for hot fields.
 - Best done after cluster model stabilizes.
+- Status: `Completed (Phase 1)`
+- Branch note: `EconomyState` now exposes a dense runtime facility list (`GetFacilitiesDense()`), and hot daily/weekly systems (`ProductionSystem`, `WageSystem`, `TelemetrySystem`) iterate that list via index loops instead of `Dictionary.Values` scans.
 
 2. Adaptive cadence for low-activity actors (`Completed`)
 
