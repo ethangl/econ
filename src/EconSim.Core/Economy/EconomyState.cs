@@ -39,19 +39,20 @@ namespace EconSim.Core.Economy
         [NonSerialized]
         public Dictionary<int, int> CountyToMarket;
 
+        /// <summary>Lookup: county ID → seat cell ID (from MapData).</summary>
+        [NonSerialized]
+        public Dictionary<int, int> CountySeatCell;
+
+        /// <summary>
+        /// Runtime lookup: county ID → seat transport cost to assigned market.
+        /// This is the county-level market-zone representation consumed by simulation systems.
+        /// </summary>
+        [NonSerialized]
+        public Dictionary<int, float> CountyToMarketCost;
+
         /// <summary>Lookup: cell ID → market ID that serves it (computed from county assignments).</summary>
         [NonSerialized]
         public Dictionary<int, int> CellToMarket;
-
-        /// <summary>Cache: county ID → seat transport cost to assigned market (rebuilt per assignment epoch).</summary>
-        [NonSerialized]
-        private Dictionary<int, float> _countyTransportCostCache;
-
-        [NonSerialized]
-        private int _marketAssignmentEpoch;
-
-        [NonSerialized]
-        private int _transportCostCacheEpoch;
 
         public EconomyState()
         {
@@ -64,10 +65,9 @@ namespace EconSim.Core.Economy
             NextFacilityId = 1;
             CellToCounty = new Dictionary<int, int>();
             CountyToMarket = new Dictionary<int, int>();
+            CountySeatCell = new Dictionary<int, int>();
+            CountyToMarketCost = new Dictionary<int, float>();
             CellToMarket = new Dictionary<int, int>();
-            _countyTransportCostCache = new Dictionary<int, float>();
-            _marketAssignmentEpoch = 1;
-            _transportCostCacheEpoch = 0;
         }
 
         /// <summary>
@@ -78,6 +78,8 @@ namespace EconSim.Core.Economy
         {
             // Build cell-to-county lookup
             CellToCounty.Clear();
+            CountySeatCell.Clear();
+            CountyToMarketCost.Clear();
             foreach (var cell in mapData.Cells)
             {
                 if (cell.IsLand && cell.CountyId > 0)
@@ -91,6 +93,11 @@ namespace EconSim.Core.Economy
 
             foreach (var countyData in mapData.Counties)
             {
+                if (countyData.Id > 0 && countyData.SeatCellId > 0)
+                {
+                    CountySeatCell[countyData.Id] = countyData.SeatCellId;
+                }
+
                 var countyEcon = new CountyEconomy(countyData.Id);
                 countyEcon.Population = CountyPopulation.FromTotal(countyData.TotalPopulation);
                 countyEcon.Stockpile.BindGoods(Goods);
@@ -218,6 +225,7 @@ namespace EconSim.Core.Economy
         {
             CellToMarket.Clear();
             CountyToMarket.Clear();
+            CountyToMarketCost.Clear();
             var cellToCost = new Dictionary<int, float>();
             var countyCells = new Dictionary<int, List<int>>();
 
@@ -283,8 +291,7 @@ namespace EconSim.Core.Economy
                     CountyToMarket[countyEcon.CountyId] = bestMarketId;
                 }
             }
-
-            InvalidateCountyTransportCostCache();
+            RebuildCountyToMarketCostLookup();
         }
 
         /// <summary>
@@ -294,6 +301,7 @@ namespace EconSim.Core.Economy
         public void RebuildCellToMarketFromCountyLookup()
         {
             CellToMarket.Clear();
+            CountyToMarketCost.Clear();
             foreach (var kvp in CellToCounty)
             {
                 int cellId = kvp.Key;
@@ -303,8 +311,7 @@ namespace EconSim.Core.Economy
                     CellToMarket[cellId] = marketId;
                 }
             }
-
-            InvalidateCountyTransportCostCache();
+            RebuildCountyToMarketCostLookup();
         }
 
         /// <summary>
@@ -319,31 +326,28 @@ namespace EconSim.Core.Economy
 
         /// <summary>
         /// Get the county seat transport cost to that county's assigned market.
-        /// Cached per market-assignment epoch to avoid repeated seat lookups in hot paths.
         /// </summary>
-        public float GetCountyTransportCost(MapData mapData, int countyId)
+        public float GetCountyTransportCost(int countyId)
         {
             if (countyId <= 0)
                 return 0f;
 
-            EnsureCountyTransportCostCache(mapData);
-            return _countyTransportCostCache.TryGetValue(countyId, out float cost)
+            return CountyToMarketCost.TryGetValue(countyId, out float cost)
                 ? cost
                 : 0f;
         }
 
-        private void EnsureCountyTransportCostCache(MapData mapData)
+        /// <summary>
+        /// Compatibility overload. MapData is no longer required once county-level market costs are built.
+        /// </summary>
+        public float GetCountyTransportCost(MapData mapData, int countyId)
         {
-            if (_transportCostCacheEpoch == _marketAssignmentEpoch)
-                return;
+            return GetCountyTransportCost(countyId);
+        }
 
-            _countyTransportCostCache.Clear();
-            if (mapData?.CountyById == null)
-            {
-                _transportCostCacheEpoch = _marketAssignmentEpoch;
-                return;
-            }
-
+        private void RebuildCountyToMarketCostLookup()
+        {
+            CountyToMarketCost.Clear();
             foreach (var kvp in CountyToMarket)
             {
                 int countyId = kvp.Key;
@@ -351,27 +355,19 @@ namespace EconSim.Core.Economy
 
                 if (marketId <= 0 || !Markets.TryGetValue(marketId, out var market))
                     continue;
-                if (!mapData.CountyById.TryGetValue(countyId, out var county))
+
+                if (!CountySeatCell.TryGetValue(countyId, out int seatCellId) || seatCellId <= 0)
                     continue;
 
                 float cost = 0f;
-                if (county.SeatCellId > 0 &&
-                    market.ZoneCellCosts != null &&
-                    market.ZoneCellCosts.TryGetValue(county.SeatCellId, out float resolvedCost))
+                if (market.ZoneCellCosts != null &&
+                    market.ZoneCellCosts.TryGetValue(seatCellId, out float resolvedCost))
                 {
                     cost = Math.Max(0f, resolvedCost);
                 }
 
-                _countyTransportCostCache[countyId] = cost;
+                CountyToMarketCost[countyId] = cost;
             }
-
-            _transportCostCacheEpoch = _marketAssignmentEpoch;
-        }
-
-        private void InvalidateCountyTransportCostCache()
-        {
-            _marketAssignmentEpoch++;
-            _transportCostCacheEpoch = 0;
         }
     }
 }

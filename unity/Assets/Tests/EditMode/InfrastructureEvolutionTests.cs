@@ -381,12 +381,16 @@ namespace EconSim.Tests
             economy.CountyToMarket[20] = market.Id;
             economy.RebuildCellToMarketFromCountyLookup();
 
+            Assert.That(economy.GetCountyTransportCost(10), Is.EqualTo(4f).Within(0.0001f));
+            Assert.That(economy.GetCountyTransportCost(20), Is.EqualTo(9f).Within(0.0001f));
             Assert.That(economy.GetCountyTransportCost(mapData, 10), Is.EqualTo(4f).Within(0.0001f));
             Assert.That(economy.GetCountyTransportCost(mapData, 20), Is.EqualTo(9f).Within(0.0001f));
+            Assert.That(economy.GetCountyTransportCost(null, 10), Is.EqualTo(4f).Within(0.0001f));
+            Assert.That(economy.GetCountyTransportCost(null, 20), Is.EqualTo(9f).Within(0.0001f));
         }
 
         [Test]
-        public void EconomyState_GetCountyTransportCost_RefreshesWhenAssignmentEpochChanges()
+        public void EconomyState_GetCountyTransportCost_RefreshesWhenAssignmentChanges()
         {
             var mapData = BuildTwoCountyMarketMap();
             var economy = new EconomyState();
@@ -415,15 +419,15 @@ namespace EconSim.Tests
 
             economy.CountyToMarket[10] = marketA.Id;
             economy.RebuildCellToMarketFromCountyLookup();
-            float before = economy.GetCountyTransportCost(mapData, 10);
+            float before = economy.GetCountyTransportCost(10);
 
             economy.CountyToMarket[10] = marketB.Id;
             economy.RebuildCellToMarketFromCountyLookup();
-            float after = economy.GetCountyTransportCost(mapData, 10);
+            float after = economy.GetCountyTransportCost(10);
 
             Assert.That(before, Is.EqualTo(12f).Within(0.0001f));
             Assert.That(after, Is.EqualTo(3f).Within(0.0001f),
-                "Transport cache should invalidate when county-to-market assignments are rebuilt.");
+                "County-level transport lookup should refresh when county-to-market assignments are rebuilt.");
         }
 
         [Test]

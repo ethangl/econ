@@ -212,7 +212,7 @@ namespace EconSim.Core.Economy
                 if (!economy.Markets.TryGetValue(marketId, out var market))
                     continue;
 
-                float transportCost = economy.GetCountyTransportCost(mapData, county.CountyId);
+                float transportCost = economy.GetCountyTransportCost(county.CountyId);
                 int populationBuyerId = MarketOrderIds.MakePopulationBuyerId(county.CountyId);
 
                 foreach (var good in economy.Goods.ConsumerGoods)

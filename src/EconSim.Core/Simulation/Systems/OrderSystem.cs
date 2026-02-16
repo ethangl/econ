@@ -71,7 +71,7 @@ namespace EconSim.Core.Simulation.Systems
                 if (!economy.Markets.TryGetValue(marketId, out var market))
                     continue;
 
-                float transportCost = economy.GetCountyTransportCost(mapData, county.CountyId);
+                float transportCost = economy.GetCountyTransportCost(county.CountyId);
 
                 PostPopulationOrders(
                     state,
