@@ -70,6 +70,7 @@ namespace EconSim.Core.Simulation.Systems
 
                 float wageBill = facility.WageRate * facility.AssignedWorkers;
                 float paid = Math.Min(Math.Max(0f, facility.Treasury), wageBill);
+                facility.BeginDayMetrics(state.CurrentDay);
                 facility.Treasury -= paid;
                 facility.AddWageBillForDay(dayIndex, paid);
 

@@ -55,6 +55,8 @@ namespace EconSim.Core.Economy
 
         /// <summary>Consecutive days wages were underpaid.</summary>
         public int WageDebtDays;
+        /// <summary>Absolute simulation day metrics were last initialized for.</summary>
+        public int MetricsDay = int.MinValue;
 
         public Facility()
         {
@@ -96,6 +98,18 @@ namespace EconSim.Core.Economy
             DailyRevenue[idx] = 0f;
             DailyInputCost[idx] = 0f;
             DailyWageBill[idx] = 0f;
+        }
+
+        public void BeginDayMetrics(int currentDay)
+        {
+            if (MetricsDay == currentDay)
+                return;
+
+            int idx = NormalizeDayIndex(currentDay);
+            DailyRevenue[idx] = 0f;
+            DailyInputCost[idx] = 0f;
+            DailyWageBill[idx] = 0f;
+            MetricsDay = currentDay;
         }
 
         public void AddRevenueForDay(int dayIndex, float amount)

@@ -31,9 +31,13 @@ namespace EconSim.Core.Simulation.Systems
         private const float V2DemandPressureRatio = 1.05f;
         private const float V2UnemploymentPressureRatio = 0.20f;
         private const int V2GraceDaysOnActivation = 21;
+        private const int V2InactiveRecheckDays = 7;
+        private const int V2InactiveExtractionRecheckDays = 3;
 
         private readonly Dictionary<string, float> _producedThisTick = new Dictionary<string, float>();
         private readonly List<KeyValuePair<string, float>> _outputGoodsBuffer = new List<KeyValuePair<string, float>>(8);
+        private readonly Dictionary<int, int> _availableUnskilledByCounty = new Dictionary<int, int>();
+        private readonly Dictionary<int, int> _availableSkilledByCounty = new Dictionary<int, int>();
 
         public void Initialize(SimulationState state, MapData mapData)
         {
@@ -98,14 +102,20 @@ namespace EconSim.Core.Simulation.Systems
             if (economy == null) return;
 
             _producedThisTick.Clear();
+            BuildAvailableWorkerCaches(economy);
 
             foreach (var facility in economy.Facilities.Values)
             {
+                facility.BeginDayMetrics(state.CurrentDay);
+
                 var def = economy.FacilityDefs.Get(facility.TypeId);
                 if (def == null)
                     continue;
 
-                ApplyActivationRulesV2(state, mapData, economy, facility, def);
+                if (!facility.IsActive && !ShouldEvaluateInactiveFacility(state.CurrentDay, facility.Id, def.IsExtraction))
+                    continue;
+
+                ApplyActivationRulesV2(state, mapData, economy, facility, def, _availableUnskilledByCounty, _availableSkilledByCounty);
 
                 if (!facility.IsActive || facility.AssignedWorkers <= 0)
                     continue;
@@ -124,7 +134,9 @@ namespace EconSim.Core.Simulation.Systems
             MapData mapData,
             EconomyState economy,
             Facility facility,
-            FacilityDef def)
+            FacilityDef def,
+            Dictionary<int, int> availableUnskilledByCounty,
+            Dictionary<int, int> availableSkilledByCounty)
         {
             float subsistence = state.SubsistenceWage > 0f ? state.SubsistenceWage : 1f;
 
@@ -133,6 +145,18 @@ namespace EconSim.Core.Simulation.Systems
                 // Keep extractive sectors stable to avoid raw-input starvation cascades.
                 if (def.IsExtraction)
                     return;
+
+                if (facility.AssignedWorkers <= 0)
+                {
+                    if (facility.GraceDaysRemaining > 0)
+                    {
+                        facility.GraceDaysRemaining--;
+                        return;
+                    }
+
+                    facility.IsActive = false;
+                    return;
+                }
 
                 int staffedWorkers = Math.Max(1, facility.AssignedWorkers > 0 ? facility.AssignedWorkers : def.LaborRequired);
                 float severeLossThreshold = -subsistence * staffedWorkers * V2LossSeverityWageFraction;
@@ -156,14 +180,17 @@ namespace EconSim.Core.Simulation.Systems
                 if (facility.ConsecutiveLossDays >= V2LossDaysToDeactivate
                     && facility.Treasury <= treasuryShutdownBuffer)
                 {
+                    int releasedWorkers = facility.AssignedWorkers;
                     facility.IsActive = false;
                     facility.AssignedWorkers = 0;
+                    if (releasedWorkers > 0)
+                        AdjustAvailableWorkers(availableUnskilledByCounty, availableSkilledByCounty, facility.CountyId, def.LaborType, releasedWorkers);
                 }
 
                 return;
             }
 
-            int availableWorkers = GetAvailableWorkers(economy, facility.CountyId, def.LaborType);
+            int availableWorkers = GetAvailableWorkers(availableUnskilledByCounty, availableSkilledByCounty, facility.CountyId, def.LaborType);
             if (availableWorkers < Math.Max(1, (int)Math.Ceiling(def.LaborRequired * V2ReactivationLaborFloorRatio)))
                 return;
 
@@ -207,6 +234,66 @@ namespace EconSim.Core.Simulation.Systems
                 facility.IsActive = true;
                 facility.GraceDaysRemaining = V2GraceDaysOnActivation;
                 facility.ConsecutiveLossDays = 0;
+            }
+        }
+
+        private static bool ShouldEvaluateInactiveFacility(int currentDay, int facilityId, bool isExtraction)
+        {
+            int period = isExtraction ? V2InactiveExtractionRecheckDays : V2InactiveRecheckDays;
+            if (period <= 1)
+                return true;
+
+            int phase = facilityId % period;
+            if (phase < 0)
+                phase += period;
+            return currentDay % period == phase;
+        }
+
+        private void BuildAvailableWorkerCaches(EconomyState economy)
+        {
+            _availableUnskilledByCounty.Clear();
+            _availableSkilledByCounty.Clear();
+
+            foreach (var county in economy.Counties.Values)
+            {
+                _availableUnskilledByCounty[county.CountyId] = county.Population.TotalUnskilled;
+                _availableSkilledByCounty[county.CountyId] = county.Population.TotalSkilled;
+            }
+
+            foreach (var facility in economy.Facilities.Values)
+            {
+                if (!facility.IsActive || facility.AssignedWorkers <= 0)
+                    continue;
+
+                var def = economy.FacilityDefs.Get(facility.TypeId);
+                if (def == null)
+                    continue;
+
+                AdjustAvailableWorkers(
+                    _availableUnskilledByCounty,
+                    _availableSkilledByCounty,
+                    facility.CountyId,
+                    def.LaborType,
+                    -facility.AssignedWorkers);
+            }
+        }
+
+        private static void AdjustAvailableWorkers(
+            Dictionary<int, int> availableUnskilledByCounty,
+            Dictionary<int, int> availableSkilledByCounty,
+            int countyId,
+            LaborType laborType,
+            int delta)
+        {
+            if (laborType == LaborType.Unskilled)
+            {
+                availableUnskilledByCounty.TryGetValue(countyId, out int current);
+                availableUnskilledByCounty[countyId] = Math.Max(0, current + delta);
+            }
+            else
+            {
+                availableSkilledByCounty.TryGetValue(countyId, out int current);
+                availableSkilledByCounty[countyId] = Math.Max(0, current + delta);
             }
         }
 
@@ -349,27 +436,16 @@ namespace EconSim.Core.Simulation.Systems
             }
         }
 
-        private int GetAvailableWorkers(EconomyState economy, int countyId, LaborType laborType)
+        private static int GetAvailableWorkers(
+            Dictionary<int, int> availableUnskilledByCounty,
+            Dictionary<int, int> availableSkilledByCounty,
+            int countyId,
+            LaborType laborType)
         {
-            if (!economy.Counties.TryGetValue(countyId, out var county))
-                return 0;
+            if (laborType == LaborType.Unskilled)
+                return availableUnskilledByCounty.TryGetValue(countyId, out int unskilled) ? unskilled : 0;
 
-            int total = laborType == LaborType.Unskilled
-                ? county.Population.TotalUnskilled
-                : county.Population.TotalSkilled;
-
-            int assigned = 0;
-            foreach (int facilityId in county.FacilityIds)
-            {
-                if (!economy.Facilities.TryGetValue(facilityId, out var facility) || !facility.IsActive)
-                    continue;
-
-                var def = economy.FacilityDefs.Get(facility.TypeId);
-                if (def != null && def.LaborType == laborType)
-                    assigned += facility.AssignedWorkers;
-            }
-
-            return Math.Max(0, total - assigned);
+            return availableSkilledByCounty.TryGetValue(countyId, out int skilled) ? skilled : 0;
         }
 
         private static float ResolveCountyTransportCost(MapData mapData, Market market, int countyId)

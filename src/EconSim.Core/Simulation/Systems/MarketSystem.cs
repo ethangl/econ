@@ -36,10 +36,6 @@ namespace EconSim.Core.Simulation.Systems
                 return;
 
             int dayIndex = state.CurrentDay % 7;
-            foreach (var facility in economy.Facilities.Values)
-            {
-                facility.ClearDayMetrics(dayIndex);
-            }
 
             foreach (var market in economy.Markets.Values)
             {
@@ -195,6 +191,7 @@ namespace EconSim.Core.Simulation.Systems
                     // Debit buyer.
                     if (facilityBuyer != null)
                     {
+                        facilityBuyer.BeginDayMetrics(currentDay);
                         facilityBuyer.Treasury -= gross;
                         facilityBuyer.AddInputCostForDay(dayIndex, gross);
                         facilityBuyer.InputBuffer.Add(goodId, desiredQty);
@@ -244,7 +241,7 @@ namespace EconSim.Core.Simulation.Systems
                     remaining -= sold;
 
                     float payout = sold * goodState.Price;
-                    CreditSellerRevenue(economy, market, lot.SellerId, payout, dayIndex);
+                    CreditSellerRevenue(economy, market, lot.SellerId, payout, dayIndex, currentDay);
                     sellerRevenue += payout;
                 }
 
@@ -287,13 +284,14 @@ namespace EconSim.Core.Simulation.Systems
             return true;
         }
 
-        private static void CreditSellerRevenue(EconomyState economy, Market market, int sellerId, float amount, int dayIndex)
+        private static void CreditSellerRevenue(EconomyState economy, Market market, int sellerId, float amount, int dayIndex, int currentDay)
         {
             if (amount <= 0f)
                 return;
 
             if (sellerId > 0 && economy.Facilities.TryGetValue(sellerId, out var facility))
             {
+                facility.BeginDayMetrics(currentDay);
                 facility.Treasury += amount;
                 facility.AddRevenueForDay(dayIndex, amount);
                 return;

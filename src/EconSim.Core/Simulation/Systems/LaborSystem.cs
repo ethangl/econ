@@ -17,9 +17,10 @@ namespace EconSim.Core.Simulation.Systems
         private const float RebalanceFillGap = 0.35f;
         private const int DistressedDebtDays = 60;
         private const float DistressedRetentionRatio = 0.75f;
+        private const int RebalanceSlices = 7;
 
         public string Name => "Labor";
-        public int TickInterval => SimulationConfig.Intervals.Weekly;
+        public int TickInterval => SimulationConfig.Intervals.Daily;
 
         public void Initialize(SimulationState state, MapData mapData)
         {
@@ -34,8 +35,12 @@ namespace EconSim.Core.Simulation.Systems
             if (economy == null)
                 return;
 
+            int slice = state.CurrentDay % RebalanceSlices;
             foreach (var county in economy.Counties.Values)
             {
+                if (county.CountyId % RebalanceSlices != slice)
+                    continue;
+
                 var countyFacilities = new List<(Facility facility, FacilityDef def)>();
                 foreach (int facilityId in county.FacilityIds)
                 {
