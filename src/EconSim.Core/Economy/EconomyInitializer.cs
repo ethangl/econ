@@ -212,7 +212,7 @@ namespace EconSim.Core.Economy
                 if (!economy.Markets.TryGetValue(marketId, out var market))
                     continue;
 
-                float transportCost = ResolveTransportCost(mapData, market, county.CountyId);
+                float transportCost = economy.GetCountyTransportCost(mapData, county.CountyId);
                 int populationBuyerId = MarketOrderIds.MakePopulationBuyerId(county.CountyId);
 
                 foreach (var good in economy.Goods.ConsumerGoods)
@@ -870,15 +870,5 @@ namespace EconSim.Core.Economy
 
         private static bool IsBasicNeed(GoodDef good) => good.NeedCategory == NeedCategory.Basic;
 
-        private static float ResolveTransportCost(MapData mapData, Market market, int countyId)
-        {
-            if (mapData?.CountyById == null || !mapData.CountyById.TryGetValue(countyId, out var county))
-                return 0f;
-
-            if (market.ZoneCellCosts != null && market.ZoneCellCosts.TryGetValue(county.SeatCellId, out float cost))
-                return Math.Max(0f, cost);
-
-            return 0f;
-        }
     }
 }

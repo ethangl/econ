@@ -4,10 +4,14 @@ This document evaluates high-cardinality bottlenecks in the current Economy V2 r
 
 ## Anchor Benchmarks
 
-Generated on day 20 and 180 of an Economy V2 run with game defaults, prior to most optimization efforts.
+Generated on day 30 and 180 of an Economy V2 run with game defaults, prior to most optimization efforts.
 
-- `unity/econ_debug_output_d20_bench.json`
+- `unity/econ_debug_output_d30_bench.json`
 - `unity/econ_debug_output_d180_bench.json`
+
+Generated on day 30 of an Economy V2 run with game defaults, post Facility Aggregation.
+
+- `unity/econ_debug_output_d30_fa_bench.json`
 
 ## Compare Workflow
 
@@ -152,11 +156,12 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 - Keep string IDs at data boundaries only (data loading, debug dump, UI).
 - Primary hotspots: `Stockpile`, `MarketOrders`, production/order/market loops.
 
-3. County transport cost cache per market assignment epoch
+3. County transport cost cache per market assignment epoch (`Completed`)
 
 - Precompute county seat cost to assigned market and reuse in production/order/wage paths.
 - Invalidate when market zones are recomputed.
 - Primary hotspots: repeated `ResolveTransportCost`/`ResolveCountyTransportCost` calls.
+- Branch note: `EconomyState` now caches county seat transport costs per assignment epoch via `GetCountyTransportCost(...)`, and production/order/bootstrap paths consume the shared cache.
 
 ### Priority B (medium-high impact, lower risk)
 

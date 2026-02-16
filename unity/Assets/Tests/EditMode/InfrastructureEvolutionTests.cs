@@ -360,6 +360,73 @@ namespace EconSim.Tests
         }
 
         [Test]
+        public void EconomyState_GetCountyTransportCost_UsesAssignedMarketSeatCost()
+        {
+            var mapData = BuildTwoCountyMarketMap();
+            var economy = new EconomyState();
+            economy.InitializeFromMap(mapData);
+
+            var market = new Market
+            {
+                Id = 1,
+                Type = MarketType.Legitimate,
+                Name = "Local",
+                LocationCellId = 1
+            };
+            market.ZoneCellCosts[1] = 4f;
+            market.ZoneCellCosts[2] = 9f;
+            economy.Markets[market.Id] = market;
+
+            economy.CountyToMarket[10] = market.Id;
+            economy.CountyToMarket[20] = market.Id;
+            economy.RebuildCellToMarketFromCountyLookup();
+
+            Assert.That(economy.GetCountyTransportCost(mapData, 10), Is.EqualTo(4f).Within(0.0001f));
+            Assert.That(economy.GetCountyTransportCost(mapData, 20), Is.EqualTo(9f).Within(0.0001f));
+        }
+
+        [Test]
+        public void EconomyState_GetCountyTransportCost_RefreshesWhenAssignmentEpochChanges()
+        {
+            var mapData = BuildTwoCountyMarketMap();
+            var economy = new EconomyState();
+            economy.InitializeFromMap(mapData);
+
+            var marketA = new Market
+            {
+                Id = 1,
+                Type = MarketType.Legitimate,
+                Name = "Market A",
+                LocationCellId = 1
+            };
+            marketA.ZoneCellCosts[1] = 12f;
+
+            var marketB = new Market
+            {
+                Id = 2,
+                Type = MarketType.Legitimate,
+                Name = "Market B",
+                LocationCellId = 2
+            };
+            marketB.ZoneCellCosts[1] = 3f;
+
+            economy.Markets[marketA.Id] = marketA;
+            economy.Markets[marketB.Id] = marketB;
+
+            economy.CountyToMarket[10] = marketA.Id;
+            economy.RebuildCellToMarketFromCountyLookup();
+            float before = economy.GetCountyTransportCost(mapData, 10);
+
+            economy.CountyToMarket[10] = marketB.Id;
+            economy.RebuildCellToMarketFromCountyLookup();
+            float after = economy.GetCountyTransportCost(mapData, 10);
+
+            Assert.That(before, Is.EqualTo(12f).Within(0.0001f));
+            Assert.That(after, Is.EqualTo(3f).Within(0.0001f),
+                "Transport cache should invalidate when county-to-market assignments are rebuilt.");
+        }
+
+        [Test]
         public void OffMapSupplySystem_ReplenishesConfiguredGoodsOnly()
         {
             var state = new SimulationState
@@ -580,6 +647,48 @@ namespace EconSim.Tests
                     new County { Id = 10, SeatCellId = 1, CellIds = new List<int> { 1 }, TotalPopulation = 22000, Centroid = new Vec2(0, 0) },
                     new County { Id = 20, SeatCellId = 2, CellIds = new List<int> { 2 }, TotalPopulation = 18000, Centroid = new Vec2(1, 0) },
                     new County { Id = 30, SeatCellId = 3, CellIds = new List<int> { 3 }, TotalPopulation = 16000, Centroid = new Vec2(2, 0) }
+                },
+                Provinces = new List<Province>(),
+                Realms = new List<Realm>(),
+                Rivers = new List<River>(),
+                Burgs = new List<Burg>(),
+                Features = new List<Feature>(),
+                Vertices = new List<Vec2>()
+            };
+
+            mapData.BuildLookups();
+            return mapData;
+        }
+
+        private static MapData BuildTwoCountyMarketMap()
+        {
+            var mapData = new MapData
+            {
+                Info = new MapInfo
+                {
+                    World = CreateWorldInfo(cellSizeKm: 2.5f, mapWidthKm: 10f, mapHeightKm: 10f)
+                },
+                Cells = new List<Cell>
+                {
+                    new Cell
+                    {
+                        Id = 1, IsLand = true, BiomeId = 1, MovementCost = 42f, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true,
+                        NeighborIds = new List<int> { 2 }, CountyId = 10, Center = new Vec2(0, 0)
+                    },
+                    new Cell
+                    {
+                        Id = 2, IsLand = true, BiomeId = 1, MovementCost = 42f, SeaRelativeElevation = 15f, HasSeaRelativeElevation = true,
+                        NeighborIds = new List<int> { 1 }, CountyId = 20, Center = new Vec2(1, 0)
+                    }
+                },
+                Biomes = new List<Biome>
+                {
+                    new Biome { Id = 1, Name = "Plains" }
+                },
+                Counties = new List<County>
+                {
+                    new County { Id = 10, SeatCellId = 1, CellIds = new List<int> { 1 }, TotalPopulation = 4000, Centroid = new Vec2(0, 0) },
+                    new County { Id = 20, SeatCellId = 2, CellIds = new List<int> { 2 }, TotalPopulation = 4000, Centroid = new Vec2(1, 0) }
                 },
                 Provinces = new List<Province>(),
                 Realms = new List<Realm>(),

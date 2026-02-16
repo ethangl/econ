@@ -170,7 +170,7 @@ namespace EconSim.Core.Simulation.Systems
             if (market == null)
                 return;
 
-            float transportCost = ResolveCountyTransportCost(mapData, market, facility.CountyId);
+            float transportCost = economy.GetCountyTransportCost(mapData, facility.CountyId);
             float sellEfficiency = 1f / (1f + transportCost * V2TransportLossRate);
 
             int outputRuntimeId = ResolveRuntimeId(economy.Goods, def.OutputGoodId);
@@ -384,7 +384,7 @@ namespace EconSim.Core.Simulation.Systems
             if (market == null)
                 return;
 
-            float transportCost = ResolveCountyTransportCost(mapData, market, facility.CountyId);
+            float transportCost = economy.GetCountyTransportCost(mapData, facility.CountyId);
             float efficiency = 1f / (1f + transportCost * V2TransportLossRate);
             if (efficiency <= 0f)
                 return;
@@ -451,17 +451,6 @@ namespace EconSim.Core.Simulation.Systems
                 return availableUnskilledByCounty.TryGetValue(countyId, out int unskilled) ? unskilled : 0;
 
             return availableSkilledByCounty.TryGetValue(countyId, out int skilled) ? skilled : 0;
-        }
-
-        private static float ResolveCountyTransportCost(MapData mapData, Market market, int countyId)
-        {
-            if (mapData?.CountyById == null || !mapData.CountyById.TryGetValue(countyId, out var county))
-                return 0f;
-
-            if (market.ZoneCellCosts != null && market.ZoneCellCosts.TryGetValue(county.SeatCellId, out float cost))
-                return Math.Max(0f, cost);
-
-            return 0f;
         }
 
         private void TrackProduction(string goodId, float amount)
