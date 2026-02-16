@@ -28,9 +28,6 @@ namespace EconSim.Core.Simulation.Systems
 
         public void Tick(SimulationState state, MapData mapData)
         {
-            if (!SimulationConfig.UseEconomyV2)
-                return;
-
             var economy = state.Economy;
             if (economy == null)
                 return;
@@ -39,9 +36,6 @@ namespace EconSim.Core.Simulation.Systems
 
             foreach (var market in economy.Markets.Values)
             {
-                if (market.Type == MarketType.Black)
-                    continue;
-
                 ApplyDecay(economy, market);
                 ClearMarket(state, economy, market, dayIndex);
 

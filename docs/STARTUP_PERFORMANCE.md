@@ -12,7 +12,8 @@ This document captures what is cached, what is deferred, and how startup cache i
   - `unity/Assets/Scripts/Renderer/MapView.cs`
   - `unity/Assets/Scripts/Renderer/MapOverlayManager.cs`
   - `src/EconSim.Core/Simulation/SimulationRunner.cs`
-  - `src/EconSim.Core/Simulation/Systems/TradeSystem.cs`
+  - `src/EconSim.Core/Simulation/Systems/MarketSystem.cs`
+  - `src/EconSim.Core/Simulation/Systems/OffMapSupplySystem.cs`
 
 ## Startup Paths
 
@@ -107,7 +108,7 @@ Dynamic texture reuse checks:
 
 Must pass all compatibility checks:
 
-- Binary version matches `BootstrapCacheVersion` (currently `2`).
+- Binary version matches `BootstrapCacheVersion` (currently `9`).
 - County count equals current map county count.
 - Cell count equals current map cell count.
 - Seed checks (when both sides are > 0):
@@ -115,6 +116,7 @@ Must pass all compatibility checks:
   - mapgen seed
   - economy seed
 - `SimulationConfig.Roads.BuildStaticNetworkAtInit` must match cached flag.
+- Cache payload is V2-only (no economy-mode branch flag in the payload).
 
 On mismatch:
 

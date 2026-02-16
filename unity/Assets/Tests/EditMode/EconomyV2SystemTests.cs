@@ -10,22 +10,18 @@ namespace EconSim.Tests
 {
     public class EconomyV2SystemTests
     {
-        private bool _prevUseV2;
         private int _prevSeedOverride;
 
         [SetUp]
         public void SetUp()
         {
-            _prevUseV2 = SimulationConfig.UseEconomyV2;
             _prevSeedOverride = SimulationConfig.EconomySeedOverride;
-            SimulationConfig.UseEconomyV2 = true;
             SimulationConfig.EconomySeedOverride = 0;
         }
 
         [TearDown]
         public void TearDown()
         {
-            SimulationConfig.UseEconomyV2 = _prevUseV2;
             SimulationConfig.EconomySeedOverride = _prevSeedOverride;
         }
 

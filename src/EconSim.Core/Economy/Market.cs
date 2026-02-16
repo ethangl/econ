@@ -9,11 +9,10 @@ namespace EconSim.Core.Economy
     public enum MarketType
     {
         /// <summary>Normal market with physical location and zone.</summary>
-        Legitimate,
-        /// <summary>Underground market - no physical location, accessible from anywhere.</summary>
-        Black,
+        Legitimate = 0,
+        // Value 1 is reserved for the removed legacy black-market type.
         /// <summary>Off-map virtual market - represents trade with the outside world via edge access point.</summary>
-        OffMap
+        OffMap = 2
     }
 
     /// <summary>
@@ -24,7 +23,7 @@ namespace EconSim.Core.Economy
     public class Market
     {
         /// <summary>
-        /// Type of market (Legitimate or Black).
+        /// Type of market (Legitimate or OffMap).
         /// </summary>
         public MarketType Type { get; set; } = MarketType.Legitimate;
         /// <summary>

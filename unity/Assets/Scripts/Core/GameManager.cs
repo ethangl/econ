@@ -253,7 +253,7 @@ namespace EconSim.Core
                 Debug.LogWarning("MapView not assigned to GameManager");
             }
 
-            // Initialize simulation (auto-registers ProductionSystem + ConsumptionSystem)
+            // Initialize simulation (registers the full economy system stack)
             Profiler.Begin("Simulation Init");
             _simulation = new SimulationRunner(
                 MapData,

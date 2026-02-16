@@ -8,7 +8,6 @@ namespace EconSim.Core.Simulation.Systems
 {
     /// <summary>
     /// Replenishes supply for off-map markets each trade tick.
-    /// Runs before TradeSystem so counties can buy off-map goods.
     /// Only replenishes goods that the off-map market is configured to supply
     /// (those with inflated BasePrice from OffMapMarketPlacer).
     /// </summary>
@@ -18,10 +17,7 @@ namespace EconSim.Core.Simulation.Systems
         private readonly Dictionary<string, float> _inventoryByGoodBuffer = new Dictionary<string, float>();
         private readonly HashSet<string> _offMapGoodLookupBuffer = new HashSet<string>();
 
-        // V1 replenishes weekly with TradeSystem; V2 replenishes daily as consignments.
-        public int TickInterval => SimulationConfig.UseEconomyV2
-            ? SimulationConfig.Intervals.Daily
-            : SimulationConfig.Intervals.Weekly;
+        public int TickInterval => SimulationConfig.Intervals.Daily;
 
         // Target supply level per good per off-map market
         private const float TargetSupply = 1000f;
@@ -36,47 +32,13 @@ namespace EconSim.Core.Simulation.Systems
             }
             SimLog.Log("OffMapSupply", $"Initialized for {offMapCount} off-map markets");
 
-            // Pre-seed V2 off-map consignments so first market clear is not supply-starved.
-            if (SimulationConfig.UseEconomyV2)
-            {
-                SeedV2Supply(state, dayListed: Math.Max(0, state.CurrentDay - 1));
-            }
+            // Pre-seed off-map consignments so first market clear is not supply-starved.
+            SeedV2Supply(state, dayListed: Math.Max(0, state.CurrentDay - 1));
         }
 
         public void Tick(SimulationState state, MapData mapData)
         {
-            if (SimulationConfig.UseEconomyV2)
-            {
-                TickV2(state);
-                return;
-            }
-
-            TickV1(state);
-        }
-
-        private static void TickV1(SimulationState state)
-        {
-            foreach (var market in state.Economy.Markets.Values)
-            {
-                if (market.Type != MarketType.OffMap)
-                    continue;
-
-                if (market.OffMapGoodIds == null || market.OffMapGoodIds.Count == 0)
-                    continue;
-
-                foreach (var goodId in market.OffMapGoodIds)
-                {
-                    if (!market.Goods.TryGetValue(goodId, out var goodState))
-                        continue;
-
-                    // Replenish to target level
-                    if (goodState.Supply < TargetSupply)
-                    {
-                        goodState.Supply = TargetSupply;
-                        goodState.SupplyOffered = TargetSupply;
-                    }
-                }
-            }
+            TickV2(state);
         }
 
         private void TickV2(SimulationState state)

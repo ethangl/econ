@@ -477,7 +477,7 @@ namespace EconSim.Editor
             j.KV("totalFacilities", econ.Facilities.Count);
             j.KV("totalStockpileValue", totalStockpileValue);
             j.KV("economySeed", st.EconomySeed);
-            j.KV("useEconomyV2", SimulationConfig.UseEconomyV2);
+            j.KV("useEconomyV2", true);
             j.KV("subsistenceWage", st.SubsistenceWage);
             j.KV("smoothedBasketCost", st.SmoothedBasketCost);
 
@@ -490,11 +490,10 @@ namespace EconSim.Editor
             j.KV("totalMoneySupply", totalMoneySupply);
             j.KV("moneyVelocity", st.Telemetry != null ? st.Telemetry.MoneyVelocity : 0f);
 
-            // Aggregate market stats (exclude black market)
+            // Aggregate market stats
             float totalSupplyOffered = 0f, totalClosingSupply = 0f, totalDemand = 0f, totalVolume = 0f;
             foreach (var market in econ.Markets.Values)
             {
-                if (market.Type == MarketType.Black) continue;
                 foreach (var gs in market.Goods.Values)
                 {
                     totalSupplyOffered += gs.SupplyOffered;

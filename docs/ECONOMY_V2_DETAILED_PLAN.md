@@ -1,11 +1,13 @@
 # Economy V2 Implementation Plan
 
-Implements the market-mediated monetary economy defined in `ECONOMY_V2.md`. Each issue is independently merge-able behind a feature flag, with unit tests verifiable before integration.
+Historical migration plan for Economy V2.
+
+> Status update: this document is retained for implementation history. The current codebase is V2-only, the `UseEconomyV2` feature flag has been removed, and legacy V1 systems are deleted.
 
 ## Strategy
 
-- **Feature flag**: `SimulationConfig.UseEconomyV2` gates system registration. V1 continues to work untouched.
-- **Additive first**: new systems are added alongside V1 systems. V1 systems are only removed from the registration path, not deleted, until V2 is stable.
+- **Historical context**: the steps below describe the migration sequence that was used to land V2.
+- **Current state**: V2 systems are now the only runtime path.
 - **Test-per-issue**: each issue includes unit tests for its core logic, runnable without the full simulation.
 - **Determinism first**: seed plumbing and RNG ownership land before behavior changes so V2 runs are replayable.
 - **Data model lands first**: all struct/field additions go in before any behavioral changes.
@@ -760,6 +762,8 @@ if (SimulationConfig.UseEconomyV2)
 
 Wire everything together and enable V2.
 
+> Historical note: this cutover is complete. `SimulationRunner` now registers only the V2 stack.
+
 ### Changes to `SimulationRunner.cs`
 
 Replace the hardcoded system registration with a branching path:
@@ -928,9 +932,9 @@ After a 90-day run on a standard Continents map (seed 12345, 10k cells):
 | `OffMapSupplySystem.cs`          | 9      | ConsignmentLot creation               |
 | `EconDebugBridge.cs`             | 0, 10  | Seed metadata + V2 dump format        |
 
-### Untouched V1 Files (kept for V1 mode)
+### Legacy Files (Current Status)
 
-- `TradeSystem.cs`
-- `ConsumptionSystem.cs`
-- `TheftSystem.cs`
-- `CountyEconomy.cs` (ExportBuffer stays, unused in V2)
+- `TradeSystem.cs` removed.
+- `ConsumptionSystem.cs` removed.
+- `TheftSystem.cs` removed.
+- `CountyEconomy.ExportBuffer` removed.
