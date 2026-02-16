@@ -177,6 +177,30 @@ namespace EconSim.Tests
         }
 
         [Test]
+        public void EconomyInitializer_DyerSeedsInDyeCounty_WhenClothMustBeImported()
+        {
+            var mapData = BuildDyeSplitMap();
+            var economy = EconomyInitializer.Initialize(mapData);
+
+            var dyeCounty = economy.GetCounty(10);
+            bool hasDyeWorks = false;
+            bool hasDyer = false;
+            foreach (int facilityId in dyeCounty.FacilityIds)
+            {
+                if (!economy.Facilities.TryGetValue(facilityId, out var facility))
+                    continue;
+
+                if (facility.TypeId == "dye_works")
+                    hasDyeWorks = true;
+                if (facility.TypeId == "dyer")
+                    hasDyer = true;
+            }
+
+            Assert.That(hasDyeWorks, Is.True, "Dye-producing county should seed dye works.");
+            Assert.That(hasDyer, Is.True, "Dyer should seed where local dye exists even when cloth is not local.");
+        }
+
+        [Test]
         public void TransportGraph_DistanceNormalization_ScalesWithWorldCellSize()
         {
             var baselineMap = BuildTwoCellTransportMap(distanceKm: 30f, cellSizeKm: 2.5f);
@@ -437,6 +461,42 @@ namespace EconSim.Tests
         }
 
         [Test]
+        public void OffMapMarketPlacer_OffersSaltWhenUnavailableOnMap()
+        {
+            var mapData = BuildOffMapPlacementMap();
+
+            var economy = new EconomyState();
+            InitialData.RegisterAll(economy);
+            economy.Counties[1] = new CountyEconomy(1);
+            economy.Counties[1].Resources["wheat"] = 1f;
+
+            var transport = new TransportGraph(mapData);
+            var result = OffMapMarketPlacer.Place(
+                mapData,
+                economy,
+                transport,
+                nextMarketId: 10,
+                marketZoneMaxTransportCost: 100f);
+
+            Assert.That(result.Markets.Count, Is.GreaterThan(0), "Expected at least one off-map market to be placed.");
+
+            bool hasRawSalt = false;
+            bool hasSalt = false;
+            foreach (var market in result.Markets)
+            {
+                if (market.OffMapGoodIds == null)
+                    continue;
+                if (market.OffMapGoodIds.Contains("raw_salt"))
+                    hasRawSalt = true;
+                if (market.OffMapGoodIds.Contains("salt"))
+                    hasSalt = true;
+            }
+
+            Assert.That(hasRawSalt, Is.True, "Off-map markets should offer raw salt when the map cannot produce it.");
+            Assert.That(hasSalt, Is.True, "Off-map recipe expansion should include processed salt.");
+        }
+
+        [Test]
         public void ProductionSystem_UsesFacilityInputOverride_WhenGoodDefaultInputsAreMissing()
         {
             var economy = new EconomyState();
@@ -587,6 +647,66 @@ namespace EconSim.Tests
                         CellIds = new List<int> { 1, 2, 3, 4, 5 },
                         TotalPopulation = 10000,
                         Centroid = new Vec2(50f, 50f)
+                    }
+                },
+                Provinces = new List<Province>(),
+                Realms = new List<Realm>(),
+                Rivers = new List<River>(),
+                Burgs = new List<Burg>(),
+                Features = new List<Feature>(),
+                Vertices = new List<Vec2>()
+            };
+
+            mapData.BuildLookups();
+            return mapData;
+        }
+
+        private static MapData BuildDyeSplitMap()
+        {
+            var mapData = new MapData
+            {
+                Info = new MapInfo
+                {
+                    Seed = "42",
+                    World = CreateWorldInfo(cellSizeKm: 2.5f, mapWidthKm: 20f, mapHeightKm: 10f)
+                },
+                Cells = new List<Cell>
+                {
+                    new Cell
+                    {
+                        Id = 1, IsLand = true, BiomeId = 1, MovementCost = 42f, CountyId = 10,
+                        SeaRelativeElevation = 20f, HasSeaRelativeElevation = true,
+                        NeighborIds = new List<int> { 2 }, Center = new Vec2(0f, 0f)
+                    },
+                    new Cell
+                    {
+                        Id = 2, IsLand = true, BiomeId = 2, MovementCost = 42f, CountyId = 20,
+                        SeaRelativeElevation = 20f, HasSeaRelativeElevation = true,
+                        NeighborIds = new List<int> { 1 }, Center = new Vec2(10f, 0f)
+                    }
+                },
+                Biomes = new List<Biome>
+                {
+                    new Biome { Id = 1, Name = "Tropical rainforest" },
+                    new Biome { Id = 2, Name = "Grassland" }
+                },
+                Counties = new List<County>
+                {
+                    new County
+                    {
+                        Id = 10,
+                        SeatCellId = 1,
+                        CellIds = new List<int> { 1 },
+                        TotalPopulation = 100000,
+                        Centroid = new Vec2(0f, 0f)
+                    },
+                    new County
+                    {
+                        Id = 20,
+                        SeatCellId = 2,
+                        CellIds = new List<int> { 2 },
+                        TotalPopulation = 100000,
+                        Centroid = new Vec2(10f, 0f)
                     }
                 },
                 Provinces = new List<Province>(),
