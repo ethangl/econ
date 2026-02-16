@@ -32,11 +32,40 @@ namespace EconSim.Core.Economy
         /// <summary>Whether this facility is currently operating.</summary>
         public bool IsActive;
 
+        /// <summary>Liquid funds available to this facility.</summary>
+        public float Treasury;
+
+        /// <summary>Current wage paid per worker per day.</summary>
+        public float WageRate;
+
+        /// <summary>Daily revenue ring buffer (7-day).</summary>
+        public float[] DailyRevenue;
+
+        /// <summary>Daily input spend ring buffer (7-day).</summary>
+        public float[] DailyInputCost;
+
+        /// <summary>Daily wage spend ring buffer (7-day).</summary>
+        public float[] DailyWageBill;
+
+        /// <summary>Consecutive days of negative rolling profit.</summary>
+        public int ConsecutiveLossDays;
+
+        /// <summary>Grace period before loss-based shutdown can trigger.</summary>
+        public int GraceDaysRemaining;
+
+        /// <summary>Consecutive days wages were underpaid.</summary>
+        public int WageDebtDays;
+        /// <summary>Absolute simulation day metrics were last initialized for.</summary>
+        public int MetricsDay = int.MinValue;
+
         public Facility()
         {
             InputBuffer = new Stockpile();
             OutputBuffer = new Stockpile();
             IsActive = true;
+            DailyRevenue = new float[7];
+            DailyInputCost = new float[7];
+            DailyWageBill = new float[7];
         }
 
         /// <summary>
@@ -61,6 +90,68 @@ namespace EconSim.Core.Economy
         {
             if (!IsActive) return 0f;
             return def.BaseThroughput * GetEfficiency(def);
+        }
+
+        public void ClearDayMetrics(int dayIndex)
+        {
+            int idx = NormalizeDayIndex(dayIndex);
+            DailyRevenue[idx] = 0f;
+            DailyInputCost[idx] = 0f;
+            DailyWageBill[idx] = 0f;
+        }
+
+        public void BeginDayMetrics(int currentDay)
+        {
+            if (MetricsDay == currentDay)
+                return;
+
+            int idx = NormalizeDayIndex(currentDay);
+            DailyRevenue[idx] = 0f;
+            DailyInputCost[idx] = 0f;
+            DailyWageBill[idx] = 0f;
+            MetricsDay = currentDay;
+        }
+
+        public void AddRevenueForDay(int dayIndex, float amount)
+        {
+            if (amount <= 0f) return;
+            DailyRevenue[NormalizeDayIndex(dayIndex)] += amount;
+        }
+
+        public void AddInputCostForDay(int dayIndex, float amount)
+        {
+            if (amount <= 0f) return;
+            DailyInputCost[NormalizeDayIndex(dayIndex)] += amount;
+        }
+
+        public void AddWageBillForDay(int dayIndex, float amount)
+        {
+            if (amount <= 0f) return;
+            DailyWageBill[NormalizeDayIndex(dayIndex)] += amount;
+        }
+
+        public float RollingAvgRevenue => Average(DailyRevenue);
+        public float RollingAvgInputCost => Average(DailyInputCost);
+        public float RollingAvgWageBill => Average(DailyWageBill);
+        public float RollingProfit => RollingAvgRevenue - RollingAvgInputCost - RollingAvgWageBill;
+
+        private static float Average(float[] values)
+        {
+            if (values == null || values.Length == 0)
+                return 0f;
+
+            float sum = 0f;
+            for (int i = 0; i < values.Length; i++)
+                sum += values[i];
+            return sum / values.Length;
+        }
+
+        private static int NormalizeDayIndex(int dayIndex)
+        {
+            const int BufferSize = 7;
+            int idx = dayIndex % BufferSize;
+            if (idx < 0) idx += BufferSize;
+            return idx;
         }
     }
 }

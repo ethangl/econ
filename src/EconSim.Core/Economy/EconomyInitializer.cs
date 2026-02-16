@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
+using EconSim.Core.Simulation;
 
 namespace EconSim.Core.Economy
 {
@@ -45,6 +46,10 @@ namespace EconSim.Core.Economy
 
             // Register good and facility definitions
             InitialData.RegisterAll(economy);
+            if (SimulationConfig.UseEconomyV2)
+            {
+                InitialData.ApplyV2GoodOverrides(economy.Goods);
+            }
 
             // Initialize county economies from map
             economy.InitializeFromMap(mapData);
@@ -59,11 +64,247 @@ namespace EconSim.Core.Economy
             return economy;
         }
 
+        /// <summary>
+        /// Seed V2 economy treasuries, inventories, and day-0 orders after markets are available.
+        /// </summary>
+        public static void BootstrapV2(SimulationState state, MapData mapData)
+        {
+            if (!SimulationConfig.UseEconomyV2)
+                return;
+
+            var economy = state.Economy;
+            if (economy == null)
+                return;
+
+            float basicBasket = 0f;
+            foreach (var good in economy.Goods.ConsumerGoods)
+            {
+                if (!IsBasicNeed(good))
+                    continue;
+
+                basicBasket += good.BasePrice * good.BaseConsumption;
+            }
+
+            state.SmoothedBasketCost = basicBasket;
+            state.SubsistenceWage = basicBasket * 1.2f;
+
+            foreach (var county in economy.Counties.Values)
+            {
+                if (county.Population.Total <= 0)
+                {
+                    county.Population.Treasury = 0f;
+                    continue;
+                }
+
+                float dailyBasicCost = 0f;
+                foreach (var good in economy.Goods.ConsumerGoods)
+                {
+                    if (!IsBasicNeed(good))
+                        continue;
+
+                    dailyBasicCost += good.BasePrice * good.BaseConsumption * county.Population.Total;
+                }
+
+                county.Population.Treasury = dailyBasicCost * 30f;
+            }
+
+            foreach (var facility in economy.Facilities.Values)
+            {
+                var def = economy.FacilityDefs.Get(facility.TypeId);
+                if (def == null)
+                    continue;
+
+                var outputGood = economy.Goods.Get(def.OutputGoodId);
+                var inputs = outputGood != null ? (def.InputOverrides ?? outputGood.Inputs) : null;
+
+                float weeklyInputCost = 0f;
+                if (inputs != null)
+                {
+                    foreach (var input in inputs)
+                    {
+                        var inputGood = economy.Goods.Get(input.GoodId);
+                        if (inputGood == null)
+                            continue;
+                        weeklyInputCost += inputGood.BasePrice * input.Quantity * def.BaseThroughput * 7f;
+                    }
+                }
+
+                float weeklyWage = def.LaborRequired * state.SubsistenceWage * 7f;
+                facility.Treasury = weeklyInputCost + weeklyWage;
+                facility.WageRate = state.SubsistenceWage;
+                facility.IsActive = true;
+                facility.GraceDaysRemaining = 14;
+            }
+
+            // Seed processing input buffers (3 days).
+            foreach (var facility in economy.Facilities.Values)
+            {
+                var def = economy.FacilityDefs.Get(facility.TypeId);
+                if (def == null || def.IsExtraction)
+                    continue;
+
+                var outputGood = economy.Goods.Get(def.OutputGoodId);
+                var inputs = outputGood != null ? (def.InputOverrides ?? outputGood.Inputs) : null;
+                if (inputs == null)
+                    continue;
+
+                foreach (var input in inputs)
+                {
+                    facility.InputBuffer.Add(input.GoodId, input.Quantity * def.BaseThroughput * 3f);
+                }
+            }
+
+            // Seed market inventory and day-0 buy orders.
+            foreach (var market in economy.Markets.Values)
+            {
+                if (market.Type != MarketType.Legitimate)
+                    continue;
+
+                int seedSellerId = MarketOrderIds.MakeSeedSellerId(market.Id);
+                var localOutputs = new HashSet<string>();
+                foreach (var kvp in economy.CountyToMarket)
+                {
+                    if (kvp.Value != market.Id || !economy.Counties.ContainsKey(kvp.Key))
+                        continue;
+
+                    var county = economy.Counties[kvp.Key];
+                    foreach (int facilityId in county.FacilityIds)
+                    {
+                        if (economy.Facilities.TryGetValue(facilityId, out var facility))
+                        {
+                            var def = economy.FacilityDefs.Get(facility.TypeId);
+                            if (def != null)
+                                localOutputs.Add(def.OutputGoodId);
+                        }
+                    }
+                }
+
+                foreach (string goodId in localOutputs)
+                {
+                    var good = economy.Goods.Get(goodId);
+                    if (good == null)
+                        continue;
+
+                    float weeklyDemand = 0f;
+                    foreach (var kvp in economy.CountyToMarket)
+                    {
+                        if (kvp.Value != market.Id || !economy.Counties.TryGetValue(kvp.Key, out var county))
+                            continue;
+
+                        weeklyDemand += good.BaseConsumption * county.Population.Total * 7f;
+                    }
+
+                    if (weeklyDemand <= 0f)
+                        continue;
+
+                    market.Inventory.Add(new ConsignmentLot
+                    {
+                        SellerId = seedSellerId,
+                        GoodId = goodId,
+                        Quantity = weeklyDemand * 2f,
+                        DayListed = 0
+                    });
+                }
+            }
+
+            // Prefill day-0 orders for processing facilities and basic population demand.
+            foreach (var county in economy.Counties.Values)
+            {
+                if (!economy.CountyToMarket.TryGetValue(county.CountyId, out int marketId))
+                    continue;
+                if (!economy.Markets.TryGetValue(marketId, out var market))
+                    continue;
+
+                float transportCost = ResolveTransportCost(mapData, market, county.CountyId);
+                int populationBuyerId = MarketOrderIds.MakePopulationBuyerId(county.CountyId);
+
+                foreach (var good in economy.Goods.ConsumerGoods)
+                {
+                    if (!IsBasicNeed(good))
+                        continue;
+                    if (!market.Goods.TryGetValue(good.Id, out var marketGood))
+                        continue;
+
+                    float quantity = good.BaseConsumption * county.Population.Total;
+                    if (quantity <= 0f)
+                        continue;
+
+                    float effectivePrice = marketGood.Price * (1f + transportCost * 0.005f);
+                    float maxSpend = quantity * effectivePrice;
+                    if (maxSpend <= 0f)
+                        continue;
+
+                    market.PendingBuyOrders.Add(new BuyOrder
+                    {
+                        BuyerId = populationBuyerId,
+                        GoodId = good.Id,
+                        Quantity = quantity,
+                        MaxSpend = Math.Min(maxSpend, county.Population.Treasury),
+                        TransportCost = transportCost,
+                        DayPosted = 0
+                    });
+                }
+
+                foreach (int facilityId in county.FacilityIds)
+                {
+                    if (!economy.Facilities.TryGetValue(facilityId, out var facility) || !facility.IsActive)
+                        continue;
+
+                    var def = economy.FacilityDefs.Get(facility.TypeId);
+                    if (def == null || def.IsExtraction)
+                        continue;
+
+                    var outputGood = economy.Goods.Get(def.OutputGoodId);
+                    var inputs = outputGood != null ? (def.InputOverrides ?? outputGood.Inputs) : null;
+                    if (inputs == null)
+                        continue;
+
+                    float remainingTreasury = facility.Treasury;
+                    foreach (var input in inputs)
+                    {
+                        if (!market.Goods.TryGetValue(input.GoodId, out var marketGood))
+                            continue;
+
+                        float needed = input.Quantity * def.BaseThroughput;
+                        float have = facility.InputBuffer.Get(input.GoodId);
+                        float toBuy = Math.Max(0f, needed - have);
+                        if (toBuy <= 0f)
+                            continue;
+
+                        float effectivePrice = marketGood.Price * (1f + transportCost * 0.005f);
+                        float maxSpend = Math.Min(remainingTreasury, toBuy * effectivePrice);
+                        float quantity = effectivePrice > 0f ? maxSpend / effectivePrice : 0f;
+                        if (quantity <= 0f || maxSpend <= 0f)
+                            continue;
+
+                        market.PendingBuyOrders.Add(new BuyOrder
+                        {
+                            BuyerId = facility.Id,
+                            GoodId = input.GoodId,
+                            Quantity = quantity,
+                            MaxSpend = maxSpend,
+                            TransportCost = transportCost,
+                            DayPosted = 0
+                        });
+
+                        remainingTreasury -= maxSpend;
+                        if (remainingTreasury <= 0f)
+                            break;
+                    }
+                }
+            }
+        }
+
         private static int ResolveInitializationSeed(MapData mapData, int? explicitSeed)
         {
             if (explicitSeed.HasValue)
             {
                 return explicitSeed.Value;
+            }
+
+            if (SimulationConfig.EconomySeedOverride > 0)
+            {
+                return SimulationConfig.EconomySeedOverride;
             }
 
             if (mapData?.Info != null)
@@ -168,7 +409,7 @@ namespace EconSim.Core.Economy
 
                     if (matches)
                     {
-                        float abundance = 0.5f + (float)_random.NextDouble() * 0.5f;
+                        float abundance = DeterministicHelpers.NextFloat(_random, 0.5f, 1f);
                         resources[good.Id] = abundance;
                     }
                 }
@@ -260,7 +501,7 @@ namespace EconSim.Core.Economy
                     int cellId = FindCellWithResource(countyId, facilityDef.OutputGoodId, mapData, cellResources);
                     if (cellId < 0) continue;
 
-                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 1);
                     for (int j = 0; j < count; j++)
                     {
                         economy.CreateFacility(facilityDef.Id, cellId);
@@ -315,7 +556,7 @@ namespace EconSim.Core.Economy
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
 
-                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 0);
                     for (int j = 0; j < count; j++)
                     {
                         economy.CreateFacility(facilityId, cellId);
@@ -368,7 +609,11 @@ namespace EconSim.Core.Economy
                 {
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
-                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    int laborLimitedCount = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 0);
+                    int count = ComputeInputConstrainedFacilityCount(economy, countyId, facilityDef, laborLimitedCount);
+                    if (count <= 0)
+                        continue;
+
                     for (int j = 0; j < count; j++)
                     {
                         economy.CreateFacility(facilityId, cellId);
@@ -403,7 +648,11 @@ namespace EconSim.Core.Economy
                 {
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
-                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    int laborLimitedCount = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 0);
+                    int count = ComputeInputConstrainedFacilityCount(economy, countyId, facilityDef, laborLimitedCount);
+                    if (count <= 0)
+                        continue;
+
                     for (int j = 0; j < count; j++)
                     {
                         economy.CreateFacility(facilityId, cellId);
@@ -507,7 +756,7 @@ namespace EconSim.Core.Economy
         /// Formula: 1 facility per (ScaleFactor * LaborRequired) workers of the matching type.
         /// A median ~200-pop county gets ~3 farms (labor=20), matching prior defaults.
         /// </summary>
-        private static int ComputeFacilityCount(CountyPopulation pop, FacilityDef def)
+        private static int ComputeFacilityCount(CountyPopulation pop, FacilityDef def, int minPerCounty = 0)
         {
             const float ScaleFactor = 3f;
             const int MaxPerType = 50;
@@ -517,7 +766,66 @@ namespace EconSim.Core.Economy
                 : pop.TotalSkilled;
 
             int count = (int)(workerPool / (def.LaborRequired * ScaleFactor));
-            return Math.Max(1, Math.Min(MaxPerType, count));
+            return Math.Max(minPerCounty, Math.Min(MaxPerType, count));
+        }
+
+        private static int ComputeInputConstrainedFacilityCount(
+            EconomyState economy,
+            int countyId,
+            FacilityDef targetDef,
+            int laborLimitedCount)
+        {
+            if (laborLimitedCount <= 0)
+                return 0;
+
+            var outputGood = economy.Goods.Get(targetDef.OutputGoodId);
+            var inputs = targetDef.InputOverrides ?? outputGood?.Inputs;
+            if (inputs == null || inputs.Count == 0)
+                return laborLimitedCount;
+
+            var county = economy.GetCounty(countyId);
+            if (county == null)
+                return laborLimitedCount;
+
+            float maxThroughputFromInputs = float.MaxValue;
+            bool hasInputConstraint = false;
+
+            foreach (var input in inputs)
+            {
+                if (input.Quantity <= 0f)
+                    continue;
+
+                float localInputPerDay = 0f;
+                foreach (int facilityId in county.FacilityIds)
+                {
+                    if (!economy.Facilities.TryGetValue(facilityId, out var facility))
+                        continue;
+
+                    var producerDef = economy.FacilityDefs.Get(facility.TypeId);
+                    if (producerDef == null || producerDef.OutputGoodId != input.GoodId)
+                        continue;
+
+                    localInputPerDay += producerDef.BaseThroughput;
+                }
+
+                hasInputConstraint = true;
+                if (localInputPerDay <= 0f)
+                    return 0;
+
+                float inputLimitedThroughput = localInputPerDay / input.Quantity;
+                if (inputLimitedThroughput < maxThroughputFromInputs)
+                    maxThroughputFromInputs = inputLimitedThroughput;
+            }
+
+            if (!hasInputConstraint || maxThroughputFromInputs == float.MaxValue)
+                return laborLimitedCount;
+
+            float targetThroughput = Math.Max(0.0001f, targetDef.BaseThroughput);
+            int inputLimitedCount = (int)Math.Ceiling(maxThroughputFromInputs / targetThroughput);
+            if (inputLimitedCount <= 0)
+                return 0;
+
+            return Math.Max(1, Math.Min(laborLimitedCount, inputLimitedCount));
         }
 
         /// <summary>
@@ -540,6 +848,19 @@ namespace EconSim.Core.Economy
                 return Elevation.ResolveMaxElevationMeters(info);
 
             return aboveSeaFraction * Elevation.ResolveMaxElevationMeters(info);
+        }
+
+        private static bool IsBasicNeed(GoodDef good) => good.NeedCategory == NeedCategory.Basic;
+
+        private static float ResolveTransportCost(MapData mapData, Market market, int countyId)
+        {
+            if (mapData?.CountyById == null || !mapData.CountyById.TryGetValue(countyId, out var county))
+                return 0f;
+
+            if (market.ZoneCellCosts != null && market.ZoneCellCosts.TryGetValue(county.SeatCellId, out float cost))
+                return Math.Max(0f, cost);
+
+            return 0f;
         }
     }
 }

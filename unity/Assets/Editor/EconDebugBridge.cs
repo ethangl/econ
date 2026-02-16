@@ -428,7 +428,7 @@ namespace EconSim.Editor
             j.KV("timestamp", DateTime.UtcNow.ToString("o"));
 
             if (scope == "all" || scope == "summary")
-                WriteSummary(j, econ, mapData);
+                WriteSummary(j, st, econ, mapData);
             if (scope == "all" || scope == "markets")
                 WriteMarkets(j, econ);
             if (scope == "all" || scope == "counties")
@@ -440,13 +440,15 @@ namespace EconSim.Editor
             File.WriteAllText(OutputPath, j.ToString());
         }
 
-        static void WriteSummary(JW j, EconomyState econ, MapData mapData)
+        static void WriteSummary(JW j, SimulationState st, EconomyState econ, MapData mapData)
         {
             j.Key("summary"); j.ObjOpen();
 
             int totalPop = 0, totalWorkingAge = 0;
             int totalEmployedU = 0, totalEmployedS = 0;
             float totalStockpileValue = 0f;
+            float moneyInPopulation = 0f;
+            float moneyInFacilities = 0f;
 
             foreach (var kvp in econ.Counties)
             {
@@ -455,6 +457,7 @@ namespace EconSim.Editor
                 totalWorkingAge += ce.Population.WorkingAge;
                 totalEmployedU += ce.Population.EmployedUnskilled;
                 totalEmployedS += ce.Population.EmployedSkilled;
+                moneyInPopulation += ce.Population.Treasury;
 
                 foreach (var item in ce.Stockpile.All)
                 {
@@ -473,20 +476,37 @@ namespace EconSim.Editor
             j.KV("totalMarkets", econ.Markets.Count);
             j.KV("totalFacilities", econ.Facilities.Count);
             j.KV("totalStockpileValue", totalStockpileValue);
+            j.KV("economySeed", st.EconomySeed);
+            j.KV("useEconomyV2", SimulationConfig.UseEconomyV2);
+            j.KV("subsistenceWage", st.SubsistenceWage);
+            j.KV("smoothedBasketCost", st.SmoothedBasketCost);
+
+            foreach (var facility in econ.Facilities.Values)
+                moneyInFacilities += facility.Treasury;
+
+            float totalMoneySupply = moneyInPopulation + moneyInFacilities;
+            j.KV("moneyInPopulation", moneyInPopulation);
+            j.KV("moneyInFacilities", moneyInFacilities);
+            j.KV("totalMoneySupply", totalMoneySupply);
+            j.KV("moneyVelocity", st.Telemetry != null ? st.Telemetry.MoneyVelocity : 0f);
 
             // Aggregate market stats (exclude black market)
-            float totalSupply = 0f, totalDemand = 0f;
+            float totalSupplyOffered = 0f, totalClosingSupply = 0f, totalDemand = 0f, totalVolume = 0f;
             foreach (var market in econ.Markets.Values)
             {
                 if (market.Type == MarketType.Black) continue;
                 foreach (var gs in market.Goods.Values)
                 {
-                    totalSupply += gs.Supply;
+                    totalSupplyOffered += gs.SupplyOffered;
+                    totalClosingSupply += gs.Supply;
                     totalDemand += gs.Demand;
+                    totalVolume += gs.LastTradeVolume;
                 }
             }
-            j.KV("totalMarketSupply", totalSupply);
+            j.KV("totalMarketSupply", totalSupplyOffered);
+            j.KV("totalMarketClosingSupply", totalClosingSupply);
             j.KV("totalMarketDemand", totalDemand);
+            j.KV("totalMarketVolume", totalVolume);
 
             // Road stats
             if (econ.Roads != null)
@@ -511,6 +531,8 @@ namespace EconSim.Editor
                 j.KV("type", market.Type.ToString());
                 j.KV("locationCellId", market.LocationCellId);
                 j.KV("zoneCells", market.ZoneCellIds?.Count ?? 0);
+                j.KV("pendingOrders", market.PendingBuyOrders?.Count ?? 0);
+                j.KV("consignmentLots", market.Inventory?.Count ?? 0);
 
                 j.Key("goods"); j.ObjOpen();
                 foreach (var gs in market.Goods.Values.OrderBy(g => g.GoodId))
@@ -522,6 +544,7 @@ namespace EconSim.Editor
                     j.KV("supplyOffered", gs.SupplyOffered);
                     j.KV("demand", gs.Demand);
                     j.KV("volume", gs.LastTradeVolume);
+                    j.KV("revenue", gs.Revenue);
                     j.ObjClose();
                 }
                 j.ObjClose();
@@ -554,6 +577,7 @@ namespace EconSim.Editor
                 j.Key("population"); j.ObjOpen();
                 j.KV("total", ce.Population.Total);
                 j.KV("workingAge", ce.Population.WorkingAge);
+                j.KV("treasury", ce.Population.Treasury);
                 j.KV("employedUnskilled", ce.Population.EmployedUnskilled);
                 j.KV("employedSkilled", ce.Population.EmployedSkilled);
                 j.KV("idleUnskilled", ce.Population.IdleUnskilled);
@@ -599,6 +623,11 @@ namespace EconSim.Editor
                     j.KV("efficiency", def != null ? f.GetEfficiency(def) : 0f);
                     j.KV("throughput", def != null ? f.GetThroughput(def) : 0f);
                     j.KV("active", f.IsActive);
+                    j.KV("treasury", f.Treasury);
+                    j.KV("wageRate", f.WageRate);
+                    j.KV("wageDebtDays", f.WageDebtDays);
+                    j.KV("consecutiveLossDays", f.ConsecutiveLossDays);
+                    j.KV("graceDaysRemaining", f.GraceDaysRemaining);
 
                     j.Key("inputs"); j.ObjOpen();
                     foreach (var item in f.InputBuffer.All)

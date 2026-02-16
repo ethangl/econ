@@ -85,7 +85,7 @@ namespace EconSim.Core.Economy
                 Id = "flour",
                 Name = "Flour",
                 Category = GoodCategory.Refined,
-                Inputs = new List<GoodInput> { new GoodInput("wheat", 2) },
+                Inputs = new List<GoodInput> { new GoodInput("wheat", 1) },
                 FacilityType = "mill",
                 ProcessingTicks = 1,
                 DecayRate = 0.003f,  // 0.3% per day - stored flour lasts months
@@ -98,7 +98,7 @@ namespace EconSim.Core.Economy
                 Id = "bread",
                 Name = "Bread",
                 Category = GoodCategory.Finished,
-                Inputs = new List<GoodInput> { new GoodInput("flour", 1) },
+                Inputs = new List<GoodInput> { new GoodInput("flour", 0.625f) },
                 FacilityType = "bakery",
                 ProcessingTicks = 1,
                 NeedCategory = NeedCategory.Basic,
@@ -529,6 +529,30 @@ namespace EconSim.Core.Economy
             });
         }
 
+        /// <summary>
+        /// Apply V2 economy overrides to good definitions.
+        /// Called once during initialization when Economy V2 is enabled.
+        /// </summary>
+        public static void ApplyV2GoodOverrides(GoodRegistry registry)
+        {
+            // Keep only category overrides in V2.
+            // Consumption-rate overrides caused demand to scale unrealistically.
+            SetNeedCategory(registry, "cheese", NeedCategory.Basic);
+            SetNeedCategory(registry, "clothes", NeedCategory.Comfort);
+        }
+
+        private static void SetNeedCategory(
+            GoodRegistry registry,
+            string goodId,
+            NeedCategory needCategory)
+        {
+            var good = registry.Get(goodId);
+            if (good == null)
+                return;
+
+            good.NeedCategory = needCategory;
+        }
+
         public static void RegisterFacilities(FacilityRegistry registry)
         {
             // =============================================
@@ -728,7 +752,7 @@ namespace EconSim.Core.Economy
                 LaborType = LaborType.Skilled,
                 BaseThroughput = 10f,
                 IsExtraction = false,
-                InputOverrides = new List<GoodInput> { new GoodInput("rye", 2) }
+                InputOverrides = new List<GoodInput> { new GoodInput("rye", 1) }
             });
 
             registry.Register(new FacilityDef
@@ -740,7 +764,7 @@ namespace EconSim.Core.Economy
                 LaborType = LaborType.Skilled,
                 BaseThroughput = 10f,
                 IsExtraction = false,
-                InputOverrides = new List<GoodInput> { new GoodInput("barley", 2) }
+                InputOverrides = new List<GoodInput> { new GoodInput("barley", 1) }
             });
 
             registry.Register(new FacilityDef
@@ -752,7 +776,7 @@ namespace EconSim.Core.Economy
                 LaborType = LaborType.Skilled,
                 BaseThroughput = 10f,
                 IsExtraction = false,
-                InputOverrides = new List<GoodInput> { new GoodInput("rice_grain", 2) }
+                InputOverrides = new List<GoodInput> { new GoodInput("rice_grain", 0.625f) }
             });
 
             registry.Register(new FacilityDef

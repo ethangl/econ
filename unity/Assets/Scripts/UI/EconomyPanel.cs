@@ -12,6 +12,8 @@ namespace EconSim.UI
     /// </summary>
     public class EconomyPanel : MonoBehaviour
     {
+        private const float RefreshIntervalSeconds = 1.0f;
+
         [SerializeField] private UIDocument _uiDocument;
         [SerializeField] private KeyCode _toggleKey = KeyCode.E;
 
@@ -42,6 +44,8 @@ namespace EconSim.UI
 
         private EconomyState _economy;
         private bool _isVisible;
+        private int _activeTabIndex;
+        private float _nextRefreshTime;
 
         private void Start()
         {
@@ -127,6 +131,7 @@ namespace EconSim.UI
 
             // Start hidden
             _isVisible = false;
+            _activeTabIndex = 0;
         }
 
         private void Update()
@@ -148,9 +153,10 @@ namespace EconSim.UI
                 Hide();
             }
 
-            // Refresh data periodically
-            if (_isVisible && Time.frameCount % 30 == 0)
+            // Refresh data periodically while visible.
+            if (_isVisible && Time.unscaledTime >= _nextRefreshTime)
             {
+                _nextRefreshTime = Time.unscaledTime + RefreshIntervalSeconds;
                 UpdateDisplay();
             }
         }
@@ -159,6 +165,7 @@ namespace EconSim.UI
         {
             _panel?.RemoveFromClassList("hidden");
             _isVisible = true;
+            _nextRefreshTime = Time.unscaledTime + RefreshIntervalSeconds;
             UpdateDisplay();
         }
 
@@ -170,6 +177,8 @@ namespace EconSim.UI
 
         private void SelectTab(int index)
         {
+            _activeTabIndex = index;
+
             // Update button states
             SetTabActive(_tabOverview, index == 0);
             SetTabActive(_tabProduction, index == 1);
@@ -205,9 +214,21 @@ namespace EconSim.UI
         {
             if (_economy == null) return;
 
-            UpdateOverview();
-            UpdateProduction();
-            UpdateTrade();
+            switch (_activeTabIndex)
+            {
+                case 0:
+                    UpdateOverview();
+                    break;
+                case 1:
+                    UpdateProduction();
+                    break;
+                case 2:
+                    UpdateTrade();
+                    break;
+                default:
+                    UpdateOverview();
+                    break;
+            }
         }
 
         private void UpdateOverview()
@@ -242,7 +263,11 @@ namespace EconSim.UI
 
             foreach (var county in _economy.Counties.Values)
             {
-                foreach (var facilityId in county.FacilityIds ?? new List<int>())
+                var facilityIds = county.FacilityIds;
+                if (facilityIds == null)
+                    continue;
+
+                foreach (var facilityId in facilityIds)
                 {
                     if (_economy.Facilities.TryGetValue(facilityId, out var facility))
                     {
@@ -282,27 +307,30 @@ namespace EconSim.UI
                 return;
             }
 
-            // Aggregate across legitimate markets only
-            var aggregateGoods = new Dictionary<string, (float supply, float demand, float price)>();
+            // Aggregate across legitimate markets only.
+            // Off-map prices are intentionally fixed and should not mask local market movement.
+            var aggregateGoods = new Dictionary<string, (float supply, float demand, float weightedPriceSum, float priceWeight)>();
             var blackMarket = _economy.BlackMarket;
 
             foreach (var market in _economy.Markets.Values)
             {
-                // Skip black market in aggregate totals
-                if (market.Type == MarketType.Black)
+                // Skip non-legitimate markets in aggregate totals.
+                if (market.Type != MarketType.Legitimate)
                     continue;
 
                 foreach (var kvp in market.Goods)
                 {
                     var state = kvp.Value;
                     if (!aggregateGoods.ContainsKey(kvp.Key))
-                        aggregateGoods[kvp.Key] = (0, 0, state.Price);
+                        aggregateGoods[kvp.Key] = (0f, 0f, 0f, 0f);
 
                     var current = aggregateGoods[kvp.Key];
+                    float priceWeight = Mathf.Max(1f, state.SupplyOffered + state.Demand);
                     aggregateGoods[kvp.Key] = (
                         current.supply + state.SupplyOffered,
                         current.demand + state.Demand,
-                        state.Price  // Use last market's price for now
+                        current.weightedPriceSum + state.Price * priceWeight,
+                        current.priceWeight + priceWeight
                     );
                 }
             }
@@ -323,15 +351,16 @@ namespace EconSim.UI
             int legitRows = 0;
             foreach (var kvp in aggregateGoods)
             {
-                var (supply, demand, price) = kvp.Value;
+                var (supply, demand, weightedPriceSum, priceWeight) = kvp.Value;
                 if (supply < 0.1f && demand < 0.1f) continue;
+                float avgPrice = priceWeight > 0f ? weightedPriceSum / priceWeight : 0f;
 
                 var row = new VisualElement();
                 row.AddToClassList("goods-row");
                 row.Add(CreateLabel(kvp.Key, "goods-name"));
                 row.Add(CreateLabel(FormatQuantity(supply), "goods-value"));
                 row.Add(CreateLabel(FormatQuantity(demand), "goods-value"));
-                row.Add(CreateLabel($"{price:F2}", "goods-value"));
+                row.Add(CreateLabel($"{avgPrice:F2}", "goods-value"));
                 _tradeList.Add(row);
                 legitRows++;
             }

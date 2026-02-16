@@ -60,6 +60,16 @@ namespace EconSim.Core.Economy
         public Dictionary<string, MarketGoodState> Goods { get; set; } = new Dictionary<string, MarketGoodState>();
 
         /// <summary>
+        /// Pending buy orders posted by facilities and county populations.
+        /// </summary>
+        public List<BuyOrder> PendingBuyOrders { get; set; } = new List<BuyOrder>();
+
+        /// <summary>
+        /// Consignment inventory available for clearing.
+        /// </summary>
+        public List<ConsignmentLot> Inventory { get; set; } = new List<ConsignmentLot>();
+
+        /// <summary>
         /// For OffMap markets: good IDs that this market supplies from off-map.
         /// Null/empty for non-OffMap markets.
         /// </summary>
@@ -115,5 +125,10 @@ namespace EconSim.Core.Economy
         /// Quantity traded in the last market tick.
         /// </summary>
         public float LastTradeVolume { get; set; }
+
+        /// <summary>
+        /// Total gold paid to sellers during the last clearing pass.
+        /// </summary>
+        public float Revenue { get; set; }
     }
 }

@@ -6,6 +6,17 @@ namespace EconSim.Core.Simulation
     public static class SimulationConfig
     {
         /// <summary>
+        /// Enables the Economy V2 system registration path.
+        /// </summary>
+        public static bool UseEconomyV2 = true;
+
+        /// <summary>
+        /// Optional explicit economy seed override.
+        /// Values greater than zero take precedence over map-derived seeds.
+        /// </summary>
+        public static int EconomySeedOverride = 0;
+
+        /// <summary>
         /// Speed presets in ticks (days) per second.
         /// </summary>
         public static class Speed
@@ -27,6 +38,12 @@ namespace EconSim.Core.Simulation
             public const int Monthly = 30;
             public const int Yearly = 365;
         }
+
+        /// <summary>
+        /// Maximum simulation days processed in a single frame update.
+        /// Caps catch-up work to avoid frame stalls when under load.
+        /// </summary>
+        public const int MaxTicksPerFrame = 4;
 
         /// <summary>
         /// Configuration for static transport backbone generation.
