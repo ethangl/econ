@@ -1,3 +1,4 @@
+using System;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
@@ -31,6 +32,12 @@ namespace EconSim.Core.Simulation.Systems
                     offMapCount++;
             }
             SimLog.Log("OffMapSupply", $"Initialized for {offMapCount} off-map markets");
+
+            // Pre-seed V2 off-map consignments so first market clear is not supply-starved.
+            if (SimulationConfig.UseEconomyV2)
+            {
+                SeedV2Supply(state, dayListed: Math.Max(0, state.CurrentDay - 1));
+            }
         }
 
         public void Tick(SimulationState state, MapData mapData)
@@ -71,6 +78,11 @@ namespace EconSim.Core.Simulation.Systems
 
         private static void TickV2(SimulationState state)
         {
+            SeedV2Supply(state, state.CurrentDay);
+        }
+
+        private static void SeedV2Supply(SimulationState state, int dayListed)
+        {
             foreach (var market in state.Economy.Markets.Values)
             {
                 if (market.Type != MarketType.OffMap)
@@ -98,7 +110,7 @@ namespace EconSim.Core.Simulation.Systems
                         SellerId = sellerId,
                         GoodId = goodId,
                         Quantity = needed,
-                        DayListed = state.CurrentDay
+                        DayListed = dayListed
                     });
                 }
             }

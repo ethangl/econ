@@ -48,7 +48,7 @@ namespace EconSim.Core.Economy
             InitialData.RegisterAll(economy);
             if (SimulationConfig.UseEconomyV2)
             {
-                ApplyEconomyV2DataTuning(economy);
+                InitialData.ApplyV2GoodOverrides(economy.Goods);
             }
 
             // Initialize county economies from map
@@ -79,10 +79,10 @@ namespace EconSim.Core.Economy
             float basicBasket = 0f;
             foreach (var good in economy.Goods.ConsumerGoods)
             {
-                if (GetNeedCategoryV2(good) != NeedCategory.Basic)
+                if (!IsBasicNeed(good))
                     continue;
 
-                basicBasket += good.BasePrice * GetBaseConsumptionV2(good);
+                basicBasket += good.BasePrice * good.BaseConsumption;
             }
 
             state.SmoothedBasketCost = basicBasket;
@@ -99,10 +99,10 @@ namespace EconSim.Core.Economy
                 float dailyBasicCost = 0f;
                 foreach (var good in economy.Goods.ConsumerGoods)
                 {
-                    if (GetNeedCategoryV2(good) != NeedCategory.Basic)
+                    if (!IsBasicNeed(good))
                         continue;
 
-                    dailyBasicCost += good.BasePrice * GetBaseConsumptionV2(good) * county.Population.Total;
+                    dailyBasicCost += good.BasePrice * good.BaseConsumption * county.Population.Total;
                 }
 
                 county.Population.Treasury = dailyBasicCost * 30f;
@@ -191,7 +191,7 @@ namespace EconSim.Core.Economy
                         if (kvp.Value != market.Id || !economy.Counties.TryGetValue(kvp.Key, out var county))
                             continue;
 
-                        weeklyDemand += GetBaseConsumptionV2(good) * county.Population.Total * 7f;
+                        weeklyDemand += good.BaseConsumption * county.Population.Total * 7f;
                     }
 
                     if (weeklyDemand <= 0f)
@@ -220,12 +220,12 @@ namespace EconSim.Core.Economy
 
                 foreach (var good in economy.Goods.ConsumerGoods)
                 {
-                    if (GetNeedCategoryV2(good) != NeedCategory.Basic)
+                    if (!IsBasicNeed(good))
                         continue;
                     if (!market.Goods.TryGetValue(good.Id, out var marketGood))
                         continue;
 
-                    float quantity = GetBaseConsumptionV2(good) * county.Population.Total;
+                    float quantity = good.BaseConsumption * county.Population.Total;
                     if (quantity <= 0f)
                         continue;
 
@@ -409,7 +409,7 @@ namespace EconSim.Core.Economy
 
                     if (matches)
                     {
-                        float abundance = 0.5f + (float)_random.NextDouble() * 0.5f;
+                        float abundance = DeterministicHelpers.NextFloat(_random, 0.5f, 1f);
                         resources[good.Id] = abundance;
                     }
                 }
@@ -783,63 +783,7 @@ namespace EconSim.Core.Economy
             return aboveSeaFraction * Elevation.ResolveMaxElevationMeters(info);
         }
 
-        private static void ApplyEconomyV2DataTuning(EconomyState economy)
-        {
-            SetNeedCategory(economy, "cheese", NeedCategory.Basic);
-            SetNeedCategory(economy, "clothes", NeedCategory.Comfort);
-
-            SetBaseConsumption(economy, "bread", 0.5f);
-            SetBaseConsumption(economy, "cheese", 0.1f);
-            SetBaseConsumption(economy, "clothes", 0.003f);
-            SetBaseConsumption(economy, "shoes", 0.003f);
-            SetBaseConsumption(economy, "tools", 0.003f);
-            SetBaseConsumption(economy, "cookware", 0.003f);
-            SetBaseConsumption(economy, "furniture", 0.001f);
-            SetBaseConsumption(economy, "jewelry", 0.0003f);
-            SetBaseConsumption(economy, "spices", 0.01f);
-            SetBaseConsumption(economy, "sugar", 0.01f);
-        }
-
-        private static void SetNeedCategory(EconomyState economy, string goodId, NeedCategory category)
-        {
-            var good = economy.Goods.Get(goodId);
-            if (good != null)
-                good.NeedCategory = category;
-        }
-
-        private static void SetBaseConsumption(EconomyState economy, string goodId, float value)
-        {
-            var good = economy.Goods.Get(goodId);
-            if (good != null)
-                good.BaseConsumption = value;
-        }
-
-        private static NeedCategory GetNeedCategoryV2(GoodDef good)
-        {
-            if (good.Id == "cheese")
-                return NeedCategory.Basic;
-            if (good.Id == "clothes")
-                return NeedCategory.Comfort;
-            return good.NeedCategory ?? NeedCategory.Luxury;
-        }
-
-        private static float GetBaseConsumptionV2(GoodDef good)
-        {
-            switch (good.Id)
-            {
-                case "bread": return 0.5f;
-                case "cheese": return 0.1f;
-                case "clothes": return 0.003f;
-                case "shoes": return 0.003f;
-                case "tools": return 0.003f;
-                case "cookware": return 0.003f;
-                case "furniture": return 0.001f;
-                case "jewelry": return 0.0003f;
-                case "spices": return 0.01f;
-                case "sugar": return 0.01f;
-                default: return good.BaseConsumption;
-            }
-        }
+        private static bool IsBasicNeed(GoodDef good) => good.NeedCategory == NeedCategory.Basic;
 
         private static float ResolveTransportCost(MapData mapData, Market market, int countyId)
         {

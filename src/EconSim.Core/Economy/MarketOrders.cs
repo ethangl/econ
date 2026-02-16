@@ -2,6 +2,11 @@ using System;
 
 namespace EconSim.Core.Economy
 {
+    /// <summary>
+    /// A buy order posted to market inventory.
+    /// Positive <see cref="BuyerId"/> values represent facility buyers.
+    /// Negative values encode county-population buyers via negated county ID.
+    /// </summary>
     [Serializable]
     public struct BuyOrder
     {
@@ -12,6 +17,21 @@ namespace EconSim.Core.Economy
         public float MaxSpend;
         public float TransportCost;
         public int DayPosted;
+
+        /// <summary>
+        /// True when this order belongs to a county population buyer.
+        /// </summary>
+        public bool IsPopulationOrder => BuyerId < 0;
+
+        /// <summary>
+        /// Population county ID for population orders; otherwise 0.
+        /// </summary>
+        public int CountyId => IsPopulationOrder ? -BuyerId : 0;
+
+        /// <summary>
+        /// Facility ID for facility orders; otherwise 0.
+        /// </summary>
+        public int FacilityId => IsPopulationOrder ? 0 : BuyerId;
     }
 
     [Serializable]

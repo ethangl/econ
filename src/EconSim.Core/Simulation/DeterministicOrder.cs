@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using EconSim.Core.Common;
 
 namespace EconSim.Core.Simulation
 {
@@ -10,14 +11,25 @@ namespace EconSim.Core.Simulation
     {
         public static void ShuffleInPlace<T>(IList<T> items, Random rng)
         {
-            if (items == null || rng == null)
-                return;
+            DeterministicHelpers.ShuffleInPlace(items, rng);
+        }
 
-            for (int i = items.Count - 1; i > 0; i--)
-            {
-                int swapIndex = rng.Next(i + 1);
-                (items[i], items[swapIndex]) = (items[swapIndex], items[i]);
-            }
+        public static float NextFloat(Random rng)
+        {
+            return DeterministicHelpers.NextFloat(rng);
+        }
+
+        public static float NextFloat(Random rng, float min, float max)
+        {
+            return DeterministicHelpers.NextFloat(rng, min, max);
+        }
+
+        public static Comparison<T> WithStableTieBreak<T, TKey>(
+            Comparison<T> primary,
+            Func<T, TKey> tieBreakSelector,
+            IComparer<TKey> tieBreakComparer = null)
+        {
+            return DeterministicHelpers.WithStableTieBreak(primary, tieBreakSelector, tieBreakComparer);
         }
     }
 }

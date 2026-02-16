@@ -128,7 +128,7 @@ namespace EconSim.Core.Simulation.Systems
                 if (desiredQty <= LotCullThreshold)
                     continue;
 
-                if (!TryResolveBuyer(economy, order.BuyerId, out var facilityBuyer, out var buyerCountyId, out float treasury))
+                if (!TryResolveBuyer(economy, order, out var facilityBuyer, out var buyerCountyId, out float treasury))
                     continue;
 
                 float unitPrice = goodState.Price;
@@ -254,7 +254,7 @@ namespace EconSim.Core.Simulation.Systems
 
         private static bool TryResolveBuyer(
             EconomyState economy,
-            int buyerId,
+            BuyOrder order,
             out Facility facilityBuyer,
             out int countyId,
             out float treasury)
@@ -263,9 +263,9 @@ namespace EconSim.Core.Simulation.Systems
             countyId = 0;
             treasury = 0f;
 
-            if (buyerId > 0)
+            if (!order.IsPopulationOrder)
             {
-                if (!economy.Facilities.TryGetValue(buyerId, out facilityBuyer))
+                if (!economy.Facilities.TryGetValue(order.FacilityId, out facilityBuyer))
                     return false;
 
                 countyId = facilityBuyer.CountyId;
@@ -273,7 +273,8 @@ namespace EconSim.Core.Simulation.Systems
                 return countyId > 0;
             }
 
-            if (!MarketOrderIds.TryGetPopulationCountyId(buyerId, out countyId))
+            countyId = order.CountyId;
+            if (countyId <= 0)
                 return false;
 
             if (!economy.Counties.TryGetValue(countyId, out var county))

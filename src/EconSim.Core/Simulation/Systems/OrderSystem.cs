@@ -13,20 +13,6 @@ namespace EconSim.Core.Simulation.Systems
     {
         private const float BuyerTransportFeeRate = 0.005f;
 
-        private static readonly Dictionary<string, float> V2BaseConsumption = new Dictionary<string, float>
-        {
-            ["bread"] = 0.5f,
-            ["cheese"] = 0.1f,
-            ["clothes"] = 0.003f,
-            ["shoes"] = 0.003f,
-            ["tools"] = 0.003f,
-            ["cookware"] = 0.003f,
-            ["furniture"] = 0.001f,
-            ["jewelry"] = 0.0003f,
-            ["spices"] = 0.01f,
-            ["sugar"] = 0.01f
-        };
-
         private static readonly string[] BreadSubsistenceGoods = { "wheat", "rye", "barley", "rice_grain" };
 
         public string Name => "Orders";
@@ -53,7 +39,7 @@ namespace EconSim.Core.Simulation.Systems
                 if (!economy.Markets.TryGetValue(marketId, out var market))
                     continue;
 
-                float transportCost = ResolveTransportCost(economy, mapData, market, county.CountyId);
+                float transportCost = ResolveTransportCost(mapData, market, county.CountyId);
 
                 PostPopulationOrders(state, economy, county, market, transportCost);
                 PostFacilityInputOrders(state, economy, county, market, transportCost);
@@ -74,11 +60,10 @@ namespace EconSim.Core.Simulation.Systems
             var demandByGood = new Dictionary<string, float>();
             foreach (var good in economy.Goods.ConsumerGoods)
             {
-                NeedCategory category = GetNeedCategory(good);
-                if (category != NeedCategory.Basic && category != NeedCategory.Comfort && category != NeedCategory.Luxury)
+                if (!good.NeedCategory.HasValue)
                     continue;
 
-                float perCapita = GetBaseConsumption(good);
+                float perCapita = good.BaseConsumption;
                 if (perCapita <= 0f)
                     continue;
 
@@ -115,7 +100,7 @@ namespace EconSim.Core.Simulation.Systems
                 if (!demandByGood.TryGetValue(good.Id, out float qty) || qty <= 0.0001f)
                     continue;
 
-                if (GetNeedCategory(good) != tier)
+                if (good.NeedCategory != tier)
                     continue;
 
                 if (!market.Goods.TryGetValue(good.Id, out var marketGood))
@@ -299,7 +284,7 @@ namespace EconSim.Core.Simulation.Systems
             }
         }
 
-        private static float ResolveTransportCost(EconomyState economy, MapData mapData, Market market, int countyId)
+        private static float ResolveTransportCost(MapData mapData, Market market, int countyId)
         {
             if (mapData?.CountyById == null || !mapData.CountyById.TryGetValue(countyId, out var county))
                 return 0f;
@@ -308,24 +293,6 @@ namespace EconSim.Core.Simulation.Systems
                 return Math.Max(0f, cost);
 
             return 0f;
-        }
-
-        private static NeedCategory GetNeedCategory(GoodDef good)
-        {
-            if (good.Id == "cheese")
-                return NeedCategory.Basic;
-            if (good.Id == "clothes")
-                return NeedCategory.Comfort;
-
-            return good.NeedCategory ?? NeedCategory.Luxury;
-        }
-
-        private static float GetBaseConsumption(GoodDef good)
-        {
-            if (V2BaseConsumption.TryGetValue(good.Id, out float overrideRate))
-                return overrideRate;
-
-            return good.BaseConsumption;
         }
     }
 }

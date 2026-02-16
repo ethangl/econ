@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
 using EconSim.Core.Transport;
@@ -174,7 +175,10 @@ namespace EconSim.Core.Simulation
                 valid.Add(county);
             }
 
-            valid.Sort((a, b) => b.TotalPopulation.CompareTo(a.TotalPopulation));
+            valid.Sort(
+                DeterministicHelpers.WithStableTieBreak<County, int>(
+                    (a, b) => b.TotalPopulation.CompareTo(a.TotalPopulation),
+                    county => county.Id));
             if (valid.Count == 0)
                 return new List<int>();
 
@@ -234,7 +238,10 @@ namespace EconSim.Core.Simulation
                     ranked.Add((targetId, dx * dx + dy * dy));
                 }
 
-                ranked.Sort((a, b) => a.distSq.CompareTo(b.distSq));
+                ranked.Sort(
+                    DeterministicHelpers.WithStableTieBreak<(int countyId, float distSq), int>(
+                        (a, b) => a.distSq.CompareTo(b.distSq),
+                        pair => pair.countyId));
                 int take = Math.Min(SimulationConfig.Roads.ConnectionsPerMajorCounty, ranked.Count);
                 for (int i = 0; i < take; i++)
                 {

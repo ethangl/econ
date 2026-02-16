@@ -100,13 +100,13 @@ namespace EconSim.Core.Simulation.Systems
                 float marketBasket = 0f;
                 foreach (var good in economy.Goods.ConsumerGoods)
                 {
-                    if (GetNeedCategory(good) != NeedCategory.Basic)
+                    if (good.NeedCategory != NeedCategory.Basic)
                         continue;
 
                     if (!market.Goods.TryGetValue(good.Id, out var marketGood))
                         continue;
 
-                    marketBasket += marketGood.Price * GetBaseConsumption(good);
+                    marketBasket += marketGood.Price * good.BaseConsumption;
                 }
 
                 weightedBasket += marketBasket * zonePopulation;
@@ -120,31 +120,11 @@ namespace EconSim.Core.Simulation.Systems
             float baseBasket = 0f;
             foreach (var good in economy.Goods.ConsumerGoods)
             {
-                if (GetNeedCategory(good) == NeedCategory.Basic)
-                    baseBasket += good.BasePrice * GetBaseConsumption(good);
+                if (good.NeedCategory == NeedCategory.Basic)
+                    baseBasket += good.BasePrice * good.BaseConsumption;
             }
 
             return baseBasket;
-        }
-
-        private static NeedCategory GetNeedCategory(GoodDef good)
-        {
-            if (good.Id == "cheese")
-                return NeedCategory.Basic;
-            if (good.Id == "clothes")
-                return NeedCategory.Comfort;
-
-            return good.NeedCategory ?? NeedCategory.Luxury;
-        }
-
-        private static float GetBaseConsumption(GoodDef good)
-        {
-            switch (good.Id)
-            {
-                case "bread": return 0.5f;
-                case "cheese": return 0.1f;
-                default: return good.BaseConsumption;
-            }
         }
 
         private static float Clamp(float value, float min, float max)

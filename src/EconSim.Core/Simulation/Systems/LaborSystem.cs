@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
 
@@ -90,7 +91,10 @@ namespace EconSim.Core.Simulation.Systems
                 active.Add(pair);
             }
 
-            active.Sort((a, b) => b.facility.WageRate.CompareTo(a.facility.WageRate));
+            active.Sort(
+                DeterministicHelpers.WithStableTieBreak<(Facility facility, FacilityDef def), int>(
+                    (a, b) => b.facility.WageRate.CompareTo(a.facility.WageRate),
+                    pair => pair.facility.Id));
 
             int totalWorkers = laborType == LaborType.Unskilled
                 ? county.Population.TotalUnskilled

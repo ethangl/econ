@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
 using EconSim.Core.Simulation;
