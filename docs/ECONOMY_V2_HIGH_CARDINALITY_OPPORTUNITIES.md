@@ -2,11 +2,12 @@
 
 This document evaluates high-cardinality bottlenecks in the current Economy V2 runtime and proposes abstractions to reduce daily simulation cost while preserving behavior.
 
-## Anchor Benchmark
+## Anchor Benchmarks
 
-Generated on day 20 of an Economy V2 run with game defaults, prior to most optimization efforts.
+Generated on day 20 and 180 of an Economy V2 run with game defaults, prior to most optimization efforts.
 
 - `unity/econ_debug_output_d20_bench.json`
+- `unity/econ_debug_output_d180_bench.json`
 
 ## Compare Workflow
 
@@ -191,7 +192,7 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 1. Instrument cardinality and per-system tick times on a large map baseline.
    Status: `Completed`
 2. Implement facility clustering by `(countyId, facilityType)` with behavior parity tests.
-   Status: `Completed` (initial placement now emits clustered facilities with `UnitCount`; labor/wage/production/bootstrap flows use scaled labor and throughput.)
+   Status: `Completed`
 3. Introduce dense good indexing in `Stockpile` and market records.
    Status: `Completed`
 4. Replace per-order/per-lot market clearing with aggregated books.
