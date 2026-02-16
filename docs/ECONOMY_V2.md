@@ -169,6 +169,7 @@ List<ConsignmentLot> Inventory;            // goods available for sale (FIFO ord
 ```
 
 **One-day lag enforcement**:
+
 - Buy orders clear only when `DayPosted < currentDay` (posted yesterday or earlier).
 - Consignment lots are sell-eligible only when `DayListed < currentDay` (listed yesterday or earlier).
 - Orders/lots created today wait until tomorrow.
