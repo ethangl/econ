@@ -18,9 +18,6 @@ namespace EconSim.Core.Simulation.Systems
 
         public void Tick(SimulationState state, MapData mapData)
         {
-            if (!SimulationConfig.UseEconomyV2)
-                return;
-
             var economy = state.Economy;
             if (economy == null)
                 return;

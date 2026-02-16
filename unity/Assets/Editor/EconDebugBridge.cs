@@ -477,7 +477,7 @@ namespace EconSim.Editor
             j.KV("totalFacilities", econ.Facilities.Count);
             j.KV("totalStockpileValue", totalStockpileValue);
             j.KV("economySeed", st.EconomySeed);
-            j.KV("useEconomyV2", SimulationConfig.UseEconomyV2);
+            j.KV("useEconomyV2", true);
             j.KV("subsistenceWage", st.SubsistenceWage);
             j.KV("smoothedBasketCost", st.SmoothedBasketCost);
 

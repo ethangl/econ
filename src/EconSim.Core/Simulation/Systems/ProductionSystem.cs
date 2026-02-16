@@ -61,10 +61,7 @@ namespace EconSim.Core.Simulation.Systems
 
         public void Tick(SimulationState state, MapData mapData)
         {
-            if (SimulationConfig.UseEconomyV2)
-                TickV2(state, mapData);
-            else
-                TickV1(state, mapData);
+            TickV2(state, mapData);
         }
 
         private void TickV1(SimulationState state, MapData mapData)

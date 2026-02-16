@@ -162,29 +162,16 @@ namespace EconSim.Core.Simulation
                 }
             }
 
-            if (SimulationConfig.UseEconomyV2)
-            {
-                EconomyInitializer.BootstrapV2(_state, _mapData);
-                RegisterSystem(new MarketSystem());
-                RegisterSystem(new ProductionSystem());
-                RegisterSystem(new OrderSystem());
-                RegisterSystem(new WageSystem());
-                RegisterSystem(new PriceSystem());
-                RegisterSystem(new LaborSystem());
-                RegisterSystem(new OffMapSupplySystem());
-                RegisterSystem(new MigrationSystem());
-                RegisterSystem(new TelemetrySystem());
-            }
-            else
-            {
-                // Register core systems (order matters!)
-                RegisterSystem(new ProductionSystem());
-                RegisterSystem(new ConsumptionSystem());
-                RegisterSystem(new OffMapSupplySystem());
-                RegisterSystem(new TradeSystem());
-                RegisterSystem(new TheftSystem());
-                RegisterSystem(new MigrationSystem());
-            }
+            EconomyInitializer.BootstrapV2(_state, _mapData);
+            RegisterSystem(new MarketSystem());
+            RegisterSystem(new ProductionSystem());
+            RegisterSystem(new OrderSystem());
+            RegisterSystem(new WageSystem());
+            RegisterSystem(new PriceSystem());
+            RegisterSystem(new LaborSystem());
+            RegisterSystem(new OffMapSupplySystem());
+            RegisterSystem(new MigrationSystem());
+            RegisterSystem(new TelemetrySystem());
         }
 
         /// <summary>
@@ -348,11 +335,6 @@ namespace EconSim.Core.Simulation
                     _state.Economy.Markets[market.Id] = market;
                 }
 
-                if (!SimulationConfig.UseEconomyV2 && !_state.Economy.Markets.ContainsKey(EconomyState.BlackMarketId))
-                {
-                    InitializeBlackMarket(logInitialization: false);
-                }
-
                 _state.Economy.CountyToMarket.Clear();
 
                 int countyToMarketCount = reader.ReadInt32();
@@ -449,7 +431,7 @@ namespace EconSim.Core.Simulation
             if (SimulationConfig.Roads.BuildStaticNetworkAtInit != staticNetworkBuilt)
                 return false;
 
-            if (cacheUseEconomyV2 != SimulationConfig.UseEconomyV2)
+            if (!cacheUseEconomyV2)
                 return false;
 
             return true;
@@ -494,7 +476,7 @@ namespace EconSim.Core.Simulation
             writer.Write(_mapData?.Info?.World != null ? _mapData.Info.World.LatitudeSouth : float.NaN);
             writer.Write(_mapData?.Info?.World != null ? _mapData.Info.World.LatitudeNorth : float.NaN);
             writer.Write(staticNetworkBuilt);
-            writer.Write(SimulationConfig.UseEconomyV2);
+            writer.Write(true);
 
             writer.Write(_state.Economy.Markets.Count);
             foreach (var market in _state.Economy.Markets.Values)
@@ -629,12 +611,6 @@ namespace EconSim.Core.Simulation
 
         private void InitializeMarkets()
         {
-            if (!SimulationConfig.UseEconomyV2)
-            {
-                // Initialize the black market first (ID 0, no physical location)
-                InitializeBlackMarket();
-            }
-
             // One market per realm, located at the realm capital.
             for (int i = 0; i < _mapData.Realms.Count; i++)
             {

@@ -46,10 +46,7 @@ namespace EconSim.Core.Economy
 
             // Register good and facility definitions
             InitialData.RegisterAll(economy);
-            if (SimulationConfig.UseEconomyV2)
-            {
-                InitialData.ApplyV2GoodOverrides(economy.Goods);
-            }
+            InitialData.ApplyV2GoodOverrides(economy.Goods);
 
             // Initialize county economies from map
             economy.InitializeFromMap(mapData);
@@ -69,9 +66,6 @@ namespace EconSim.Core.Economy
         /// </summary>
         public static void BootstrapV2(SimulationState state, MapData mapData)
         {
-            if (!SimulationConfig.UseEconomyV2)
-                return;
-
             var economy = state.Economy;
             if (economy == null)
                 return;
