@@ -170,7 +170,7 @@ namespace EconSim.Core.Simulation.Systems
             if (market == null)
                 return;
 
-            float transportCost = economy.GetCountyTransportCost(mapData, facility.CountyId);
+            float transportCost = economy.GetCountyTransportCost(facility.CountyId);
             float sellEfficiency = 1f / (1f + transportCost * V2TransportLossRate);
 
             int outputRuntimeId = ResolveRuntimeId(economy.Goods, def.OutputGoodId);
@@ -384,7 +384,7 @@ namespace EconSim.Core.Simulation.Systems
             if (market == null)
                 return;
 
-            float transportCost = economy.GetCountyTransportCost(mapData, facility.CountyId);
+            float transportCost = economy.GetCountyTransportCost(facility.CountyId);
             float efficiency = 1f / (1f + transportCost * V2TransportLossRate);
             if (efficiency <= 0f)
                 return;

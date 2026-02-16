@@ -165,10 +165,11 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 
 ### Priority B (medium-high impact, lower risk)
 
-1. Runtime county-level market zone representation
+1. Runtime county-level market zone representation (`Completed`)
 
 - Keep cell-level zone data only for rendering/debug tools.
 - Runtime economics should consume county-zone costs directly.
+- Branch note: `EconomyState` now materializes `CountyToMarketCost` from assignment rebuilds, and runtime systems read county transport costs from this county-level lookup.
 
 2. Migration county-graph reachability
 
