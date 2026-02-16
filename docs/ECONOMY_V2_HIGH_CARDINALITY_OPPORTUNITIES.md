@@ -143,37 +143,11 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 - Primary hotspots: `OrderSystem`, `MarketSystem`, `Market.PendingBuyOrders`, `Market.Inventory`.
 - Branch note: market books are grouped by good (`PendingBuyOrdersByGood`, `InventoryLotsByGood`) and posting/clearing paths use the new APIs.
 
-2. Dense good indexing (int IDs) for runtime paths (`In progress`)
+2. Dense good indexing (int IDs) for runtime paths (`Completed`)
 
 - Add a runtime good index table and use `int` IDs in stockpiles/orders/lots.
 - Keep string IDs at data boundaries only (data loading, debug dump, UI).
 - Primary hotspots: `Stockpile`, `MarketOrders`, production/order/market loops.
-
-Proposed implementation slices:
-
-- Slice A (low risk): add dense index in `GoodRegistry`
-  - Add stable `RuntimeId` assignment for each registered good.
-  - Add `GetByRuntimeId`, `TryGetRuntimeId`, and dense good list accessors.
-  - No behavior changes; compile/runtime parity check only.
-
-- Slice B (low-medium risk): migrate `Stockpile` internals to int-keyed storage
-  - Keep existing string APIs as compatibility shims.
-  - Add int-based `Get/Add/Remove/Has` fast paths.
-  - Update hot loops (`ProductionSystem`, `OrderSystem` subsistence helpers, facility buffers) to int paths.
-
-- Slice C (medium risk): migrate market books to int good keys
-  - Convert `Market` book dictionaries from `string` to `int` keys.
-  - Keep per-good state visible by string in debug output via registry lookup.
-  - Maintain deterministic ordering in dumps by sorting on good ID string.
-
-- Slice D (optional cleanup): remove/limit string runtime paths
-  - Keep string operations only at boundaries and test fixtures.
-  - Remove fallback lookups from tick-time loops.
-
-Expected impact (with current perf profile):
-
-- Highest gains should appear in `Production` and `Orders` system timings.
-- `Labor` is mostly unaffected by good-key hashing and should not be expected to improve much from this item.
 
 3. County transport cost cache per market assignment epoch
 
@@ -217,7 +191,7 @@ Expected impact (with current perf profile):
 2. Implement facility clustering by `(countyId, facilityType)` with behavior parity tests.
    Status: `Not started`
 3. Introduce dense good indexing in `Stockpile` and market records.
-   Status: `Partial` (Slice A complete: `GoodRegistry` runtime IDs + lookups; Slice B partial: int-keyed `Stockpile` internals, county/facility stockpile binding, and production/order stockpile hot-path adoption; Slice C complete: market books keyed by runtime int IDs with string-compatible query APIs.)
+   Status: `Completed`
 4. Replace per-order/per-lot market clearing with aggregated books.
    Status: `Completed`
 5. Shift runtime zone and migration logic to county-level representations.

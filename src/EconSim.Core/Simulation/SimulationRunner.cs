@@ -720,6 +720,8 @@ namespace EconSim.Core.Simulation
                     Demand = 0
                 };
             }
+
+            market.RebuildRuntimeGoodIndex();
         }
     }
 }

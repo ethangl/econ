@@ -48,7 +48,7 @@ namespace EconSim.Tests
         }
 
         [Test]
-        public void UnboundMarket_UsesFallbackRuntimeIds_ForUnknownGoods()
+        public void UnboundMarket_RejectsUnknownStringGoods_ButAcceptsExplicitRuntimeIds()
         {
             var market = new Market();
             market.AddPendingBuyOrder(new BuyOrder
@@ -60,9 +60,20 @@ namespace EconSim.Tests
                 DayPosted = 0
             });
 
-            int runtimeId = market.ResolveGoodRuntimeId("mystery_good");
-            Assert.That(runtimeId, Is.GreaterThanOrEqualTo(1000000));
-            Assert.That(market.PendingBuyOrdersByGood.ContainsKey(runtimeId), Is.True);
+            Assert.That(market.ResolveGoodRuntimeId("mystery_good"), Is.EqualTo(-1));
+            Assert.That(market.PendingBuyOrdersByGood.Count, Is.EqualTo(0));
+
+            market.AddPendingBuyOrder(new BuyOrder
+            {
+                BuyerId = 2,
+                GoodId = "mystery_good",
+                GoodRuntimeId = 42,
+                Quantity = 4f,
+                MaxSpend = 7f,
+                DayPosted = 0
+            });
+
+            Assert.That(market.PendingBuyOrdersByGood.ContainsKey(42), Is.True);
         }
     }
 }

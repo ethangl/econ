@@ -57,6 +57,7 @@ namespace EconSim.Core.Economy
         /// Current market state for each good: supply, demand, price.
         /// </summary>
         public Dictionary<string, MarketGoodState> Goods { get; set; } = new Dictionary<string, MarketGoodState>();
+        [NonSerialized] private readonly Dictionary<int, MarketGoodState> _goodsByRuntimeId = new Dictionary<int, MarketGoodState>();
 
         /// <summary>
         /// Pending buy orders grouped by good runtime ID and (day,buyer) key.
@@ -104,9 +105,6 @@ namespace EconSim.Core.Economy
         public float OffMapPriceMultiplier { get; set; } = 1f;
 
         [NonSerialized] private GoodRegistry _goodsRegistry;
-        [NonSerialized] private readonly Dictionary<string, int> _fallbackRuntimeIdByGoodId = new Dictionary<string, int>();
-        [NonSerialized] private readonly Dictionary<int, string> _fallbackGoodIdByRuntimeId = new Dictionary<int, string>();
-        [NonSerialized] private int _nextFallbackRuntimeId = 1000000;
 
         /// <summary>
         /// Bind this market to the active good registry so book keys can use dense runtime IDs.
@@ -114,6 +112,38 @@ namespace EconSim.Core.Economy
         public void BindGoods(GoodRegistry goodsRegistry)
         {
             _goodsRegistry = goodsRegistry;
+            RebuildRuntimeGoodIndex();
+        }
+
+        /// <summary>
+        /// Rebuild runtime-id lookup for market good state.
+        /// Call after mutating <see cref="Goods"/>.
+        /// </summary>
+        public void RebuildRuntimeGoodIndex()
+        {
+            _goodsByRuntimeId.Clear();
+            foreach (var goodState in Goods.Values)
+            {
+                if (goodState == null)
+                    continue;
+
+                int runtimeId = goodState.RuntimeId >= 0
+                    ? goodState.RuntimeId
+                    : ResolveRuntimeIdForRead(goodState.GoodId);
+                if (runtimeId < 0)
+                    continue;
+
+                goodState.RuntimeId = runtimeId;
+                _goodsByRuntimeId[runtimeId] = goodState;
+            }
+        }
+
+        /// <summary>
+        /// Try get market good state by dense runtime ID.
+        /// </summary>
+        public bool TryGetGoodState(int goodRuntimeId, out MarketGoodState goodState)
+        {
+            return _goodsByRuntimeId.TryGetValue(goodRuntimeId, out goodState);
         }
 
         /// <summary>
@@ -626,33 +656,18 @@ namespace EconSim.Core.Economy
             if (_goodsRegistry != null && _goodsRegistry.TryGetRuntimeId(goodId, out int registryRuntimeId))
                 return registryRuntimeId;
 
-            if (_fallbackRuntimeIdByGoodId.TryGetValue(goodId, out int cached))
-                return cached;
-
             return -1;
         }
 
         private int ResolveRuntimeIdForWrite(string goodId, int hintRuntimeId)
         {
             if (hintRuntimeId >= 0)
-            {
-                if (!string.IsNullOrWhiteSpace(goodId))
-                    _fallbackGoodIdByRuntimeId[hintRuntimeId] = goodId;
                 return hintRuntimeId;
-            }
 
             if (!string.IsNullOrWhiteSpace(goodId))
             {
                 if (_goodsRegistry != null && _goodsRegistry.TryGetRuntimeId(goodId, out int registryRuntimeId))
                     return registryRuntimeId;
-
-                if (_fallbackRuntimeIdByGoodId.TryGetValue(goodId, out int cached))
-                    return cached;
-
-                int fallback = _nextFallbackRuntimeId++;
-                _fallbackRuntimeIdByGoodId[goodId] = fallback;
-                _fallbackGoodIdByRuntimeId[fallback] = goodId;
-                return fallback;
             }
 
             return -1;

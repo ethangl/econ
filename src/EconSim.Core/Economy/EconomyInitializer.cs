@@ -260,9 +260,11 @@ namespace EconSim.Core.Economy
                     {
                         if (!market.Goods.TryGetValue(input.GoodId, out var marketGood))
                             continue;
+                        if (!economy.Goods.TryGetRuntimeId(input.GoodId, out int inputRuntimeId))
+                            continue;
 
                         float needed = input.Quantity * def.BaseThroughput;
-                        float have = facility.InputBuffer.Get(input.GoodId);
+                        float have = facility.InputBuffer.Get(inputRuntimeId);
                         float toBuy = Math.Max(0f, needed - have);
                         if (toBuy <= 0f)
                             continue;
@@ -277,7 +279,7 @@ namespace EconSim.Core.Economy
                         {
                             BuyerId = facility.Id,
                             GoodId = input.GoodId,
-                            GoodRuntimeId = economy.Goods.TryGetRuntimeId(input.GoodId, out int runtimeId) ? runtimeId : (int?)null,
+                            GoodRuntimeId = inputRuntimeId,
                             Quantity = quantity,
                             MaxSpend = maxSpend,
                             TransportCost = transportCost,
