@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
 
@@ -11,6 +12,7 @@ namespace EconSim.Core.Simulation.Systems
     {
         private const float BasketEmaAlpha = 2f / 31f;
         private const float DailyClamp = 0.02f;
+        private readonly Dictionary<int, int> _zonePopulationByMarket = new Dictionary<int, int>();
 
         public string Name => "Wages";
         public int TickInterval => SimulationConfig.Intervals.Daily;
@@ -96,8 +98,18 @@ namespace EconSim.Core.Simulation.Systems
             }
         }
 
-        private static float ComputeBasicBasketCost(EconomyState economy)
+        private float ComputeBasicBasketCost(EconomyState economy)
         {
+            _zonePopulationByMarket.Clear();
+            foreach (var kvp in economy.CountyToMarket)
+            {
+                if (!economy.Counties.TryGetValue(kvp.Key, out var county))
+                    continue;
+
+                _zonePopulationByMarket.TryGetValue(kvp.Value, out int population);
+                _zonePopulationByMarket[kvp.Value] = population + county.Population.Total;
+            }
+
             float weightedBasket = 0f;
             float weightedPopulation = 0f;
 
@@ -106,15 +118,8 @@ namespace EconSim.Core.Simulation.Systems
                 if (market.Type != MarketType.Legitimate)
                     continue;
 
-                int zonePopulation = 0;
-                foreach (var kvp in economy.CountyToMarket)
-                {
-                    if (kvp.Value != market.Id)
-                        continue;
-
-                    if (economy.Counties.TryGetValue(kvp.Key, out var county))
-                        zonePopulation += county.Population.Total;
-                }
+                if (!_zonePopulationByMarket.TryGetValue(market.Id, out int zonePopulation))
+                    continue;
 
                 if (zonePopulation <= 0)
                     continue;

@@ -15,6 +15,8 @@ namespace EconSim.Core.Simulation.Systems
     public class OffMapSupplySystem : ITickSystem
     {
         public string Name => "OffMapSupply";
+        private readonly Dictionary<string, float> _inventoryByGoodBuffer = new Dictionary<string, float>();
+        private readonly HashSet<string> _offMapGoodLookupBuffer = new HashSet<string>();
 
         // V1 replenishes weekly with TradeSystem; V2 replenishes daily as consignments.
         public int TickInterval => SimulationConfig.UseEconomyV2
@@ -77,12 +79,12 @@ namespace EconSim.Core.Simulation.Systems
             }
         }
 
-        private static void TickV2(SimulationState state)
+        private void TickV2(SimulationState state)
         {
             SeedV2Supply(state, state.CurrentDay);
         }
 
-        private static void SeedV2Supply(SimulationState state, int dayListed)
+        private void SeedV2Supply(SimulationState state, int dayListed)
         {
             foreach (var market in state.Economy.Markets.Values)
             {
@@ -92,21 +94,27 @@ namespace EconSim.Core.Simulation.Systems
                 if (market.OffMapGoodIds == null || market.OffMapGoodIds.Count == 0)
                     continue;
 
-                var inventoryByGood = new Dictionary<string, float>();
+                _inventoryByGoodBuffer.Clear();
+                _offMapGoodLookupBuffer.Clear();
+                foreach (var offMapGoodId in market.OffMapGoodIds)
+                {
+                    _offMapGoodLookupBuffer.Add(offMapGoodId);
+                }
+
                 for (int i = 0; i < market.Inventory.Count; i++)
                 {
                     var lot = market.Inventory[i];
-                    if (!market.OffMapGoodIds.Contains(lot.GoodId))
+                    if (!_offMapGoodLookupBuffer.Contains(lot.GoodId))
                         continue;
 
-                    inventoryByGood.TryGetValue(lot.GoodId, out float inventory);
-                    inventoryByGood[lot.GoodId] = inventory + lot.Quantity;
+                    _inventoryByGoodBuffer.TryGetValue(lot.GoodId, out float inventory);
+                    _inventoryByGoodBuffer[lot.GoodId] = inventory + lot.Quantity;
                 }
 
                 int sellerId = MarketOrderIds.MakeOffMapSellerId(market.Id);
                 foreach (var goodId in market.OffMapGoodIds)
                 {
-                    inventoryByGood.TryGetValue(goodId, out float inventory);
+                    _inventoryByGoodBuffer.TryGetValue(goodId, out float inventory);
 
                     if (inventory >= TargetSupply)
                         continue;

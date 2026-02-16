@@ -40,6 +40,12 @@ namespace EconSim.Core.Simulation
         }
 
         /// <summary>
+        /// Maximum simulation days processed in a single frame update.
+        /// Caps catch-up work to avoid frame stalls when under load.
+        /// </summary>
+        public const int MaxTicksPerFrame = 4;
+
+        /// <summary>
         /// Configuration for static transport backbone generation.
         /// </summary>
         public static class Roads

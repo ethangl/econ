@@ -205,11 +205,16 @@ namespace EconSim.Core.Simulation
             // Each "tick" represents one day
             float secondsPerDay = 1f / _state.TimeScale;
             _accumulator += deltaTime;
+            int ticksProcessedThisFrame = 0;
+            int tickBudget = SimulationConfig.MaxTicksPerFrame > 0
+                ? SimulationConfig.MaxTicksPerFrame
+                : int.MaxValue;
 
-            while (_accumulator >= secondsPerDay)
+            while (_accumulator >= secondsPerDay && ticksProcessedThisFrame < tickBudget)
             {
                 _accumulator -= secondsPerDay;
                 ProcessTick();
+                ticksProcessedThisFrame++;
             }
         }
 

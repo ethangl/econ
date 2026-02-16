@@ -10,7 +10,7 @@ namespace EconSim.Core.Simulation.Systems
     public class TelemetrySystem : ITickSystem
     {
         public string Name => "Telemetry";
-        public int TickInterval => SimulationConfig.Intervals.Daily;
+        public int TickInterval => SimulationConfig.Intervals.Weekly;
 
         public void Initialize(SimulationState state, MapData mapData)
         {

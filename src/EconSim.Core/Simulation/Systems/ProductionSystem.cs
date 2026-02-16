@@ -33,6 +33,7 @@ namespace EconSim.Core.Simulation.Systems
         private const int V2GraceDaysOnActivation = 21;
 
         private readonly Dictionary<string, float> _producedThisTick = new Dictionary<string, float>();
+        private readonly List<KeyValuePair<string, float>> _outputGoodsBuffer = new List<KeyValuePair<string, float>>(8);
 
         public void Initialize(SimulationState state, MapData mapData)
         {
@@ -302,13 +303,13 @@ namespace EconSim.Core.Simulation.Systems
                 return;
 
             var county = economy.GetCounty(facility.CountyId);
-            var goods = new List<KeyValuePair<string, float>>();
+            _outputGoodsBuffer.Clear();
             foreach (var kvp in facility.OutputBuffer.All)
             {
-                goods.Add(kvp);
+                _outputGoodsBuffer.Add(kvp);
             }
 
-            foreach (var kvp in goods)
+            foreach (var kvp in _outputGoodsBuffer)
             {
                 string goodId = kvp.Key;
                 float quantity = kvp.Value;

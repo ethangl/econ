@@ -501,7 +501,7 @@ namespace EconSim.Core.Economy
                     int cellId = FindCellWithResource(countyId, facilityDef.OutputGoodId, mapData, cellResources);
                     if (cellId < 0) continue;
 
-                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 1);
                     for (int j = 0; j < count; j++)
                     {
                         economy.CreateFacility(facilityDef.Id, cellId);
@@ -556,7 +556,7 @@ namespace EconSim.Core.Economy
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
 
-                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 0);
                     for (int j = 0; j < count; j++)
                     {
                         economy.CreateFacility(facilityId, cellId);
@@ -609,7 +609,7 @@ namespace EconSim.Core.Economy
                 {
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
-                    int laborLimitedCount = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    int laborLimitedCount = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 0);
                     int count = ComputeInputConstrainedFacilityCount(economy, countyId, facilityDef, laborLimitedCount);
                     if (count <= 0)
                         continue;
@@ -648,7 +648,7 @@ namespace EconSim.Core.Economy
                 {
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
-                    int laborLimitedCount = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef);
+                    int laborLimitedCount = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 0);
                     int count = ComputeInputConstrainedFacilityCount(economy, countyId, facilityDef, laborLimitedCount);
                     if (count <= 0)
                         continue;
@@ -756,7 +756,7 @@ namespace EconSim.Core.Economy
         /// Formula: 1 facility per (ScaleFactor * LaborRequired) workers of the matching type.
         /// A median ~200-pop county gets ~3 farms (labor=20), matching prior defaults.
         /// </summary>
-        private static int ComputeFacilityCount(CountyPopulation pop, FacilityDef def)
+        private static int ComputeFacilityCount(CountyPopulation pop, FacilityDef def, int minPerCounty = 0)
         {
             const float ScaleFactor = 3f;
             const int MaxPerType = 50;
@@ -766,7 +766,7 @@ namespace EconSim.Core.Economy
                 : pop.TotalSkilled;
 
             int count = (int)(workerPool / (def.LaborRequired * ScaleFactor));
-            return Math.Max(1, Math.Min(MaxPerType, count));
+            return Math.Max(minPerCounty, Math.Min(MaxPerType, count));
         }
 
         private static int ComputeInputConstrainedFacilityCount(
