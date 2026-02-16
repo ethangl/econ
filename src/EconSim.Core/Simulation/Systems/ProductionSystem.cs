@@ -28,6 +28,8 @@ namespace EconSim.Core.Simulation.Systems
         private const int V2GraceDaysOnActivation = 21;
         private const int V2InactiveRecheckDays = 7;
         private const int V2InactiveExtractionRecheckDays = 3;
+        private const int V2InactiveMediumDormancyDays = 30;
+        private const int V2InactiveLongDormancyDays = 120;
 
         private readonly Dictionary<string, float> _producedThisTick = new Dictionary<string, float>();
         private readonly List<KeyValuePair<int, float>> _outputGoodsBuffer = new List<KeyValuePair<int, float>>(8);
@@ -82,12 +84,29 @@ namespace EconSim.Core.Simulation.Systems
                 if (def == null)
                     continue;
 
-                if (!facility.IsActive && !ShouldEvaluateInactiveFacility(state.CurrentDay, facility.Id, def.IsExtraction))
-                    continue;
+                if (facility.IsActive)
+                {
+                    facility.InactiveDays = 0;
+                }
+                else
+                {
+                    facility.InactiveDays = Math.Min(int.MaxValue - 1, Math.Max(0, facility.InactiveDays) + 1);
+                    if (!ShouldEvaluateInactiveFacility(state.CurrentDay, facility, def.IsExtraction))
+                        continue;
+                }
 
                 ApplyActivationRulesV2(state, mapData, economy, facility, def, _availableUnskilledByCounty, _availableSkilledByCounty);
 
-                if (!facility.IsActive || facility.AssignedWorkers <= 0)
+                if (!facility.IsActive)
+                {
+                    // A facility may deactivate during this tick from active state.
+                    if (facility.InactiveDays <= 0)
+                        facility.InactiveDays = 1;
+                    continue;
+                }
+
+                facility.InactiveDays = 0;
+                if (facility.AssignedWorkers <= 0)
                     continue;
 
                 if (def.IsExtraction)
@@ -218,16 +237,29 @@ namespace EconSim.Core.Simulation.Systems
             }
         }
 
-        private static bool ShouldEvaluateInactiveFacility(int currentDay, int facilityId, bool isExtraction)
+        private static bool ShouldEvaluateInactiveFacility(int currentDay, Facility facility, bool isExtraction)
         {
-            int period = isExtraction ? V2InactiveExtractionRecheckDays : V2InactiveRecheckDays;
+            int period = ResolveInactiveRecheckPeriod(facility, isExtraction);
             if (period <= 1)
                 return true;
 
-            int phase = facilityId % period;
+            int phase = facility.Id % period;
             if (phase < 0)
                 phase += period;
             return currentDay % period == phase;
+        }
+
+        private static int ResolveInactiveRecheckPeriod(Facility facility, bool isExtraction)
+        {
+            int basePeriod = isExtraction ? V2InactiveExtractionRecheckDays : V2InactiveRecheckDays;
+            int dormantDays = facility != null ? Math.Max(0, facility.InactiveDays) : 0;
+
+            if (dormantDays >= V2InactiveLongDormancyDays)
+                return basePeriod * 4;
+            if (dormantDays >= V2InactiveMediumDormancyDays)
+                return basePeriod * 2;
+
+            return basePeriod;
         }
 
         private void BuildAvailableWorkerCaches(EconomyState economy)

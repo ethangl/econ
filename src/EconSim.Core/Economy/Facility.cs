@@ -60,6 +60,8 @@ namespace EconSim.Core.Economy
 
         /// <summary>Consecutive days wages were underpaid.</summary>
         public int WageDebtDays;
+        /// <summary>Consecutive days spent inactive (used for adaptive inactive recheck cadence).</summary>
+        public int InactiveDays;
         /// <summary>Absolute simulation day metrics were last initialized for.</summary>
         public int MetricsDay = int.MinValue;
 
