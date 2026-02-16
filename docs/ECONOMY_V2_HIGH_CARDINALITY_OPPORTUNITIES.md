@@ -176,10 +176,11 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 - Compute county adjacency/cost graph and run migration reachability on counties, not full cell graph.
 - Preserve cell-graph pathfinding for rendering/road features where needed.
 
-3. Allocation pooling and reuse in labor/market systems
+3. Allocation pooling and reuse in labor/market systems (`Completed`)
 
 - Reuse list/map buffers by county/market key to reduce daily GC churn.
 - Avoid repeated short-lived `new List<>` in hot paths.
+- Branch note: `LaborSystem` now reuses county/active facility buffers, and `MarketSystem` reuses seller-id buffers during clearing.
 
 ### Priority C (follow-up after structural changes)
 

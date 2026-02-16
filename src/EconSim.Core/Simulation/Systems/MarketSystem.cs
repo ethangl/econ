@@ -17,6 +17,7 @@ namespace EconSim.Core.Simulation.Systems
         private readonly Dictionary<int, float> _eligibleDemandByGood = new Dictionary<int, float>();
         private readonly Dictionary<int, float> _eligibleSupplyByGood = new Dictionary<int, float>();
         private readonly Dictionary<int, MarketGoodState> _goodStateByRuntimeId = new Dictionary<int, MarketGoodState>();
+        private readonly List<int> _sellerIdsBuffer = new List<int>();
 
         public string Name => "Market";
         public int TickInterval => SimulationConfig.Intervals.Daily;
@@ -183,10 +184,15 @@ namespace EconSim.Core.Simulation.Systems
                 float remainingSold = soldTarget;
                 float remainingSupply = totalSupply;
                 float sellerRevenue = 0f;
-                var sellerIds = new List<int>(sellers.Keys);
-                for (int i = 0; i < sellerIds.Count; i++)
+                _sellerIdsBuffer.Clear();
+                foreach (int sellerId in sellers.Keys)
                 {
-                    int sellerId = sellerIds[i];
+                    _sellerIdsBuffer.Add(sellerId);
+                }
+
+                for (int i = 0; i < _sellerIdsBuffer.Count; i++)
+                {
+                    int sellerId = _sellerIdsBuffer[i];
                     if (!sellers.TryGetValue(sellerId, out float sellerQty) || sellerQty <= LotCullThreshold)
                         continue;
 
@@ -194,7 +200,7 @@ namespace EconSim.Core.Simulation.Systems
                         break;
 
                     float sold;
-                    bool isLast = i == sellerIds.Count - 1;
+                    bool isLast = i == _sellerIdsBuffer.Count - 1;
                     if (isLast)
                     {
                         sold = Math.Min(sellerQty, remainingSold);
