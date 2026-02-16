@@ -6,6 +6,17 @@ namespace EconSim.Core.Simulation
     public static class SimulationConfig
     {
         /// <summary>
+        /// Enables the Economy V2 system registration path.
+        /// </summary>
+        public static bool UseEconomyV2 = false;
+
+        /// <summary>
+        /// Optional explicit economy seed override.
+        /// Values greater than zero take precedence over map-derived seeds.
+        /// </summary>
+        public static int EconomySeedOverride = 0;
+
+        /// <summary>
         /// Speed presets in ticks (days) per second.
         /// </summary>
         public static class Speed

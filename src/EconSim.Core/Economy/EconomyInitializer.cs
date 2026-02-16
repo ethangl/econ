@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
+using EconSim.Core.Simulation;
 
 namespace EconSim.Core.Economy
 {
@@ -45,6 +46,10 @@ namespace EconSim.Core.Economy
 
             // Register good and facility definitions
             InitialData.RegisterAll(economy);
+            if (SimulationConfig.UseEconomyV2)
+            {
+                ApplyEconomyV2DataTuning(economy);
+            }
 
             // Initialize county economies from map
             economy.InitializeFromMap(mapData);
@@ -59,11 +64,247 @@ namespace EconSim.Core.Economy
             return economy;
         }
 
+        /// <summary>
+        /// Seed V2 economy treasuries, inventories, and day-0 orders after markets are available.
+        /// </summary>
+        public static void BootstrapV2(SimulationState state, MapData mapData)
+        {
+            if (!SimulationConfig.UseEconomyV2)
+                return;
+
+            var economy = state.Economy;
+            if (economy == null)
+                return;
+
+            float basicBasket = 0f;
+            foreach (var good in economy.Goods.ConsumerGoods)
+            {
+                if (GetNeedCategoryV2(good) != NeedCategory.Basic)
+                    continue;
+
+                basicBasket += good.BasePrice * GetBaseConsumptionV2(good);
+            }
+
+            state.SmoothedBasketCost = basicBasket;
+            state.SubsistenceWage = basicBasket * 1.2f;
+
+            foreach (var county in economy.Counties.Values)
+            {
+                if (county.Population.Total <= 0)
+                {
+                    county.Population.Treasury = 0f;
+                    continue;
+                }
+
+                float dailyBasicCost = 0f;
+                foreach (var good in economy.Goods.ConsumerGoods)
+                {
+                    if (GetNeedCategoryV2(good) != NeedCategory.Basic)
+                        continue;
+
+                    dailyBasicCost += good.BasePrice * GetBaseConsumptionV2(good) * county.Population.Total;
+                }
+
+                county.Population.Treasury = dailyBasicCost * 30f;
+            }
+
+            foreach (var facility in economy.Facilities.Values)
+            {
+                var def = economy.FacilityDefs.Get(facility.TypeId);
+                if (def == null)
+                    continue;
+
+                var outputGood = economy.Goods.Get(def.OutputGoodId);
+                var inputs = outputGood != null ? (def.InputOverrides ?? outputGood.Inputs) : null;
+
+                float weeklyInputCost = 0f;
+                if (inputs != null)
+                {
+                    foreach (var input in inputs)
+                    {
+                        var inputGood = economy.Goods.Get(input.GoodId);
+                        if (inputGood == null)
+                            continue;
+                        weeklyInputCost += inputGood.BasePrice * input.Quantity * def.BaseThroughput * 7f;
+                    }
+                }
+
+                float weeklyWage = def.LaborRequired * state.SubsistenceWage * 7f;
+                facility.Treasury = weeklyInputCost + weeklyWage;
+                facility.WageRate = state.SubsistenceWage;
+                facility.IsActive = true;
+                facility.GraceDaysRemaining = 14;
+            }
+
+            // Seed processing input buffers (3 days).
+            foreach (var facility in economy.Facilities.Values)
+            {
+                var def = economy.FacilityDefs.Get(facility.TypeId);
+                if (def == null || def.IsExtraction)
+                    continue;
+
+                var outputGood = economy.Goods.Get(def.OutputGoodId);
+                var inputs = outputGood != null ? (def.InputOverrides ?? outputGood.Inputs) : null;
+                if (inputs == null)
+                    continue;
+
+                foreach (var input in inputs)
+                {
+                    facility.InputBuffer.Add(input.GoodId, input.Quantity * def.BaseThroughput * 3f);
+                }
+            }
+
+            // Seed market inventory and day-0 buy orders.
+            foreach (var market in economy.Markets.Values)
+            {
+                if (market.Type != MarketType.Legitimate)
+                    continue;
+
+                int seedSellerId = MarketOrderIds.MakeSeedSellerId(market.Id);
+                var localOutputs = new HashSet<string>();
+                foreach (var kvp in economy.CountyToMarket)
+                {
+                    if (kvp.Value != market.Id || !economy.Counties.ContainsKey(kvp.Key))
+                        continue;
+
+                    var county = economy.Counties[kvp.Key];
+                    foreach (int facilityId in county.FacilityIds)
+                    {
+                        if (economy.Facilities.TryGetValue(facilityId, out var facility))
+                        {
+                            var def = economy.FacilityDefs.Get(facility.TypeId);
+                            if (def != null)
+                                localOutputs.Add(def.OutputGoodId);
+                        }
+                    }
+                }
+
+                foreach (string goodId in localOutputs)
+                {
+                    var good = economy.Goods.Get(goodId);
+                    if (good == null)
+                        continue;
+
+                    float weeklyDemand = 0f;
+                    foreach (var kvp in economy.CountyToMarket)
+                    {
+                        if (kvp.Value != market.Id || !economy.Counties.TryGetValue(kvp.Key, out var county))
+                            continue;
+
+                        weeklyDemand += GetBaseConsumptionV2(good) * county.Population.Total * 7f;
+                    }
+
+                    if (weeklyDemand <= 0f)
+                        continue;
+
+                    market.Inventory.Add(new ConsignmentLot
+                    {
+                        SellerId = seedSellerId,
+                        GoodId = goodId,
+                        Quantity = weeklyDemand * 2f,
+                        DayListed = 0
+                    });
+                }
+            }
+
+            // Prefill day-0 orders for processing facilities and basic population demand.
+            foreach (var county in economy.Counties.Values)
+            {
+                if (!economy.CountyToMarket.TryGetValue(county.CountyId, out int marketId))
+                    continue;
+                if (!economy.Markets.TryGetValue(marketId, out var market))
+                    continue;
+
+                float transportCost = ResolveTransportCost(mapData, market, county.CountyId);
+                int populationBuyerId = MarketOrderIds.MakePopulationBuyerId(county.CountyId);
+
+                foreach (var good in economy.Goods.ConsumerGoods)
+                {
+                    if (GetNeedCategoryV2(good) != NeedCategory.Basic)
+                        continue;
+                    if (!market.Goods.TryGetValue(good.Id, out var marketGood))
+                        continue;
+
+                    float quantity = GetBaseConsumptionV2(good) * county.Population.Total;
+                    if (quantity <= 0f)
+                        continue;
+
+                    float effectivePrice = marketGood.Price * (1f + transportCost * 0.005f);
+                    float maxSpend = quantity * effectivePrice;
+                    if (maxSpend <= 0f)
+                        continue;
+
+                    market.PendingBuyOrders.Add(new BuyOrder
+                    {
+                        BuyerId = populationBuyerId,
+                        GoodId = good.Id,
+                        Quantity = quantity,
+                        MaxSpend = Math.Min(maxSpend, county.Population.Treasury),
+                        TransportCost = transportCost,
+                        DayPosted = 0
+                    });
+                }
+
+                foreach (int facilityId in county.FacilityIds)
+                {
+                    if (!economy.Facilities.TryGetValue(facilityId, out var facility) || !facility.IsActive)
+                        continue;
+
+                    var def = economy.FacilityDefs.Get(facility.TypeId);
+                    if (def == null || def.IsExtraction)
+                        continue;
+
+                    var outputGood = economy.Goods.Get(def.OutputGoodId);
+                    var inputs = outputGood != null ? (def.InputOverrides ?? outputGood.Inputs) : null;
+                    if (inputs == null)
+                        continue;
+
+                    float remainingTreasury = facility.Treasury;
+                    foreach (var input in inputs)
+                    {
+                        if (!market.Goods.TryGetValue(input.GoodId, out var marketGood))
+                            continue;
+
+                        float needed = input.Quantity * def.BaseThroughput;
+                        float have = facility.InputBuffer.Get(input.GoodId);
+                        float toBuy = Math.Max(0f, needed - have);
+                        if (toBuy <= 0f)
+                            continue;
+
+                        float effectivePrice = marketGood.Price * (1f + transportCost * 0.005f);
+                        float maxSpend = Math.Min(remainingTreasury, toBuy * effectivePrice);
+                        float quantity = effectivePrice > 0f ? maxSpend / effectivePrice : 0f;
+                        if (quantity <= 0f || maxSpend <= 0f)
+                            continue;
+
+                        market.PendingBuyOrders.Add(new BuyOrder
+                        {
+                            BuyerId = facility.Id,
+                            GoodId = input.GoodId,
+                            Quantity = quantity,
+                            MaxSpend = maxSpend,
+                            TransportCost = transportCost,
+                            DayPosted = 0
+                        });
+
+                        remainingTreasury -= maxSpend;
+                        if (remainingTreasury <= 0f)
+                            break;
+                    }
+                }
+            }
+        }
+
         private static int ResolveInitializationSeed(MapData mapData, int? explicitSeed)
         {
             if (explicitSeed.HasValue)
             {
                 return explicitSeed.Value;
+            }
+
+            if (SimulationConfig.EconomySeedOverride > 0)
+            {
+                return SimulationConfig.EconomySeedOverride;
             }
 
             if (mapData?.Info != null)
@@ -540,6 +781,75 @@ namespace EconSim.Core.Economy
                 return Elevation.ResolveMaxElevationMeters(info);
 
             return aboveSeaFraction * Elevation.ResolveMaxElevationMeters(info);
+        }
+
+        private static void ApplyEconomyV2DataTuning(EconomyState economy)
+        {
+            SetNeedCategory(economy, "cheese", NeedCategory.Basic);
+            SetNeedCategory(economy, "clothes", NeedCategory.Comfort);
+
+            SetBaseConsumption(economy, "bread", 0.5f);
+            SetBaseConsumption(economy, "cheese", 0.1f);
+            SetBaseConsumption(economy, "clothes", 0.003f);
+            SetBaseConsumption(economy, "shoes", 0.003f);
+            SetBaseConsumption(economy, "tools", 0.003f);
+            SetBaseConsumption(economy, "cookware", 0.003f);
+            SetBaseConsumption(economy, "furniture", 0.001f);
+            SetBaseConsumption(economy, "jewelry", 0.0003f);
+            SetBaseConsumption(economy, "spices", 0.01f);
+            SetBaseConsumption(economy, "sugar", 0.01f);
+        }
+
+        private static void SetNeedCategory(EconomyState economy, string goodId, NeedCategory category)
+        {
+            var good = economy.Goods.Get(goodId);
+            if (good != null)
+                good.NeedCategory = category;
+        }
+
+        private static void SetBaseConsumption(EconomyState economy, string goodId, float value)
+        {
+            var good = economy.Goods.Get(goodId);
+            if (good != null)
+                good.BaseConsumption = value;
+        }
+
+        private static NeedCategory GetNeedCategoryV2(GoodDef good)
+        {
+            if (good.Id == "cheese")
+                return NeedCategory.Basic;
+            if (good.Id == "clothes")
+                return NeedCategory.Comfort;
+            return good.NeedCategory ?? NeedCategory.Luxury;
+        }
+
+        private static float GetBaseConsumptionV2(GoodDef good)
+        {
+            switch (good.Id)
+            {
+                case "bread": return 0.5f;
+                case "cheese": return 0.1f;
+                case "clothes": return 0.003f;
+                case "shoes": return 0.003f;
+                case "tools": return 0.003f;
+                case "cookware": return 0.003f;
+                case "furniture": return 0.001f;
+                case "jewelry": return 0.0003f;
+                case "spices": return 0.01f;
+                case "sugar": return 0.01f;
+                default: return good.BaseConsumption;
+            }
+        }
+
+        private static float ResolveTransportCost(MapData mapData, Market market, int countyId)
+        {
+            if (mapData?.CountyById == null || !mapData.CountyById.TryGetValue(countyId, out var county))
+                return 0f;
+
+            if (market.ZoneCellCosts != null && market.ZoneCellCosts.TryGetValue(county.SeatCellId, out float cost))
+                return Math.Max(0f, cost);
+
+            return 0f;
         }
     }
 }

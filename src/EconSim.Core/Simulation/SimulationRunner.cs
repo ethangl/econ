@@ -16,7 +16,7 @@ namespace EconSim.Core.Simulation
     /// </summary>
     public class SimulationRunner : ISimulation
     {
-        private const int BootstrapCacheVersion = 8;
+        private const int BootstrapCacheVersion = 9;
         private const int BootstrapCacheHeaderMagic = unchecked((int)0xEC0A571C);
         private const string BootstrapCacheFileName = "simulation_bootstrap.bin";
         private static readonly int BootstrapCacheSchemaHash = ComputeBootstrapCacheSchemaHash();
@@ -101,6 +101,8 @@ namespace EconSim.Core.Simulation
             _cacheRootSeed = rootSeed > 0 ? rootSeed : mapData?.Info?.RootSeed ?? 0;
             _cacheMapGenSeed = mapGenSeed > 0 ? mapGenSeed : mapData?.Info?.MapGenSeed ?? 0;
             _cacheEconomySeed = ResolveEconomySeedForCache(mapData, economySeed);
+            _state.EconomySeed = _cacheEconomySeed;
+            _state.EconomyRng = new Random(_cacheEconomySeed);
 
             // Initialize economy
             Profiler.Begin("EconomyInitializer");
@@ -160,13 +162,29 @@ namespace EconSim.Core.Simulation
                 }
             }
 
-            // Register core systems (order matters!)
-            RegisterSystem(new ProductionSystem());
-            RegisterSystem(new ConsumptionSystem());
-            RegisterSystem(new OffMapSupplySystem());
-            RegisterSystem(new TradeSystem());
-            RegisterSystem(new TheftSystem());
-            RegisterSystem(new MigrationSystem());
+            if (SimulationConfig.UseEconomyV2)
+            {
+                EconomyInitializer.BootstrapV2(_state, _mapData);
+                RegisterSystem(new MarketSystem());
+                RegisterSystem(new ProductionSystem());
+                RegisterSystem(new OrderSystem());
+                RegisterSystem(new WageSystem());
+                RegisterSystem(new PriceSystem());
+                RegisterSystem(new LaborSystem());
+                RegisterSystem(new OffMapSupplySystem());
+                RegisterSystem(new MigrationSystem());
+                RegisterSystem(new TelemetrySystem());
+            }
+            else
+            {
+                // Register core systems (order matters!)
+                RegisterSystem(new ProductionSystem());
+                RegisterSystem(new ConsumptionSystem());
+                RegisterSystem(new OffMapSupplySystem());
+                RegisterSystem(new TradeSystem());
+                RegisterSystem(new TheftSystem());
+                RegisterSystem(new MigrationSystem());
+            }
         }
 
         /// <summary>
@@ -249,6 +267,7 @@ namespace EconSim.Core.Simulation
                 float latitudeSouth = reader.ReadSingle();
                 float latitudeNorth = reader.ReadSingle();
                 bool staticNetworkBuilt = reader.ReadBoolean();
+                bool cacheUseEconomyV2 = reader.ReadBoolean();
 
                 if (!IsSimulationBootstrapCacheCompatible(
                     rootSeed,
@@ -258,7 +277,8 @@ namespace EconSim.Core.Simulation
                     cellCount,
                     latitudeSouth,
                     latitudeNorth,
-                    staticNetworkBuilt))
+                    staticNetworkBuilt,
+                    cacheUseEconomyV2))
                     return false;
 
                 _state.Economy.Markets.Clear();
@@ -323,7 +343,7 @@ namespace EconSim.Core.Simulation
                     _state.Economy.Markets[market.Id] = market;
                 }
 
-                if (!_state.Economy.Markets.ContainsKey(EconomyState.BlackMarketId))
+                if (!SimulationConfig.UseEconomyV2 && !_state.Economy.Markets.ContainsKey(EconomyState.BlackMarketId))
                 {
                     InitializeBlackMarket(logInitialization: false);
                 }
@@ -397,7 +417,8 @@ namespace EconSim.Core.Simulation
             int cellCount,
             float latitudeSouth,
             float latitudeNorth,
-            bool staticNetworkBuilt)
+            bool staticNetworkBuilt,
+            bool cacheUseEconomyV2)
         {
             if (countyCount != (_mapData?.Counties?.Count ?? 0))
                 return false;
@@ -421,6 +442,9 @@ namespace EconSim.Core.Simulation
                 return false;
 
             if (SimulationConfig.Roads.BuildStaticNetworkAtInit != staticNetworkBuilt)
+                return false;
+
+            if (cacheUseEconomyV2 != SimulationConfig.UseEconomyV2)
                 return false;
 
             return true;
@@ -465,6 +489,7 @@ namespace EconSim.Core.Simulation
             writer.Write(_mapData?.Info?.World != null ? _mapData.Info.World.LatitudeSouth : float.NaN);
             writer.Write(_mapData?.Info?.World != null ? _mapData.Info.World.LatitudeNorth : float.NaN);
             writer.Write(staticNetworkBuilt);
+            writer.Write(SimulationConfig.UseEconomyV2);
 
             writer.Write(_state.Economy.Markets.Count);
             foreach (var market in _state.Economy.Markets.Values)
@@ -579,6 +604,9 @@ namespace EconSim.Core.Simulation
             if (explicitSeed.HasValue)
                 return explicitSeed.Value;
 
+            if (SimulationConfig.EconomySeedOverride > 0)
+                return SimulationConfig.EconomySeedOverride;
+
             if (mapData?.Info != null)
             {
                 if (mapData.Info.EconomySeed > 0)
@@ -596,8 +624,11 @@ namespace EconSim.Core.Simulation
 
         private void InitializeMarkets()
         {
-            // Initialize the black market first (ID 0, no physical location)
-            InitializeBlackMarket();
+            if (!SimulationConfig.UseEconomyV2)
+            {
+                // Initialize the black market first (ID 0, no physical location)
+                InitializeBlackMarket();
+            }
 
             // One market per realm, located at the realm capital.
             for (int i = 0; i < _mapData.Realms.Count; i++)
@@ -639,7 +670,12 @@ namespace EconSim.Core.Simulation
             }
 
             // Place off-map virtual markets at map edges
-            int nextId = _state.Economy.Markets.Count; // After black market (0) + legitimate markets
+            int nextId = 1;
+            foreach (var existing in _state.Economy.Markets.Values)
+            {
+                if (existing.Id >= nextId)
+                    nextId = existing.Id + 1;
+            }
             var offMapResult = OffMapMarketPlacer.Place(
                 _mapData, _state.Economy, _state.Transport, nextId, _marketZoneMaxTransportCost);
             foreach (var offMapMarket in offMapResult.Markets)

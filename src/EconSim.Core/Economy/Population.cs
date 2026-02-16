@@ -68,6 +68,9 @@ namespace EconSim.Core.Economy
     {
         public List<PopulationCohort> Cohorts = new List<PopulationCohort>();
 
+        /// <summary>Household treasury used for market purchases.</summary>
+        public float Treasury;
+
         /// <summary>Number of unskilled workers currently employed.</summary>
         public int EmployedUnskilled;
 
@@ -136,6 +139,12 @@ namespace EconSim.Core.Economy
         /// <summary>Skilled workers not currently employed.</summary>
         public int IdleSkilled => Math.Max(0, TotalSkilled - EmployedSkilled);
 
+        /// <summary>Idle workers for a labor type.</summary>
+        public int IdleWorkers(LaborType laborType)
+        {
+            return laborType == LaborType.Unskilled ? IdleUnskilled : IdleSkilled;
+        }
+
         /// <summary>Population count for a given estate.</summary>
         public int GetEstatePopulation(Estate estate)
         {
@@ -174,6 +183,16 @@ namespace EconSim.Core.Economy
         {
             EmployedUnskilled = 0;
             EmployedSkilled = 0;
+        }
+
+        /// <summary>
+        /// Set employed worker counts from external allocation systems.
+        /// Values are clamped to valid population limits.
+        /// </summary>
+        public void SetEmployment(int employedUnskilled, int employedSkilled)
+        {
+            EmployedUnskilled = Math.Max(0, Math.Min(TotalUnskilled, employedUnskilled));
+            EmployedSkilled = Math.Max(0, Math.Min(TotalSkilled, employedSkilled));
         }
 
         /// <summary>

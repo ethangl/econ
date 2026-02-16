@@ -14,8 +14,10 @@ namespace EconSim.Core.Simulation.Systems
     {
         public string Name => "OffMapSupply";
 
-        // Runs on the same schedule as TradeSystem (weekly)
-        public int TickInterval => SimulationConfig.Intervals.Weekly;
+        // V1 replenishes weekly with TradeSystem; V2 replenishes daily as consignments.
+        public int TickInterval => SimulationConfig.UseEconomyV2
+            ? SimulationConfig.Intervals.Daily
+            : SimulationConfig.Intervals.Weekly;
 
         // Target supply level per good per off-map market
         private const float TargetSupply = 1000f;
@@ -32,6 +34,17 @@ namespace EconSim.Core.Simulation.Systems
         }
 
         public void Tick(SimulationState state, MapData mapData)
+        {
+            if (SimulationConfig.UseEconomyV2)
+            {
+                TickV2(state);
+                return;
+            }
+
+            TickV1(state);
+        }
+
+        private static void TickV1(SimulationState state)
         {
             foreach (var market in state.Economy.Markets.Values)
             {
@@ -52,6 +65,41 @@ namespace EconSim.Core.Simulation.Systems
                         goodState.Supply = TargetSupply;
                         goodState.SupplyOffered = TargetSupply;
                     }
+                }
+            }
+        }
+
+        private static void TickV2(SimulationState state)
+        {
+            foreach (var market in state.Economy.Markets.Values)
+            {
+                if (market.Type != MarketType.OffMap)
+                    continue;
+
+                if (market.OffMapGoodIds == null || market.OffMapGoodIds.Count == 0)
+                    continue;
+
+                int sellerId = MarketOrderIds.MakeOffMapSellerId(market.Id);
+                foreach (var goodId in market.OffMapGoodIds)
+                {
+                    float inventory = 0f;
+                    for (int i = 0; i < market.Inventory.Count; i++)
+                    {
+                        if (market.Inventory[i].GoodId == goodId)
+                            inventory += market.Inventory[i].Quantity;
+                    }
+
+                    if (inventory >= TargetSupply)
+                        continue;
+
+                    float needed = TargetSupply - inventory;
+                    market.Inventory.Add(new ConsignmentLot
+                    {
+                        SellerId = sellerId,
+                        GoodId = goodId,
+                        Quantity = needed,
+                        DayListed = state.CurrentDay
+                    });
                 }
             }
         }
