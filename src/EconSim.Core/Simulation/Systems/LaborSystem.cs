@@ -69,7 +69,7 @@ namespace EconSim.Core.Simulation.Systems
                 var (facility, def) = facilities[i];
                 if (facility.WageDebtDays >= DistressedDebtDays)
                 {
-                    int retained = Math.Max(1, (int)Math.Ceiling(def.LaborRequired * DistressedRetentionRatio));
+                    int retained = Math.Max(1, (int)Math.Ceiling(facility.GetRequiredLabor(def) * DistressedRetentionRatio));
                     facility.AssignedWorkers = Math.Min(facility.AssignedWorkers, retained);
                 }
             }
@@ -94,7 +94,8 @@ namespace EconSim.Core.Simulation.Systems
                     continue;
                 }
 
-                pair.facility.AssignedWorkers = Math.Max(0, Math.Min(pair.facility.AssignedWorkers, pair.def.LaborRequired));
+                int requiredLabor = pair.facility.GetRequiredLabor(pair.def);
+                pair.facility.AssignedWorkers = Math.Max(0, Math.Min(pair.facility.AssignedWorkers, requiredLabor));
                 active.Add(pair);
             }
 
@@ -112,7 +113,7 @@ namespace EconSim.Core.Simulation.Systems
 
                 // When wages/fill are equal, favor lower labor requirements so scarce labor
                 // can seed more facilities instead of concentrating in a few.
-                int reqCmp = a.def.LaborRequired.CompareTo(b.def.LaborRequired);
+                int reqCmp = a.facility.GetRequiredLabor(a.def).CompareTo(b.facility.GetRequiredLabor(b.def));
                 if (reqCmp != 0)
                     return reqCmp;
 
@@ -178,7 +179,7 @@ namespace EconSim.Core.Simulation.Systems
                 if (pair.facility.WageRate + 0.0001f < subsistenceWage)
                     continue;
 
-                int needed = Math.Max(0, pair.def.LaborRequired - pair.facility.AssignedWorkers);
+                int needed = Math.Max(0, pair.facility.GetRequiredLabor(pair.def) - pair.facility.AssignedWorkers);
                 if (needed <= 0 || idle <= 0)
                     continue;
 
@@ -221,10 +222,11 @@ namespace EconSim.Core.Simulation.Systems
 
         private static float GetFillRatio(Facility facility, FacilityDef def)
         {
-            if (def.LaborRequired <= 0)
+            int requiredLabor = facility.GetRequiredLabor(def);
+            if (requiredLabor <= 0)
                 return 1f;
 
-            return (float)facility.AssignedWorkers / def.LaborRequired;
+            return (float)facility.AssignedWorkers / requiredLabor;
         }
     }
 }

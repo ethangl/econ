@@ -55,9 +55,10 @@ namespace EconSim.Core.Simulation.Systems
                 }
 
                 float margin = facility.RollingAvgRevenue - facility.RollingAvgInputCost;
-                if (margin > 0f && def.LaborRequired > 0)
+                int requiredLabor = facility.GetRequiredLabor(def);
+                if (margin > 0f && requiredLabor > 0)
                 {
-                    float maxWage = margin / def.LaborRequired;
+                    float maxWage = margin / requiredLabor;
                     facility.WageRate = Math.Max(maxWage * 0.7f, state.SubsistenceWage);
                 }
                 else

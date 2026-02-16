@@ -42,17 +42,22 @@ namespace EconSim.Core.Simulation.Systems
             if (economy == null) return;
 
             var facilityCounts = new Dictionary<string, int>();
+            var unitCounts = new Dictionary<string, int>();
             foreach (var f in economy.Facilities.Values)
             {
                 if (!facilityCounts.ContainsKey(f.TypeId))
+                {
                     facilityCounts[f.TypeId] = 0;
+                    unitCounts[f.TypeId] = 0;
+                }
                 facilityCounts[f.TypeId]++;
+                unitCounts[f.TypeId] += Math.Max(1, f.UnitCount);
             }
 
-            SimLog.Log("Production", $"Initialized with {economy.Facilities.Count} facilities:");
+            SimLog.Log("Production", $"Initialized with {economy.Facilities.Count} facility clusters:");
             foreach (var kvp in facilityCounts)
             {
-                SimLog.Log("Production", $"  {kvp.Key}: {kvp.Value}");
+                SimLog.Log("Production", $"  {kvp.Key}: clusters={kvp.Value}, units={unitCounts[kvp.Key]}");
             }
         }
 
@@ -123,7 +128,8 @@ namespace EconSim.Core.Simulation.Systems
                     return;
                 }
 
-                int staffedWorkers = Math.Max(1, facility.AssignedWorkers > 0 ? facility.AssignedWorkers : def.LaborRequired);
+                int requiredLabor = Math.Max(1, facility.GetRequiredLabor(def));
+                int staffedWorkers = Math.Max(1, facility.AssignedWorkers > 0 ? facility.AssignedWorkers : requiredLabor);
                 float severeLossThreshold = -subsistence * staffedWorkers * V2LossSeverityWageFraction;
                 if (facility.RollingProfit < severeLossThreshold)
                 {
@@ -156,7 +162,8 @@ namespace EconSim.Core.Simulation.Systems
             }
 
             int availableWorkers = GetAvailableWorkers(availableUnskilledByCounty, availableSkilledByCounty, facility.CountyId, def.LaborType);
-            if (availableWorkers < Math.Max(1, (int)Math.Ceiling(def.LaborRequired * V2ReactivationLaborFloorRatio)))
+            int requiredLaborForActivation = Math.Max(1, facility.GetRequiredLabor(def));
+            if (availableWorkers < Math.Max(1, (int)Math.Ceiling(requiredLaborForActivation * V2ReactivationLaborFloorRatio)))
                 return;
 
             var market = economy.GetMarketForCounty(facility.CountyId);
@@ -174,8 +181,9 @@ namespace EconSim.Core.Simulation.Systems
                 return;
 
             float outputPrice = outputMarket.Price;
-            float hypoRevenue = outputPrice * def.BaseThroughput * sellEfficiency;
-            float hypoSellFee = def.BaseThroughput * outputPrice * transportCost * V2TransportFeeRate;
+            float nominalThroughput = facility.GetNominalThroughput(def);
+            float hypoRevenue = outputPrice * nominalThroughput * sellEfficiency;
+            float hypoSellFee = nominalThroughput * outputPrice * transportCost * V2TransportFeeRate;
 
             float hypoInputCost = 0f;
             var outputGood = economy.Goods.Get(def.OutputGoodId);
@@ -192,11 +200,11 @@ namespace EconSim.Core.Simulation.Systems
                         ? inputMarket.Price
                         : economy.Goods.GetByRuntimeId(inputRuntimeId)?.BasePrice ?? 0f;
 
-                    hypoInputCost += inputPrice * input.Quantity * def.BaseThroughput * (1f + transportCost * V2TransportFeeRate);
+                    hypoInputCost += inputPrice * input.Quantity * nominalThroughput * (1f + transportCost * V2TransportFeeRate);
                 }
             }
 
-            float hypoWageBill = subsistence * def.LaborRequired;
+            float hypoWageBill = subsistence * requiredLaborForActivation;
             float hypoProfit = (hypoRevenue - hypoSellFee - hypoInputCost - hypoWageBill) * 0.7f;
             float toleratedLoss = hypoWageBill * V2ReactivationWageLossTolerance;
             bool demandPressure = outputMarket.Demand > outputMarket.Supply * V2DemandPressureRatio;

@@ -23,6 +23,11 @@ namespace EconSim.Core.Economy
         /// <summary>Current number of workers assigned.</summary>
         public int AssignedWorkers;
 
+        /// <summary>
+        /// Number of merged facility units represented by this runtime actor.
+        /// </summary>
+        public int UnitCount = 1;
+
         /// <summary>Local input inventory (materials waiting to be processed).</summary>
         public Stockpile InputBuffer;
 
@@ -83,13 +88,39 @@ namespace EconSim.Core.Economy
         /// </summary>
         public float GetEfficiency(FacilityDef def, float alpha = 0.7f)
         {
-            if (def.LaborRequired <= 0) return 1f;
+            int requiredLabor = GetRequiredLabor(def);
+            if (requiredLabor <= 0) return 1f;
             if (AssignedWorkers <= 0) return 0f;
 
-            float ratio = (float)AssignedWorkers / def.LaborRequired;
+            float ratio = (float)AssignedWorkers / requiredLabor;
             if (ratio >= 1f) return 1f;
 
             return (float)Math.Pow(ratio, alpha);
+        }
+
+        /// <summary>
+        /// Calculate total labor required at full staffing for this clustered facility.
+        /// </summary>
+        public int GetRequiredLabor(FacilityDef def)
+        {
+            if (def == null || def.LaborRequired <= 0)
+                return 0;
+
+            long total = (long)def.LaborRequired * Math.Max(1, UnitCount);
+            if (total > int.MaxValue)
+                return int.MaxValue;
+            return (int)total;
+        }
+
+        /// <summary>
+        /// Calculate nominal throughput at full staffing for this clustered facility.
+        /// </summary>
+        public float GetNominalThroughput(FacilityDef def)
+        {
+            if (def == null || def.BaseThroughput <= 0f)
+                return 0f;
+
+            return def.BaseThroughput * Math.Max(1, UnitCount);
         }
 
         /// <summary>
@@ -98,7 +129,7 @@ namespace EconSim.Core.Economy
         public float GetThroughput(FacilityDef def)
         {
             if (!IsActive) return 0f;
-            return def.BaseThroughput * GetEfficiency(def);
+            return GetNominalThroughput(def) * GetEfficiency(def);
         }
 
         public void ClearDayMetrics(int dayIndex)
