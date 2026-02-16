@@ -9,6 +9,10 @@ Generated on day 30 and 180 of an Economy V2 run with game defaults, prior to mo
 - `unity/econ_debug_output_d30_bench.json`
 - `unity/econ_debug_output_d180_bench.json`
 
+Generated on day 30 of an Economy V2 run with game defaults, post Facility Aggregation.
+
+- `unity/econ_debug_output_d30_fa_bench.json`
+
 ## Compare Workflow
 
 Use the compare script to evaluate a candidate run against the baseline:
