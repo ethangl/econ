@@ -114,16 +114,17 @@ namespace EconSim.Core.Economy
                 float weeklyInputCost = 0f;
                 if (inputs != null)
                 {
+                    float nominalThroughput = facility.GetNominalThroughput(def);
                     foreach (var input in inputs)
                     {
                         var inputGood = economy.Goods.Get(input.GoodId);
                         if (inputGood == null)
                             continue;
-                        weeklyInputCost += inputGood.BasePrice * input.Quantity * def.BaseThroughput * 7f;
+                        weeklyInputCost += inputGood.BasePrice * input.Quantity * nominalThroughput * 7f;
                     }
                 }
 
-                float weeklyWage = def.LaborRequired * state.SubsistenceWage * 7f;
+                float weeklyWage = facility.GetRequiredLabor(def) * state.SubsistenceWage * 7f;
                 facility.Treasury = weeklyInputCost + weeklyWage;
                 facility.WageRate = state.SubsistenceWage;
                 facility.IsActive = true;
@@ -142,9 +143,10 @@ namespace EconSim.Core.Economy
                 if (inputs == null)
                     continue;
 
+                float nominalThroughput = facility.GetNominalThroughput(def);
                 foreach (var input in inputs)
                 {
-                    facility.InputBuffer.Add(input.GoodId, input.Quantity * def.BaseThroughput * 3f);
+                    facility.InputBuffer.Add(input.GoodId, input.Quantity * nominalThroughput * 3f);
                 }
             }
 
@@ -263,7 +265,7 @@ namespace EconSim.Core.Economy
                         if (!economy.Goods.TryGetRuntimeId(input.GoodId, out int inputRuntimeId))
                             continue;
 
-                        float needed = input.Quantity * def.BaseThroughput;
+                        float needed = input.Quantity * facility.GetNominalThroughput(def);
                         float have = facility.InputBuffer.Get(inputRuntimeId);
                         float toBuy = Math.Max(0f, needed - have);
                         if (toBuy <= 0f)
@@ -501,11 +503,11 @@ namespace EconSim.Core.Economy
                     if (cellId < 0) continue;
 
                     int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 1);
-                    for (int j = 0; j < count; j++)
-                    {
-                        economy.CreateFacility(facilityDef.Id, cellId);
-                        placed++;
-                    }
+                    if (count <= 0)
+                        continue;
+
+                    economy.CreateFacility(facilityDef.Id, cellId, count);
+                    placed += count;
                     extractionCounties[facilityDef.OutputGoodId].Add(countyId);
                 }
                 SimLog.Log("Economy", $"  {facilityDef.Id}: placed {placed} in {candidates.Count} candidates");
@@ -559,11 +561,11 @@ namespace EconSim.Core.Economy
                     if (cellId < 0) continue;
 
                     int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 0);
-                    for (int j = 0; j < count; j++)
-                    {
-                        economy.CreateFacility(facilityId, cellId);
-                        placed++;
-                    }
+                    if (count <= 0)
+                        continue;
+
+                    economy.CreateFacility(facilityId, cellId, count);
+                    placed += count;
                     facilityCounties[facilityId].Add(countyId);
                 }
                 SimLog.Log("Economy", $"  {facilityId}: placed {placed} in {sourceGood} counties");
@@ -629,11 +631,8 @@ namespace EconSim.Core.Economy
                     if (count <= 0)
                         continue;
 
-                    for (int j = 0; j < count; j++)
-                    {
-                        economy.CreateFacility(facilityId, cellId);
-                        placed++;
-                    }
+                    economy.CreateFacility(facilityId, cellId, count);
+                    placed += count;
                     facilityCounties[facilityId].Add(countyId);
                 }
                 SimLog.Log("Economy", $"  {facilityId}: placed {placed} in {allCandidates.Count} counties");
@@ -668,11 +667,8 @@ namespace EconSim.Core.Economy
                     if (count <= 0)
                         continue;
 
-                    for (int j = 0; j < count; j++)
-                    {
-                        economy.CreateFacility(facilityId, cellId);
-                        placed++;
-                    }
+                    economy.CreateFacility(facilityId, cellId, count);
+                    placed += count;
                 }
                 SimLog.Log("Economy", $"  {facilityId}: placed {placed} in {candidates.Count} counties");
             }
@@ -827,7 +823,7 @@ namespace EconSim.Core.Economy
                     if (producerDef == null || producerDef.OutputGoodId != input.GoodId)
                         continue;
 
-                    localInputPerDay += producerDef.BaseThroughput;
+                    localInputPerDay += facility.GetNominalThroughput(producerDef);
                 }
 
                 hasInputConstraint = true;

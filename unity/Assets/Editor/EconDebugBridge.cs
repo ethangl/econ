@@ -694,8 +694,9 @@ namespace EconSim.Editor
                     j.ObjOpen();
                     j.KV("id", f.Id);
                     j.KV("type", f.TypeId);
+                    j.KV("unitCount", Math.Max(1, f.UnitCount));
                     j.KV("workers", f.AssignedWorkers);
-                    j.KV("laborRequired", def?.LaborRequired ?? 0);
+                    j.KV("laborRequired", def != null ? f.GetRequiredLabor(def) : 0);
                     j.KV("efficiency", def != null ? f.GetEfficiency(def) : 0f);
                     j.KV("throughput", def != null ? f.GetThroughput(def) : 0f);
                     j.KV("active", f.IsActive);

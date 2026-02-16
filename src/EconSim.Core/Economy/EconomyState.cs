@@ -116,7 +116,7 @@ namespace EconSim.Core.Economy
         /// Create a new facility instance at a cell.
         /// The facility is physically located in the cell but economically owned by its county.
         /// </summary>
-        public Facility CreateFacility(string typeId, int cellId)
+        public Facility CreateFacility(string typeId, int cellId, int unitCount = 1)
         {
             // Look up the county that owns this cell
             int countyId = CellToCounty.TryGetValue(cellId, out int cId) ? cId : 0;
@@ -126,7 +126,8 @@ namespace EconSim.Core.Economy
                 Id = NextFacilityId++,
                 TypeId = typeId,
                 CellId = cellId,
-                CountyId = countyId
+                CountyId = countyId,
+                UnitCount = Math.Max(1, unitCount)
             };
             facility.BindGoods(Goods);
 

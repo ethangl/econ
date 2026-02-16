@@ -96,7 +96,7 @@ The script reports:
 - Multiple systems rebuild temporary lists/maps each tick slice or tick pass.
 - Labor and production paths perform repeated scans and sorting per county/facility group.
 
-## Evaluation: County-Level Facility Aggregation
+## Evaluation: County-Level Facility Aggregation (`Completed`)
 
 The proposal to represent multiple same-type facilities as county-level aggregates is a strong first-order optimization.
 
@@ -109,6 +109,8 @@ The proposal to represent multiple same-type facilities as county-level aggregat
 ### Recommended abstraction
 
 Represent one runtime "facility cluster" per `(countyId, facilityType)` with a `UnitCount` (or capacity multiplier).
+
+- Branch note: placement now creates one clustered facility actor per county/type with `UnitCount`; labor requirements and throughput scale by `UnitCount`, and bootstrap/labor/wage/production paths use the scaled values.
 
 Cluster state should preserve:
 
@@ -189,7 +191,7 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 1. Instrument cardinality and per-system tick times on a large map baseline.
    Status: `Completed`
 2. Implement facility clustering by `(countyId, facilityType)` with behavior parity tests.
-   Status: `Not started`
+   Status: `Completed` (initial placement now emits clustered facilities with `UnitCount`; labor/wage/production/bootstrap flows use scaled labor and throughput.)
 3. Introduce dense good indexing in `Stockpile` and market records.
    Status: `Completed`
 4. Replace per-order/per-lot market clearing with aggregated books.
