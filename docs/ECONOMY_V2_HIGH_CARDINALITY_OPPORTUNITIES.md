@@ -8,11 +8,32 @@ Generated on day 20 of an Economy V2 run with game defaults.
 
 - `unity/econ_debug_output_d20_bench.json`
 
+## Compare Workflow
+
+Use the compare script to evaluate a candidate run against the baseline:
+
+```bash
+scripts/compare_econ_dumps.sh unity/econ_debug_output_d20_bench.json unity/econ_debug_output.json
+```
+
+Optional third argument prints more top drift rows:
+
+```bash
+scripts/compare_econ_dumps.sh <bench.json> <candidate.json> 20
+```
+
+The script reports:
+
+- Summary deltas (population, facilities, supply/demand/volume, money metrics)
+- Global and per-market order/lot cardinality deltas
+- Tick timing deltas from the `performance` block (`avgTickMs`, `maxTickMs`, per-system `avgMs`)
+- Largest market-good drifts and top price/volume movers
+
 ## Scope
 
 - Focus on runtime tick cost (daily/weekly/monthly systems), memory pressure, and object/list cardinality.
 - Startup-only costs are out of scope unless they materially affect large-map usability.
-  Code areas reviewed:
+- Code areas reviewed:
 - `src/EconSim.Core/Economy/EconomyInitializer.cs`
 - `src/EconSim.Core/Economy/EconomyState.cs`
 - `src/EconSim.Core/Economy/Facility.cs`

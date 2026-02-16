@@ -160,11 +160,38 @@ States: `idle`, `starting`, `generating`, `running`, `complete`, `error`, `waiti
   "totalCounties": 70,
   "totalMarkets": 3,
   "totalFacilities": 2874,
+  "activeFacilities": 2101,
+  "inactiveFacilities": 773,
   "totalStockpileValue": 504298,
+  "totalPendingOrders": 1204,
+  "totalConsignmentLots": 9391,
+  "avgPendingOrdersPerMarket": 401.3,
+  "avgConsignmentLotsPerMarket": 3130.3,
+  "maxPendingOrdersPerMarket": 729,
+  "maxConsignmentLotsPerMarket": 4022,
+  "avgFacilitiesPerCounty": 41.06,
+  "maxFacilitiesPerCounty": 97,
   "totalMarketSupply": 7596.9,
   "totalMarketDemand": 339.2,
   "pathSegments": 299,
   "roadSegments": 79
+}
+```
+
+### performance
+
+Top-level timing instrumentation block emitted with `scope=summary|all`.
+
+```json
+"performance": {
+  "tickSamples": 180,
+  "avgTickMs": 6.42,
+  "maxTickMs": 19.3,
+  "lastTickMs": 5.98,
+  "systems": {
+    "Market": { "tickInterval": 1, "invocations": 180, "avgMs": 2.31, "maxMs": 7.4, "lastMs": 2.2, "totalMs": 415.8 },
+    "Production": { "tickInterval": 1, "invocations": 180, "avgMs": 1.87, "maxMs": 5.9, "lastMs": 1.8, "totalMs": 336.6 }
+  }
 }
 ```
 

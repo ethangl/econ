@@ -98,6 +98,53 @@ BEGIN {
 }'
 echo
 
+echo "== Tick Timing (from performance block) =="
+BENCH_TICK_SAMPLES="$(jq -r '.performance.tickSamples // 0' "$BENCH_FILE")"
+NEW_TICK_SAMPLES="$(jq -r '.performance.tickSamples // 0' "$NEW_FILE")"
+BENCH_AVG_TICK_MS="$(jq -r '.performance.avgTickMs // 0' "$BENCH_FILE")"
+NEW_AVG_TICK_MS="$(jq -r '.performance.avgTickMs // 0' "$NEW_FILE")"
+BENCH_MAX_TICK_MS="$(jq -r '.performance.maxTickMs // 0' "$BENCH_FILE")"
+NEW_MAX_TICK_MS="$(jq -r '.performance.maxTickMs // 0' "$NEW_FILE")"
+BENCH_LAST_TICK_MS="$(jq -r '.performance.lastTickMs // 0' "$BENCH_FILE")"
+NEW_LAST_TICK_MS="$(jq -r '.performance.lastTickMs // 0' "$NEW_FILE")"
+
+awk -v bs="$BENCH_TICK_SAMPLES" -v ns="$NEW_TICK_SAMPLES" \
+    -v ba="$BENCH_AVG_TICK_MS" -v na="$NEW_AVG_TICK_MS" \
+    -v bm="$BENCH_MAX_TICK_MS" -v nm="$NEW_MAX_TICK_MS" \
+    -v bl="$BENCH_LAST_TICK_MS" -v nl="$NEW_LAST_TICK_MS" '
+function pct(d,b) { if (b == 0) return "NA"; return sprintf("%.8g", (d/b)*100); }
+BEGIN {
+  da=na-ba; dm=nm-bm; dl=nl-bl;
+  printf "tickSamples: benchmark=%s candidate=%s\n", bs, ns;
+  printf "avgTickMs: benchmark=%s candidate=%s delta=%s delta_pct=%s\n", ba, na, da, pct(da, ba);
+  printf "maxTickMs: benchmark=%s candidate=%s delta=%s delta_pct=%s\n", bm, nm, dm, pct(dm, bm);
+  printf "lastTickMs: benchmark=%s candidate=%s delta=%s delta_pct=%s\n", bl, nl, dl, pct(dl, bl);
+}'
+echo
+
+jq -r '.performance.systems // {} | to_entries[] | [.key, (.value.tickInterval // 0), (.value.invocations // 0), (.value.avgMs // 0), (.value.maxMs // 0), (.value.lastMs // 0), (.value.totalMs // 0)] | @tsv' "$BENCH_FILE" | sort > "$TMP_DIR/bench_perf_systems.tsv"
+jq -r '.performance.systems // {} | to_entries[] | [.key, (.value.tickInterval // 0), (.value.invocations // 0), (.value.avgMs // 0), (.value.maxMs // 0), (.value.lastMs // 0), (.value.totalMs // 0)] | @tsv' "$NEW_FILE" | sort > "$TMP_DIR/new_perf_systems.tsv"
+
+echo "== Per-System Timing Deltas =="
+join -t $'\t' -a1 -a2 -e NA -o 0,1.2,2.2,1.3,2.3,1.4,2.4,1.5,2.5 \
+  "$TMP_DIR/bench_perf_systems.tsv" "$TMP_DIR/new_perf_systems.tsv" \
+  | awk -F'\t' '
+function isnum(x) { return x ~ /^-?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$/ }
+BEGIN {
+  printf "%-14s %-10s %-10s %-12s %-12s %-12s %-12s %-12s %-12s\n",
+    "system", "intvl_b", "intvl_n", "invoc_b", "invoc_n", "avgMs_b", "avgMs_n", "deltaAvgMs", "deltaPct";
+}
+{
+  dpct="NA"; davg="NA";
+  if (isnum($6) && isnum($7)) {
+    davg=$7-$6;
+    if ($6 != 0) dpct=(davg/$6)*100;
+  }
+  printf "%-14s %-10s %-10s %-12s %-12s %-12s %-12s %-12s %-12s\n",
+    $1, $2, $3, $4, $5, $6, $7, davg, dpct;
+}'
+echo
+
 jq -r '.markets[] | [.id, .pendingOrders, .consignmentLots] | @tsv' "$BENCH_FILE" | sort -n > "$TMP_DIR/bench_markets.tsv"
 jq -r '.markets[] | [.id, .pendingOrders, .consignmentLots] | @tsv' "$NEW_FILE" | sort -n > "$TMP_DIR/new_markets.tsv"
 

@@ -1,6 +1,6 @@
+using System;
 using EconSim.Core.Economy;
 using EconSim.Core.Transport;
-using System;
 
 namespace EconSim.Core.Simulation
 {
@@ -63,5 +63,10 @@ namespace EconSim.Core.Simulation
         /// End-of-day economy telemetry snapshot.
         /// </summary>
         public EconomyTelemetry Telemetry { get; set; } = new EconomyTelemetry();
+
+        /// <summary>
+        /// Runtime timing metrics for whole ticks and tick systems.
+        /// </summary>
+        public SimulationPerformanceStats Performance { get; set; } = new SimulationPerformanceStats();
     }
 }

@@ -428,7 +428,10 @@ namespace EconSim.Editor
             j.KV("timestamp", DateTime.UtcNow.ToString("o"));
 
             if (scope == "all" || scope == "summary")
+            {
                 WriteSummary(j, st, econ, mapData);
+                WritePerformance(j, st);
+            }
             if (scope == "all" || scope == "markets")
                 WriteMarkets(j, econ);
             if (scope == "all" || scope == "counties")
@@ -449,6 +452,9 @@ namespace EconSim.Editor
             float totalStockpileValue = 0f;
             float moneyInPopulation = 0f;
             float moneyInFacilities = 0f;
+            int maxFacilitiesInCounty = 0;
+            int activeFacilities = 0;
+            int inactiveFacilities = 0;
 
             foreach (var kvp in econ.Counties)
             {
@@ -465,6 +471,9 @@ namespace EconSim.Editor
                     if (good != null)
                         totalStockpileValue += item.Value * good.BasePrice;
                 }
+
+                if (ce.FacilityIds != null && ce.FacilityIds.Count > maxFacilitiesInCounty)
+                    maxFacilitiesInCounty = ce.FacilityIds.Count;
             }
 
             int totalEmployed = totalEmployedU + totalEmployedS;
@@ -482,7 +491,11 @@ namespace EconSim.Editor
             j.KV("smoothedBasketCost", st.SmoothedBasketCost);
 
             foreach (var facility in econ.Facilities.Values)
+            {
                 moneyInFacilities += facility.Treasury;
+                if (facility.IsActive) activeFacilities++;
+                else inactiveFacilities++;
+            }
 
             float totalMoneySupply = moneyInPopulation + moneyInFacilities;
             j.KV("moneyInPopulation", moneyInPopulation);
@@ -507,6 +520,32 @@ namespace EconSim.Editor
             j.KV("totalMarketDemand", totalDemand);
             j.KV("totalMarketVolume", totalVolume);
 
+            int totalPendingOrders = 0;
+            int totalConsignmentLots = 0;
+            int maxPendingOrdersPerMarket = 0;
+            int maxConsignmentLotsPerMarket = 0;
+            foreach (var market in econ.Markets.Values)
+            {
+                int pending = market.PendingBuyOrderCount;
+                int lots = market.InventoryLotCount;
+                totalPendingOrders += pending;
+                totalConsignmentLots += lots;
+                if (pending > maxPendingOrdersPerMarket)
+                    maxPendingOrdersPerMarket = pending;
+                if (lots > maxConsignmentLotsPerMarket)
+                    maxConsignmentLotsPerMarket = lots;
+            }
+            j.KV("totalPendingOrders", totalPendingOrders);
+            j.KV("totalConsignmentLots", totalConsignmentLots);
+            j.KV("avgPendingOrdersPerMarket", econ.Markets.Count > 0 ? (float)totalPendingOrders / econ.Markets.Count : 0f);
+            j.KV("avgConsignmentLotsPerMarket", econ.Markets.Count > 0 ? (float)totalConsignmentLots / econ.Markets.Count : 0f);
+            j.KV("maxPendingOrdersPerMarket", maxPendingOrdersPerMarket);
+            j.KV("maxConsignmentLotsPerMarket", maxConsignmentLotsPerMarket);
+            j.KV("activeFacilities", activeFacilities);
+            j.KV("inactiveFacilities", inactiveFacilities);
+            j.KV("avgFacilitiesPerCounty", econ.Counties.Count > 0 ? (float)econ.Facilities.Count / econ.Counties.Count : 0f);
+            j.KV("maxFacilitiesPerCounty", maxFacilitiesInCounty);
+
             // Road stats
             if (econ.Roads != null)
             {
@@ -514,6 +553,45 @@ namespace EconSim.Editor
                 j.KV("pathSegments", allRoads.Count(r => r.Item3 == RoadTier.Path));
                 j.KV("roadSegments", allRoads.Count(r => r.Item3 == RoadTier.Road));
             }
+
+            j.ObjClose();
+        }
+
+        static void WritePerformance(JW j, SimulationState st)
+        {
+            j.Key("performance"); j.ObjOpen();
+
+            var perf = st.Performance;
+            if (perf == null)
+            {
+                j.KV("tickSamples", 0);
+                j.KV("avgTickMs", 0f);
+                j.KV("maxTickMs", 0f);
+                j.KV("lastTickMs", 0f);
+                j.Key("systems"); j.ObjOpen();
+                j.ObjClose();
+                j.ObjClose();
+                return;
+            }
+
+            j.KV("tickSamples", perf.TickSamples);
+            j.KV("avgTickMs", perf.AvgTickMs);
+            j.KV("maxTickMs", perf.MaxTickMs);
+            j.KV("lastTickMs", perf.LastTickMs);
+
+            j.Key("systems"); j.ObjOpen();
+            foreach (var system in perf.Systems.Values.OrderByDescending(s => s.AvgMs).ThenBy(s => s.Name))
+            {
+                j.Key(system.Name); j.ObjOpen();
+                j.KV("tickInterval", system.TickInterval);
+                j.KV("invocations", system.InvocationCount);
+                j.KV("avgMs", system.AvgMs);
+                j.KV("maxMs", system.MaxMs);
+                j.KV("lastMs", system.LastMs);
+                j.KV("totalMs", system.TotalMs);
+                j.ObjClose();
+            }
+            j.ObjClose();
 
             j.ObjClose();
         }
