@@ -46,6 +46,15 @@ namespace EconSim.Core.Simulation.Systems
                 if (def == null || !facility.IsActive)
                     continue;
 
+                if (facility.AssignedWorkers <= 0)
+                {
+                    // Keep idle facilities at subsistence offer and decay legacy debt cheaply.
+                    facility.WageRate = state.SubsistenceWage;
+                    if (facility.WageDebtDays > 0 && state.CurrentDay % 2 == 0)
+                        facility.WageDebtDays--;
+                    continue;
+                }
+
                 float margin = facility.RollingAvgRevenue - facility.RollingAvgInputCost;
                 if (margin > 0f && def.LaborRequired > 0)
                 {
@@ -67,7 +76,7 @@ namespace EconSim.Core.Simulation.Systems
                     county.Population.Treasury += paid;
                 }
 
-                if (facility.AssignedWorkers > 0 && wageBill > 0f)
+                if (wageBill > 0f)
                 {
                     float coverage = paid / wageBill;
                     if (coverage < 0.60f)
@@ -83,11 +92,6 @@ namespace EconSim.Core.Simulation.Systems
                         // Partial coverage still allows gradual recovery.
                         facility.WageDebtDays--;
                     }
-                }
-                else if (facility.WageDebtDays > 0 && state.CurrentDay % 2 == 0)
-                {
-                    // Idle facilities recover slowly, not instantly.
-                    facility.WageDebtDays--;
                 }
             }
         }

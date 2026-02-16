@@ -195,6 +195,14 @@ namespace EconSim.Core.Simulation.Systems
                 if (def == null || def.IsExtraction)
                     continue;
 
+                // Zero-staffed facilities cannot consume inputs this tick.
+                if (facility.AssignedWorkers <= 0)
+                    continue;
+
+                float currentThroughput = facility.GetThroughput(def);
+                if (currentThroughput <= 0f)
+                    continue;
+
                 var output = economy.Goods.Get(def.OutputGoodId);
                 if (output == null)
                     continue;
@@ -210,11 +218,6 @@ namespace EconSim.Core.Simulation.Systems
                 foreach (var input in inputs)
                 {
                     if (!market.Goods.TryGetValue(input.GoodId, out var marketGood))
-                        continue;
-
-                    // Demand inputs based on current staffed throughput, not max design throughput.
-                    float currentThroughput = facility.GetThroughput(def);
-                    if (currentThroughput <= 0f)
                         continue;
 
                     float needed = input.Quantity * currentThroughput;

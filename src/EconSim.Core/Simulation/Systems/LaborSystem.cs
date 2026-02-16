@@ -127,6 +127,19 @@ namespace EconSim.Core.Simulation.Systems
                 employed += active[i].facility.AssignedWorkers;
             }
 
+            float maxWage = 0f;
+            float minFill = 1f;
+            if (active.Count > 0)
+            {
+                maxWage = active[0].facility.WageRate;
+                for (int i = 0; i < active.Count; i++)
+                {
+                    float fill = GetFillRatio(active[i].facility, active[i].def);
+                    if (fill < minFill)
+                        minFill = fill;
+                }
+            }
+
             int reconsiderTarget = (int)(employed * ReconsiderationRate);
             int reconsidered = 0;
             if (reconsiderTarget > 0)
@@ -138,7 +151,7 @@ namespace EconSim.Core.Simulation.Systems
                     if (assigned <= 0)
                         continue;
 
-                    if (!HasBetterOption(pair, active))
+                    if (!HasBetterOption(pair, maxWage, minFill))
                         continue;
 
                     int remaining = reconsiderTarget - reconsidered;
@@ -175,30 +188,19 @@ namespace EconSim.Core.Simulation.Systems
 
         private static bool HasBetterOption(
             (Facility facility, FacilityDef def) current,
-            List<(Facility facility, FacilityDef def)> facilities)
+            float maxWage,
+            float minFill)
         {
             float currentWage = current.facility.WageRate;
             float threshold = currentWage * SwitchThreshold;
             float currentFill = GetFillRatio(current.facility, current.def);
 
-            for (int i = 0; i < facilities.Count; i++)
-            {
-                var candidate = facilities[i];
-                if (candidate.facility.Id == current.facility.Id)
-                    continue;
+            if (maxWage > threshold)
+                return true;
 
-                if (candidate.facility.WageRate > threshold)
-                    return true;
-
-                // If wages are near-parity, still allow movement toward much emptier facilities
-                // so labor doesn't deadlock into arbitrary early assignments.
-                if (candidate.facility.WageRate >= currentWage * RebalanceWageTolerance)
-                {
-                    float candidateFill = GetFillRatio(candidate.facility, candidate.def);
-                    if (candidateFill + RebalanceFillGap < currentFill)
-                        return true;
-                }
-            }
+            if (maxWage >= currentWage * RebalanceWageTolerance
+                && minFill + RebalanceFillGap < currentFill)
+                return true;
 
             return false;
         }
