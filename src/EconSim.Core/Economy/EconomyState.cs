@@ -54,6 +54,13 @@ namespace EconSim.Core.Economy
         [NonSerialized]
         public Dictionary<int, int> CellToMarket;
 
+        /// <summary>
+        /// Runtime dense facility view for hot-loop iteration.
+        /// Rebuilt lazily if direct dictionary edits change facility cardinality.
+        /// </summary>
+        [NonSerialized]
+        private List<Facility> _facilityDense;
+
         public EconomyState()
         {
             Goods = new GoodRegistry();
@@ -68,6 +75,7 @@ namespace EconSim.Core.Economy
             CountySeatCell = new Dictionary<int, int>();
             CountyToMarketCost = new Dictionary<int, float>();
             CellToMarket = new Dictionary<int, int>();
+            _facilityDense = new List<Facility>();
         }
 
         /// <summary>
@@ -152,6 +160,7 @@ namespace EconSim.Core.Economy
             facility.BindGoods(Goods);
 
             Facilities[facility.Id] = facility;
+            _facilityDense.Add(facility);
 
             // Add to county's facility list
             if (countyId > 0)
@@ -172,12 +181,23 @@ namespace EconSim.Core.Economy
         }
 
         /// <summary>
+        /// Get facilities in a dense list for high-cardinality runtime loops.
+        /// </summary>
+        public List<Facility> GetFacilitiesDense()
+        {
+            EnsureFacilityDenseIndex();
+            return _facilityDense;
+        }
+
+        /// <summary>
         /// Get all facilities of a given type.
         /// </summary>
         public IEnumerable<Facility> GetFacilitiesByType(string typeId)
         {
-            foreach (var f in Facilities.Values)
+            var facilities = GetFacilitiesDense();
+            for (int i = 0; i < facilities.Count; i++)
             {
+                var f = facilities[i];
                 if (f.TypeId == typeId)
                     yield return f;
             }
@@ -368,6 +388,19 @@ namespace EconSim.Core.Economy
 
                 CountyToMarketCost[countyId] = cost;
             }
+        }
+
+        private void EnsureFacilityDenseIndex()
+        {
+            if (_facilityDense == null)
+                _facilityDense = new List<Facility>();
+
+            if (_facilityDense.Count == Facilities.Count)
+                return;
+
+            _facilityDense.Clear();
+            foreach (var facility in Facilities.Values)
+                _facilityDense.Add(facility);
         }
     }
 }

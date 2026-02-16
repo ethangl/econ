@@ -33,8 +33,10 @@ namespace EconSim.Core.Simulation.Systems
             int active = 0;
             int idle = 0;
             int distressed = 0;
-            foreach (var facility in economy.Facilities.Values)
+            var facilities = economy.GetFacilitiesDense();
+            for (int i = 0; i < facilities.Count; i++)
             {
+                var facility = facilities[i];
                 moneyInFacilities += facility.Treasury;
                 if (facility.WageDebtDays >= 3) distressed++;
                 if (facility.IsActive) active++;

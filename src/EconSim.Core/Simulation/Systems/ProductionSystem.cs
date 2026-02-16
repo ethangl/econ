@@ -45,8 +45,10 @@ namespace EconSim.Core.Simulation.Systems
 
             var facilityCounts = new Dictionary<string, int>();
             var unitCounts = new Dictionary<string, int>();
-            foreach (var f in economy.Facilities.Values)
+            var facilities = economy.GetFacilitiesDense();
+            for (int i = 0; i < facilities.Count; i++)
             {
+                var f = facilities[i];
                 if (!facilityCounts.ContainsKey(f.TypeId))
                 {
                     facilityCounts[f.TypeId] = 0;
@@ -76,8 +78,10 @@ namespace EconSim.Core.Simulation.Systems
             _producedThisTick.Clear();
             BuildAvailableWorkerCaches(economy);
 
-            foreach (var facility in economy.Facilities.Values)
+            var facilities = economy.GetFacilitiesDense();
+            for (int i = 0; i < facilities.Count; i++)
             {
+                var facility = facilities[i];
                 facility.BeginDayMetrics(state.CurrentDay);
 
                 var def = economy.FacilityDefs.Get(facility.TypeId);
@@ -273,8 +277,10 @@ namespace EconSim.Core.Simulation.Systems
                 _availableSkilledByCounty[county.CountyId] = county.Population.TotalSkilled;
             }
 
-            foreach (var facility in economy.Facilities.Values)
+            var facilities = economy.GetFacilitiesDense();
+            for (int i = 0; i < facilities.Count; i++)
             {
+                var facility = facilities[i];
                 if (!facility.IsActive || facility.AssignedWorkers <= 0)
                     continue;
 
