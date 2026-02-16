@@ -17,7 +17,8 @@ namespace EconSim.Core.Simulation.Systems
         public int TickInterval => SimulationConfig.Intervals.Monthly;
 
         private const float BaseMigrationRate = 0.01f;
-        private const float MaxTransportCost = 150f;
+        private const float MaxTransportCost = 50f;
+        private const float CountyEdgeCostScale = 10f;
         private const float DistanceDecayScale = 30f;
         private const float CulturalAffinityForeign = 0.2f;
         private const int MinMigrationPop = 1;
@@ -42,54 +43,52 @@ namespace EconSim.Core.Simulation.Systems
         };
 
         private Dictionary<int, int> _countyToCulture;
+        // County adjacency graph: countyId -> [(neighborCountyId, edgeCost)].
+        private Dictionary<int, List<(int countyId, float cost)>> _countyAdjacency;
         // Precomputed reachable counties per source county: countyId → [(destCountyId, cost)]
         private Dictionary<int, List<(int countyId, float cost)>> _reachableCache;
         private float[] _scoreBuffer = Array.Empty<float>();
 
         public void Initialize(SimulationState state, MapData mapData)
         {
+            var economy = state?.Economy;
+            var transport = state?.Transport;
+            if (economy == null)
+            {
+                _countyToCulture = new Dictionary<int, int>();
+                _countyAdjacency = new Dictionary<int, List<(int countyId, float cost)>>();
+                _reachableCache = new Dictionary<int, List<(int countyId, float cost)>>();
+                return;
+            }
+
             // Build county → culture lookup: county.RealmId → realm.CultureId
             _countyToCulture = new Dictionary<int, int>();
-            if (mapData.Counties != null)
+            if (mapData?.Counties != null)
             {
                 foreach (var county in mapData.Counties)
                 {
                     if (county == null) continue;
-                    if (mapData.RealmById.TryGetValue(county.RealmId, out var realm))
+                    if (mapData.RealmById != null && mapData.RealmById.TryGetValue(county.RealmId, out var realm))
                         _countyToCulture[county.Id] = realm.CultureId;
                 }
             }
 
-            // Precompute reachable counties for each county seat
+            // Build county-level transport graph once from county boundary crossings.
+            _countyAdjacency = BuildCountyAdjacencyGraph(economy, transport, mapData);
+
+            // Precompute reachable counties for each county on county graph.
             _reachableCache = new Dictionary<int, List<(int, float)>>();
-            var economy = state.Economy;
-            var transport = state.Transport;
             foreach (var countyEcon in economy.Counties.Values)
             {
                 int countyId = countyEcon.CountyId;
-                if (!mapData.CountyById.TryGetValue(countyId, out var county))
-                    continue;
-
-                var reachableCells = transport.FindReachable(county.SeatCellId, MaxTransportCost);
-                var bestCost = new Dictionary<int, float>();
-                foreach (var kvp in reachableCells)
-                {
-                    if (!economy.CellToCounty.TryGetValue(kvp.Key, out int cId))
-                        continue;
-                    if (cId == countyId) continue;
-                    if (!economy.Counties.ContainsKey(cId)) continue;
-                    if (!bestCost.TryGetValue(cId, out float existing) || kvp.Value < existing)
-                        bestCost[cId] = kvp.Value;
-                }
-
-                var candidates = new List<(int, float)>(bestCost.Count);
-                foreach (var kvp in bestCost)
-                    candidates.Add((kvp.Key, kvp.Value));
-
-                _reachableCache[countyId] = candidates;
+                _reachableCache[countyId] = FindReachableCounties(countyId, MaxTransportCost);
             }
+            var reachabilityStats = ComputeReachabilityStats(_reachableCache);
 
-            SimLog.Log("Migration", $"Migration system initialized, {_countyToCulture.Count} counties, {_reachableCache.Count} reachability maps cached");
+            SimLog.Log(
+                "Migration",
+                $"Migration system initialized, {_countyToCulture.Count} counties, {_countyAdjacency?.Count ?? 0} county nodes, {_reachableCache.Count} reachability maps cached, " +
+                $"maxCost={MaxTransportCost:F1}, edgeScale={CountyEdgeCostScale:F1}, reachable(avg={reachabilityStats.avg:F1}, p95={reachabilityStats.p95}, max={reachabilityStats.max})");
         }
 
         public void Tick(SimulationState state, MapData mapData)
@@ -266,6 +265,174 @@ namespace EconSim.Core.Simulation.Systems
 
             int next = Math.Max(count, Math.Max(16, _scoreBuffer.Length * 2));
             _scoreBuffer = new float[next];
+        }
+
+        private static (float avg, int p95, int max) ComputeReachabilityStats(
+            Dictionary<int, List<(int countyId, float cost)>> reachableCache)
+        {
+            if (reachableCache == null || reachableCache.Count == 0)
+                return (0f, 0, 0);
+
+            int n = reachableCache.Count;
+            var counts = new int[n];
+            int sum = 0;
+            int max = 0;
+            int i = 0;
+            foreach (var kvp in reachableCache)
+            {
+                int count = kvp.Value?.Count ?? 0;
+                counts[i++] = count;
+                sum += count;
+                if (count > max)
+                    max = count;
+            }
+
+            Array.Sort(counts);
+            int p95Index = (int)Math.Ceiling((n - 1) * 0.95f);
+            p95Index = Math.Max(0, Math.Min(n - 1, p95Index));
+            int p95 = counts[p95Index];
+
+            float avg = n > 0 ? (float)sum / n : 0f;
+            return (avg, p95, max);
+        }
+
+        private static Dictionary<int, List<(int countyId, float cost)>> BuildCountyAdjacencyGraph(
+            EconomyState economy,
+            Transport.TransportGraph transport,
+            MapData mapData)
+        {
+            var adjacency = new Dictionary<int, Dictionary<int, float>>();
+            foreach (var county in economy.Counties.Values)
+            {
+                adjacency[county.CountyId] = new Dictionary<int, float>();
+            }
+
+            if (transport == null || mapData?.Cells == null || mapData.CellById == null)
+            {
+                var emptyResult = new Dictionary<int, List<(int countyId, float cost)>>(adjacency.Count);
+                foreach (var kvp in adjacency)
+                {
+                    emptyResult[kvp.Key] = new List<(int countyId, float cost)>();
+                }
+                return emptyResult;
+            }
+
+            foreach (var cell in mapData.Cells)
+            {
+                if (cell == null || !cell.IsLand)
+                    continue;
+
+                int sourceCountyId = cell.CountyId;
+                if (sourceCountyId <= 0 || !adjacency.ContainsKey(sourceCountyId))
+                    continue;
+
+                if (cell.NeighborIds == null)
+                    continue;
+
+                foreach (int neighborId in cell.NeighborIds)
+                {
+                    if (!mapData.CellById.TryGetValue(neighborId, out var neighbor) || neighbor == null)
+                        continue;
+
+                    int destCountyId = neighbor.CountyId;
+                    if (destCountyId <= 0 || destCountyId == sourceCountyId || !adjacency.ContainsKey(destCountyId))
+                        continue;
+
+                    float edgeCost = transport.GetEdgeCost(cell, neighbor);
+                    if (edgeCost >= float.MaxValue)
+                        continue;
+                    edgeCost *= CountyEdgeCostScale;
+
+                    var neighbors = adjacency[sourceCountyId];
+                    if (!neighbors.TryGetValue(destCountyId, out float existing) || edgeCost < existing)
+                    {
+                        neighbors[destCountyId] = edgeCost;
+                    }
+                }
+            }
+
+            var result = new Dictionary<int, List<(int countyId, float cost)>>(adjacency.Count);
+            foreach (var kvp in adjacency)
+            {
+                var list = new List<(int countyId, float cost)>(kvp.Value.Count);
+                foreach (var neighbor in kvp.Value)
+                {
+                    list.Add((neighbor.Key, neighbor.Value));
+                }
+
+                list.Sort((a, b) =>
+                {
+                    int costCmp = a.cost.CompareTo(b.cost);
+                    return costCmp != 0 ? costCmp : a.countyId.CompareTo(b.countyId);
+                });
+
+                result[kvp.Key] = list;
+            }
+
+            return result;
+        }
+
+        private List<(int countyId, float cost)> FindReachableCounties(int sourceCountyId, float maxCost)
+        {
+            var result = new List<(int countyId, float cost)>();
+            if (sourceCountyId <= 0 || maxCost <= 0f)
+                return result;
+            if (_countyAdjacency == null || !_countyAdjacency.ContainsKey(sourceCountyId))
+                return result;
+
+            var bestCost = new Dictionary<int, float>();
+            var visited = new HashSet<int>();
+            var queue = new SortedSet<(float cost, int countyId)>(
+                Comparer<(float cost, int countyId)>.Create((a, b) =>
+                {
+                    int cmp = a.cost.CompareTo(b.cost);
+                    return cmp != 0 ? cmp : a.countyId.CompareTo(b.countyId);
+                }));
+
+            bestCost[sourceCountyId] = 0f;
+            queue.Add((0f, sourceCountyId));
+
+            while (queue.Count > 0)
+            {
+                var current = queue.Min;
+                queue.Remove(current);
+
+                float currentCost = current.cost;
+                int currentCountyId = current.countyId;
+                if (currentCost > maxCost)
+                    break;
+                if (visited.Contains(currentCountyId))
+                    continue;
+
+                visited.Add(currentCountyId);
+                if (currentCountyId != sourceCountyId)
+                {
+                    result.Add((currentCountyId, currentCost));
+                }
+
+                if (!_countyAdjacency.TryGetValue(currentCountyId, out var neighbors) || neighbors == null)
+                    continue;
+
+                for (int i = 0; i < neighbors.Count; i++)
+                {
+                    var edge = neighbors[i];
+                    int nextCountyId = edge.countyId;
+                    float nextCost = currentCost + edge.cost;
+                    if (nextCost > maxCost)
+                        continue;
+
+                    if (bestCost.TryGetValue(nextCountyId, out float oldCost) && nextCost >= oldCost)
+                        continue;
+
+                    if (bestCost.ContainsKey(nextCountyId))
+                        queue.Remove((oldCost, nextCountyId));
+
+                    bestCost[nextCountyId] = nextCost;
+                    queue.Add((nextCost, nextCountyId));
+                }
+            }
+
+            return result;
         }
 
         private void TransferPopulation(

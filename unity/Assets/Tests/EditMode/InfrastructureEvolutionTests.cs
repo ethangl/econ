@@ -628,6 +628,39 @@ namespace EconSim.Tests
                 "Input goods should be consumed when production succeeds.");
         }
 
+        [Test]
+        public void MigrationSystem_CachesCountyGraphReachability_FromCountyAdjacency()
+        {
+            var mapData = BuildLinearMap();
+            var economy = new EconomyState();
+            economy.InitializeFromMap(mapData);
+            var transport = new TransportGraph(mapData);
+
+            var state = new SimulationState
+            {
+                Economy = economy,
+                Transport = transport
+            };
+
+            var system = new MigrationSystem();
+            system.Initialize(state, mapData);
+
+            var field = typeof(MigrationSystem).GetField(
+                "_reachableCache",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.That(field, Is.Not.Null, "Could not find MigrationSystem._reachableCache via reflection.");
+
+            var cache = field.GetValue(system) as Dictionary<int, List<(int countyId, float cost)>>;
+            Assert.That(cache, Is.Not.Null);
+            Assert.That(cache.ContainsKey(10), Is.True);
+
+            var from10 = cache[10];
+            Assert.That(from10.Exists(entry => entry.countyId == 20), Is.True,
+                "County 10 should reach adjacent county 20 in county graph.");
+            Assert.That(from10.Exists(entry => entry.countyId == 30), Is.True,
+                "County 10 should reach county 30 via county graph traversal.");
+        }
+
         private static MapData BuildLinearMap()
         {
             var mapData = new MapData

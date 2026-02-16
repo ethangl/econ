@@ -171,10 +171,11 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 - Runtime economics should consume county-zone costs directly.
 - Branch note: `EconomyState` now materializes `CountyToMarketCost` from assignment rebuilds, and runtime systems read county transport costs from this county-level lookup.
 
-2. Migration county-graph reachability
+2. Migration county-graph reachability (`Completed`)
 
 - Compute county adjacency/cost graph and run migration reachability on counties, not full cell graph.
 - Preserve cell-graph pathfinding for rendering/road features where needed.
+- Branch note: `MigrationSystem` now builds a weighted county adjacency graph once and caches county-level reachable sets from that graph.
 
 3. Allocation pooling and reuse in labor/market systems (`Completed`)
 
@@ -205,7 +206,7 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 4. Replace per-order/per-lot market clearing with aggregated books.
    Status: `Completed`
 5. Shift runtime zone and migration logic to county-level representations.
-   Status: `Not started`
+   Status: `Completed`
 
 ## Acceptance Metrics
 
