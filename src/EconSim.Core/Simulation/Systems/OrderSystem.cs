@@ -160,7 +160,7 @@ namespace EconSim.Core.Simulation.Systems
                 if (qty <= 0.0001f || maxSpend <= 0f)
                     continue;
 
-                market.PendingBuyOrders.Add(new BuyOrder
+                market.AddPendingBuyOrder(new BuyOrder
                 {
                     BuyerId = buyerId,
                     GoodId = line.GoodId,
@@ -232,7 +232,7 @@ namespace EconSim.Core.Simulation.Systems
                     if (quantity <= 0.0001f || maxSpend <= 0f)
                         continue;
 
-                    market.PendingBuyOrders.Add(new BuyOrder
+                    market.AddPendingBuyOrder(new BuyOrder
                     {
                         BuyerId = facility.Id,
                         GoodId = input.GoodId,

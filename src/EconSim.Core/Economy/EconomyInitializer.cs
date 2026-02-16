@@ -191,7 +191,7 @@ namespace EconSim.Core.Economy
                     if (weeklyDemand <= 0f)
                         continue;
 
-                    market.Inventory.Add(new ConsignmentLot
+                    market.AddInventoryLot(new ConsignmentLot
                     {
                         SellerId = seedSellerId,
                         GoodId = goodId,
@@ -228,7 +228,7 @@ namespace EconSim.Core.Economy
                     if (maxSpend <= 0f)
                         continue;
 
-                    market.PendingBuyOrders.Add(new BuyOrder
+                    market.AddPendingBuyOrder(new BuyOrder
                     {
                         BuyerId = populationBuyerId,
                         GoodId = good.Id,
@@ -271,7 +271,7 @@ namespace EconSim.Core.Economy
                         if (quantity <= 0f || maxSpend <= 0f)
                             continue;
 
-                        market.PendingBuyOrders.Add(new BuyOrder
+                        market.AddPendingBuyOrder(new BuyOrder
                         {
                             BuyerId = facility.Id,
                             GoodId = input.GoodId,

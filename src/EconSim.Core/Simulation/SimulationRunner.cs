@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using EconSim.Core.Common;
@@ -30,6 +31,7 @@ namespace EconSim.Core.Simulation
         private readonly int _cacheMapGenSeed;
         private readonly int _cacheEconomySeed;
         private float _accumulator;
+        private static readonly double TimestampTicksToMs = 1000d / Stopwatch.Frequency;
 
         public float TimeScale
         {
@@ -207,6 +209,7 @@ namespace EconSim.Core.Simulation
 
         private void ProcessTick()
         {
+            long tickStart = Stopwatch.GetTimestamp();
             _state.CurrentDay++;
             _state.TotalTicksProcessed++;
 
@@ -215,9 +218,19 @@ namespace EconSim.Core.Simulation
             {
                 if (_state.CurrentDay % system.TickInterval == 0)
                 {
+                    long systemStart = Stopwatch.GetTimestamp();
                     system.Tick(_state, _mapData);
+                    float systemMs = ElapsedMs(systemStart);
+                    _state.Performance.RecordSystem(system.Name, system.TickInterval, systemMs);
                 }
             }
+
+            _state.Performance.RecordTick(ElapsedMs(tickStart));
+        }
+
+        private static float ElapsedMs(long startTimestamp)
+        {
+            return (float)((Stopwatch.GetTimestamp() - startTimestamp) * TimestampTicksToMs);
         }
 
         public MapData GetMapData() => _mapData;

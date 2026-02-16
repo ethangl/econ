@@ -59,14 +59,24 @@ namespace EconSim.Core.Economy
         public Dictionary<string, MarketGoodState> Goods { get; set; } = new Dictionary<string, MarketGoodState>();
 
         /// <summary>
-        /// Pending buy orders posted by facilities and county populations.
+        /// Pending buy orders grouped by good ID.
         /// </summary>
-        public List<BuyOrder> PendingBuyOrders { get; set; } = new List<BuyOrder>();
+        public Dictionary<string, List<BuyOrder>> PendingBuyOrdersByGood { get; } = new Dictionary<string, List<BuyOrder>>();
 
         /// <summary>
-        /// Consignment inventory available for clearing.
+        /// Consignment lots grouped by good ID.
         /// </summary>
-        public List<ConsignmentLot> Inventory { get; set; } = new List<ConsignmentLot>();
+        public Dictionary<string, List<ConsignmentLot>> InventoryLotsByGood { get; } = new Dictionary<string, List<ConsignmentLot>>();
+
+        /// <summary>
+        /// Number of pending buy orders across all books.
+        /// </summary>
+        public int PendingBuyOrderCount { get; private set; }
+
+        /// <summary>
+        /// Number of inventory lots across all books.
+        /// </summary>
+        public int InventoryLotCount { get; private set; }
 
         /// <summary>
         /// For OffMap markets: good IDs that this market supplies from off-map.
@@ -78,6 +88,118 @@ namespace EconSim.Core.Economy
         /// For OffMap markets: the price multiplier applied to off-map goods.
         /// </summary>
         public float OffMapPriceMultiplier { get; set; } = 1f;
+
+        /// <summary>
+        /// Append a pending buy order to this market's order books.
+        /// </summary>
+        public void AddPendingBuyOrder(BuyOrder order)
+        {
+            if (order.Quantity <= 0f)
+                return;
+            if (string.IsNullOrWhiteSpace(order.GoodId))
+                return;
+
+            if (!PendingBuyOrdersByGood.TryGetValue(order.GoodId, out var book))
+            {
+                book = new List<BuyOrder>();
+                PendingBuyOrdersByGood[order.GoodId] = book;
+            }
+
+            book.Add(order);
+            PendingBuyOrderCount++;
+        }
+
+        /// <summary>
+        /// Append an inventory lot to this market's lot books.
+        /// </summary>
+        public void AddInventoryLot(ConsignmentLot lot)
+        {
+            if (lot.Quantity <= 0f)
+                return;
+            if (string.IsNullOrWhiteSpace(lot.GoodId))
+                return;
+
+            if (!InventoryLotsByGood.TryGetValue(lot.GoodId, out var book))
+            {
+                book = new List<ConsignmentLot>();
+                InventoryLotsByGood[lot.GoodId] = book;
+            }
+
+            book.Add(lot);
+            InventoryLotCount++;
+        }
+
+        /// <summary>
+        /// Try get pending orders for a given good.
+        /// </summary>
+        public bool TryGetPendingOrders(string goodId, out List<BuyOrder> orders)
+        {
+            return PendingBuyOrdersByGood.TryGetValue(goodId, out orders);
+        }
+
+        /// <summary>
+        /// Try get inventory lots for a given good.
+        /// </summary>
+        public bool TryGetInventoryLots(string goodId, out List<ConsignmentLot> lots)
+        {
+            return InventoryLotsByGood.TryGetValue(goodId, out lots);
+        }
+
+        /// <summary>
+        /// Remove stale pending orders and tiny inventory lots.
+        /// </summary>
+        public void CullBooks(int currentDay, float lotCullThreshold)
+        {
+            PendingBuyOrderCount = CullOrders(PendingBuyOrdersByGood, currentDay, lotCullThreshold);
+            InventoryLotCount = CullLots(InventoryLotsByGood, lotCullThreshold);
+        }
+
+        private static int CullOrders(
+            Dictionary<string, List<BuyOrder>> books,
+            int currentDay,
+            float lotCullThreshold)
+        {
+            int total = 0;
+            var empty = new List<string>();
+
+            foreach (var kvp in books)
+            {
+                var list = kvp.Value;
+                list.RemoveAll(o => o.DayPosted < currentDay || o.Quantity <= lotCullThreshold);
+                if (list.Count == 0)
+                    empty.Add(kvp.Key);
+                else
+                    total += list.Count;
+            }
+
+            for (int i = 0; i < empty.Count; i++)
+                books.Remove(empty[i]);
+
+            return total;
+        }
+
+        private static int CullLots(
+            Dictionary<string, List<ConsignmentLot>> books,
+            float lotCullThreshold)
+        {
+            int total = 0;
+            var empty = new List<string>();
+
+            foreach (var kvp in books)
+            {
+                var list = kvp.Value;
+                list.RemoveAll(l => l.Quantity <= lotCullThreshold);
+                if (list.Count == 0)
+                    empty.Add(kvp.Key);
+                else
+                    total += list.Count;
+            }
+
+            for (int i = 0; i < empty.Count; i++)
+                books.Remove(empty[i]);
+
+            return total;
+        }
     }
 
     /// <summary>
