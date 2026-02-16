@@ -24,6 +24,20 @@ All files are gitignored.
 3. Poll `econ_debug_status.json` until `"state": "complete"` or `"error"`
 4. Read results from `econ_debug_output.json`
 
+### Comparing two dumps
+
+Use:
+
+```bash
+scripts/compare_econ_dumps.sh unity/econ_debug_output_d20_bench.json unity/econ_debug_output.json
+```
+
+Optional third arg controls how many top drifts to print:
+
+```bash
+scripts/compare_econ_dumps.sh <bench.json> <candidate.json> 20
+```
+
 ## Commands
 
 ### generate_and_run

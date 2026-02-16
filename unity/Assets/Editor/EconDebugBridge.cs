@@ -530,8 +530,8 @@ namespace EconSim.Editor
                 j.KV("type", market.Type.ToString());
                 j.KV("locationCellId", market.LocationCellId);
                 j.KV("zoneCells", market.ZoneCellIds?.Count ?? 0);
-                j.KV("pendingOrders", market.PendingBuyOrders?.Count ?? 0);
-                j.KV("consignmentLots", market.Inventory?.Count ?? 0);
+                j.KV("pendingOrders", market.PendingBuyOrderCount);
+                j.KV("consignmentLots", market.InventoryLotCount);
 
                 j.Key("goods"); j.ObjOpen();
                 foreach (var gs in market.Goods.Values.OrderBy(g => g.GoodId))

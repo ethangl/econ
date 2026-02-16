@@ -46,7 +46,7 @@ namespace EconSim.Tests
                 }
             };
 
-            market.Inventory.Add(new ConsignmentLot
+            market.AddInventoryLot(new ConsignmentLot
             {
                 SellerId = MarketOrderIds.MakeSeedSellerId(market.Id),
                 GoodId = "bread",
@@ -54,7 +54,7 @@ namespace EconSim.Tests
                 DayListed = 0
             });
 
-            market.PendingBuyOrders.Add(new BuyOrder
+            market.AddPendingBuyOrder(new BuyOrder
             {
                 BuyerId = MarketOrderIds.MakePopulationBuyerId(1),
                 GoodId = "bread",
@@ -64,7 +64,7 @@ namespace EconSim.Tests
                 DayPosted = 0
             });
 
-            market.PendingBuyOrders.Add(new BuyOrder
+            market.AddPendingBuyOrder(new BuyOrder
             {
                 BuyerId = MarketOrderIds.MakePopulationBuyerId(2),
                 GoodId = "bread",
@@ -75,7 +75,7 @@ namespace EconSim.Tests
             });
 
             // Posted today: should not clear this tick.
-            market.PendingBuyOrders.Add(new BuyOrder
+            market.AddPendingBuyOrder(new BuyOrder
             {
                 BuyerId = MarketOrderIds.MakePopulationBuyerId(1),
                 GoodId = "bread",
@@ -105,7 +105,7 @@ namespace EconSim.Tests
             Assert.That(economy.GetCounty(2).Population.Treasury, Is.EqualTo(80f).Within(0.001f));
             Assert.That(market.Goods["bread"].LastTradeVolume, Is.EqualTo(50f).Within(0.001f));
             Assert.That(market.Goods["bread"].Demand, Is.EqualTo(100f).Within(0.001f));
-            Assert.That(market.PendingBuyOrders.Count, Is.EqualTo(1), "Only day-2 order should remain pending.");
+            Assert.That(market.PendingBuyOrderCount, Is.EqualTo(1), "Only day-2 order should remain pending.");
         }
 
         [Test]
