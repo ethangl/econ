@@ -81,7 +81,7 @@ namespace EconSim.Core.Economy
 
         // === Theft properties ===
         /// <summary>
-        /// Fraction of transport losses that become theft (feed black market).
+        /// Legacy theft-risk tuning coefficient.
         /// 0 = no theft appeal, 1 = all losses are stolen.
         /// High-value portable goods have higher theft risk.
         /// </summary>

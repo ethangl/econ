@@ -28,9 +28,6 @@ namespace EconSim.Core.Economy
         /// <summary>Road network state (traffic accumulation, road tiers).</summary>
         public RoadState Roads;
 
-        /// <summary>Reserved ID for the black market.</summary>
-        public const int BlackMarketId = 0;
-
         /// <summary>Next facility ID to assign.</summary>
         public int NextFacilityId;
 
@@ -183,11 +180,6 @@ namespace EconSim.Core.Economy
         {
             return Markets.TryGetValue(marketId, out var m) ? m : null;
         }
-
-        /// <summary>
-        /// Get the black market (convenience accessor).
-        /// </summary>
-        public Market BlackMarket => GetMarket(BlackMarketId);
 
         /// <summary>
         /// Get the market that serves a given cell (if any).

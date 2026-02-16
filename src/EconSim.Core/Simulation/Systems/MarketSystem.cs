@@ -36,9 +36,6 @@ namespace EconSim.Core.Simulation.Systems
 
             foreach (var market in economy.Markets.Values)
             {
-                if (market.Type == MarketType.Black)
-                    continue;
-
                 ApplyDecay(economy, market);
                 ClearMarket(state, economy, market, dayIndex);
 

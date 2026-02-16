@@ -44,9 +44,6 @@ namespace EconSim.Core.Simulation.Systems
             float dailyTradeValue = 0f;
             foreach (var market in economy.Markets.Values)
             {
-                if (market.Type == MarketType.Black)
-                    continue;
-
                 foreach (var gs in market.Goods.Values)
                 {
                     if (!telemetry.GoodMetrics.TryGetValue(gs.GoodId, out var metric))
@@ -65,12 +62,7 @@ namespace EconSim.Core.Simulation.Systems
                 }
             }
 
-            int marketCount = 0;
-            foreach (var market in economy.Markets.Values)
-            {
-                if (market.Type != MarketType.Black)
-                    marketCount++;
-            }
+            int marketCount = economy.Markets.Count;
             if (marketCount > 0)
             {
                 var keys = new List<string>(telemetry.GoodMetrics.Keys);

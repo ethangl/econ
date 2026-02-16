@@ -157,38 +157,9 @@ namespace EconSim.Core.Economy
         }
 
         /// <summary>
-        /// Try to allocate workers for a facility.
-        /// Returns the number of workers actually allocated.
-        /// </summary>
-        public int AllocateWorkers(LaborType type, int requested)
-        {
-            if (type == LaborType.Unskilled)
-            {
-                int available = IdleUnskilled;
-                int allocated = Math.Min(available, requested);
-                EmployedUnskilled += allocated;
-                return allocated;
-            }
-            else
-            {
-                int available = IdleSkilled;
-                int allocated = Math.Min(available, requested);
-                EmployedSkilled += allocated;
-                return allocated;
-            }
-        }
-
-        /// <summary>Reset employment counts (called at start of each tick).</summary>
-        public void ResetEmployment()
-        {
-            EmployedUnskilled = 0;
-            EmployedSkilled = 0;
-        }
-
-        /// <summary>
-        /// Set employed worker counts from external allocation systems.
-        /// Values are clamped to valid population limits.
-        /// </summary>
+         /// Set employed worker counts from external allocation systems.
+         /// Values are clamped to valid population limits.
+         /// </summary>
         public void SetEmployment(int employedUnskilled, int employedSkilled)
         {
             EmployedUnskilled = Math.Max(0, Math.Min(TotalUnskilled, employedUnskilled));

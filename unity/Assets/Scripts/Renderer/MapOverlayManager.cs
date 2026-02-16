@@ -2690,7 +2690,7 @@ public class MapOverlayManager
 
             if (!economyState.Markets.TryGetValue(marketId, out var market))
                 return false;
-            if (market.Type == MarketType.Black || market.ZoneCellCosts == null)
+            if (market.ZoneCellCosts == null)
                 return false;
 
             return market.ZoneCellCosts.TryGetValue(cellId, out cost);

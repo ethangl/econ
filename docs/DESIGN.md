@@ -391,7 +391,7 @@ GoodType:
   - need_category: basic | comfort | luxury   # for finished
   - base_price: float                         # equilibrium market price
   - decay_rate: float                         # spoilage per day
-  - theft_risk: float                         # black market appeal (finished only)
+  - theft_risk: float                         # legacy security coefficient (not currently consumed by systems)
 ```
 
 ### Facilities
@@ -492,7 +492,7 @@ For each county C:
 
 ### Implementation Notes (Current)
 
-**Classes:** `Market`, `MarketPlacer`, `TradeSystem`
+**Classes:** `Market`, `MarketPlacer`, `MarketSystem`, `OrderSystem`, `PriceSystem`
 
 Market placement uses suitability scoring:
 
@@ -508,15 +508,14 @@ Market placement uses suitability scoring:
 
 **Zone visualization:** Each market has a distinct color from a predefined palette (8 colors). The hub province (not just the hub cell) is highlighted with a vivid version of the market color for visibility.
 
-Trade system runs weekly:
+Economy tick flow is daily:
 
-- Counties with >7 days stock sell surplus to market (consumer goods)
-- Counties with >10 units sell surplus (non-consumer goods)
-- Counties with <3 days stock buy from market
-- Prices adjust via supply/demand ratio (±10% per tick)
-- Price bounds: 0.1x - 10x base price (relative to each good's BasePrice)
-- **Transport cost markup**: goods lose ~1% per unit of transport cost during trade
-- Transport efficiency = `1 / (1 + cost * 0.01)`, minimum 50%
+- `MarketSystem` clears yesterday's buy orders against consignment inventory.
+- `ProductionSystem` runs facility production and lists output consignments.
+- `OrderSystem` posts next-day population and facility input demand.
+- `WageSystem` pays workers from facility treasuries.
+- `PriceSystem` adjusts legitimate market prices from supply/demand.
+- `LaborSystem` reallocates workers with friction in daily slices.
 
 **Base prices by good:**
 
@@ -535,52 +534,10 @@ Trade system runs weekly:
 | Finished | Jewelry   | 50        | Luxury, artisan premium     |
 | Finished | Furniture | 12        | Luxury, crafted goods       |
 
-Storage decay (in `ConsumptionSystem`):
+Storage decay:
 
-- `GoodDef.DecayRate`: fraction of stockpile lost per day
-- Bread: 5%/day, Flour: 1%/day, Wheat: 0.5%/day
-- Wood products: 0.2%/day, Metals: 0%
-
-### Black Market
-
-A global underground market that receives stolen finished goods and sells them at premium prices.
-
-**Design:**
-
-- Special `Market` instance with `Type = MarketType.Black` (ID 0)
-- No physical location (`LocationCellId = -1`), no zone
-- Accessible from all counties (no transport cost for purchases)
-- 2x base price markup, higher price floor (0.5x vs 0.1x)
-- Supply persists between ticks (unlike legitimate markets which reset)
-- **Only finished goods** are stolen - raw materials and refined goods stay in the legitimate economy
-
-**Theft sources (finished goods only):**
-
-1. **Transport theft**: When finished goods are transported to/from markets, a portion of transport losses become stolen goods based on `GoodDef.TheftRisk`
-2. **Stockpile theft**: Daily theft from county stockpiles (`TheftSystem`)
-
-**TheftRisk values (finished goods):**
-
-| Good      | TheftRisk | BasePrice | Rationale                |
-| --------- | --------- | --------- | ------------------------ |
-| Jewelry   | 1.0       | 50        | Maximum theft appeal     |
-| Tools     | 0.8       | 15        | High value, high demand  |
-| Furniture | 0.6       | 12        | High value, identifiable |
-| Bread     | 0.1       | 5         | Perishable               |
-
-**Buying behavior:**
-
-- Counties compare effective prices: local market (adjusted for transport loss) vs black market
-- Buy from whichever source is cheaper and has supply
-- Black market purchases have no transport loss (delivered directly)
-
-**Economic dynamics:**
-
-- Heavy theft → black market oversupply → prices drop → can become cheaper than legitimate markets
-- Creates underground economy that competes with legitimate trade
-- Raw/refined goods remain in legitimate trade, only consumer goods enter black market
-
-**UI:** Economy panel (E key) Trade tab shows black market in separate section with stock, sales volume, and prices.
+- `GoodDef.DecayRate` is applied to market consignment inventory.
+- County stockpiles currently do not run a global daily spoilage pass.
 
 ---
 
@@ -656,9 +613,9 @@ Key methods:
 
 Caching: Simple LRU with configurable max size (default 10k entries).
 
-### Transport Losses & Theft
+### Transport Losses & Fees
 
-Transport inefficiency causes goods to be lost in transit. A portion of these losses become theft, feeding the black market.
+Transport inefficiency causes goods to be lost in transit, and hauling generates fee transfers to county households.
 
 **Transport efficiency:**
 
@@ -668,27 +625,15 @@ arriving = sent * efficiency
 lost = sent - arriving
 ```
 
-Minimum efficiency is 50% (goods always lose some portion to transport).
-
-**Theft from transport (finished goods only):**
+Hauling fees:
 
 ```
-if (good.IsFinished && good.TheftRisk > 0):
-    stolen = lost * good.TheftRisk
+hauling_fee = quantity * market_price * transportCost * 0.005
 ```
 
-Stolen finished goods are added to black market supply. See Black Market section for TheftRisk values.
-
-**Stockpile theft (`TheftSystem`):**
-
-Runs daily. Small percentage of stockpiled **finished goods** stolen based on TheftRisk:
-
-```
-if (good.IsFinished && good.TheftRisk > 0):
-    stolen = stockpile * 0.005 * TheftRisk
-```
-
-For tools (TheftRisk=0.8): ~0.4% stolen per day. Minimum stockpile of 1 unit required. Raw materials and refined goods are not stolen.
+- Seller-side hauling fees are paid when consignments are listed.
+- Buyer-side hauling fees are included in effective purchase price.
+- Fee proceeds are credited to county population treasury (teamster/hauler income).
 
 ### Future: Fragility
 
@@ -829,10 +774,12 @@ econ/
 │           ├── SimulationConfig.cs # Speed presets, tick intervals
 │           └── Systems/
 │               ├── ITickSystem.cs     # Interface for subsystems
-│               ├── ProductionSystem.cs # Extraction & processing
-│               ├── ConsumptionSystem.cs # Population consumption
-│               ├── TradeSystem.cs     # Market trade & pricing
-│               └── TheftSystem.cs     # Stockpile theft → black market
+│               ├── MarketSystem.cs     # Market clearing
+│               ├── ProductionSystem.cs # Extraction + processing + consignments
+│               ├── OrderSystem.cs      # Population/facility buy orders
+│               ├── WageSystem.cs       # Wage payments and subsistence updates
+│               ├── PriceSystem.cs      # Price adjustment
+│               └── LaborSystem.cs      # Worker reallocation
 │
 └── unity/                         # Unity frontend
     ├── Assets/

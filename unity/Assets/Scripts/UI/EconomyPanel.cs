@@ -310,7 +310,6 @@ namespace EconSim.UI
             // Aggregate across legitimate markets only.
             // Off-map prices are intentionally fixed and should not mask local market movement.
             var aggregateGoods = new Dictionary<string, (float supply, float demand, float weightedPriceSum, float priceWeight)>();
-            var blackMarket = _economy.BlackMarket;
 
             foreach (var market in _economy.Markets.Values)
             {
@@ -368,44 +367,6 @@ namespace EconSim.UI
             if (legitRows == 0)
             {
                 AddEmptyLabel(_tradeList, "No trade activity");
-            }
-
-            // Black Market Section
-            if (blackMarket != null)
-            {
-                AddSectionHeader(_tradeList, "Black Market", new Color(0.8f, 0.3f, 0.3f));
-
-                // Header
-                var blackHeader = new VisualElement();
-                blackHeader.AddToClassList("goods-header");
-                blackHeader.Add(CreateLabel("Good", "goods-name"));
-                blackHeader.Add(CreateLabel("Stock", "goods-value"));
-                blackHeader.Add(CreateLabel("Sold", "goods-value"));
-                blackHeader.Add(CreateLabel("Price", "goods-value"));
-                _tradeList.Add(blackHeader);
-
-                // Rows - show goods with any supply or recent activity
-                int blackRows = 0;
-                foreach (var kvp in blackMarket.Goods)
-                {
-                    var state = kvp.Value;
-                    // Show if there's stock or recent sales
-                    if (state.Supply < 0.1f && state.LastTradeVolume < 0.1f) continue;
-
-                    var row = new VisualElement();
-                    row.AddToClassList("goods-row");
-                    row.Add(CreateLabel(kvp.Key, "goods-name"));
-                    row.Add(CreateLabel(FormatQuantity(state.Supply), "goods-value"));
-                    row.Add(CreateLabel(FormatQuantity(state.LastTradeVolume), "goods-value"));
-                    row.Add(CreateLabel($"{state.Price:F2}", "goods-value"));
-                    _tradeList.Add(row);
-                    blackRows++;
-                }
-
-                if (blackRows == 0)
-                {
-                    AddEmptyLabel(_tradeList, "No stolen goods in circulation");
-                }
             }
         }
 

@@ -8,7 +8,6 @@ namespace EconSim.Core.Simulation.Systems
 {
     /// <summary>
     /// Replenishes supply for off-map markets each trade tick.
-    /// Runs before TradeSystem so counties can buy off-map goods.
     /// Only replenishes goods that the off-map market is configured to supply
     /// (those with inflated BasePrice from OffMapMarketPlacer).
     /// </summary>

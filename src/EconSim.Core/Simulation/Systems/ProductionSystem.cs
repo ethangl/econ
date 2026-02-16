@@ -7,19 +7,14 @@ using EconSim.Core.Economy;
 namespace EconSim.Core.Simulation.Systems
 {
     /// <summary>
-    /// Handles extraction and processing production.
-    /// V1: per-tick worker reset and county-stockpile processing.
-    /// V2: persistent staffing, profitability gating, input/output buffers, market consignments.
+    /// Handles extraction and processing production with persistent staffing,
+    /// profitability gating, input/output buffers, and market consignments.
     /// </summary>
     public class ProductionSystem : ITickSystem
     {
         public string Name => "Production";
         public int TickInterval => SimulationConfig.Intervals.Daily;
 
-        // V1: fraction of extraction output sent to export buffer.
-        private const float V1ExportFraction = 0.3f;
-
-        // V2 constants.
         private const float V2SubsistenceFraction = 0.20f;
         private const float V2TransportLossRate = 0.01f;
         private const float V2TransportFeeRate = 0.005f;
@@ -62,35 +57,6 @@ namespace EconSim.Core.Simulation.Systems
         public void Tick(SimulationState state, MapData mapData)
         {
             TickV2(state, mapData);
-        }
-
-        private void TickV1(SimulationState state, MapData mapData)
-        {
-            var economy = state.Economy;
-            if (economy == null) return;
-
-            _producedThisTick.Clear();
-
-            foreach (var county in economy.Counties.Values)
-            {
-                county.Population.ResetEmployment();
-            }
-
-            foreach (var facility in economy.Facilities.Values)
-            {
-                var def = economy.FacilityDefs.Get(facility.TypeId);
-                if (def == null || !def.IsExtraction) continue;
-
-                RunExtractionFacilityV1(economy, facility, def, mapData);
-            }
-
-            foreach (var facility in economy.Facilities.Values)
-            {
-                var def = economy.FacilityDefs.Get(facility.TypeId);
-                if (def == null || def.IsExtraction) continue;
-
-                RunProcessingFacilityV1(economy, facility, def);
-            }
         }
 
         private void TickV2(SimulationState state, MapData mapData)
@@ -454,72 +420,6 @@ namespace EconSim.Core.Simulation.Systems
                 return Math.Max(0f, cost);
 
             return 0f;
-        }
-
-        private static void AllocateWorkersV1(CountyEconomy county, Facility facility, FacilityDef def)
-        {
-            var laborType = def.LaborType;
-            int needed = def.LaborRequired;
-            int allocated = county.Population.AllocateWorkers(laborType, needed);
-            facility.AssignedWorkers = allocated;
-        }
-
-        private void RunExtractionFacilityV1(EconomyState economy, Facility facility, FacilityDef def, MapData mapData)
-        {
-            var county = economy.GetCounty(facility.CountyId);
-            var goodDef = economy.Goods.Get(def.OutputGoodId);
-            if (goodDef == null) return;
-
-            float abundance = county.GetResourceAbundance(def.OutputGoodId);
-            if (abundance <= 0f) return;
-
-            AllocateWorkersV1(county, facility, def);
-            if (facility.AssignedWorkers <= 0) return;
-
-            float throughput = facility.GetThroughput(def);
-            float produced = throughput * abundance;
-
-            float forExport = produced * V1ExportFraction;
-            float forLocal = produced - forExport;
-
-            county.Stockpile.Add(def.OutputGoodId, forLocal);
-            county.ExportBuffer.Add(def.OutputGoodId, forExport);
-            TrackProduction(def.OutputGoodId, produced);
-        }
-
-        private void RunProcessingFacilityV1(EconomyState economy, Facility facility, FacilityDef def)
-        {
-            var county = economy.GetCounty(facility.CountyId);
-            var goodDef = economy.Goods.Get(def.OutputGoodId);
-            if (goodDef == null) return;
-
-            var inputs = def.InputOverrides ?? goodDef.Inputs;
-            if (inputs == null || inputs.Count == 0) return;
-
-            AllocateWorkersV1(county, facility, def);
-            if (facility.AssignedWorkers <= 0) return;
-
-            float throughput = facility.GetThroughput(def);
-            int maxBatches = (int)throughput;
-
-            int possibleBatches = maxBatches;
-            foreach (var input in inputs)
-            {
-                float available = county.Stockpile.Get(input.GoodId);
-                int canMake = (int)(available / input.Quantity);
-                if (canMake < possibleBatches)
-                    possibleBatches = canMake;
-            }
-
-            if (possibleBatches <= 0) return;
-
-            foreach (var input in inputs)
-            {
-                county.Stockpile.Remove(input.GoodId, input.Quantity * possibleBatches);
-            }
-
-            county.Stockpile.Add(def.OutputGoodId, possibleBatches);
-            TrackProduction(def.OutputGoodId, possibleBatches);
         }
 
         private void TrackProduction(string goodId, float amount)

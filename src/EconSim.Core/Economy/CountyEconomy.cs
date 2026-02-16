@@ -20,12 +20,6 @@ namespace EconSim.Core.Economy
         /// <summary>Local stockpile of goods.</summary>
         public Stockpile Stockpile;
 
-        /// <summary>
-        /// Goods earmarked for market export. Filled by extraction facilities,
-        /// sold unconditionally by TradeSystem (bypasses surplus threshold).
-        /// </summary>
-        public Stockpile ExportBuffer;
-
         /// <summary>Facilities located in this county.</summary>
         public List<int> FacilityIds;
 
@@ -43,7 +37,6 @@ namespace EconSim.Core.Economy
             CountyId = countyId;
             Population = new CountyPopulation();
             Stockpile = new Stockpile();
-            ExportBuffer = new Stockpile();
             FacilityIds = new List<int>();
             Resources = new Dictionary<string, float>();
             UnmetDemand = new Dictionary<string, float>();

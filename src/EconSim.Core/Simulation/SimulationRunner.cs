@@ -259,7 +259,6 @@ namespace EconSim.Core.Simulation
                 float latitudeSouth = reader.ReadSingle();
                 float latitudeNorth = reader.ReadSingle();
                 bool staticNetworkBuilt = reader.ReadBoolean();
-                bool cacheUseEconomyV2 = reader.ReadBoolean();
 
                 if (!IsSimulationBootstrapCacheCompatible(
                     rootSeed,
@@ -269,8 +268,7 @@ namespace EconSim.Core.Simulation
                     cellCount,
                     latitudeSouth,
                     latitudeNorth,
-                    staticNetworkBuilt,
-                    cacheUseEconomyV2))
+                    staticNetworkBuilt))
                     return false;
 
                 _state.Economy.Markets.Clear();
@@ -285,13 +283,9 @@ namespace EconSim.Core.Simulation
                     if (marketId < 0)
                         continue;
 
-                    MarketType type;
-                    if (typeRaw == (int)MarketType.Black)
-                        type = MarketType.Black;
-                    else if (typeRaw == (int)MarketType.OffMap)
-                        type = MarketType.OffMap;
-                    else
-                        type = MarketType.Legitimate;
+                    MarketType type = typeRaw == (int)MarketType.OffMap
+                        ? MarketType.OffMap
+                        : MarketType.Legitimate;
 
                     var market = new Market
                     {
@@ -302,7 +296,7 @@ namespace EconSim.Core.Simulation
                     };
 
                     int zoneEntryCount = reader.ReadInt32();
-                    if (zoneEntryCount > 0 && market.Type != MarketType.Black)
+                    if (zoneEntryCount > 0)
                     {
                         for (int zoneIndex = 0; zoneIndex < zoneEntryCount; zoneIndex++)
                         {
@@ -310,14 +304,6 @@ namespace EconSim.Core.Simulation
                             float zoneCost = reader.ReadSingle();
                             market.ZoneCellIds.Add(zoneCellId);
                             market.ZoneCellCosts[zoneCellId] = zoneCost;
-                        }
-                    }
-                    else
-                    {
-                        for (int zoneIndex = 0; zoneIndex < zoneEntryCount; zoneIndex++)
-                        {
-                            reader.ReadInt32();
-                            reader.ReadSingle();
                         }
                     }
 
@@ -404,8 +390,7 @@ namespace EconSim.Core.Simulation
             int cellCount,
             float latitudeSouth,
             float latitudeNorth,
-            bool staticNetworkBuilt,
-            bool cacheUseEconomyV2)
+            bool staticNetworkBuilt)
         {
             if (countyCount != (_mapData?.Counties?.Count ?? 0))
                 return false;
@@ -429,9 +414,6 @@ namespace EconSim.Core.Simulation
                 return false;
 
             if (SimulationConfig.Roads.BuildStaticNetworkAtInit != staticNetworkBuilt)
-                return false;
-
-            if (!cacheUseEconomyV2)
                 return false;
 
             return true;
@@ -476,7 +458,6 @@ namespace EconSim.Core.Simulation
             writer.Write(_mapData?.Info?.World != null ? _mapData.Info.World.LatitudeSouth : float.NaN);
             writer.Write(_mapData?.Info?.World != null ? _mapData.Info.World.LatitudeNorth : float.NaN);
             writer.Write(staticNetworkBuilt);
-            writer.Write(true);
 
             writer.Write(_state.Economy.Markets.Count);
             foreach (var market in _state.Economy.Markets.Values)
@@ -485,9 +466,7 @@ namespace EconSim.Core.Simulation
                 writer.Write(market.LocationCellId);
                 writer.Write(market.Name ?? string.Empty);
                 writer.Write((int)market.Type);
-                int zoneEntryCount = market.Type == MarketType.Black
-                    ? 0
-                    : (market.ZoneCellCosts?.Count ?? 0);
+                int zoneEntryCount = market.ZoneCellCosts?.Count ?? 0;
                 writer.Write(zoneEntryCount);
                 if (zoneEntryCount > 0)
                 {
@@ -698,50 +677,21 @@ namespace EconSim.Core.Simulation
         {
             foreach (var market in _state.Economy.Markets.Values)
             {
-                if (market.Type == MarketType.Black)
-                    continue;
-
                 MarketPlacer.ComputeMarketZone(market, _mapData, _state.Transport, maxTransportCost: _marketZoneMaxTransportCost);
             }
 
             _state.Economy.RebuildCellToMarketLookup();
         }
 
-        /// <summary>
-        /// Initialize the black market - a global underground market with no physical location.
-        /// </summary>
-        private void InitializeBlackMarket(bool logInitialization = true)
-        {
-            var blackMarket = new Market
-            {
-                Id = EconomyState.BlackMarketId,
-                LocationCellId = -1,  // No physical location
-                Name = "Black Market",
-                Type = MarketType.Black
-            };
-
-            InitializeMarketGoods(blackMarket);
-            _state.Economy.Markets[blackMarket.Id] = blackMarket;
-
-            if (logInitialization)
-            {
-                SimLog.Log("Market", "Initialized black market (global, 2x base prices)");
-            }
-        }
-
         private void InitializeMarketGoods(Market market)
         {
             market.Goods.Clear();
-            const float BlackMarketPriceMultiplier = 2.0f;
-            bool isBlackMarket = market.Type == MarketType.Black;
             bool isOffMap = market.Type == MarketType.OffMap;
 
             foreach (var good in _state.Economy.Goods.All)
             {
                 float price;
-                if (isBlackMarket)
-                    price = good.BasePrice * BlackMarketPriceMultiplier;
-                else if (isOffMap && market.OffMapGoodIds != null && market.OffMapGoodIds.Contains(good.Id))
+                if (isOffMap && market.OffMapGoodIds != null && market.OffMapGoodIds.Contains(good.Id))
                     price = good.BasePrice * market.OffMapPriceMultiplier;
                 else
                     price = good.BasePrice;

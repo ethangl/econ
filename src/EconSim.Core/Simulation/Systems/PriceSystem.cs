@@ -28,7 +28,7 @@ namespace EconSim.Core.Simulation.Systems
 
             foreach (var market in economy.Markets.Values)
             {
-                if (market.Type == MarketType.OffMap || market.Type == MarketType.Black)
+                if (market.Type == MarketType.OffMap)
                     continue;
 
                 foreach (var goodState in market.Goods.Values)
