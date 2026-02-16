@@ -210,10 +210,12 @@ namespace EconSim.Core.Economy
             // Match raw goods to off-map biomes
             var availableRaw = new HashSet<string>();
 
-            // Mining goods always available off-map (mountains exist somewhere)
+            // Mining goods always available off-map (mountains exist somewhere).
+            // Salt is also globally tradeable via saline basins/coasts outside the current map.
             availableRaw.Add("iron_ore");
             availableRaw.Add("copper_ore");
             availableRaw.Add("gold_ore");
+            availableRaw.Add("raw_salt");
 
             foreach (var good in economy.Goods.ByCategory(GoodCategory.Raw))
             {

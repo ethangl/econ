@@ -533,7 +533,10 @@ namespace EconSim.Core.Economy
                 { "sawmill", "timber" },
                 { "shearing_shed", "sheep" },
                 { "tannery", "hides" },
-                { "dairy", "goats" }
+                { "dairy", "goats" },
+                { "malthouse", "barley" },
+                { "salt_warehouse", "raw_salt" },
+                { "dye_works", "dye_plants" }
             };
 
             foreach (var kvp in primaryProcessors)
@@ -579,7 +582,14 @@ namespace EconSim.Core.Economy
                 { "workshop", new List<string> { "sawmill" } },
                 { "spinning_mill", new List<string> { "shearing_shed" } },
                 { "cobbler", new List<string> { "tannery" } },
-                { "creamery", new List<string> { "dairy" } }
+                { "creamery", new List<string> { "dairy" } },
+                { "brewery", new List<string> { "malthouse" } },
+                { "dyer", new List<string> { "dye_works" } }
+            };
+            var secondaryLocalInputRequirements = new Dictionary<string, HashSet<string>>
+            {
+                // Dyers should cluster in dye-producing counties, but cloth can be imported through trade.
+                { "dyer", new HashSet<string> { "dye" } }
             };
 
             foreach (var kvp in secondaryProcessors)
@@ -610,7 +620,13 @@ namespace EconSim.Core.Economy
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
                     int laborLimitedCount = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 0);
-                    int count = ComputeInputConstrainedFacilityCount(economy, countyId, facilityDef, laborLimitedCount);
+                    secondaryLocalInputRequirements.TryGetValue(facilityId, out var requiredLocalInputGoodIds);
+                    int count = ComputeInputConstrainedFacilityCount(
+                        economy,
+                        countyId,
+                        facilityDef,
+                        laborLimitedCount,
+                        requiredLocalInputGoodIds);
                     if (count <= 0)
                         continue;
 
@@ -773,7 +789,8 @@ namespace EconSim.Core.Economy
             EconomyState economy,
             int countyId,
             FacilityDef targetDef,
-            int laborLimitedCount)
+            int laborLimitedCount,
+            HashSet<string> requiredLocalInputGoodIds = null)
         {
             if (laborLimitedCount <= 0)
                 return 0;
@@ -794,6 +811,12 @@ namespace EconSim.Core.Economy
             {
                 if (input.Quantity <= 0f)
                     continue;
+                if (requiredLocalInputGoodIds != null &&
+                    requiredLocalInputGoodIds.Count > 0 &&
+                    !requiredLocalInputGoodIds.Contains(input.GoodId))
+                {
+                    continue;
+                }
 
                 float localInputPerDay = 0f;
                 foreach (int facilityId in county.FacilityIds)
