@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
 
@@ -18,6 +17,8 @@ namespace EconSim.Core.Simulation.Systems
         private const int DistressedDebtDays = 60;
         private const float DistressedRetentionRatio = 0.75f;
         private const int RebalanceSlices = 7;
+        private readonly List<(Facility facility, FacilityDef def)> _countyFacilitiesBuffer = new List<(Facility facility, FacilityDef def)>();
+        private readonly List<(Facility facility, FacilityDef def)> _activeFacilitiesBuffer = new List<(Facility facility, FacilityDef def)>();
 
         public string Name => "Labor";
         public int TickInterval => SimulationConfig.Intervals.Daily;
@@ -38,7 +39,7 @@ namespace EconSim.Core.Simulation.Systems
                 if (county.CountyId % RebalanceSlices != slice)
                     continue;
 
-                var countyFacilities = new List<(Facility facility, FacilityDef def)>();
+                _countyFacilitiesBuffer.Clear();
                 foreach (int facilityId in county.FacilityIds)
                 {
                     if (!economy.Facilities.TryGetValue(facilityId, out var facility))
@@ -48,17 +49,17 @@ namespace EconSim.Core.Simulation.Systems
                     if (def == null)
                         continue;
 
-                    countyFacilities.Add((facility, def));
+                    _countyFacilitiesBuffer.Add((facility, def));
                 }
 
-                HandleDistressedExit(countyFacilities);
+                HandleDistressedExit(_countyFacilitiesBuffer);
 
-                ReallocateType(county, countyFacilities, LaborType.Unskilled, state.SubsistenceWage);
-                ReallocateType(county, countyFacilities, LaborType.Skilled, state.SubsistenceWage);
+                ReallocateType(county, _countyFacilitiesBuffer, LaborType.Unskilled, state.SubsistenceWage);
+                ReallocateType(county, _countyFacilitiesBuffer, LaborType.Skilled, state.SubsistenceWage);
 
                 county.Population.SetEmployment(
-                    SumAssigned(countyFacilities, LaborType.Unskilled),
-                    SumAssigned(countyFacilities, LaborType.Skilled));
+                    SumAssigned(_countyFacilitiesBuffer, LaborType.Unskilled),
+                    SumAssigned(_countyFacilitiesBuffer, LaborType.Skilled));
             }
         }
 
@@ -75,13 +76,13 @@ namespace EconSim.Core.Simulation.Systems
             }
         }
 
-        private static void ReallocateType(
+        private void ReallocateType(
             CountyEconomy county,
             List<(Facility facility, FacilityDef def)> facilities,
             LaborType laborType,
             float subsistenceWage)
         {
-            var active = new List<(Facility facility, FacilityDef def)>();
+            _activeFacilitiesBuffer.Clear();
             for (int i = 0; i < facilities.Count; i++)
             {
                 var pair = facilities[i];
@@ -96,48 +97,29 @@ namespace EconSim.Core.Simulation.Systems
 
                 int requiredLabor = pair.facility.GetRequiredLabor(pair.def);
                 pair.facility.AssignedWorkers = Math.Max(0, Math.Min(pair.facility.AssignedWorkers, requiredLabor));
-                active.Add(pair);
+                _activeFacilitiesBuffer.Add(pair);
             }
 
-            active.Sort((a, b) =>
-            {
-                int wageCmp = b.facility.WageRate.CompareTo(a.facility.WageRate);
-                if (wageCmp != 0)
-                    return wageCmp;
-
-                float aFill = GetFillRatio(a.facility, a.def);
-                float bFill = GetFillRatio(b.facility, b.def);
-                int fillCmp = aFill.CompareTo(bFill); // Less-staffed facilities get priority.
-                if (fillCmp != 0)
-                    return fillCmp;
-
-                // When wages/fill are equal, favor lower labor requirements so scarce labor
-                // can seed more facilities instead of concentrating in a few.
-                int reqCmp = a.facility.GetRequiredLabor(a.def).CompareTo(b.facility.GetRequiredLabor(b.def));
-                if (reqCmp != 0)
-                    return reqCmp;
-
-                return a.facility.Id.CompareTo(b.facility.Id);
-            });
+            _activeFacilitiesBuffer.Sort(CompareFacilityPriority);
 
             int totalWorkers = laborType == LaborType.Unskilled
                 ? county.Population.TotalUnskilled
                 : county.Population.TotalSkilled;
 
             int employed = 0;
-            for (int i = 0; i < active.Count; i++)
+            for (int i = 0; i < _activeFacilitiesBuffer.Count; i++)
             {
-                employed += active[i].facility.AssignedWorkers;
+                employed += _activeFacilitiesBuffer[i].facility.AssignedWorkers;
             }
 
             float maxWage = 0f;
             float minFill = 1f;
-            if (active.Count > 0)
+            if (_activeFacilitiesBuffer.Count > 0)
             {
-                maxWage = active[0].facility.WageRate;
-                for (int i = 0; i < active.Count; i++)
+                maxWage = _activeFacilitiesBuffer[0].facility.WageRate;
+                for (int i = 0; i < _activeFacilitiesBuffer.Count; i++)
                 {
-                    float fill = GetFillRatio(active[i].facility, active[i].def);
+                    float fill = GetFillRatio(_activeFacilitiesBuffer[i].facility, _activeFacilitiesBuffer[i].def);
                     if (fill < minFill)
                         minFill = fill;
                 }
@@ -147,9 +129,9 @@ namespace EconSim.Core.Simulation.Systems
             int reconsidered = 0;
             if (reconsiderTarget > 0)
             {
-                for (int i = active.Count - 1; i >= 0 && reconsidered < reconsiderTarget; i--)
+                for (int i = _activeFacilitiesBuffer.Count - 1; i >= 0 && reconsidered < reconsiderTarget; i--)
                 {
-                    var pair = active[i];
+                    var pair = _activeFacilitiesBuffer[i];
                     int assigned = pair.facility.AssignedWorkers;
                     if (assigned <= 0)
                         continue;
@@ -165,17 +147,17 @@ namespace EconSim.Core.Simulation.Systems
             }
 
             int currentlyAssigned = 0;
-            for (int i = 0; i < active.Count; i++)
+            for (int i = 0; i < _activeFacilitiesBuffer.Count; i++)
             {
-                currentlyAssigned += active[i].facility.AssignedWorkers;
+                currentlyAssigned += _activeFacilitiesBuffer[i].facility.AssignedWorkers;
             }
 
             int idle = Math.Max(0, totalWorkers - currentlyAssigned);
 
             // Fill by wage ranking.
-            for (int i = 0; i < active.Count; i++)
+            for (int i = 0; i < _activeFacilitiesBuffer.Count; i++)
             {
-                var pair = active[i];
+                var pair = _activeFacilitiesBuffer[i];
                 if (pair.facility.WageRate + 0.0001f < subsistenceWage)
                     continue;
 
@@ -187,6 +169,27 @@ namespace EconSim.Core.Simulation.Systems
                 pair.facility.AssignedWorkers += allocated;
                 idle -= allocated;
             }
+        }
+
+        private static int CompareFacilityPriority((Facility facility, FacilityDef def) a, (Facility facility, FacilityDef def) b)
+        {
+            int wageCmp = b.facility.WageRate.CompareTo(a.facility.WageRate);
+            if (wageCmp != 0)
+                return wageCmp;
+
+            float aFill = GetFillRatio(a.facility, a.def);
+            float bFill = GetFillRatio(b.facility, b.def);
+            int fillCmp = aFill.CompareTo(bFill); // Less-staffed facilities get priority.
+            if (fillCmp != 0)
+                return fillCmp;
+
+            // When wages/fill are equal, favor lower labor requirements so scarce labor
+            // can seed more facilities instead of concentrating in a few.
+            int reqCmp = a.facility.GetRequiredLabor(a.def).CompareTo(b.facility.GetRequiredLabor(b.def));
+            if (reqCmp != 0)
+                return reqCmp;
+
+            return a.facility.Id.CompareTo(b.facility.Id);
         }
 
         private static bool HasBetterOption(
