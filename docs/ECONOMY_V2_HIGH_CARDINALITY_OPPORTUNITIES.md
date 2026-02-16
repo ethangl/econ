@@ -117,11 +117,12 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 
 ### Priority A (high impact, moderate risk)
 
-1. Aggregate market demand/supply books
+1. Aggregate market demand/supply books (`Partially completed`)
 
 - Replace per-order/per-lot scanning with aggregated books per good, optionally with seller/buyer buckets.
 - Keep FIFO only where gameplay requires it; otherwise clear against aggregate liquidity.
 - Primary hotspots: `OrderSystem`, `MarketSystem`, `Market.PendingBuyOrders`, `Market.Inventory`.
+- Branch note: market books are grouped by good (`PendingBuyOrdersByGood`, `InventoryLotsByGood`) and posting/clearing paths use the new APIs.
 
 2. Dense good indexing (int IDs) for runtime paths
 
@@ -167,10 +168,15 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 ## Suggested Execution Order
 
 1. Instrument cardinality and per-system tick times on a large map baseline.
+   Status: `Completed` (timing instrumentation + dump output + compare script updates).
 2. Implement facility clustering by `(countyId, facilityType)` with behavior parity tests.
+   Status: `Not started`.
 3. Introduce dense good indexing in `Stockpile` and market records.
+   Status: `Not started`.
 4. Replace per-order/per-lot market clearing with aggregated books.
+   Status: `Partial` (good-grouped books implemented; full aggregation model still pending).
 5. Shift runtime zone and migration logic to county-level representations.
+   Status: `Not started`.
 
 ## Acceptance Metrics
 
