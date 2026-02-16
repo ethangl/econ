@@ -16,8 +16,6 @@ namespace EconSim.Core.Simulation.Systems
         private readonly Dictionary<string, float> _totalInventoryByGood = new Dictionary<string, float>();
         private readonly Dictionary<string, float> _eligibleDemandByGood = new Dictionary<string, float>();
         private readonly Dictionary<string, float> _eligibleSupplyByGood = new Dictionary<string, float>();
-        private readonly Dictionary<string, List<int>> _eligibleOrdersByGood = new Dictionary<string, List<int>>();
-        private readonly Dictionary<string, List<int>> _eligibleLotsByGood = new Dictionary<string, List<int>>();
 
         public string Name => "Market";
         public int TickInterval => SimulationConfig.Intervals.Daily;
@@ -40,28 +38,29 @@ namespace EconSim.Core.Simulation.Systems
                 ClearMarket(state, economy, market, dayIndex);
 
                 // Remove all eligible orders (filled or partial). Remaining orders are posted today.
-                market.PendingBuyOrders.RemoveAll(o => o.DayPosted < state.CurrentDay || o.Quantity <= LotCullThreshold);
-                market.Inventory.RemoveAll(l => l.Quantity <= LotCullThreshold);
+                market.CullBooks(state.CurrentDay, LotCullThreshold);
             }
         }
 
         private void ApplyDecay(EconomyState economy, Market market)
         {
-            for (int i = 0; i < market.Inventory.Count; i++)
+            foreach (var kvp in market.InventoryLotsByGood)
             {
-                var lot = market.Inventory[i];
-                if (lot.Quantity <= LotCullThreshold)
-                    continue;
-
-                var good = economy.Goods.Get(lot.GoodId);
+                var good = economy.Goods.Get(kvp.Key);
                 if (good == null || good.DecayRate <= 0f)
                     continue;
 
-                lot.Quantity *= Math.Max(0f, 1f - good.DecayRate);
-                market.Inventory[i] = lot;
-            }
+                var lots = kvp.Value;
+                for (int i = 0; i < lots.Count; i++)
+                {
+                    var lot = lots[i];
+                    if (lot.Quantity <= LotCullThreshold)
+                        continue;
 
-            market.Inventory.RemoveAll(l => l.Quantity <= LotCullThreshold);
+                    lot.Quantity *= Math.Max(0f, 1f - good.DecayRate);
+                    lots[i] = lot;
+                }
+            }
         }
 
         private void ClearMarket(
@@ -74,47 +73,47 @@ namespace EconSim.Core.Simulation.Systems
             _totalInventoryByGood.Clear();
             _eligibleDemandByGood.Clear();
             _eligibleSupplyByGood.Clear();
-            ClearIndexLists(_eligibleOrdersByGood);
-            ClearIndexLists(_eligibleLotsByGood);
 
-            for (int i = 0; i < market.Inventory.Count; i++)
+            foreach (var lotsEntry in market.InventoryLotsByGood)
             {
-                var lot = market.Inventory[i];
-                if (lot.Quantity > 0f)
+                string goodId = lotsEntry.Key;
+                var lots = lotsEntry.Value;
+                float totalInventory = 0f;
+                float eligibleSupply = 0f;
+
+                for (int i = 0; i < lots.Count; i++)
                 {
-                    _totalInventoryByGood.TryGetValue(lot.GoodId, out float inventory);
-                    _totalInventoryByGood[lot.GoodId] = inventory + lot.Quantity;
+                    var lot = lots[i];
+                    if (lot.Quantity <= 0f)
+                        continue;
+
+                    totalInventory += lot.Quantity;
+                    if (lot.DayListed < currentDay && lot.Quantity > LotCullThreshold)
+                        eligibleSupply += lot.Quantity;
                 }
 
-                if (lot.DayListed >= currentDay || lot.Quantity <= LotCullThreshold)
-                    continue;
-
-                if (!_eligibleLotsByGood.TryGetValue(lot.GoodId, out var lotIndices))
-                {
-                    lotIndices = new List<int>();
-                    _eligibleLotsByGood[lot.GoodId] = lotIndices;
-                }
-
-                lotIndices.Add(i);
-                _eligibleSupplyByGood.TryGetValue(lot.GoodId, out float supply);
-                _eligibleSupplyByGood[lot.GoodId] = supply + lot.Quantity;
+                if (totalInventory > 0f)
+                    _totalInventoryByGood[goodId] = totalInventory;
+                if (eligibleSupply > 0f)
+                    _eligibleSupplyByGood[goodId] = eligibleSupply;
             }
 
-            for (int i = 0; i < market.PendingBuyOrders.Count; i++)
+            foreach (var ordersEntry in market.PendingBuyOrdersByGood)
             {
-                var order = market.PendingBuyOrders[i];
-                if (order.DayPosted >= currentDay || order.Quantity <= LotCullThreshold)
-                    continue;
+                string goodId = ordersEntry.Key;
+                var orders = ordersEntry.Value;
+                float demand = 0f;
 
-                if (!_eligibleOrdersByGood.TryGetValue(order.GoodId, out var orderIndices))
+                for (int i = 0; i < orders.Count; i++)
                 {
-                    orderIndices = new List<int>();
-                    _eligibleOrdersByGood[order.GoodId] = orderIndices;
+                    var order = orders[i];
+                    if (order.DayPosted >= currentDay || order.Quantity <= LotCullThreshold)
+                        continue;
+                    demand += order.Quantity;
                 }
 
-                orderIndices.Add(i);
-                _eligibleDemandByGood.TryGetValue(order.GoodId, out float demand);
-                _eligibleDemandByGood[order.GoodId] = demand + order.Quantity;
+                if (demand > 0f)
+                    _eligibleDemandByGood[goodId] = demand;
             }
 
             foreach (var goodState in market.Goods.Values)
@@ -130,18 +129,17 @@ namespace EconSim.Core.Simulation.Systems
                 goodState.Revenue = 0f;
             }
 
-            foreach (var demandEntry in _eligibleOrdersByGood)
+            foreach (var demandEntry in _eligibleDemandByGood)
             {
-                if (demandEntry.Value.Count == 0)
-                    continue;
-
                 string goodId = demandEntry.Key;
-                if (!_eligibleLotsByGood.TryGetValue(goodId, out var eligibleLots) || eligibleLots.Count == 0)
+                if (!market.TryGetInventoryLots(goodId, out var lots) || lots.Count == 0)
+                    continue;
+                if (!market.TryGetPendingOrders(goodId, out var orders) || orders.Count == 0)
                     continue;
                 if (!market.Goods.TryGetValue(goodId, out var goodState))
                     continue;
 
-                float totalDemand = _eligibleDemandByGood[goodId];
+                float totalDemand = demandEntry.Value;
                 if (!_eligibleSupplyByGood.TryGetValue(goodId, out float totalSupply))
                     continue;
 
@@ -152,10 +150,12 @@ namespace EconSim.Core.Simulation.Systems
                 float buyerFillRatio = totalDemand > 0f ? plannedTraded / totalDemand : 0f;
                 float actualDemandFilled = 0f;
 
-                var eligibleOrders = demandEntry.Value;
-                foreach (int orderIndex in eligibleOrders)
+                for (int i = 0; i < orders.Count; i++)
                 {
-                    var order = market.PendingBuyOrders[orderIndex];
+                    var order = orders[i];
+                    if (order.DayPosted >= currentDay || order.Quantity <= LotCullThreshold)
+                        continue;
+
                     float desiredQty = order.Quantity * buyerFillRatio;
                     if (desiredQty <= LotCullThreshold)
                         continue;
@@ -207,31 +207,32 @@ namespace EconSim.Core.Simulation.Systems
                     continue;
 
                 // FIFO lot resolution: lots are usually already in list-order by listing day.
-                if (!IsFifoOrdered(eligibleLots, market.Inventory))
+                if (!IsFifoOrdered(lots))
                 {
-                    eligibleLots.Sort((a, b) =>
+                    lots.Sort((left, right) =>
                     {
-                        var left = market.Inventory[a];
-                        var right = market.Inventory[b];
                         int dayCmp = left.DayListed.CompareTo(right.DayListed);
-                        return dayCmp != 0 ? dayCmp : a.CompareTo(b);
+                        return dayCmp;
                     });
                 }
 
                 float remaining = actualDemandFilled;
                 float sellerRevenue = 0f;
-                foreach (int lotIndex in eligibleLots)
+                for (int i = 0; i < lots.Count; i++)
                 {
                     if (remaining <= LotCullThreshold)
                         break;
 
-                    var lot = market.Inventory[lotIndex];
+                    var lot = lots[i];
+                    if (lot.DayListed >= currentDay || lot.Quantity <= LotCullThreshold)
+                        continue;
+
                     float sold = Math.Min(lot.Quantity, remaining);
                     if (sold <= 0f)
                         continue;
 
                     lot.Quantity -= sold;
-                    market.Inventory[lotIndex] = lot;
+                    lots[i] = lot;
                     remaining -= sold;
 
                     float payout = sold * goodState.Price;
@@ -246,33 +247,20 @@ namespace EconSim.Core.Simulation.Systems
             }
         }
 
-        private static void ClearIndexLists(Dictionary<string, List<int>> map)
+        private static bool IsFifoOrdered(List<ConsignmentLot> lots)
         {
-            foreach (var entry in map.Values)
-            {
-                entry.Clear();
-            }
-        }
-
-        private static bool IsFifoOrdered(List<int> lotIndices, List<ConsignmentLot> inventory)
-        {
-            if (lotIndices.Count < 2)
+            if (lots.Count < 2)
                 return true;
 
-            int prevIndex = lotIndices[0];
-            int prevDay = inventory[prevIndex].DayListed;
+            int prevDay = lots[0].DayListed;
 
-            for (int i = 1; i < lotIndices.Count; i++)
+            for (int i = 1; i < lots.Count; i++)
             {
-                int index = lotIndices[i];
-                int day = inventory[index].DayListed;
+                int day = lots[i].DayListed;
                 if (day < prevDay)
-                    return false;
-                if (day == prevDay && index < prevIndex)
                     return false;
 
                 prevDay = day;
-                prevIndex = index;
             }
 
             return true;

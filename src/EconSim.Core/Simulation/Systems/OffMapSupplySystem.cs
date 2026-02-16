@@ -15,7 +15,6 @@ namespace EconSim.Core.Simulation.Systems
     {
         public string Name => "OffMapSupply";
         private readonly Dictionary<string, float> _inventoryByGoodBuffer = new Dictionary<string, float>();
-        private readonly HashSet<string> _offMapGoodLookupBuffer = new HashSet<string>();
 
         public int TickInterval => SimulationConfig.Intervals.Daily;
 
@@ -57,20 +56,15 @@ namespace EconSim.Core.Simulation.Systems
                     continue;
 
                 _inventoryByGoodBuffer.Clear();
-                _offMapGoodLookupBuffer.Clear();
                 foreach (var offMapGoodId in market.OffMapGoodIds)
                 {
-                    _offMapGoodLookupBuffer.Add(offMapGoodId);
-                }
-
-                for (int i = 0; i < market.Inventory.Count; i++)
-                {
-                    var lot = market.Inventory[i];
-                    if (!_offMapGoodLookupBuffer.Contains(lot.GoodId))
+                    if (!market.TryGetInventoryLots(offMapGoodId, out var lots))
                         continue;
 
-                    _inventoryByGoodBuffer.TryGetValue(lot.GoodId, out float inventory);
-                    _inventoryByGoodBuffer[lot.GoodId] = inventory + lot.Quantity;
+                    float inventory = 0f;
+                    for (int i = 0; i < lots.Count; i++)
+                        inventory += lots[i].Quantity;
+                    _inventoryByGoodBuffer[offMapGoodId] = inventory;
                 }
 
                 int sellerId = MarketOrderIds.MakeOffMapSellerId(market.Id);
@@ -82,7 +76,7 @@ namespace EconSim.Core.Simulation.Systems
                         continue;
 
                     float needed = TargetSupply - inventory;
-                    market.Inventory.Add(new ConsignmentLot
+                    market.AddInventoryLot(new ConsignmentLot
                     {
                         SellerId = sellerId,
                         GoodId = goodId,

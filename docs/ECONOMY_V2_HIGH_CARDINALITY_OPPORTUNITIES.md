@@ -2,11 +2,17 @@
 
 This document evaluates high-cardinality bottlenecks in the current Economy V2 runtime and proposes abstractions to reduce daily simulation cost while preserving behavior.
 
+## Benchmark
+
+Generated on day 20 of an Economy V2 run with game defaults.
+
+- `unity/econ_debug_output_d20_bench.json`
+
 ## Scope
 
 - Focus on runtime tick cost (daily/weekly/monthly systems), memory pressure, and object/list cardinality.
 - Startup-only costs are out of scope unless they materially affect large-map usability.
-Code areas reviewed:
+  Code areas reviewed:
 - `src/EconSim.Core/Economy/EconomyInitializer.cs`
 - `src/EconSim.Core/Economy/EconomyState.cs`
 - `src/EconSim.Core/Economy/Facility.cs`
@@ -23,25 +29,30 @@ Code areas reviewed:
 ## Current High-Cardinality Drivers
 
 1. Facility instance explosion
+
 - Initial placement creates many repeated facility instances per county/type using `for (j < count)` loops.
 - One object per instance carries substantial mutable state (`Stockpile`, 3x 7-day arrays, treasury, wage, activation flags).
 - Daily systems repeatedly scan all facilities.
 
 2. Market order and lot explosion
+
 - Orders are posted per county population and per active facility input.
 - Consignments are posted as one lot per seller/good/day.
 - Market clearing scans full inventory and order lists every day.
 
 3. String-keyed inventory and good IDs in hot loops
+
 - `Stockpile` uses `Dictionary<string,float>`.
 - `BuyOrder` and `ConsignmentLot` store `string GoodId`.
 - This adds hashing and allocation pressure across many tight loops.
 
 4. Cell-level zone maps used where county-level data is sufficient
+
 - Market zones store `ZoneCellIds` and `ZoneCellCosts`.
 - Runtime economics mostly consume county-level assignments (`CountyToMarket`) and county seat costs.
 
 5. Repeated per-day recomputation/allocation patterns
+
 - Multiple systems rebuild temporary lists/maps each tick slice or tick pass.
 - Labor and production paths perform repeated scans and sorting per county/facility group.
 
@@ -60,12 +71,14 @@ The proposal to represent multiple same-type facilities as county-level aggregat
 Represent one runtime "facility cluster" per `(countyId, facilityType)` with a `UnitCount` (or capacity multiplier).
 
 Cluster state should preserve:
+
 - Labor demand and assignment
 - Treasury and wage dynamics
 - Input/output buffers
 - Activation and loss/debt tracking
 
 Derived values should scale by `UnitCount`:
+
 - `LaborRequired`
 - `BaseThroughput`
 - Wage bill and profitability thresholds
@@ -84,16 +97,19 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 ### Priority A (high impact, moderate risk)
 
 1. Aggregate market demand/supply books
+
 - Replace per-order/per-lot scanning with aggregated books per good, optionally with seller/buyer buckets.
 - Keep FIFO only where gameplay requires it; otherwise clear against aggregate liquidity.
 - Primary hotspots: `OrderSystem`, `MarketSystem`, `Market.PendingBuyOrders`, `Market.Inventory`.
 
 2. Dense good indexing (int IDs) for runtime paths
+
 - Add a runtime good index table and use `int` IDs in stockpiles/orders/lots.
 - Keep string IDs at data boundaries only.
 - Primary hotspots: `Stockpile`, `MarketOrders`, all production/order/market loops.
 
 3. County transport cost cache per market assignment epoch
+
 - Precompute county seat cost to assigned market and reuse in production/order/wage paths.
 - Invalidate when market zones are recomputed.
 - Primary hotspots: repeated `ResolveTransportCost`/`ResolveCountyTransportCost` calls.
@@ -101,24 +117,29 @@ Naively merging all facilities of a type can alter behavior if facilities are in
 ### Priority B (medium-high impact, lower risk)
 
 1. Runtime county-level market zone representation
+
 - Keep cell-level zone data only for rendering/debug tools.
 - Runtime economics should consume county-zone costs directly.
 
 2. Migration county-graph reachability
+
 - Compute county adjacency/cost graph and run migration reachability on counties, not full cell graph.
 - Preserve cell-graph pathfinding for rendering/road features where needed.
 
 3. Allocation pooling and reuse in labor/market systems
+
 - Reuse list/map buffers by county/market key to reduce daily GC churn.
 - Avoid repeated short-lived `new List<>` in hot paths.
 
 ### Priority C (follow-up after structural changes)
 
 1. Data-oriented facility state storage
+
 - Move from many heap objects to compact arrays/struct-of-arrays for hot fields.
 - Best done after cluster model stabilizes.
 
 2. Adaptive cadence for low-activity actors
+
 - Increase tick interval for persistently idle clusters/markets with bounded error.
 - Requires clear gameplay tolerance for delayed response.
 

@@ -389,7 +389,7 @@ namespace EconSim.Core.Simulation.Systems
                 facility.Treasury -= haulingFee;
                 county.Population.Treasury += haulingFee;
 
-                market.Inventory.Add(new ConsignmentLot
+                market.AddInventoryLot(new ConsignmentLot
                 {
                     SellerId = facility.Id,
                     GoodId = goodId,
