@@ -4,7 +4,7 @@ namespace EconSim.Core.Economy
 {
     /// <summary>
     /// Initial good and facility definitions for the v1 economy.
-    /// Ten production chains: Food, Tools, Jewelry, Furniture, Clothing (4-tier), Dairy, Leatherwork, Copperwork, Sugar, Spices.
+    /// Thirteen production chains: Food, Tools, Jewelry, Furniture, Clothing (4-tier), Dairy, Leatherwork, Copperwork, Sugar, Spices, Salt, Beer, Dyed Clothes.
     /// </summary>
     public static class InitialData
     {
@@ -482,6 +482,128 @@ namespace EconSim.Core.Economy
             });
 
             // =============================================
+            // CHAIN 11: Salt (Salt → consumed directly)
+            // Single-tier: extracted from salt flats and coastal marshes
+            // Universal demand, geographically scarce — drives long-distance trade
+            // =============================================
+
+            registry.Register(new GoodDef
+            {
+                Id = "raw_salt",
+                Name = "Raw Salt",
+                Category = GoodCategory.Raw,
+                HarvestMethod = "mining",
+                TerrainAffinity = new List<string> { "Salt Flat", "Coastal Marsh" },
+                BaseYield = 6f,
+                DecayRate = 0f,  // Mineral, doesn't decay
+                TheftRisk = 0.2f,  // Bulk, unprocessed
+                BasePrice = 1.0f
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "salt",
+                Name = "Salt",
+                Category = GoodCategory.Finished,
+                Inputs = new List<GoodInput> { new GoodInput("raw_salt", 2) },
+                FacilityType = "salt_warehouse",
+                ProcessingTicks = 1,
+                NeedCategory = NeedCategory.Basic,
+                BaseConsumption = 0.003f,  // Universal staple, modest per-capita
+                DecayRate = 0f,  // Processed mineral, doesn't decay
+                TheftRisk = 0.4f,  // Moderate value, portable
+                BasePrice = 4.0f  // 2 raw salt (2.0) + cleaning/drying/grading
+            });
+
+            // =============================================
+            // CHAIN 12: Beer (Barley → Malt → Beer)
+            // Competes with barley_mill for barley supply
+            // =============================================
+
+            registry.Register(new GoodDef
+            {
+                Id = "malt",
+                Name = "Malt",
+                Category = GoodCategory.Refined,
+                Inputs = new List<GoodInput> { new GoodInput("barley", 2) },
+                FacilityType = "malthouse",
+                ProcessingTicks = 1,
+                DecayRate = 0.003f,  // 0.3% per day - malted grain stores reasonably well
+                TheftRisk = 0.2f,
+                BasePrice = 3.0f  // 2 barley (2.0) + malting
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "beer",
+                Name = "Beer",
+                Category = GoodCategory.Finished,
+                Inputs = new List<GoodInput> { new GoodInput("malt", 2) },
+                FacilityType = "brewery",
+                ProcessingTicks = 2,
+                NeedCategory = NeedCategory.Comfort,
+                BaseConsumption = 0.003f,  // Popular drink, moderate consumption
+                DecayRate = 0.01f,  // 1% per day - ale spoils in weeks
+                TheftRisk = 0.3f,  // Bulky liquid, moderate value
+                BasePrice = 10.0f  // 2 malt (6.0) + brewing
+            });
+
+            // =============================================
+            // CHAIN 13: Dyed Clothes (Dye Plants → Dye) + Cloth → Dyed Clothes
+            // First multi-input recipe: requires tropical dye and textile-region cloth
+            // Creates cross-regional trade dependency
+            // =============================================
+
+            registry.Register(new GoodDef
+            {
+                Id = "dye_plants",
+                Name = "Dye Plants",
+                Category = GoodCategory.Raw,
+                HarvestMethod = "farming",
+                TerrainAffinity = new List<string> {
+                    "Tropical seasonal forest",
+                    "Tropical rainforest",
+                    "Savanna"
+                },
+                BaseYield = 4f,  // Moderate yield
+                DecayRate = 0.02f,  // 2% per day - fresh plants wilt quickly
+                TheftRisk = 0.1f,
+                BasePrice = 1.0f
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "dye",
+                Name = "Dye",
+                Category = GoodCategory.Refined,
+                Inputs = new List<GoodInput> { new GoodInput("dye_plants", 3) },
+                FacilityType = "dye_works",
+                ProcessingTicks = 2,
+                DecayRate = 0.002f,  // 0.2% per day - prepared dye keeps well
+                TheftRisk = 0.6f,  // High value-to-weight
+                BasePrice = 5.0f  // 3 dye plants (3.0) + extraction/preparation
+            });
+
+            registry.Register(new GoodDef
+            {
+                Id = "dyed_clothes",
+                Name = "Dyed Clothes",
+                Category = GoodCategory.Finished,
+                Inputs = new List<GoodInput>
+                {
+                    new GoodInput("cloth", 1),
+                    new GoodInput("dye", 1)
+                },
+                FacilityType = "dyer",
+                ProcessingTicks = 2,
+                NeedCategory = NeedCategory.Luxury,
+                BaseConsumption = 0.001f,  // Luxury clothing, lower consumption than basic clothes
+                DecayRate = 0.001f,  // 0.1% per day - fine garments, handled with care
+                TheftRisk = 0.7f,  // High value, portable
+                BasePrice = 20.0f  // 1 cloth (8.0) + 1 dye (5.0) + skilled dyeing
+            });
+
+            // =============================================
             // CHAIN 6: Dairy (Goats → Milk → Cheese)
             // Milk is a pure intermediate (perishable, must be processed into cheese)
             // =============================================
@@ -728,6 +850,34 @@ namespace EconSim.Core.Economy
                 TerrainRequirements = new List<string> { "Grassland", "Steppe", "Highland" }
             });
 
+            registry.Register(new FacilityDef
+            {
+                Id = "dye_farm",
+                Name = "Dye Farm",
+                OutputGoodId = "dye_plants",
+                LaborRequired = 15,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 4f,
+                IsExtraction = true,
+                TerrainRequirements = new List<string> {
+                    "Tropical seasonal forest",
+                    "Tropical rainforest",
+                    "Savanna"
+                }
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "salt_works",
+                Name = "Salt Works",
+                OutputGoodId = "raw_salt",
+                LaborRequired = 15,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 6f,
+                IsExtraction = true,
+                TerrainRequirements = new List<string> { "Salt Flat", "Coastal Marsh" }
+            });
+
             // =============================================
             // Processing facilities (no terrain requirement)
             // =============================================
@@ -963,6 +1113,61 @@ namespace EconSim.Core.Economy
                 LaborRequired = 3,
                 LaborType = LaborType.Skilled,
                 BaseThroughput = 4f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "dye_works",
+                Name = "Dye Works",
+                OutputGoodId = "dye",
+                LaborRequired = 3,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 3f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "dyer",
+                Name = "Dyer",
+                OutputGoodId = "dyed_clothes",
+                LaborRequired = 4,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 2f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "salt_warehouse",
+                Name = "Salt Warehouse",
+                OutputGoodId = "salt",
+                LaborRequired = 3,
+                LaborType = LaborType.Unskilled,
+                BaseThroughput = 4f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "malthouse",
+                Name = "Malthouse",
+                OutputGoodId = "malt",
+                LaborRequired = 3,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 4f,
+                IsExtraction = false
+            });
+
+            registry.Register(new FacilityDef
+            {
+                Id = "brewery",
+                Name = "Brewery",
+                OutputGoodId = "beer",
+                LaborRequired = 4,
+                LaborType = LaborType.Skilled,
+                BaseThroughput = 3f,
                 IsExtraction = false
             });
 
