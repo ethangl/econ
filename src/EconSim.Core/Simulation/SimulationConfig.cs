@@ -8,7 +8,7 @@ namespace EconSim.Core.Simulation
         /// <summary>
         /// Enables the Economy V2 system registration path.
         /// </summary>
-        public static bool UseEconomyV2 = false;
+        public static bool UseEconomyV2 = true;
 
         /// <summary>
         /// Optional explicit economy seed override.

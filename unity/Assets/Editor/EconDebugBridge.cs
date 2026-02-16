@@ -491,18 +491,22 @@ namespace EconSim.Editor
             j.KV("moneyVelocity", st.Telemetry != null ? st.Telemetry.MoneyVelocity : 0f);
 
             // Aggregate market stats (exclude black market)
-            float totalSupply = 0f, totalDemand = 0f;
+            float totalSupplyOffered = 0f, totalClosingSupply = 0f, totalDemand = 0f, totalVolume = 0f;
             foreach (var market in econ.Markets.Values)
             {
                 if (market.Type == MarketType.Black) continue;
                 foreach (var gs in market.Goods.Values)
                 {
-                    totalSupply += gs.Supply;
+                    totalSupplyOffered += gs.SupplyOffered;
+                    totalClosingSupply += gs.Supply;
                     totalDemand += gs.Demand;
+                    totalVolume += gs.LastTradeVolume;
                 }
             }
-            j.KV("totalMarketSupply", totalSupply);
+            j.KV("totalMarketSupply", totalSupplyOffered);
+            j.KV("totalMarketClosingSupply", totalClosingSupply);
             j.KV("totalMarketDemand", totalDemand);
+            j.KV("totalMarketVolume", totalVolume);
 
             // Road stats
             if (econ.Roads != null)

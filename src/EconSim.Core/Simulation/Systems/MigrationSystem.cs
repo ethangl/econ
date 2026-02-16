@@ -44,6 +44,7 @@ namespace EconSim.Core.Simulation.Systems
         private Dictionary<int, int> _countyToCulture;
         // Precomputed reachable counties per source county: countyId → [(destCountyId, cost)]
         private Dictionary<int, List<(int countyId, float cost)>> _reachableCache;
+        private float[] _scoreBuffer = Array.Empty<float>();
 
         public void Initialize(SimulationState state, MapData mapData)
         {
@@ -102,21 +103,8 @@ namespace EconSim.Core.Simulation.Systems
                 var pop = countyEcon.Population;
                 int countyId = countyEcon.CountyId;
 
-                if (!_reachableCache.TryGetValue(countyId, out var cached))
+                if (!_reachableCache.TryGetValue(countyId, out var candidates) || candidates == null || candidates.Count == 0)
                     continue;
-
-                // Filter cached candidates to those with working population
-                List<(int countyId, float cost)> candidates = null;
-                foreach (var (destId, cost) in cached)
-                {
-                    if (economy.Counties.TryGetValue(destId, out var destEcon)
-                        && destEcon.Population.WorkingAge > 0)
-                    {
-                        candidates ??= new List<(int, float)>();
-                        candidates.Add((destId, cost));
-                    }
-                }
-                if (candidates == null) continue;
 
                 foreach (var kvp in EstateMobility)
                 {
@@ -220,15 +208,20 @@ namespace EconSim.Core.Simulation.Systems
             EconomyState economy)
         {
             int sourceCulture = _countyToCulture.TryGetValue(sourceCountyId, out int sc) ? sc : -1;
+            EnsureScoreBufferCapacity(candidates.Count);
 
             // Score each candidate
             float totalScore = 0f;
-            var scores = new float[candidates.Count];
             for (int i = 0; i < candidates.Count; i++)
             {
                 var (destId, cost) = candidates[i];
+                if (!economy.Counties.TryGetValue(destId, out var destination) || destination.Population.WorkingAge <= 0)
+                {
+                    _scoreBuffer[i] = 0f;
+                    continue;
+                }
 
-                float pull = GetPullScore(economy.Counties[destId], estate);
+                float pull = GetPullScore(destination, estate);
                 float distanceDecay = 1f / (1f + cost / DistanceDecayScale);
 
                 int destCulture = _countyToCulture.TryGetValue(destId, out int dc) ? dc : -2;
@@ -236,7 +229,7 @@ namespace EconSim.Core.Simulation.Systems
                     ? 1f : CulturalAffinityForeign;
 
                 float score = pull * cultureAffinity * distanceDecay;
-                scores[i] = score;
+                _scoreBuffer[i] = score;
                 totalScore += score;
             }
 
@@ -248,9 +241,10 @@ namespace EconSim.Core.Simulation.Systems
 
             for (int i = 0; i < candidates.Count; i++)
             {
-                if (scores[i] <= 0f) continue;
+                float score = _scoreBuffer[i];
+                if (score <= 0f) continue;
 
-                int share = (int)(migrants * scores[i] / totalScore);
+                int share = (int)(migrants * score / totalScore);
                 if (share < MinMigrationPop) continue;
 
                 // Don't exceed remaining migrants
@@ -263,6 +257,15 @@ namespace EconSim.Core.Simulation.Systems
             }
 
             return totalMoved;
+        }
+
+        private void EnsureScoreBufferCapacity(int count)
+        {
+            if (_scoreBuffer.Length >= count)
+                return;
+
+            int next = Math.Max(count, Math.Max(16, _scoreBuffer.Length * 2));
+            _scoreBuffer = new float[next];
         }
 
         private void TransferPopulation(

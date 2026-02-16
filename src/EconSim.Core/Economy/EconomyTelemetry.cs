@@ -21,6 +21,7 @@ namespace EconSim.Core.Economy
     {
         public float AvgPrice;
         public float TotalSupply;
+        public float TotalClosingSupply;
         public float TotalDemand;
         public float TotalTradeVolume;
         public float UnmetDemand;

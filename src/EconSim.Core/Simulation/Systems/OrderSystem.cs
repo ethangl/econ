@@ -14,6 +14,24 @@ namespace EconSim.Core.Simulation.Systems
         private const float BuyerTransportFeeRate = 0.005f;
 
         private static readonly string[] BreadSubsistenceGoods = { "wheat", "rye", "barley", "rice_grain" };
+        private readonly Dictionary<string, float> _demandByGoodBuffer = new Dictionary<string, float>();
+        private readonly List<OrderLine> _tierLinesBuffer = new List<OrderLine>();
+
+        private struct OrderLine
+        {
+            public string GoodId;
+            public float Quantity;
+            public float EffectivePrice;
+            public float FullCost;
+
+            public OrderLine(string goodId, float quantity, float effectivePrice, float fullCost)
+            {
+                GoodId = goodId;
+                Quantity = quantity;
+                EffectivePrice = effectivePrice;
+                FullCost = fullCost;
+            }
+        }
 
         public string Name => "Orders";
         public int TickInterval => SimulationConfig.Intervals.Daily;
@@ -41,7 +59,7 @@ namespace EconSim.Core.Simulation.Systems
 
                 float transportCost = ResolveTransportCost(mapData, market, county.CountyId);
 
-                PostPopulationOrders(state, economy, county, market, transportCost);
+                PostPopulationOrders(state, economy, county, market, transportCost, _demandByGoodBuffer, _tierLinesBuffer);
                 PostFacilityInputOrders(state, economy, county, market, transportCost);
             }
         }
@@ -51,13 +69,15 @@ namespace EconSim.Core.Simulation.Systems
             EconomyState economy,
             CountyEconomy county,
             Market market,
-            float transportCost)
+            float transportCost,
+            Dictionary<string, float> demandByGood,
+            List<OrderLine> tierLinesBuffer)
         {
             int population = county.Population.Total;
             if (population <= 0)
                 return;
 
-            var demandByGood = new Dictionary<string, float>();
+            demandByGood.Clear();
             foreach (var good in economy.Goods.ConsumerGoods)
             {
                 if (!good.NeedCategory.HasValue)
@@ -73,13 +93,13 @@ namespace EconSim.Core.Simulation.Systems
             ApplySubsistenceFromStockpile(county, demandByGood);
 
             float budget = Math.Max(0f, county.Population.Treasury);
-            budget -= PostTierOrders(state, economy, county, market, transportCost, demandByGood, NeedCategory.Basic, budget);
+            budget -= PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Basic, budget);
             if (budget <= 0f) return;
 
-            budget -= PostTierOrders(state, economy, county, market, transportCost, demandByGood, NeedCategory.Comfort, budget);
+            budget -= PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Comfort, budget);
             if (budget <= 0f) return;
 
-            PostTierOrders(state, economy, county, market, transportCost, demandByGood, NeedCategory.Luxury, budget);
+            PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Luxury, budget);
         }
 
         private static float PostTierOrders(
@@ -89,10 +109,11 @@ namespace EconSim.Core.Simulation.Systems
             Market market,
             float transportCost,
             Dictionary<string, float> demandByGood,
+            List<OrderLine> linesBuffer,
             NeedCategory tier,
             float availableBudget)
         {
-            var lines = new List<(string goodId, float qty, float effectivePrice, float fullCost)>();
+            linesBuffer.Clear();
             float totalCost = 0f;
 
             foreach (var good in economy.Goods.ConsumerGoods)
@@ -111,31 +132,31 @@ namespace EconSim.Core.Simulation.Systems
                     continue;
 
                 float fullCost = qty * effectivePrice;
-                lines.Add((good.Id, qty, effectivePrice, fullCost));
+                linesBuffer.Add(new OrderLine(good.Id, qty, effectivePrice, fullCost));
                 totalCost += fullCost;
             }
 
-            if (lines.Count == 0 || totalCost <= 0f || availableBudget <= 0f)
+            if (linesBuffer.Count == 0 || totalCost <= 0f || availableBudget <= 0f)
                 return 0f;
 
             float budget = Math.Min(availableBudget, totalCost);
             float spent = 0f;
             int buyerId = MarketOrderIds.MakePopulationBuyerId(county.CountyId);
 
-            foreach (var line in lines)
+            foreach (var line in linesBuffer)
             {
                 float qty;
                 float maxSpend;
 
                 if (budget >= totalCost)
                 {
-                    qty = line.qty;
-                    maxSpend = line.fullCost;
+                    qty = line.Quantity;
+                    maxSpend = line.FullCost;
                 }
                 else
                 {
-                    float budgetShare = budget * (line.fullCost / totalCost);
-                    qty = line.effectivePrice > 0f ? budgetShare / line.effectivePrice : 0f;
+                    float budgetShare = budget * (line.FullCost / totalCost);
+                    qty = line.EffectivePrice > 0f ? budgetShare / line.EffectivePrice : 0f;
                     maxSpend = budgetShare;
                 }
 
@@ -145,7 +166,7 @@ namespace EconSim.Core.Simulation.Systems
                 market.PendingBuyOrders.Add(new BuyOrder
                 {
                     BuyerId = buyerId,
-                    GoodId = line.goodId,
+                    GoodId = line.GoodId,
                     Quantity = qty,
                     MaxSpend = maxSpend,
                     TransportCost = transportCost,

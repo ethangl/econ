@@ -56,7 +56,9 @@ namespace EconSim.Core.Simulation.Systems
                         metric = new GoodTelemetry();
 
                     metric.AvgPrice += gs.Price;
-                    metric.TotalSupply += gs.Supply;
+                    // SupplyOffered reflects pre-clear available lots; Supply is post-clear remainder.
+                    metric.TotalSupply += gs.SupplyOffered;
+                    metric.TotalClosingSupply += gs.Supply;
                     metric.TotalDemand += gs.Demand;
                     metric.TotalTradeVolume += gs.LastTradeVolume;
                     metric.UnmetDemand += gs.Demand > gs.LastTradeVolume ? (gs.Demand - gs.LastTradeVolume) : 0f;

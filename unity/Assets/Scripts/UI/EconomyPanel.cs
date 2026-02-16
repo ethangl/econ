@@ -282,27 +282,30 @@ namespace EconSim.UI
                 return;
             }
 
-            // Aggregate across legitimate markets only
-            var aggregateGoods = new Dictionary<string, (float supply, float demand, float price)>();
+            // Aggregate across legitimate markets only.
+            // Off-map prices are intentionally fixed and should not mask local market movement.
+            var aggregateGoods = new Dictionary<string, (float supply, float demand, float weightedPriceSum, float priceWeight)>();
             var blackMarket = _economy.BlackMarket;
 
             foreach (var market in _economy.Markets.Values)
             {
-                // Skip black market in aggregate totals
-                if (market.Type == MarketType.Black)
+                // Skip non-legitimate markets in aggregate totals.
+                if (market.Type != MarketType.Legitimate)
                     continue;
 
                 foreach (var kvp in market.Goods)
                 {
                     var state = kvp.Value;
                     if (!aggregateGoods.ContainsKey(kvp.Key))
-                        aggregateGoods[kvp.Key] = (0, 0, state.Price);
+                        aggregateGoods[kvp.Key] = (0f, 0f, 0f, 0f);
 
                     var current = aggregateGoods[kvp.Key];
+                    float priceWeight = Mathf.Max(1f, state.SupplyOffered + state.Demand);
                     aggregateGoods[kvp.Key] = (
                         current.supply + state.SupplyOffered,
                         current.demand + state.Demand,
-                        state.Price  // Use last market's price for now
+                        current.weightedPriceSum + state.Price * priceWeight,
+                        current.priceWeight + priceWeight
                     );
                 }
             }
@@ -323,15 +326,16 @@ namespace EconSim.UI
             int legitRows = 0;
             foreach (var kvp in aggregateGoods)
             {
-                var (supply, demand, price) = kvp.Value;
+                var (supply, demand, weightedPriceSum, priceWeight) = kvp.Value;
                 if (supply < 0.1f && demand < 0.1f) continue;
+                float avgPrice = priceWeight > 0f ? weightedPriceSum / priceWeight : 0f;
 
                 var row = new VisualElement();
                 row.AddToClassList("goods-row");
                 row.Add(CreateLabel(kvp.Key, "goods-name"));
                 row.Add(CreateLabel(FormatQuantity(supply), "goods-value"));
                 row.Add(CreateLabel(FormatQuantity(demand), "goods-value"));
-                row.Add(CreateLabel($"{price:F2}", "goods-value"));
+                row.Add(CreateLabel($"{avgPrice:F2}", "goods-value"));
                 _tradeList.Add(row);
                 legitRows++;
             }

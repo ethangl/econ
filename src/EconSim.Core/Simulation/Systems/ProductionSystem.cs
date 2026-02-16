@@ -23,6 +23,14 @@ namespace EconSim.Core.Simulation.Systems
         private const float V2SubsistenceFraction = 0.20f;
         private const float V2TransportLossRate = 0.01f;
         private const float V2TransportFeeRate = 0.005f;
+        private const int V2LossDaysToDeactivate = 42;
+        private const int V2TreasuryBufferDays = 5;
+        private const float V2ReactivationWageLossTolerance = 0.75f;
+        private const float V2LossSeverityWageFraction = 0.10f;
+        private const float V2ReactivationLaborFloorRatio = 0.25f;
+        private const float V2DemandPressureRatio = 1.05f;
+        private const float V2UnemploymentPressureRatio = 0.20f;
+        private const int V2GraceDaysOnActivation = 21;
 
         private readonly Dictionary<string, float> _producedThisTick = new Dictionary<string, float>();
 
@@ -117,12 +125,25 @@ namespace EconSim.Core.Simulation.Systems
             Facility facility,
             FacilityDef def)
         {
+            float subsistence = state.SubsistenceWage > 0f ? state.SubsistenceWage : 1f;
+
             if (facility.IsActive)
             {
-                if (facility.RollingProfit < 0f)
+                // Keep extractive sectors stable to avoid raw-input starvation cascades.
+                if (def.IsExtraction)
+                    return;
+
+                int staffedWorkers = Math.Max(1, facility.AssignedWorkers > 0 ? facility.AssignedWorkers : def.LaborRequired);
+                float severeLossThreshold = -subsistence * staffedWorkers * V2LossSeverityWageFraction;
+                if (facility.RollingProfit < severeLossThreshold)
+                {
                     facility.ConsecutiveLossDays++;
-                else
-                    facility.ConsecutiveLossDays = 0;
+                }
+                else if (facility.ConsecutiveLossDays > 0)
+                {
+                    // Let neutral/positive days unwind loss streaks gradually instead of hard-resets.
+                    facility.ConsecutiveLossDays--;
+                }
 
                 if (facility.GraceDaysRemaining > 0)
                 {
@@ -130,7 +151,9 @@ namespace EconSim.Core.Simulation.Systems
                     return;
                 }
 
-                if (facility.ConsecutiveLossDays >= 7)
+                float treasuryShutdownBuffer = staffedWorkers * subsistence * V2TreasuryBufferDays;
+                if (facility.ConsecutiveLossDays >= V2LossDaysToDeactivate
+                    && facility.Treasury <= treasuryShutdownBuffer)
                 {
                     facility.IsActive = false;
                     facility.AssignedWorkers = 0;
@@ -140,7 +163,7 @@ namespace EconSim.Core.Simulation.Systems
             }
 
             int availableWorkers = GetAvailableWorkers(economy, facility.CountyId, def.LaborType);
-            if (availableWorkers < Math.Max(1, (int)Math.Ceiling(def.LaborRequired * 0.5f)))
+            if (availableWorkers < Math.Max(1, (int)Math.Ceiling(def.LaborRequired * V2ReactivationLaborFloorRatio)))
                 return;
 
             var market = economy.GetMarketForCounty(facility.CountyId);
@@ -172,16 +195,34 @@ namespace EconSim.Core.Simulation.Systems
                 }
             }
 
-            float subsistence = state.SubsistenceWage > 0f ? state.SubsistenceWage : 1f;
             float hypoWageBill = subsistence * def.LaborRequired;
             float hypoProfit = (hypoRevenue - hypoSellFee - hypoInputCost - hypoWageBill) * 0.7f;
+            float toleratedLoss = hypoWageBill * V2ReactivationWageLossTolerance;
+            bool demandPressure = outputMarket.Demand > outputMarket.Supply * V2DemandPressureRatio;
+            bool laborPressure = HasLaborPressure(economy, facility.CountyId, def.LaborType);
 
-            if (hypoProfit > 0f)
+            if (def.IsExtraction || demandPressure || laborPressure || hypoProfit > -toleratedLoss)
             {
                 facility.IsActive = true;
-                facility.GraceDaysRemaining = 14;
+                facility.GraceDaysRemaining = V2GraceDaysOnActivation;
                 facility.ConsecutiveLossDays = 0;
             }
+        }
+
+        private static bool HasLaborPressure(EconomyState economy, int countyId, LaborType laborType)
+        {
+            if (!economy.Counties.TryGetValue(countyId, out var county))
+                return false;
+
+            int totalWorkers = laborType == LaborType.Unskilled
+                ? county.Population.TotalUnskilled
+                : county.Population.TotalSkilled;
+            if (totalWorkers <= 0)
+                return false;
+
+            int idleWorkers = county.Population.IdleWorkers(laborType);
+            float idleRatio = (float)idleWorkers / totalWorkers;
+            return idleRatio >= V2UnemploymentPressureRatio;
         }
 
         private void RunExtractionFacilityV2(EconomyState economy, Facility facility, FacilityDef def)

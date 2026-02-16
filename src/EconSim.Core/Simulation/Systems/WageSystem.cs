@@ -67,10 +67,28 @@ namespace EconSim.Core.Simulation.Systems
                     county.Population.Treasury += paid;
                 }
 
-                if (paid + 0.0001f < wageBill && facility.AssignedWorkers > 0)
-                    facility.WageDebtDays++;
-                else
-                    facility.WageDebtDays = 0;
+                if (facility.AssignedWorkers > 0 && wageBill > 0f)
+                {
+                    float coverage = paid / wageBill;
+                    if (coverage < 0.60f)
+                    {
+                        facility.WageDebtDays++;
+                    }
+                    else if (coverage >= 0.95f && facility.WageDebtDays > 0)
+                    {
+                        facility.WageDebtDays--;
+                    }
+                    else if (coverage >= 0.80f && facility.WageDebtDays > 0 && state.CurrentDay % 3 == 0)
+                    {
+                        // Partial coverage still allows gradual recovery.
+                        facility.WageDebtDays--;
+                    }
+                }
+                else if (facility.WageDebtDays > 0 && state.CurrentDay % 2 == 0)
+                {
+                    // Idle facilities recover slowly, not instantly.
+                    facility.WageDebtDays--;
+                }
             }
         }
 

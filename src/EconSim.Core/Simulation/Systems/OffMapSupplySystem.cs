@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
@@ -91,15 +92,21 @@ namespace EconSim.Core.Simulation.Systems
                 if (market.OffMapGoodIds == null || market.OffMapGoodIds.Count == 0)
                     continue;
 
+                var inventoryByGood = new Dictionary<string, float>();
+                for (int i = 0; i < market.Inventory.Count; i++)
+                {
+                    var lot = market.Inventory[i];
+                    if (!market.OffMapGoodIds.Contains(lot.GoodId))
+                        continue;
+
+                    inventoryByGood.TryGetValue(lot.GoodId, out float inventory);
+                    inventoryByGood[lot.GoodId] = inventory + lot.Quantity;
+                }
+
                 int sellerId = MarketOrderIds.MakeOffMapSellerId(market.Id);
                 foreach (var goodId in market.OffMapGoodIds)
                 {
-                    float inventory = 0f;
-                    for (int i = 0; i < market.Inventory.Count; i++)
-                    {
-                        if (market.Inventory[i].GoodId == goodId)
-                            inventory += market.Inventory[i].Quantity;
-                    }
+                    inventoryByGood.TryGetValue(goodId, out float inventory);
 
                     if (inventory >= TargetSupply)
                         continue;

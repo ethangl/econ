@@ -13,6 +13,8 @@ namespace EconSim.Core.Simulation.Systems
     {
         private const float ReconsiderationRate = 0.15f;
         private const float SwitchThreshold = 1.10f;
+        private const int DistressedDebtDays = 60;
+        private const float DistressedRetentionRatio = 0.75f;
 
         public string Name => "Labor";
         public int TickInterval => SimulationConfig.Intervals.Weekly;
@@ -60,10 +62,11 @@ namespace EconSim.Core.Simulation.Systems
         {
             for (int i = 0; i < facilities.Count; i++)
             {
-                var (facility, _) = facilities[i];
-                if (facility.WageDebtDays >= 3)
+                var (facility, def) = facilities[i];
+                if (facility.WageDebtDays >= DistressedDebtDays)
                 {
-                    facility.AssignedWorkers = 0;
+                    int retained = Math.Max(1, (int)Math.Ceiling(def.LaborRequired * DistressedRetentionRatio));
+                    facility.AssignedWorkers = Math.Min(facility.AssignedWorkers, retained);
                 }
             }
         }
@@ -81,7 +84,7 @@ namespace EconSim.Core.Simulation.Systems
                 if (pair.def.LaborType != laborType)
                     continue;
 
-                if (!pair.facility.IsActive || pair.facility.WageDebtDays >= 3)
+                if (!pair.facility.IsActive)
                 {
                     pair.facility.AssignedWorkers = 0;
                     continue;

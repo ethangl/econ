@@ -201,7 +201,7 @@ namespace EconSim.Tests
                 IsActive = true,
                 AssignedWorkers = 25,
                 WageRate = 6f,
-                WageDebtDays = 3
+                WageDebtDays = 60
             };
 
             var healthy = new Facility
@@ -230,7 +230,7 @@ namespace EconSim.Tests
             var system = new LaborSystem();
             system.Tick(state, null);
 
-            Assert.That(distressed.AssignedWorkers, Is.EqualTo(0));
+            Assert.That(distressed.AssignedWorkers, Is.LessThan(25));
             Assert.That(healthy.AssignedWorkers, Is.GreaterThan(0));
             Assert.That(county.Population.EmployedUnskilled, Is.GreaterThan(0));
         }

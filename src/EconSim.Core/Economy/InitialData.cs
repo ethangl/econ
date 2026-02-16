@@ -535,40 +535,22 @@ namespace EconSim.Core.Economy
         /// </summary>
         public static void ApplyV2GoodOverrides(GoodRegistry registry)
         {
-            SetNeedAndConsumption(registry, "cheese", NeedCategory.Basic, 0.1f);
-            SetNeedAndConsumption(registry, "clothes", NeedCategory.Comfort, 0.003f);
-
-            SetConsumption(registry, "bread", 0.5f);
-            SetConsumption(registry, "shoes", 0.003f);
-            SetConsumption(registry, "tools", 0.003f);
-            SetConsumption(registry, "cookware", 0.003f);
-            SetConsumption(registry, "furniture", 0.001f);
-            SetConsumption(registry, "jewelry", 0.0003f);
-            SetConsumption(registry, "spices", 0.01f);
-            SetConsumption(registry, "sugar", 0.01f);
+            // Keep only category overrides in V2.
+            // Consumption-rate overrides caused demand to scale unrealistically.
+            SetNeedCategory(registry, "cheese", NeedCategory.Basic);
+            SetNeedCategory(registry, "clothes", NeedCategory.Comfort);
         }
 
-        private static void SetNeedAndConsumption(
+        private static void SetNeedCategory(
             GoodRegistry registry,
             string goodId,
-            NeedCategory needCategory,
-            float baseConsumption)
+            NeedCategory needCategory)
         {
             var good = registry.Get(goodId);
             if (good == null)
                 return;
 
             good.NeedCategory = needCategory;
-            good.BaseConsumption = baseConsumption;
-        }
-
-        private static void SetConsumption(GoodRegistry registry, string goodId, float baseConsumption)
-        {
-            var good = registry.Get(goodId);
-            if (good == null)
-                return;
-
-            good.BaseConsumption = baseConsumption;
         }
 
         public static void RegisterFacilities(FacilityRegistry registry)
