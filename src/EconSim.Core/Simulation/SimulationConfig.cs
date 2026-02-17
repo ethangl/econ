@@ -82,7 +82,7 @@ namespace EconSim.Core.Simulation
             public static readonly bool PegSubsistenceWageToRawSaltPrice = true;
 
             /// <summary>
-            /// Share of bread demand covered by local subsistence stockpile before
+            /// Share of staple flour demand covered by local subsistence stockpile before
             /// remaining demand is routed to markets.
             /// 0.99 means 99% subsistence / 1% market.
             /// </summary>
@@ -107,6 +107,8 @@ namespace EconSim.Core.Simulation
                 "rye_farm",
                 "barley_farm",
                 "mill",
+                "rye_mill",
+                "barley_mill",
                 "bakery"
             };
 

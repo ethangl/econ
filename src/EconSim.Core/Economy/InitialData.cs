@@ -89,27 +89,11 @@ namespace EconSim.Core.Economy
                 Name = "Flour",
                 Category = GoodCategory.Refined,
                 Inputs = new List<GoodInput> { new GoodInput("wheat", 1f / 0.75f) }, // 75% yield
-                InputVariants = new List<GoodInputVariant>
-                {
-                    new GoodInputVariant
-                    {
-                        Id = "wheat_milling",
-                        Inputs = new List<GoodInput> { new GoodInput("wheat", 1f / 0.75f) } // 75% yield
-                    },
-                    new GoodInputVariant
-                    {
-                        Id = "rye_milling",
-                        Inputs = new List<GoodInput> { new GoodInput("rye", 1f / 0.75f) } // 75% yield
-                    },
-                    new GoodInputVariant
-                    {
-                        Id = "barley_milling",
-                        Inputs = new List<GoodInput> { new GoodInput("barley", 1f / 0.65f) } // 65% yield
-                    }
-                },
                 FacilityType = "mill",
                 ProcessingTicks = 1,
-                DecayRate = 0.003f,  // 0.3% per day - stored flour lasts months
+                NeedCategory = NeedCategory.Basic,
+                BaseConsumption = 160f / 365f, // Flour-equivalent staple intake (household cooking/baking)
+                DecayRate = 0.02f,  // 2% per day - flour is perishable versus durable grain stores
                 TheftRisk = 0.4f,  // Processed, more valuable
                 BasePrice = 3.0f   // 2 grain (2.0) + processing
             });
@@ -122,11 +106,11 @@ namespace EconSim.Core.Economy
                 Inputs = new List<GoodInput> { new GoodInput("flour", 1f / 1.4f) }, // 1.4 kg bread per 1 kg flour
                 FacilityType = "bakery",
                 ProcessingTicks = 1,
-                NeedCategory = NeedCategory.Basic,
-                BaseConsumption = 200f / 365f,  // 200 kg bread per person per year
+                NeedCategory = NeedCategory.Comfort,
+                BaseConsumption = 40f / 365f,  // Market-purchased baked bread on top of staple flour
                 DecayRate = 0.25f,  // 25% per day - stale in 3-4 days
                 TheftRisk = 0f,
-                BasePrice = 5.0f   // Basic staple, modest markup
+                BasePrice = 5.0f   // Comfort-tier prepared food markup over flour
             });
 
             // =============================================
@@ -849,9 +833,9 @@ namespace EconSim.Core.Economy
                 Id = "mill",
                 Name = "Mill",
                 OutputGoodId = "flour",
-                LaborRequired = 3,
+                LaborRequired = 1,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 50000f / 365f, // 50,000 kg/year at full staffing
+                BaseThroughput = 20000f / 365f, // 20,000 kg/year at full staffing
                 IsExtraction = false
             });
 
@@ -860,9 +844,9 @@ namespace EconSim.Core.Economy
                 Id = "rye_mill",
                 Name = "Rye Mill",
                 OutputGoodId = "flour",
-                LaborRequired = 3,
+                LaborRequired = 1,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 10f,
+                BaseThroughput = 20000f / 365f, // 20,000 kg/year at full staffing
                 IsExtraction = false,
                 InputOverrides = new List<GoodInput> { new GoodInput("rye", 1f / 0.75f) } // 75% yield
             });
@@ -872,9 +856,9 @@ namespace EconSim.Core.Economy
                 Id = "barley_mill",
                 Name = "Barley Mill",
                 OutputGoodId = "flour",
-                LaborRequired = 1, // Milling is intentionally low-workload.
+                LaborRequired = 1,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 10f,
+                BaseThroughput = 20000f / 365f, // 20,000 kg/year at full staffing
                 IsExtraction = false,
                 InputOverrides = new List<GoodInput> { new GoodInput("barley", 1f / 0.65f) } // 65% yield
             });

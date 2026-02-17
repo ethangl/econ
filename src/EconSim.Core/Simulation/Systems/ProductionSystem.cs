@@ -34,6 +34,10 @@ namespace EconSim.Core.Simulation.Systems
         private const float V2FacilityAskMarkupSubsidized = 0.03f;
         private const float V2FacilityAskBaseFloorMultiplierUnsubsidized = 0.25f;
         private const float V2FacilityAskBaseFloorMultiplierSubsidized = 0.10f;
+        private const float GrainReserveTargetDays = 540f; // 1.5 years of staple reserve.
+        private const float AvgGrainKgPerFlourKg = 1f / 0.72f;
+        private const float MillDemandBufferFactor = 1.10f;
+        private static readonly string[] ReserveGrainGoods = { "wheat", "rye", "barley", "rice_grain" };
 
         private readonly Dictionary<string, float> _producedThisTick = new Dictionary<string, float>();
         private readonly List<KeyValuePair<int, float>> _outputGoodsBuffer = new List<KeyValuePair<int, float>>(8);
@@ -399,11 +403,27 @@ namespace EconSim.Core.Simulation.Systems
             if (outputRuntimeId < 0)
                 return;
 
-            if (subsistence > 0f)
-                county.Stockpile.Add(outputRuntimeId, subsistence);
+            if (IsReserveGrainGood(def.OutputGoodId))
+            {
+                float reserveTarget = ComputeCountyGrainReserveTargetKg(economy, county);
+                float reserveCurrent = GetCountyGrainReserveKg(economy, county);
+                float reserveNeeded = Math.Max(0f, reserveTarget - reserveCurrent);
+                float toReserve = Math.Min(produced, reserveNeeded);
+                float toMarket = produced - toReserve;
 
-            if (forMarket > 0f)
-                facility.OutputBuffer.Add(outputRuntimeId, forMarket);
+                if (toReserve > 0f)
+                    county.Stockpile.Add(outputRuntimeId, toReserve);
+                if (toMarket > 0f)
+                    facility.OutputBuffer.Add(outputRuntimeId, toMarket);
+            }
+            else
+            {
+                if (subsistence > 0f)
+                    county.Stockpile.Add(outputRuntimeId, subsistence);
+
+                if (forMarket > 0f)
+                    facility.OutputBuffer.Add(outputRuntimeId, forMarket);
+            }
 
             TrackProduction(def.OutputGoodId, produced);
         }
@@ -421,6 +441,22 @@ namespace EconSim.Core.Simulation.Systems
             if (throughput <= 0f)
                 return;
 
+            if (IsMillFacility(def))
+            {
+                var market = economy.GetMarketForCounty(facility.CountyId);
+                if (market != null && market.TryGetGoodState(outputRuntimeId, out var outputState))
+                {
+                    float unmetDemand = Math.Max(0f, outputState.Demand - outputState.Supply);
+                    float demandLimitedThroughput = unmetDemand * MillDemandBufferFactor;
+                    throughput = Math.Min(throughput, demandLimitedThroughput);
+                }
+            }
+
+            if (throughput <= 0.001f)
+                return;
+
+            var county = economy.GetCounty(facility.CountyId);
+            bool useCountyGrainReserve = IsMillFacility(def) && county != null;
             List<GoodInput> selectedInputs = null;
             float possibleBatches = 0f;
             foreach (var candidateInputs in EnumerateInputVariants(def, outputGood))
@@ -447,6 +483,8 @@ namespace EconSim.Core.Simulation.Systems
                     }
 
                     float available = facility.InputBuffer.Get(inputRuntimeId);
+                    if (useCountyGrainReserve && IsReserveGrainRuntimeId(economy, inputRuntimeId))
+                        available += county.Stockpile.Get(inputRuntimeId);
                     float canMake = available / input.QuantityKg;
                     if (canMake < candidateBatches)
                         candidateBatches = canMake;
@@ -475,7 +513,11 @@ namespace EconSim.Core.Simulation.Systems
             {
                 var input = selectedInputs[i];
                 int inputRuntimeId = _inputRuntimeIdsBuffer[i];
-                facility.InputBuffer.Remove(inputRuntimeId, input.QuantityKg * possibleBatches);
+                float required = input.QuantityKg * possibleBatches;
+                float pulledFromBuffer = facility.InputBuffer.Remove(inputRuntimeId, required);
+                float remaining = required - pulledFromBuffer;
+                if (remaining > 0f && useCountyGrainReserve && IsReserveGrainRuntimeId(economy, inputRuntimeId))
+                    county.Stockpile.Remove(inputRuntimeId, remaining);
             }
 
             facility.OutputBuffer.Add(outputRuntimeId, possibleBatches);
@@ -699,6 +741,71 @@ namespace EconSim.Core.Simulation.Systems
                 : -1;
             _goodRuntimeIdCache[goodId] = runtimeId;
             return runtimeId;
+        }
+
+        private static bool IsMillFacility(FacilityDef def)
+        {
+            if (def == null)
+                return false;
+
+            return def.Id == "mill" || def.Id == "rye_mill" || def.Id == "barley_mill";
+        }
+
+        private static bool IsReserveGrainGood(string goodId)
+        {
+            if (string.IsNullOrWhiteSpace(goodId))
+                return false;
+
+            for (int i = 0; i < ReserveGrainGoods.Length; i++)
+            {
+                if (string.Equals(ReserveGrainGoods[i], goodId, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsReserveGrainRuntimeId(EconomyState economy, int runtimeId)
+        {
+            if (economy == null || runtimeId < 0 || !economy.Goods.TryGetByRuntimeId(runtimeId, out var good))
+                return false;
+
+            return IsReserveGrainGood(good.Id);
+        }
+
+        private static float ComputeCountyGrainReserveTargetKg(EconomyState economy, CountyEconomy county)
+        {
+            if (economy == null || county == null)
+                return 0f;
+
+            int population = county.Population.Total;
+            if (population <= 0)
+                return 0f;
+
+            float stapleFlourPerCapitaPerDay = 160f / 365f;
+            var flour = economy.Goods.Get("flour");
+            if (flour != null && flour.NeedCategory == NeedCategory.Basic && flour.BaseConsumptionKgPerCapitaPerDay > 0f)
+                stapleFlourPerCapitaPerDay = flour.BaseConsumptionKgPerCapitaPerDay;
+
+            float dailyRawNeed = population * stapleFlourPerCapitaPerDay * AvgGrainKgPerFlourKg;
+            return Math.Max(0f, dailyRawNeed * GrainReserveTargetDays);
+        }
+
+        private static float GetCountyGrainReserveKg(EconomyState economy, CountyEconomy county)
+        {
+            if (economy == null || county == null)
+                return 0f;
+
+            float total = 0f;
+            for (int i = 0; i < ReserveGrainGoods.Length; i++)
+            {
+                if (!economy.Goods.TryGetRuntimeId(ReserveGrainGoods[i], out int runtimeId) || runtimeId < 0)
+                    continue;
+
+                total += county.Stockpile.Get(runtimeId);
+            }
+
+            return total;
         }
     }
 }

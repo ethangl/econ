@@ -17,6 +17,10 @@ namespace EconSim.Core.Economy
         private const float Elevation40FractionAboveSea = 0.25f;
         private const float Elevation45FractionAboveSea = 0.3125f;
         private const float Elevation50FractionAboveSea = 0.375f;
+        private const float BootstrapGrainReserveDays = 270f; // 9 months to avoid cold-start starvation.
+        private const float BootstrapRawGrainKgPerFlourKg = 1f / 0.72f;
+        private const float BootstrapSaltReserveKgPerCapita = 7.5f; // Midpoint of 5-10 kg/person reserve.
+        private static readonly string[] BootstrapReserveGrainGoodIds = { "wheat", "rye", "barley", "rice_grain" };
 
         /// <summary>
         /// Fully initialize economy from map data.
@@ -101,6 +105,9 @@ namespace EconSim.Core.Economy
 
                 county.Population.Treasury = dailyBasicCost * 30f;
             }
+
+            SeedCountyGrainReserves(economy);
+            SeedCountySaltReserves(economy);
 
             foreach (var facility in economy.Facilities.Values)
             {
@@ -821,6 +828,128 @@ namespace EconSim.Core.Economy
             return good != null
                 && good.NeedCategory == NeedCategory.Basic
                 && SimulationConfig.Economy.IsGoodEnabled(good.Id);
+        }
+
+        private static void SeedCountyGrainReserves(EconomyState economy)
+        {
+            if (economy == null)
+                return;
+
+            float stapleFlourPerCapitaPerDay = 160f / 365f;
+            var flour = economy.Goods.Get("flour");
+            if (flour != null
+                && flour.NeedCategory == NeedCategory.Basic
+                && flour.BaseConsumptionKgPerCapitaPerDay > 0f)
+            {
+                stapleFlourPerCapitaPerDay = flour.BaseConsumptionKgPerCapitaPerDay;
+            }
+
+            float totalSeededKg = 0f;
+            int seededCounties = 0;
+            foreach (var county in economy.Counties.Values)
+            {
+                int population = county.Population.Total;
+                if (population <= 0)
+                    continue;
+
+                float dailyRawNeed = population * stapleFlourPerCapitaPerDay * BootstrapRawGrainKgPerFlourKg;
+                float seedTargetKg = Math.Max(0f, dailyRawNeed * BootstrapGrainReserveDays);
+                if (seedTargetKg <= 0f)
+                    continue;
+
+                float[] weights = new float[BootstrapReserveGrainGoodIds.Length];
+                float weightSum = 0f;
+                for (int i = 0; i < BootstrapReserveGrainGoodIds.Length; i++)
+                {
+                    string goodId = BootstrapReserveGrainGoodIds[i];
+                    float weight = 0f;
+                    if (county.Resources != null
+                        && county.Resources.TryGetValue(goodId, out float localAbundance)
+                        && localAbundance > 0f)
+                    {
+                        weight = localAbundance;
+                    }
+
+                    weights[i] = weight;
+                    weightSum += weight;
+                }
+
+                // Fallback cereal mix if county has no explicit grain resource profile.
+                if (weightSum <= 0f)
+                {
+                    for (int i = 0; i < BootstrapReserveGrainGoodIds.Length; i++)
+                        weights[i] = 0f;
+
+                    int wheatIndex = Array.IndexOf(BootstrapReserveGrainGoodIds, "wheat");
+                    int ryeIndex = Array.IndexOf(BootstrapReserveGrainGoodIds, "rye");
+                    int barleyIndex = Array.IndexOf(BootstrapReserveGrainGoodIds, "barley");
+
+                    if (wheatIndex >= 0) weights[wheatIndex] = 1f;
+                    if (ryeIndex >= 0) weights[ryeIndex] = 1f;
+                    if (barleyIndex >= 0) weights[barleyIndex] = 1f;
+                    weightSum = 3f;
+                }
+
+                if (weightSum <= 0f)
+                    continue;
+
+                float seededHere = 0f;
+                for (int i = 0; i < BootstrapReserveGrainGoodIds.Length; i++)
+                {
+                    if (weights[i] <= 0f)
+                        continue;
+
+                    string goodId = BootstrapReserveGrainGoodIds[i];
+                    if (!economy.Goods.TryGetRuntimeId(goodId, out int runtimeId) || runtimeId < 0)
+                        continue;
+
+                    float quantity = seedTargetKg * (weights[i] / weightSum);
+                    if (quantity <= 0f)
+                        continue;
+
+                    county.Stockpile.Add(runtimeId, quantity);
+                    seededHere += quantity;
+                }
+
+                if (seededHere > 0f)
+                {
+                    seededCounties++;
+                    totalSeededKg += seededHere;
+                }
+            }
+
+            SimLog.Log(
+                "Economy",
+                $"Seeded county grain reserves: counties={seededCounties}, total={totalSeededKg:F0} kg, targetDays={BootstrapGrainReserveDays:F0}");
+        }
+
+        private static void SeedCountySaltReserves(EconomyState economy)
+        {
+            if (economy == null)
+                return;
+            if (!economy.Goods.TryGetRuntimeId("salt", out int saltRuntimeId) || saltRuntimeId < 0)
+                return;
+
+            float totalSeededKg = 0f;
+            int seededCounties = 0;
+            foreach (var county in economy.Counties.Values)
+            {
+                int population = county.Population.Total;
+                if (population <= 0)
+                    continue;
+
+                float quantity = population * BootstrapSaltReserveKgPerCapita;
+                if (quantity <= 0f)
+                    continue;
+
+                county.Stockpile.Add(saltRuntimeId, quantity);
+                seededCounties++;
+                totalSeededKg += quantity;
+            }
+
+            SimLog.Log(
+                "Economy",
+                $"Seeded county salt reserves: counties={seededCounties}, total={totalSeededKg:F0} kg, perCapita={BootstrapSaltReserveKgPerCapita:F1} kg");
         }
 
     }
