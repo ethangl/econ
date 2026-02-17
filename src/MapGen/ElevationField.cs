@@ -1,3 +1,5 @@
+using System;
+
 namespace MapGen.Core
 {
     /// <summary>
@@ -29,9 +31,15 @@ namespace MapGen.Core
             TerrainShapeReferenceSpanMeters = terrainShapeReferenceSpanMeters > 0f
                 ? terrainShapeReferenceSpanMeters
                 : fallbackSpan;
+
+            float referenceSeaDepthMeters = TerrainShapeReferenceSpanMeters - MaxElevationMeters;
+            float initialSeaDepthMeters = referenceSeaDepthMeters > 0f
+                ? Math.Min(MaxSeaDepthMeters, referenceSeaDepthMeters)
+                : MaxSeaDepthMeters;
+
             ElevationMetersSigned = new float[mesh.CellCount];
             for (int i = 0; i < ElevationMetersSigned.Length; i++)
-                ElevationMetersSigned[i] = -MaxSeaDepthMeters;
+                ElevationMetersSigned[i] = -initialSeaDepthMeters;
         }
 
         public float this[int cellIndex]

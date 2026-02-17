@@ -17,7 +17,7 @@ namespace MapGen.Core
 
         // Elevation envelope in signed meters (sea level = 0).
         public float MaxElevationMeters = 5000f;
-        public float MaxSeaDepthMeters = 1250f;
+        public float MaxSeaDepthMeters = 5000f;
         // Reference span used by terrain-shaping DSL ops (Hill/Pit/Range/Trough/Strait).
         // Keep fixed to preserve morphology when only the elevation envelope changes.
         public float TerrainShapeReferenceSpanMeters = 6250f;
