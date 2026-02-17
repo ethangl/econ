@@ -26,15 +26,26 @@ namespace EconSim.Core.Simulation.Systems
         {
             public string GoodId;
             public int GoodRuntimeId;
+            public Market TargetMarket;
             public float Quantity;
+            public float TransportCost;
             public float EffectivePrice;
             public float FullCost;
 
-            public OrderLine(string goodId, int goodRuntimeId, float quantity, float effectivePrice, float fullCost)
+            public OrderLine(
+                string goodId,
+                int goodRuntimeId,
+                Market targetMarket,
+                float quantity,
+                float transportCost,
+                float effectivePrice,
+                float fullCost)
             {
                 GoodId = goodId;
                 GoodRuntimeId = goodRuntimeId;
+                TargetMarket = targetMarket;
                 Quantity = quantity;
+                TransportCost = transportCost;
                 EffectivePrice = effectivePrice;
                 FullCost = fullCost;
             }
@@ -159,15 +170,30 @@ namespace EconSim.Core.Simulation.Systems
                 if (good.NeedCategory != tier)
                     continue;
 
-                if (!market.TryGetGoodState(good.RuntimeId, out var marketGood))
+                Market targetMarket = market;
+                float targetTransportCost = transportCost;
+                if (TryResolveOffMapMarket(economy, county.CountyId, good.Id, out var offMapMarket, out float offMapTransportCost))
+                {
+                    targetMarket = offMapMarket;
+                    targetTransportCost = offMapTransportCost;
+                }
+
+                if (!targetMarket.TryGetGoodState(good.RuntimeId, out var marketGood))
                     continue;
 
-                float effectivePrice = marketGood.Price * (1f + Math.Max(0f, transportCost) * BuyerTransportFeeRate);
+                float effectivePrice = marketGood.Price * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
                 if (effectivePrice <= 0f)
                     continue;
 
                 float fullCost = qty * effectivePrice;
-                linesBuffer.Add(new OrderLine(good.Id, good.RuntimeId, qty, effectivePrice, fullCost));
+                linesBuffer.Add(new OrderLine(
+                    good.Id,
+                    good.RuntimeId,
+                    targetMarket,
+                    qty,
+                    targetTransportCost,
+                    effectivePrice,
+                    fullCost));
                 totalCost += fullCost;
             }
 
@@ -198,14 +224,14 @@ namespace EconSim.Core.Simulation.Systems
                 if (qty <= 0.0001f || maxSpend <= 0f)
                     continue;
 
-                market.AddPendingBuyOrder(new BuyOrder
+                line.TargetMarket.AddPendingBuyOrder(new BuyOrder
                 {
                     BuyerId = buyerId,
                     GoodId = line.GoodId,
                     GoodRuntimeId = line.GoodRuntimeId,
                     Quantity = qty,
                     MaxSpend = maxSpend,
-                    TransportCost = transportCost,
+                    TransportCost = line.TransportCost,
                     DayPosted = state.CurrentDay
                 });
 
@@ -257,7 +283,16 @@ namespace EconSim.Core.Simulation.Systems
                     int inputRuntimeId = ResolveRuntimeId(economy.Goods, runtimeIdCache, input.GoodId);
                     if (inputRuntimeId < 0)
                         continue;
-                    if (!market.TryGetGoodState(inputRuntimeId, out var marketGood))
+
+                    Market targetMarket = market;
+                    float targetTransportCost = transportCost;
+                    if (TryResolveOffMapMarket(economy, county.CountyId, input.GoodId, out var offMapMarket, out float offMapTransportCost))
+                    {
+                        targetMarket = offMapMarket;
+                        targetTransportCost = offMapTransportCost;
+                    }
+
+                    if (!targetMarket.TryGetGoodState(inputRuntimeId, out var marketGood))
                         continue;
 
                     float needed = input.Quantity * currentThroughput;
@@ -266,7 +301,7 @@ namespace EconSim.Core.Simulation.Systems
                     if (toBuy <= 0.0001f)
                         continue;
 
-                    float effectivePrice = marketGood.Price * (1f + Math.Max(0f, transportCost) * BuyerTransportFeeRate);
+                    float effectivePrice = marketGood.Price * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
                     if (effectivePrice <= 0f)
                         continue;
 
@@ -275,14 +310,14 @@ namespace EconSim.Core.Simulation.Systems
                     if (quantity <= 0.0001f || maxSpend <= 0f)
                         continue;
 
-                    market.AddPendingBuyOrder(new BuyOrder
+                    targetMarket.AddPendingBuyOrder(new BuyOrder
                     {
                         BuyerId = facility.Id,
                         GoodId = input.GoodId,
                         GoodRuntimeId = inputRuntimeId,
                         Quantity = quantity,
                         MaxSpend = maxSpend,
-                        TransportCost = transportCost,
+                        TransportCost = targetTransportCost,
                         DayPosted = state.CurrentDay
                     });
 
@@ -397,6 +432,50 @@ namespace EconSim.Core.Simulation.Systems
             if (runtimeIdCache != null)
                 runtimeIdCache[goodId] = runtimeId;
             return runtimeId;
+        }
+
+        private static bool TryResolveOffMapMarket(
+            EconomyState economy,
+            int countyId,
+            string goodId,
+            out Market offMapMarket,
+            out float offMapTransportCost)
+        {
+            offMapMarket = null;
+            offMapTransportCost = 0f;
+
+            if (economy == null || countyId <= 0 || string.IsNullOrWhiteSpace(goodId))
+                return false;
+
+            if (!economy.CountySeatCell.TryGetValue(countyId, out int seatCellId) || seatCellId <= 0)
+                return false;
+
+            float bestCost = float.MaxValue;
+            Market bestMarket = null;
+            foreach (var market in economy.Markets.Values)
+            {
+                if (market.Type != MarketType.OffMap)
+                    continue;
+                if (market.OffMapGoodIds == null || !market.OffMapGoodIds.Contains(goodId))
+                    continue;
+                if (market.ZoneCellCosts == null || !market.ZoneCellCosts.TryGetValue(seatCellId, out float cost))
+                    continue;
+                if (!float.IsFinite(cost))
+                    continue;
+
+                if (cost < bestCost)
+                {
+                    bestCost = cost;
+                    bestMarket = market;
+                }
+            }
+
+            if (bestMarket == null)
+                return false;
+
+            offMapMarket = bestMarket;
+            offMapTransportCost = Math.Max(0f, bestCost);
+            return true;
         }
     }
 }
