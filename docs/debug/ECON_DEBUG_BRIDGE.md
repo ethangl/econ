@@ -58,6 +58,18 @@ The script reports:
 - Mean/median/p95 deltas for tick timing, key summary metrics, and per-system `avgMs`
 - Top per-system median drift by absolute percentage
 
+### Diagnosing systemic vs chain bottlenecks
+
+After generating or comparing dumps, run chain classification:
+
+```bash
+scripts/analyze_econ_chains.py unity/econ_debug_output.json
+```
+
+For interpretation and workflow guidance, see:
+
+- `docs/debug/ECON_CHAIN_DIAGNOSIS.md`
+
 ### Repeated A/B capture workflow
 
 Archive the current dump immediately after each run:
