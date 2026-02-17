@@ -35,6 +35,27 @@ namespace EconSim.Core.Simulation
         }
 
         /// <summary>
+        /// Temporary economy tuning controls used while balancing production chains.
+        /// </summary>
+        public static class Economy
+        {
+            /// <summary>
+            /// When enabled, facilities receive an operating subsidy to prevent liquidity-driven collapse.
+            /// </summary>
+            public static readonly bool EnableFacilitySubsidies = true;
+
+            /// <summary>
+            /// Keep each active facility at least this many subsistence-wage days liquid.
+            /// </summary>
+            public const float FacilityTreasuryFloorDays = 14f;
+
+            /// <summary>
+            /// Number of wage-debt days forgiven per tick while subsidies are enabled.
+            /// </summary>
+            public const int FacilityWageDebtReliefPerDay = 14;
+        }
+
+        /// <summary>
         /// Maximum simulation days processed in a single frame update.
         /// Caps catch-up work to avoid frame stalls when under load.
         /// </summary>

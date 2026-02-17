@@ -84,6 +84,11 @@ namespace EconSim.Core.Economy
         public Dictionary<int, Dictionary<int, float>> TradableInventoryByGood { get; } = new Dictionary<int, Dictionary<int, float>>();
 
         /// <summary>
+        /// Reservation floor price (gold per kg) for tradable inventory by good runtime ID and seller ID.
+        /// </summary>
+        public Dictionary<int, Dictionary<int, float>> TradableInventoryMinPriceByGood { get; } = new Dictionary<int, Dictionary<int, float>>();
+
+        /// <summary>
         /// Number of pending buy orders across all books.
         /// </summary>
         public int PendingBuyOrderCount { get; private set; }
@@ -207,11 +212,22 @@ namespace EconSim.Core.Economy
             long key = ComposeEntryKey(lot.DayListed, lot.SellerId);
             if (book.TryGetValue(key, out var existing))
             {
-                existing.Quantity += lot.Quantity;
+                float existingQty = Math.Max(0f, existing.Quantity);
+                float incomingQty = Math.Max(0f, lot.Quantity);
+                float totalQty = existingQty + incomingQty;
+                if (totalQty > 0f)
+                {
+                    float existingMin = Math.Max(0f, existing.MinUnitPrice);
+                    float incomingMin = Math.Max(0f, lot.MinUnitPrice);
+                    existing.MinUnitPrice = (existingMin * existingQty + incomingMin * incomingQty) / totalQty;
+                }
+
+                existing.Quantity = totalQty;
                 book[key] = existing;
             }
             else
             {
+                lot.MinUnitPrice = Math.Max(0f, lot.MinUnitPrice);
                 book[key] = lot;
                 InventoryLotCount++;
             }
@@ -288,6 +304,7 @@ namespace EconSim.Core.Economy
 
             if (TradableInventoryByGood.TryGetValue(goodRuntimeId, out var tradable))
             {
+                TradableInventoryMinPriceByGood.TryGetValue(goodRuntimeId, out var tradableMinPrices);
                 var remove = new List<int>();
                 var updates = new List<KeyValuePair<int, float>>();
                 foreach (var kvp in tradable)
@@ -302,9 +319,15 @@ namespace EconSim.Core.Economy
                 for (int i = 0; i < updates.Count; i++)
                     tradable[updates[i].Key] = updates[i].Value;
                 for (int i = 0; i < remove.Count; i++)
+                {
                     tradable.Remove(remove[i]);
+                    tradableMinPrices?.Remove(remove[i]);
+                }
                 if (tradable.Count == 0)
+                {
                     TradableInventoryByGood.Remove(goodRuntimeId);
+                    TradableInventoryMinPriceByGood.Remove(goodRuntimeId);
+                }
             }
 
             RecountBooks();
@@ -354,6 +377,14 @@ namespace EconSim.Core.Economy
         public bool TryGetTradableInventory(int goodRuntimeId, out Dictionary<int, float> inventoryBySeller)
         {
             return TradableInventoryByGood.TryGetValue(goodRuntimeId, out inventoryBySeller);
+        }
+
+        /// <summary>
+        /// Try get reservation floor prices for tradable inventory by seller.
+        /// </summary>
+        public bool TryGetTradableInventoryMinPrices(int goodRuntimeId, out Dictionary<int, float> minPriceBySeller)
+        {
+            return TradableInventoryMinPriceByGood.TryGetValue(goodRuntimeId, out minPriceBySeller);
         }
 
         /// <summary>
@@ -496,6 +527,7 @@ namespace EconSim.Core.Economy
                 var pending = byGood.Value;
                 var promotedKeys = new List<long>();
                 Dictionary<int, float> tradable = null;
+                Dictionary<int, float> tradableMinPrices = null;
 
                 foreach (var entry in pending)
                 {
@@ -510,10 +542,35 @@ namespace EconSim.Core.Economy
                             tradable = new Dictionary<int, float>();
                             TradableInventoryByGood[goodRuntimeId] = tradable;
                         }
+
+                        if (!TradableInventoryMinPriceByGood.TryGetValue(goodRuntimeId, out tradableMinPrices))
+                        {
+                            tradableMinPrices = new Dictionary<int, float>();
+                            TradableInventoryMinPriceByGood[goodRuntimeId] = tradableMinPrices;
+                        }
+                    }
+
+                    if (tradableMinPrices == null
+                        && !TradableInventoryMinPriceByGood.TryGetValue(goodRuntimeId, out tradableMinPrices))
+                    {
+                        tradableMinPrices = new Dictionary<int, float>();
+                        TradableInventoryMinPriceByGood[goodRuntimeId] = tradableMinPrices;
                     }
 
                     tradable.TryGetValue(lot.SellerId, out float quantity);
-                    tradable[lot.SellerId] = quantity + lot.Quantity;
+                    float incomingQty = Math.Max(0f, lot.Quantity);
+                    float mergedQty = quantity + incomingQty;
+                    tradable[lot.SellerId] = mergedQty;
+
+                    float incomingMin = Math.Max(0f, lot.MinUnitPrice);
+                    if (tradableMinPrices.TryGetValue(lot.SellerId, out float existingMin) && quantity > 0f && mergedQty > 0f)
+                    {
+                        tradableMinPrices[lot.SellerId] = (existingMin * quantity + incomingMin * incomingQty) / mergedQty;
+                    }
+                    else
+                    {
+                        tradableMinPrices[lot.SellerId] = incomingMin;
+                    }
                     promotedKeys.Add(entry.Key);
                 }
 
@@ -605,6 +662,7 @@ namespace EconSim.Core.Economy
             foreach (var goodEntry in TradableInventoryByGood)
             {
                 var book = goodEntry.Value;
+                TradableInventoryMinPriceByGood.TryGetValue(goodEntry.Key, out var minPriceBook);
                 var removeKeys = new List<int>();
                 foreach (var entry in book)
                 {
@@ -613,14 +671,20 @@ namespace EconSim.Core.Economy
                 }
 
                 for (int i = 0; i < removeKeys.Count; i++)
+                {
                     book.Remove(removeKeys[i]);
+                    minPriceBook?.Remove(removeKeys[i]);
+                }
 
                 if (book.Count == 0)
                     emptyGoods.Add(goodEntry.Key);
             }
 
             for (int i = 0; i < emptyGoods.Count; i++)
+            {
                 TradableInventoryByGood.Remove(emptyGoods[i]);
+                TradableInventoryMinPriceByGood.Remove(emptyGoods[i]);
+            }
         }
 
         private void RecountBooks()

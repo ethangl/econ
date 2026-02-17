@@ -86,6 +86,11 @@ namespace EconSim.Core.Simulation.Systems
                     _totalInventoryByGood[goodRuntimeId] = inventory;
 
                 float supply = market.GetTradableSupply(goodRuntimeId);
+                if (supply > 0f && market.TryGetTradableInventory(goodRuntimeId, out var sellersByGood))
+                {
+                    market.TryGetTradableInventoryMinPrices(goodRuntimeId, out var minPriceBySeller);
+                    supply = ComputePriceEligibleSupply(sellersByGood, minPriceBySeller, goodState.Price);
+                }
                 if (supply > 0f)
                     _eligibleSupplyByGood[goodRuntimeId] = supply;
 
@@ -93,8 +98,8 @@ namespace EconSim.Core.Simulation.Systems
                 if (demand > 0f)
                     _eligibleDemandByGood[goodRuntimeId] = demand;
 
-                goodState.Supply = inventory;
-                goodState.SupplyOffered = goodState.Supply;
+                goodState.Supply = supply;
+                goodState.SupplyOffered = inventory;
                 goodState.Demand = demand;
                 goodState.LastTradeVolume = 0f;
                 goodState.Revenue = 0f;
@@ -184,11 +189,21 @@ namespace EconSim.Core.Simulation.Systems
                 float remainingSold = soldTarget;
                 float remainingSupply = totalSupply;
                 float sellerRevenue = 0f;
+                market.TryGetTradableInventoryMinPrices(goodRuntimeId, out var minPriceBySeller);
                 _sellerIdsBuffer.Clear();
-                foreach (int sellerId in sellers.Keys)
+                foreach (var sellerEntry in sellers)
                 {
+                    int sellerId = sellerEntry.Key;
+                    float sellerQty = sellerEntry.Value;
+                    if (sellerQty <= LotCullThreshold)
+                        continue;
+                    if (!IsSellerPriceEligible(sellerId, goodState.Price, minPriceBySeller))
+                        continue;
+
                     _sellerIdsBuffer.Add(sellerId);
                 }
+                if (_sellerIdsBuffer.Count == 0)
+                    continue;
 
                 for (int i = 0; i < _sellerIdsBuffer.Count; i++)
                 {
@@ -250,6 +265,39 @@ namespace EconSim.Core.Simulation.Systems
                 return;
 
             economy.GetCounty(countyId).Population.Treasury += amount;
+        }
+
+        private static float ComputePriceEligibleSupply(
+            Dictionary<int, float> sellers,
+            Dictionary<int, float> minPriceBySeller,
+            float clearingPrice)
+        {
+            if (sellers == null || sellers.Count == 0)
+                return 0f;
+
+            float total = 0f;
+            foreach (var sellerEntry in sellers)
+            {
+                if (sellerEntry.Value <= LotCullThreshold)
+                    continue;
+                if (!IsSellerPriceEligible(sellerEntry.Key, clearingPrice, minPriceBySeller))
+                    continue;
+
+                total += sellerEntry.Value;
+            }
+
+            return total;
+        }
+
+        private static bool IsSellerPriceEligible(
+            int sellerId,
+            float clearingPrice,
+            Dictionary<int, float> minPriceBySeller)
+        {
+            if (minPriceBySeller == null || !minPriceBySeller.TryGetValue(sellerId, out float minPrice))
+                return true;
+
+            return clearingPrice + 0.0001f >= Math.Max(0f, minPrice);
         }
 
         private static bool TryResolveBuyer(

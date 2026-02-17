@@ -30,6 +30,8 @@ namespace EconSim.Core.Simulation.Systems
         private const int V2InactiveExtractionRecheckDays = 3;
         private const int V2InactiveMediumDormancyDays = 30;
         private const int V2InactiveLongDormancyDays = 120;
+        private const float V2FacilityAskMarkup = 0.12f;
+        private const float V2FacilityAskBaseFloorMultiplier = 0.25f;
 
         private readonly Dictionary<string, float> _producedThisTick = new Dictionary<string, float>();
         private readonly List<KeyValuePair<int, float>> _outputGoodsBuffer = new List<KeyValuePair<int, float>>(8);
@@ -77,6 +79,7 @@ namespace EconSim.Core.Simulation.Systems
 
             _producedThisTick.Clear();
             BuildAvailableWorkerCaches(economy);
+            ApplyFacilitySubsidiesV2(state, economy);
 
             var facilities = economy.GetFacilitiesDense();
             for (int i = 0; i < facilities.Count; i++)
@@ -118,7 +121,37 @@ namespace EconSim.Core.Simulation.Systems
                 else
                     RunProcessingFacilityV2(economy, facility, def);
 
-                FlushOutputBufferToMarketV2(state, mapData, economy, facility);
+                FlushOutputBufferToMarketV2(state, mapData, economy, facility, def);
+            }
+        }
+
+        private static void ApplyFacilitySubsidiesV2(SimulationState state, EconomyState economy)
+        {
+            if (!SimulationConfig.Economy.EnableFacilitySubsidies)
+                return;
+
+            float subsistence = state.SubsistenceWage > 0f ? state.SubsistenceWage : 1f;
+            float treasuryFloorDays = Math.Max(0f, SimulationConfig.Economy.FacilityTreasuryFloorDays);
+            int wageDebtRelief = Math.Max(0, SimulationConfig.Economy.FacilityWageDebtReliefPerDay);
+
+            var facilities = economy.GetFacilitiesDense();
+            for (int i = 0; i < facilities.Count; i++)
+            {
+                var facility = facilities[i];
+                if (!facility.IsActive)
+                    continue;
+
+                var def = economy.FacilityDefs.Get(facility.TypeId);
+                if (def == null)
+                    continue;
+
+                int requiredLabor = Math.Max(1, facility.GetRequiredLabor(def));
+                float treasuryFloor = requiredLabor * subsistence * treasuryFloorDays;
+                if (facility.Treasury < treasuryFloor)
+                    facility.Treasury = treasuryFloor;
+
+                if (wageDebtRelief > 0 && facility.WageDebtDays > 0)
+                    facility.WageDebtDays = Math.Max(0, facility.WageDebtDays - wageDebtRelief);
             }
         }
 
@@ -416,7 +449,8 @@ namespace EconSim.Core.Simulation.Systems
             SimulationState state,
             MapData mapData,
             EconomyState economy,
-            Facility facility)
+            Facility facility,
+            FacilityDef def)
         {
             var market = economy.GetMarketForCounty(facility.CountyId);
             if (market == null)
@@ -448,6 +482,13 @@ namespace EconSim.Core.Simulation.Systems
                 float marketPrice = market.TryGetGoodState(goodRuntimeId, out var marketGood)
                     ? marketGood.Price
                     : good.BasePrice;
+                float minUnitPrice = ComputeFacilityMinUnitAskPrice(
+                    economy,
+                    market,
+                    facility,
+                    def,
+                    marketPrice,
+                    transportCost);
 
                 float haulingFee = quantity * marketPrice * transportCost * V2TransportFeeRate;
                 if (haulingFee > 0f && facility.Treasury < haulingFee)
@@ -474,9 +515,63 @@ namespace EconSim.Core.Simulation.Systems
                     GoodId = goodId,
                     GoodRuntimeId = goodRuntimeId,
                     Quantity = arrived,
+                    MinUnitPrice = minUnitPrice,
                     DayListed = state.CurrentDay
                 });
             }
+        }
+
+        private float ComputeFacilityMinUnitAskPrice(
+            EconomyState economy,
+            Market market,
+            Facility facility,
+            FacilityDef def,
+            float marketPrice,
+            float transportCost)
+        {
+            if (economy == null || facility == null || def == null)
+                return Math.Max(0f, marketPrice);
+
+            float throughput = facility.GetThroughput(def);
+            if (throughput <= 0.001f)
+                return Math.Max(0f, marketPrice);
+
+            float wageCostPerUnit = 0f;
+            if (facility.AssignedWorkers > 0 && facility.WageRate > 0f)
+            {
+                float wageBill = facility.WageRate * facility.AssignedWorkers;
+                wageCostPerUnit = wageBill / throughput;
+            }
+
+            float inputCostPerUnit = 0f;
+            var outputGood = economy.Goods.Get(def.OutputGoodId);
+            var inputs = outputGood != null ? (def.InputOverrides ?? outputGood.Inputs) : null;
+            if (inputs != null)
+            {
+                for (int i = 0; i < inputs.Count; i++)
+                {
+                    var input = inputs[i];
+                    int inputRuntimeId = ResolveRuntimeId(economy.Goods, input.GoodId);
+                    float inputPrice = 0f;
+                    if (inputRuntimeId >= 0 && market != null && market.TryGetGoodState(inputRuntimeId, out var inputState))
+                        inputPrice = inputState.Price;
+                    else
+                        inputPrice = economy.Goods.Get(input.GoodId)?.BasePrice ?? 0f;
+
+                    float landedInputPrice = inputPrice * (1f + Math.Max(0f, transportCost) * V2TransportFeeRate);
+                    inputCostPerUnit += input.QuantityKg * landedInputPrice;
+                }
+            }
+
+            float haulingCostPerUnit = Math.Max(0f, marketPrice) * Math.Max(0f, transportCost) * V2TransportFeeRate;
+            float operatingCostPerUnit = inputCostPerUnit + wageCostPerUnit + haulingCostPerUnit;
+
+            float minFromCost = operatingCostPerUnit * (1f + V2FacilityAskMarkup);
+            float minFromBase = outputGood != null
+                ? outputGood.BasePrice * V2FacilityAskBaseFloorMultiplier
+                : 0f;
+
+            return Math.Max(0f, Math.Max(minFromCost, minFromBase));
         }
 
         private static int GetAvailableWorkers(

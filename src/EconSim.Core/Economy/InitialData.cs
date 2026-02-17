@@ -486,8 +486,8 @@ namespace EconSim.Core.Economy
 
             // =============================================
             // CHAIN 11: Salt (Salt → consumed directly)
-            // Single-tier: extracted from salt flats and coastal marshes
-            // Universal demand, geographically scarce — drives long-distance trade
+            // Single-tier: extracted from northern brine and coastal brine works
+            // Universal demand, geographically constrained — drives long-distance trade
             // =============================================
 
             registry.Register(new GoodDef
@@ -495,8 +495,8 @@ namespace EconSim.Core.Economy
                 Id = "raw_salt",
                 Name = "Raw Salt",
                 Category = GoodCategory.Raw,
-                HarvestMethod = "mining",
-                TerrainAffinity = new List<string> { "Salt Flat", "Coastal Marsh" },
+                HarvestMethod = "brine_evaporation",
+                TerrainAffinity = new List<string> { "Taiga", "Tundra", "Coastal Marsh" },
                 BaseYield = 6f,
                 DecayRate = 0f,  // Mineral, doesn't decay
                 TheftRisk = 0.2f,  // Bulk, unprocessed
@@ -508,14 +508,14 @@ namespace EconSim.Core.Economy
                 Id = "salt",
                 Name = "Salt",
                 Category = GoodCategory.Finished,
-                Inputs = new List<GoodInput> { new GoodInput("raw_salt", 2) },
+                Inputs = new List<GoodInput> { new GoodInput("raw_salt", 1.1f) }, // ~91% conversion yield
                 FacilityType = "salt_warehouse",
                 ProcessingTicks = 1,
                 NeedCategory = NeedCategory.Basic,
-                BaseConsumption = 0.003f,  // Universal staple, modest per-capita
+                BaseConsumption = 15f / 365f,  // 15 kg per person per year
                 DecayRate = 0f,  // Processed mineral, doesn't decay
                 TheftRisk = 0.4f,  // Moderate value, portable
-                BasePrice = 4.0f  // 2 raw salt (2.0) + cleaning/drying/grading
+                BasePrice = 4.0f  // Brine-derived raw salt + drying/grading
             });
 
             // =============================================
@@ -813,13 +813,13 @@ namespace EconSim.Core.Economy
             registry.Register(new FacilityDef
             {
                 Id = "salt_works",
-                Name = "Salt Works",
+                Name = "Brine Salt Works",
                 OutputGoodId = "raw_salt",
                 LaborRequired = 15,
                 LaborType = LaborType.Unskilled,
                 BaseThroughput = 6f,
                 IsExtraction = true,
-                TerrainRequirements = new List<string> { "Salt Flat", "Coastal Marsh" }
+                TerrainRequirements = new List<string> { "Taiga", "Tundra", "Coastal Marsh" }
             });
 
             // =============================================
