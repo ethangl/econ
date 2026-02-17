@@ -67,12 +67,37 @@ namespace EconSim.Tests
             }
         }
 
+        [Test]
+        public void DepthRemapExponent_LowerValue_PushesBathymetryDeeper()
+        {
+            Metrics linear = RunMetrics(
+                HeightmapTemplateType.LowIsland,
+                seed: 1101,
+                cellCount: 5000,
+                maxSeaDepthMeters: 8000f,
+                maxElevationMeters: 8000f,
+                depthRemapExponent: 1f);
+            Metrics abyssBias = RunMetrics(
+                HeightmapTemplateType.LowIsland,
+                seed: 1101,
+                cellCount: 5000,
+                maxSeaDepthMeters: 8000f,
+                maxElevationMeters: 8000f,
+                depthRemapExponent: 0.75f);
+
+            Assert.That(abyssBias.P10, Is.LessThan(linear.P10 - 100f),
+                "Lower depth remap exponent should deepen lower-ocean percentile.");
+            Assert.That(Math.Abs(abyssBias.LandRatio - linear.LandRatio), Is.LessThanOrEqualTo(0.02f),
+                "Depth remap exponent should not materially change land ratio.");
+        }
+
         static Metrics RunMetrics(
             HeightmapTemplateType template,
             int seed,
             int cellCount,
             float maxSeaDepthMeters,
-            float maxElevationMeters = 5000f)
+            float maxElevationMeters = 5000f,
+            float depthRemapExponent = 1f)
         {
             var config = new MapGenConfig
             {
@@ -83,6 +108,7 @@ namespace EconSim.Tests
                 MaxSeaDepthMeters = maxSeaDepthMeters,
                 TerrainShapeReferenceSpanMeters = 6250f,
                 TerrainShapeInitialSeaDepthMeters = 1250f,
+                TerrainDepthRemapExponent = depthRemapExponent,
                 RiverThreshold = 180f,
                 RiverTraceThreshold = 10f,
                 MinRiverVertices = 8

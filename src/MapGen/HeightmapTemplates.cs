@@ -124,6 +124,7 @@ Invert 0.4 both
 ";
 
         public const string Shattered = @"
+DepthRemap 0.75
 Hill 8 2187.5m-2500m 15-85 30-70
 Trough 10-20 2500m-3125m 5-95 5-95
 Range 5-7 1875m-2500m 10-90 20-80

@@ -3,6 +3,11 @@ using System.Globalization;
 
 namespace MapGen.Core
 {
+    public sealed class HeightmapDslExecutionContext
+    {
+        public float? DepthRemapExponentOverride;
+    }
+
     /// <summary>
     /// DSL parser for map terrain templates.
     /// Elevation magnitudes are specified in meters (suffix: m).
@@ -10,7 +15,12 @@ namespace MapGen.Core
     /// </summary>
     public static class HeightmapDsl
     {
-        public static void Execute(ElevationField field, string script, int seed, HeightmapDslDiagnostics diagnostics = null)
+        public static void Execute(
+            ElevationField field,
+            string script,
+            int seed,
+            HeightmapDslDiagnostics diagnostics = null,
+            HeightmapDslExecutionContext context = null)
         {
             if (field == null) throw new ArgumentNullException(nameof(field));
             if (script == null) throw new ArgumentNullException(nameof(script));
@@ -35,7 +45,7 @@ namespace MapGen.Core
                     beforeEdgeLand = ComputeEdgeLandRatio(field);
                 }
 
-                OpTrace trace = ExecuteLine(field, line, rng);
+                OpTrace trace = ExecuteLine(field, line, rng, context);
                 field.ClampAll();
 
                 if (diagnostics != null)
@@ -72,7 +82,7 @@ namespace MapGen.Core
             }
         }
 
-        static OpTrace ExecuteLine(ElevationField field, string line, Random rng)
+        static OpTrace ExecuteLine(ElevationField field, string line, Random rng, HeightmapDslExecutionContext context)
         {
             string[] parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 0)
@@ -107,9 +117,26 @@ namespace MapGen.Core
                 case "invert":
                     ExecuteInvert(field, parts, rng);
                     return new OpTrace(op);
+                case "depthremap":
+                case "depthcurve":
+                    ExecuteDepthRemapDirective(parts, context);
+                    return new OpTrace(op);
                 default:
                     throw new ArgumentException($"Unknown heightmap operation: {op}");
             }
+        }
+
+        static void ExecuteDepthRemapDirective(string[] parts, HeightmapDslExecutionContext context)
+        {
+            if (parts.Length < 2)
+                throw new ArgumentException("DepthRemap operation requires: exponent.");
+
+            float exponent = ParseFloat(parts[1]);
+            if (float.IsNaN(exponent) || float.IsInfinity(exponent) || exponent <= 0f)
+                throw new ArgumentException($"DepthRemap exponent must be positive and finite, got {parts[1]}.");
+
+            if (context != null)
+                context.DepthRemapExponentOverride = exponent;
         }
 
         static OpTrace ExecuteBlob(ElevationField field, string[] parts, bool positive, Random rng, string operation)

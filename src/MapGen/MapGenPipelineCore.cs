@@ -22,7 +22,7 @@ namespace MapGen.Core
                 terrainDomainMaxElevation,
                 config.TerrainShapeReferenceSpanMeters,
                 config.TerrainShapeInitialSeaDepthMeters);
-            GenerateElevationFromDsl(elevation, config);
+            float depthRemapExponent = GenerateElevationFromDsl(elevation, config);
             EnsureNonDegenerateLandWater(elevation);
             var climate = new ClimateField(mesh);
             TemperatureModelOps.Compute(climate, elevation, config, world);
@@ -38,7 +38,8 @@ namespace MapGen.Core
                 terrainDomainMaxSeaDepth,
                 terrainDomainMaxElevation,
                 config.MaxSeaDepthMeters,
-                config.MaxElevationMeters);
+                config.MaxElevationMeters,
+                depthRemapExponent);
 
             return new MapGenResult
             {
@@ -71,15 +72,21 @@ namespace MapGen.Core
             return mesh;
         }
 
-        static void GenerateElevationFromDsl(ElevationField elevation, MapGenConfig config)
+        static float GenerateElevationFromDsl(ElevationField elevation, MapGenConfig config)
         {
             string script = HeightmapTemplateCompiler.GetTemplate(config.Template, config);
             if (string.IsNullOrWhiteSpace(script))
                 throw new InvalidOperationException($"No map template found for {config.Template}.");
 
-            HeightmapDsl.Execute(elevation, script, config.ElevationSeed);
+            var dslContext = new HeightmapDslExecutionContext();
+            HeightmapDsl.Execute(elevation, script, config.ElevationSeed, context: dslContext);
             ConstrainLandRatioBand(elevation, config.Template);
             elevation.ClampAll();
+
+            if (dslContext.DepthRemapExponentOverride.HasValue)
+                return dslContext.DepthRemapExponentOverride.Value;
+
+            return config.TerrainDepthRemapExponent;
         }
 
         static void ConstrainLandRatioBand(ElevationField elevation, HeightmapTemplateType template)
@@ -182,7 +189,8 @@ namespace MapGen.Core
             float fromSeaDepthMeters,
             float fromMaxElevationMeters,
             float toSeaDepthMeters,
-            float toMaxElevationMeters)
+            float toMaxElevationMeters,
+            float depthRemapExponent)
         {
             if (Math.Abs(fromSeaDepthMeters - toSeaDepthMeters) <= 0.0001f
                 && Math.Abs(fromMaxElevationMeters - toMaxElevationMeters) <= 0.0001f)
@@ -192,6 +200,9 @@ namespace MapGen.Core
 
             float invFromSea = fromSeaDepthMeters > 0f ? 1f / fromSeaDepthMeters : 0f;
             float invFromLand = fromMaxElevationMeters > 0f ? 1f / fromMaxElevationMeters : 0f;
+            float exponent = depthRemapExponent;
+            if (float.IsNaN(exponent) || float.IsInfinity(exponent) || exponent <= 0f)
+                exponent = 1f;
 
             for (int i = 0; i < elevation.CellCount; i++)
             {
@@ -208,6 +219,7 @@ namespace MapGen.Core
                     float t = -h * invFromSea;
                     if (t < 0f) t = 0f;
                     if (t > 1f) t = 1f;
+                    t = (float)Math.Pow(t, exponent);
                     elevation.ElevationMetersSigned[i] = -t * toSeaDepthMeters;
                 }
             }

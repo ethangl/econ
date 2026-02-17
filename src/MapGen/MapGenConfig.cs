@@ -28,6 +28,10 @@ namespace MapGen.Core
         // Initial water fill depth for terrain shaping before DSL ops (sea level = 0).
         // This is clamped to MaxSeaDepthMeters at runtime.
         public float TerrainShapeInitialSeaDepthMeters = 1250f;
+        // Fallback post-generation remap curve for underwater depths when expanding world envelope.
+        // Template DSL directives (DepthRemap/DepthCurve) override this value.
+        // 1.0 = linear, <1 pushes more cells toward abyss, >1 keeps more continental shelf.
+        public float TerrainDepthRemapExponent = 1f;
 
         // Climate defaults.
         public float EquatorTempC = 29f;
@@ -134,6 +138,8 @@ namespace MapGen.Core
                 throw new ArgumentOutOfRangeException(nameof(TerrainShapeReferenceSpanMeters), "TerrainShapeReferenceSpanMeters must be positive and finite.");
             if (float.IsNaN(TerrainShapeInitialSeaDepthMeters) || float.IsInfinity(TerrainShapeInitialSeaDepthMeters) || TerrainShapeInitialSeaDepthMeters <= 0f)
                 throw new ArgumentOutOfRangeException(nameof(TerrainShapeInitialSeaDepthMeters), "TerrainShapeInitialSeaDepthMeters must be positive and finite.");
+            if (float.IsNaN(TerrainDepthRemapExponent) || float.IsInfinity(TerrainDepthRemapExponent) || TerrainDepthRemapExponent <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(TerrainDepthRemapExponent), "TerrainDepthRemapExponent must be positive and finite.");
             if (LapseRateCPerKm <= 0f) throw new ArgumentOutOfRangeException(nameof(LapseRateCPerKm), "LapseRateCPerKm must be positive.");
             if (MaxAnnualPrecipitationMm <= 0f) throw new ArgumentOutOfRangeException(nameof(MaxAnnualPrecipitationMm), "MaxAnnualPrecipitationMm must be positive.");
             if (RiverThreshold <= 0f) throw new ArgumentOutOfRangeException(nameof(RiverThreshold), "RiverThreshold must be positive.");
