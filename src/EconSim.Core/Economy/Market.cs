@@ -84,7 +84,7 @@ namespace EconSim.Core.Economy
         public Dictionary<int, Dictionary<int, float>> TradableInventoryByGood { get; } = new Dictionary<int, Dictionary<int, float>>();
 
         /// <summary>
-        /// Reservation floor price (gold per kg) for tradable inventory by good runtime ID and seller ID.
+        /// Reservation floor price (Crowns per kg) for tradable inventory by good runtime ID and seller ID.
         /// </summary>
         public Dictionary<int, Dictionary<int, float>> TradableInventoryMinPriceByGood { get; } = new Dictionary<int, Dictionary<int, float>>();
 
@@ -778,13 +778,13 @@ namespace EconSim.Core.Economy
         public float Demand { get; set; }
 
         /// <summary>
-        /// Current price per unit.
+        /// Current price per kilogram (Crowns/kg).
         /// Adjusts based on supply/demand ratio.
         /// </summary>
         public float Price { get; set; } = 1.0f;
 
         /// <summary>
-        /// Base price (price when supply equals demand).
+        /// Base price in Crowns/kg (price when supply equals demand).
         /// </summary>
         public float BasePrice { get; set; } = 1.0f;
 
@@ -794,7 +794,7 @@ namespace EconSim.Core.Economy
         public float LastTradeVolume { get; set; }
 
         /// <summary>
-        /// Total gold paid to sellers during the last clearing pass.
+        /// Total Crowns paid to sellers during the last clearing pass.
         /// </summary>
         public float Revenue { get; set; }
     }

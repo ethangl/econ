@@ -14,6 +14,8 @@ namespace EconSim.Core.Simulation.Systems
         private const float MaxDailyIncrease = 0.01f;
         private const float MaxDailyDecrease = 0.03f;
         private const float MinUpwardLiquidityGate = 0.15f;
+        private const float PriceUnlockMinIncrease = 0.03f;
+        private const float PriceUnlockMaxIncrease = 0.05f;
 
         public string Name => "Prices";
         public int TickInterval => SimulationConfig.Intervals.Daily;
@@ -50,7 +52,19 @@ namespace EconSim.Core.Simulation.Systems
                         priceDelta *= liquidityGate;
                     }
 
-                    priceDelta = Clamp(priceDelta, -MaxDailyDecrease, MaxDailyIncrease);
+                    // If demand exists and stock is offered but no supply clears at current price,
+                    // accelerate upward repricing to break out of min-price lock conditions.
+                    bool priceLocked = demand > 0f
+                        && goodState.SupplyOffered > 0f
+                        && supply <= 0f
+                        && goodState.LastTradeVolume <= 0.0001f;
+                    if (priceLocked && priceDelta < PriceUnlockMinIncrease)
+                        priceDelta = PriceUnlockMinIncrease;
+
+                    float maxDailyIncrease = priceLocked
+                        ? PriceUnlockMaxIncrease
+                        : MaxDailyIncrease;
+                    priceDelta = Clamp(priceDelta, -MaxDailyDecrease, maxDailyIncrease);
                     goodState.Price *= 1f + priceDelta;
                     if (goodState.Price < 0.0001f)
                         goodState.Price = 0.0001f;

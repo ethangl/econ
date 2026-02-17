@@ -37,10 +37,10 @@ namespace EconSim.Core.Economy
         /// <summary>Whether this facility is currently operating.</summary>
         public bool IsActive;
 
-        /// <summary>Liquid funds available to this facility.</summary>
+        /// <summary>Liquid funds available to this facility (Crowns).</summary>
         public float Treasury;
 
-        /// <summary>Current wage paid per worker per day.</summary>
+        /// <summary>Current wage paid per worker per day (Crowns/day).</summary>
         public float WageRate;
 
         /// <summary>Daily revenue ring buffer (7-day).</summary>
@@ -88,7 +88,7 @@ namespace EconSim.Core.Economy
         /// Calculate current efficiency based on staffing.
         /// Formula: (workers / required)^α where α < 1 gives diminishing returns.
         /// </summary>
-        public float GetEfficiency(FacilityDef def, float alpha = 0.7f)
+        public float GetEfficiency(FacilityDef def, float alpha = 0.65f)
         {
             int requiredLabor = GetRequiredLabor(def);
             if (requiredLabor <= 0) return 1f;

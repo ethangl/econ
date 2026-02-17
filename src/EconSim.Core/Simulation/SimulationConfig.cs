@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace EconSim.Core.Simulation
 {
     /// <summary>
@@ -40,6 +42,19 @@ namespace EconSim.Core.Simulation
         public static class Economy
         {
             /// <summary>
+            /// Canonical money unit used across treasury, wages, and prices.
+            /// One Crown is defined as one gram of gold (0.001 kg).
+            /// </summary>
+            public static class Money
+            {
+                public const string UnitName = "Crown";
+                public const string UnitNamePlural = "Crowns";
+                public const float KgGoldPerCrown = 0.001f;
+                public const float CrownsPerKgGold = 1000f;
+                public const string PricePerKgLabel = "Crowns/kg";
+            }
+
+            /// <summary>
             /// When enabled, facilities receive an operating subsidy to prevent liquidity-driven collapse.
             /// </summary>
             public static readonly bool EnableFacilitySubsidies = true;
@@ -53,6 +68,65 @@ namespace EconSim.Core.Simulation
             /// Number of wage-debt days forgiven per tick while subsidies are enabled.
             /// </summary>
             public const int FacilityWageDebtReliefPerDay = 14;
+
+            /// <summary>
+            /// Temporary chain-isolation mode for focused tuning.
+            /// When enabled, only explicitly listed goods/facilities participate.
+            /// </summary>
+            public static readonly bool EnableChainIsolation = true;
+
+            /// <summary>
+            /// When enabled, subsistence wage is pegged directly to the raw salt base price
+            /// (Crowns/kg), instead of the basic basket model.
+            /// </summary>
+            public static readonly bool PegSubsistenceWageToRawSaltPrice = true;
+
+            /// <summary>
+            /// Share of bread demand covered by local subsistence stockpile before
+            /// remaining demand is routed to markets.
+            /// 0.99 means 99% subsistence / 1% market.
+            /// </summary>
+            public const float BreadSubsistenceShare = 0.99f;
+
+            private static readonly HashSet<string> EnabledGoods = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+            {
+                "raw_salt",
+                "salt",
+                "wheat",
+                "rye",
+                "barley",
+                "flour",
+                "bread"
+            };
+
+            private static readonly HashSet<string> EnabledFacilities = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+            {
+                "salt_works",
+                "salt_warehouse",
+                "farm",
+                "rye_farm",
+                "barley_farm",
+                "mill",
+                "bakery"
+            };
+
+            public static bool IsGoodEnabled(string goodId)
+            {
+                if (!EnableChainIsolation)
+                    return true;
+                if (string.IsNullOrWhiteSpace(goodId))
+                    return false;
+                return EnabledGoods.Contains(goodId);
+            }
+
+            public static bool IsFacilityEnabled(string facilityTypeId)
+            {
+                if (!EnableChainIsolation)
+                    return true;
+                if (string.IsNullOrWhiteSpace(facilityTypeId))
+                    return false;
+                return EnabledFacilities.Contains(facilityTypeId);
+            }
         }
 
         /// <summary>

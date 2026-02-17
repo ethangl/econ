@@ -120,6 +120,8 @@ namespace EconSim.Core.Simulation.Systems
             {
                 if (!good.NeedCategory.HasValue)
                     continue;
+                if (!SimulationConfig.Economy.IsGoodEnabled(good.Id))
+                    continue;
 
                 float perCapita = good.BaseConsumptionKgPerCapitaPerDay;
                 if (perCapita <= 0f)
@@ -166,6 +168,8 @@ namespace EconSim.Core.Simulation.Systems
                     continue;
 
                 if (good.NeedCategory != tier)
+                    continue;
+                if (!SimulationConfig.Economy.IsGoodEnabled(good.Id))
                     continue;
 
                 Market targetMarket = market;
@@ -293,6 +297,9 @@ namespace EconSim.Core.Simulation.Systems
                 var def = economy.FacilityDefs.Get(facility.TypeId);
                 if (def == null || def.IsExtraction)
                     continue;
+                if (!SimulationConfig.Economy.IsFacilityEnabled(facility.TypeId)
+                    || !SimulationConfig.Economy.IsGoodEnabled(def.OutputGoodId))
+                    continue;
 
                 // Zero-staffed facilities cannot consume inputs this tick.
                 if (facility.AssignedWorkers <= 0)
@@ -306,18 +313,26 @@ namespace EconSim.Core.Simulation.Systems
                 if (output == null)
                     continue;
 
-                var inputs = def.InputOverrides ?? output.Inputs;
-                if (inputs == null || inputs.Count == 0)
+                var selectedInputs = SelectBestInputVariantForOrders(
+                    economy,
+                    county.CountyId,
+                    market,
+                    transportCost,
+                    def,
+                    output);
+                if (selectedInputs == null || selectedInputs.Count == 0)
                     continue;
 
                 float remainingTreasury = Math.Max(0f, facility.Treasury);
                 if (remainingTreasury <= 0f)
                     continue;
 
-                foreach (var input in inputs)
+                foreach (var input in selectedInputs)
                 {
                     int inputRuntimeId = ResolveRuntimeId(economy.Goods, runtimeIdCache, input.GoodId);
                     if (inputRuntimeId < 0)
+                        continue;
+                    if (!SimulationConfig.Economy.IsGoodEnabled(input.GoodId))
                         continue;
 
                     Market targetMarket = market;
@@ -364,6 +379,98 @@ namespace EconSim.Core.Simulation.Systems
             }
         }
 
+        private static List<GoodInput> SelectBestInputVariantForOrders(
+            EconomyState economy,
+            int countyId,
+            Market localMarket,
+            float localTransportCost,
+            FacilityDef def,
+            GoodDef output)
+        {
+            List<GoodInput> bestInputs = null;
+            float bestCost = float.MaxValue;
+
+            foreach (var inputs in EnumerateInputVariants(def, output))
+            {
+                if (inputs == null || inputs.Count == 0)
+                    continue;
+
+                float variantCost = 0f;
+                bool valid = true;
+                for (int i = 0; i < inputs.Count; i++)
+                {
+                    var input = inputs[i];
+                    if (input.QuantityKg <= 0f)
+                    {
+                        valid = false;
+                        break;
+                    }
+
+                    Market targetMarket = localMarket;
+                    float targetTransportCost = localTransportCost;
+                    if (TryResolveOffMapMarket(economy, countyId, input.GoodId, out var offMapMarket, out float offMapTransportCost))
+                    {
+                        targetMarket = offMapMarket;
+                        targetTransportCost = offMapTransportCost;
+                    }
+
+                    if (!economy.Goods.TryGetRuntimeId(input.GoodId, out int inputRuntimeId))
+                    {
+                        valid = false;
+                        break;
+                    }
+                    if (!targetMarket.TryGetGoodState(inputRuntimeId, out var marketGood))
+                    {
+                        valid = false;
+                        break;
+                    }
+
+                    float effectivePrice = marketGood.Price * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
+                    if (effectivePrice <= 0f)
+                    {
+                        valid = false;
+                        break;
+                    }
+
+                    variantCost += input.QuantityKg * effectivePrice;
+                }
+
+                if (!valid || variantCost >= bestCost)
+                    continue;
+
+                bestCost = variantCost;
+                bestInputs = inputs;
+            }
+
+            return bestInputs;
+        }
+
+        private static IEnumerable<List<GoodInput>> EnumerateInputVariants(FacilityDef def, GoodDef output)
+        {
+            if (def?.InputOverrides != null && def.InputOverrides.Count > 0)
+            {
+                yield return def.InputOverrides;
+                yield break;
+            }
+
+            bool yieldedVariant = false;
+            if (output?.InputVariants != null)
+            {
+                for (int i = 0; i < output.InputVariants.Count; i++)
+                {
+                    var variant = output.InputVariants[i];
+                    if (variant?.Inputs == null || variant.Inputs.Count == 0)
+                        continue;
+
+                    yieldedVariant = true;
+                    yield return variant.Inputs;
+                }
+            }
+
+            if (!yieldedVariant && output?.Inputs != null && output.Inputs.Count > 0)
+                yield return output.Inputs;
+        }
+
         private static void ApplySubsistenceFromStockpile(
             CountyEconomy county,
             Dictionary<int, float> demandByGood,
@@ -385,7 +492,9 @@ namespace EconSim.Core.Simulation.Systems
                     equivalent += available * 0.5f;
                 }
 
-                float covered = Math.Min(breadNeed, equivalent);
+                float subsistenceShare = Clamp(SimulationConfig.Economy.BreadSubsistenceShare, 0f, 1f);
+                float subsistenceCap = breadNeed * subsistenceShare;
+                float covered = Math.Min(subsistenceCap, equivalent);
                 if (covered > 0f)
                 {
                     float requiredRaw = covered / 0.5f;

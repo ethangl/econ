@@ -91,10 +91,28 @@ namespace EconSim.Core.Simulation.Systems
                     market.TryGetTradableInventoryMinPrices(goodRuntimeId, out var minPriceBySeller);
                     supply = ComputePriceEligibleSupply(sellersByGood, minPriceBySeller, goodState.Price);
                 }
-                if (supply > 0f)
-                    _eligibleSupplyByGood[goodRuntimeId] = supply;
 
                 float demand = market.GetTradableDemand(goodRuntimeId);
+
+                // If demand exists and inventory is tradable but no lots are eligible at current price,
+                // lift clearing price to the lowest seller floor so funded buyers can transact.
+                if (demand > 0f
+                    && supply <= LotCullThreshold
+                    && market.TryGetTradableInventory(goodRuntimeId, out var unlockSellers)
+                    && unlockSellers != null
+                    && unlockSellers.Count > 0)
+                {
+                    market.TryGetTradableInventoryMinPrices(goodRuntimeId, out var unlockMinPrices);
+                    float unlockPrice = ComputeMinimumSellerFloor(unlockSellers, unlockMinPrices);
+                    if (unlockPrice > goodState.Price + 0.0001f)
+                    {
+                        goodState.Price = unlockPrice;
+                        supply = ComputePriceEligibleSupply(unlockSellers, unlockMinPrices, goodState.Price);
+                    }
+                }
+
+                if (supply > 0f)
+                    _eligibleSupplyByGood[goodRuntimeId] = supply;
                 if (demand > 0f)
                     _eligibleDemandByGood[goodRuntimeId] = demand;
 
@@ -298,6 +316,33 @@ namespace EconSim.Core.Simulation.Systems
                 return true;
 
             return clearingPrice + 0.0001f >= Math.Max(0f, minPrice);
+        }
+
+        private static float ComputeMinimumSellerFloor(
+            Dictionary<int, float> sellers,
+            Dictionary<int, float> minPriceBySeller)
+        {
+            if (sellers == null || sellers.Count == 0)
+                return 0f;
+
+            float minFloor = float.MaxValue;
+            foreach (var sellerEntry in sellers)
+            {
+                if (sellerEntry.Value <= LotCullThreshold)
+                    continue;
+
+                float floor = 0f;
+                if (minPriceBySeller != null
+                    && minPriceBySeller.TryGetValue(sellerEntry.Key, out float sellerFloor))
+                {
+                    floor = Math.Max(0f, sellerFloor);
+                }
+
+                if (floor < minFloor)
+                    minFloor = floor;
+            }
+
+            return minFloor == float.MaxValue ? 0f : minFloor;
         }
 
         private static bool TryResolveBuyer(

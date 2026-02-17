@@ -68,7 +68,7 @@ namespace EconSim.Core.Economy
     {
         public List<PopulationCohort> Cohorts = new List<PopulationCohort>();
 
-        /// <summary>Household treasury used for market purchases.</summary>
+        /// <summary>Household treasury used for market purchases (Crowns).</summary>
         public float Treasury;
 
         /// <summary>Number of unskilled workers currently employed.</summary>

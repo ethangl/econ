@@ -44,7 +44,7 @@ namespace EconSim.Core.Economy
         public int? GoodRuntimeId;
         public float Quantity;
         /// <summary>
-        /// Seller reservation floor for this lot (gold per kg).
+        /// Seller reservation floor for this lot (Crowns per kg).
         /// Market clears this lot only if current price meets/exceeds this value.
         /// </summary>
         public float MinUnitPrice;

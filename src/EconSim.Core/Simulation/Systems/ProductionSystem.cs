@@ -93,6 +93,15 @@ namespace EconSim.Core.Simulation.Systems
                 if (def == null)
                     continue;
 
+                if (!SimulationConfig.Economy.IsFacilityEnabled(facility.TypeId)
+                    || !SimulationConfig.Economy.IsGoodEnabled(def.OutputGoodId))
+                {
+                    facility.IsActive = false;
+                    facility.AssignedWorkers = 0;
+                    facility.InactiveDays = 1;
+                    continue;
+                }
+
                 if (facility.IsActive)
                 {
                     facility.InactiveDays = 0;
@@ -145,6 +154,9 @@ namespace EconSim.Core.Simulation.Systems
 
                 var def = economy.FacilityDefs.Get(facility.TypeId);
                 if (def == null)
+                    continue;
+                if (!SimulationConfig.Economy.IsFacilityEnabled(facility.TypeId)
+                    || !SimulationConfig.Economy.IsGoodEnabled(def.OutputGoodId))
                     continue;
 
                 int requiredLabor = Math.Max(1, facility.GetRequiredLabor(def));
@@ -405,40 +417,63 @@ namespace EconSim.Core.Simulation.Systems
             if (outputRuntimeId < 0)
                 return;
 
-            var inputs = def.InputOverrides ?? outputGood.Inputs;
-            if (inputs == null || inputs.Count == 0)
-                return;
-
             float throughput = facility.GetThroughput(def);
             if (throughput <= 0f)
                 return;
 
-            _inputRuntimeIdsBuffer.Clear();
-            for (int i = 0; i < inputs.Count; i++)
+            List<GoodInput> selectedInputs = null;
+            float possibleBatches = 0f;
+            foreach (var candidateInputs in EnumerateInputVariants(def, outputGood))
             {
-                int inputRuntimeId = ResolveRuntimeId(economy.Goods, inputs[i].GoodId);
+                if (candidateInputs == null || candidateInputs.Count == 0)
+                    continue;
+
+                float candidateBatches = throughput;
+                bool valid = true;
+                for (int i = 0; i < candidateInputs.Count; i++)
+                {
+                    var input = candidateInputs[i];
+                    if (input.QuantityKg <= 0f)
+                    {
+                        valid = false;
+                        break;
+                    }
+
+                    int inputRuntimeId = ResolveRuntimeId(economy.Goods, input.GoodId);
+                    if (inputRuntimeId < 0)
+                    {
+                        valid = false;
+                        break;
+                    }
+
+                    float available = facility.InputBuffer.Get(inputRuntimeId);
+                    float canMake = available / input.QuantityKg;
+                    if (canMake < candidateBatches)
+                        candidateBatches = canMake;
+                }
+
+                if (!valid || candidateBatches <= possibleBatches)
+                    continue;
+
+                selectedInputs = candidateInputs;
+                possibleBatches = candidateBatches;
+            }
+
+            if (selectedInputs == null || possibleBatches <= 0.001f)
+                return;
+
+            _inputRuntimeIdsBuffer.Clear();
+            for (int i = 0; i < selectedInputs.Count; i++)
+            {
+                int inputRuntimeId = ResolveRuntimeId(economy.Goods, selectedInputs[i].GoodId);
                 if (inputRuntimeId < 0)
                     return;
                 _inputRuntimeIdsBuffer.Add(inputRuntimeId);
             }
 
-            float possibleBatches = throughput;
-            for (int i = 0; i < inputs.Count; i++)
+            for (int i = 0; i < selectedInputs.Count; i++)
             {
-                var input = inputs[i];
-                int inputRuntimeId = _inputRuntimeIdsBuffer[i];
-                float available = facility.InputBuffer.Get(inputRuntimeId);
-                float canMake = available / input.QuantityKg;
-                if (canMake < possibleBatches)
-                    possibleBatches = canMake;
-            }
-
-            if (possibleBatches <= 0.001f)
-                return;
-
-            for (int i = 0; i < inputs.Count; i++)
-            {
-                var input = inputs[i];
+                var input = selectedInputs[i];
                 int inputRuntimeId = _inputRuntimeIdsBuffer[i];
                 facility.InputBuffer.Remove(inputRuntimeId, input.QuantityKg * possibleBatches);
             }
@@ -477,6 +512,8 @@ namespace EconSim.Core.Simulation.Systems
                 if (quantity <= 0.001f)
                     continue;
                 if (!economy.Goods.TryGetByRuntimeId(goodRuntimeId, out var good))
+                    continue;
+                if (!SimulationConfig.Economy.IsGoodEnabled(good.Id))
                     continue;
 
                 string goodId = good.Id;
@@ -547,22 +584,42 @@ namespace EconSim.Core.Simulation.Systems
 
             float inputCostPerUnit = 0f;
             var outputGood = economy.Goods.Get(def.OutputGoodId);
-            var inputs = outputGood != null ? (def.InputOverrides ?? outputGood.Inputs) : null;
-            if (inputs != null)
+            if (outputGood != null)
             {
-                for (int i = 0; i < inputs.Count; i++)
+                float bestVariantCost = float.MaxValue;
+                foreach (var inputs in EnumerateInputVariants(def, outputGood))
                 {
-                    var input = inputs[i];
-                    int inputRuntimeId = ResolveRuntimeId(economy.Goods, input.GoodId);
-                    float inputPrice = 0f;
-                    if (inputRuntimeId >= 0 && market != null && market.TryGetGoodState(inputRuntimeId, out var inputState))
-                        inputPrice = inputState.Price;
-                    else
-                        inputPrice = economy.Goods.Get(input.GoodId)?.BasePrice ?? 0f;
+                    if (inputs == null || inputs.Count == 0)
+                        continue;
 
-                    float landedInputPrice = inputPrice * (1f + Math.Max(0f, transportCost) * V2TransportFeeRate);
-                    inputCostPerUnit += input.QuantityKg * landedInputPrice;
+                    float variantCost = 0f;
+                    bool valid = true;
+                    for (int i = 0; i < inputs.Count; i++)
+                    {
+                        var input = inputs[i];
+                        if (input.QuantityKg <= 0f)
+                        {
+                            valid = false;
+                            break;
+                        }
+
+                        int inputRuntimeId = ResolveRuntimeId(economy.Goods, input.GoodId);
+                        float inputPrice;
+                        if (inputRuntimeId >= 0 && market != null && market.TryGetGoodState(inputRuntimeId, out var inputState))
+                            inputPrice = inputState.Price;
+                        else
+                            inputPrice = economy.Goods.Get(input.GoodId)?.BasePrice ?? 0f;
+
+                        float landedInputPrice = inputPrice * (1f + Math.Max(0f, transportCost) * V2TransportFeeRate);
+                        variantCost += input.QuantityKg * landedInputPrice;
+                    }
+
+                    if (valid && variantCost < bestVariantCost)
+                        bestVariantCost = variantCost;
                 }
+
+                if (bestVariantCost < float.MaxValue)
+                    inputCostPerUnit = bestVariantCost;
             }
 
             float haulingCostPerUnit = Math.Max(0f, marketPrice) * Math.Max(0f, transportCost) * V2TransportFeeRate;
@@ -582,6 +639,32 @@ namespace EconSim.Core.Simulation.Systems
                 : 0f;
 
             return Math.Max(0f, Math.Max(minFromCost, minFromBase));
+        }
+
+        private static IEnumerable<List<GoodInput>> EnumerateInputVariants(FacilityDef def, GoodDef outputGood)
+        {
+            if (def?.InputOverrides != null && def.InputOverrides.Count > 0)
+            {
+                yield return def.InputOverrides;
+                yield break;
+            }
+
+            bool yieldedVariant = false;
+            if (outputGood?.InputVariants != null)
+            {
+                for (int i = 0; i < outputGood.InputVariants.Count; i++)
+                {
+                    var variant = outputGood.InputVariants[i];
+                    if (variant?.Inputs == null || variant.Inputs.Count == 0)
+                        continue;
+
+                    yieldedVariant = true;
+                    yield return variant.Inputs;
+                }
+            }
+
+            if (!yieldedVariant && outputGood?.Inputs != null && outputGood.Inputs.Count > 0)
+                yield return outputGood.Inputs;
         }
 
         private static int GetAvailableWorkers(

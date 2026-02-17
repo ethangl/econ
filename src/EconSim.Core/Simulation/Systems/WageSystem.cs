@@ -33,10 +33,22 @@ namespace EconSim.Core.Simulation.Systems
                 : state.SmoothedBasketCost + (basketCost - state.SmoothedBasketCost) * BasketEmaAlpha;
 
             float rawSubsistence = state.SmoothedBasketCost * 1.2f;
-            float prevSubsistence = state.SubsistenceWage > 0f ? state.SubsistenceWage : rawSubsistence;
-            float min = prevSubsistence * (1f - DailyClamp);
-            float max = prevSubsistence * (1f + DailyClamp);
-            state.SubsistenceWage = Clamp(rawSubsistence, min, max);
+            float rawSaltBasePrice = 0f;
+            bool peggedToRawSalt = SimulationConfig.Economy.PegSubsistenceWageToRawSaltPrice
+                && TryGetRawSaltBasePrice(economy, out rawSaltBasePrice);
+
+            if (peggedToRawSalt)
+            {
+                // Peg mode is intended as a direct control surface during salt-chain tuning.
+                state.SubsistenceWage = Math.Max(0f, rawSaltBasePrice);
+            }
+            else
+            {
+                float prevSubsistence = state.SubsistenceWage > 0f ? state.SubsistenceWage : rawSubsistence;
+                float min = prevSubsistence * (1f - DailyClamp);
+                float max = prevSubsistence * (1f + DailyClamp);
+                state.SubsistenceWage = Clamp(rawSubsistence, min, max);
+            }
 
             int dayIndex = state.CurrentDay % 7;
             var facilities = economy.GetFacilitiesDense();
@@ -101,15 +113,7 @@ namespace EconSim.Core.Simulation.Systems
 
         private float ComputeBasicBasketCost(EconomyState economy)
         {
-            _zonePopulationByMarket.Clear();
-            foreach (var kvp in economy.CountyToMarket)
-            {
-                if (!economy.Counties.TryGetValue(kvp.Key, out var county))
-                    continue;
-
-                _zonePopulationByMarket.TryGetValue(kvp.Value, out int population);
-                _zonePopulationByMarket[kvp.Value] = population + county.Population.Total;
-            }
+            RebuildZonePopulationByMarket(economy);
 
             float weightedBasket = 0f;
             float weightedPopulation = 0f;
@@ -129,6 +133,8 @@ namespace EconSim.Core.Simulation.Systems
                 foreach (var good in economy.Goods.ConsumerGoods)
                 {
                     if (good.NeedCategory != NeedCategory.Basic)
+                        continue;
+                    if (!SimulationConfig.Economy.IsGoodEnabled(good.Id))
                         continue;
                     if (good.RuntimeId < 0)
                         continue;
@@ -151,10 +157,39 @@ namespace EconSim.Core.Simulation.Systems
             foreach (var good in economy.Goods.ConsumerGoods)
             {
                 if (good.NeedCategory == NeedCategory.Basic)
+                {
+                    if (!SimulationConfig.Economy.IsGoodEnabled(good.Id))
+                        continue;
                     baseBasket += good.BasePrice * good.BaseConsumptionKgPerCapitaPerDay;
+                }
             }
 
             return baseBasket;
+        }
+
+        private static bool TryGetRawSaltBasePrice(EconomyState economy, out float rawSaltBasePrice)
+        {
+            rawSaltBasePrice = 0f;
+            if (!SimulationConfig.Economy.IsGoodEnabled("raw_salt"))
+                return false;
+            var rawSalt = economy.Goods.Get("raw_salt");
+            if (rawSalt == null)
+                return false;
+            rawSaltBasePrice = rawSalt.BasePrice;
+            return rawSaltBasePrice > 0f;
+        }
+
+        private void RebuildZonePopulationByMarket(EconomyState economy)
+        {
+            _zonePopulationByMarket.Clear();
+            foreach (var kvp in economy.CountyToMarket)
+            {
+                if (!economy.Counties.TryGetValue(kvp.Key, out var county))
+                    continue;
+
+                _zonePopulationByMarket.TryGetValue(kvp.Value, out int population);
+                _zonePopulationByMarket[kvp.Value] = population + county.Population.Total;
+            }
         }
 
         private static float Clamp(float value, float min, float max)
