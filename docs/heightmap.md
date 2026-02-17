@@ -41,7 +41,7 @@ height[neighbor] = height[current] ^ blobPower * random(0.9, 1.1)
 
 ## Templates
 
-14 predefined templates, each a DSL script producing a characteristic geography:
+9 predefined templates, each a DSL script producing a characteristic geography:
 
 | Template      | Character                            |
 | ------------- | ------------------------------------ |
@@ -51,14 +51,9 @@ height[neighbor] = height[current] ^ blobPower * random(0.9, 1.1)
 | Continents    | Large landmasses with inland seas    |
 | Pangea        | Single supercontinent                |
 | HighIsland    | Mountainous island                   |
-| Atoll         | Ring islands around central lagoon   |
 | Peninsula     | Land extending into water            |
-| Mediterranean | Inland sea with surrounding land     |
-| Isthmus       | Narrow land bridge                   |
 | Shattered     | Fragmented terrain                   |
-| Taklamakan    | Basin surrounded by mountains        |
 | OldWorld      | Multi-continent with straits         |
-| Fractious     | Dense, broken landmasses             |
 
 Same template + different seed = maps that feel related but are unique.
 

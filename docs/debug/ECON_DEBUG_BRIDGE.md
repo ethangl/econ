@@ -109,7 +109,7 @@ Generate a fresh map and run the simulation for N months. Enters play mode if ne
 | `template`  | string | "Continents" | Heightmap template (see below)          |
 | `months`    | int    | 6            | Simulation months to run (30 days each) |
 
-**Templates:** Continents, Archipelago, HighIsland, LowIsland, Atoll, Volcano, Mediterranean, Peninsula, Pangaea, Isthmus, Shattered
+**Templates:** Continents, Archipelago, HighIsland, LowIsland, Volcano, Peninsula, Pangea, Shattered, OldWorld
 
 ### run_months
 

@@ -11,14 +11,9 @@ namespace MapGen.Core
         Continents,
         Pangea,
         HighIsland,
-        Atoll,
         Peninsula,
-        Mediterranean,
-        Isthmus,
         Shattered,
-        Taklamakan,
-        OldWorld,
-        Fractious
+        OldWorld
     }
 
     /// <summary>

@@ -65,12 +65,12 @@ Everything is generated as a static snapshot. There's no simulation of:
 
 ### Template Scale Mismatch
 
-The heightmap templates produce wildly different land areas at the same point count. 40k points on an isthmus vs. 40k points on a pangea results in:
+The heightmap templates produce wildly different land areas at the same point count. 40k points on a peninsula vs. 40k points on a pangea results in:
 
-| Template | Land Area | Cell Density on Land |
-| -------- | --------- | -------------------- |
-| Isthmus  | Small     | Very high (detailed) |
-| Pangea   | Huge      | Very low (sparse)    |
+| Template  | Land Area | Cell Density on Land |
+| --------- | --------- | -------------------- |
+| Peninsula | Small     | Very high (detailed) |
+| Pangea    | Huge      | Very low (sparse)    |
 
 The templates are designed for visual variety, not consistent simulation scale.
 
@@ -78,7 +78,7 @@ The templates are designed for visual variety, not consistent simulation scale.
 
 - Cell count affects simulation performance
 - Want consistent "resolution" (cells per county, cells per market zone)
-- An isthmus might have 50 cells per county; a pangea might have 3
+- A peninsula might have 50 cells per county; a pangea might have 3
 
 **What we'll likely do:**
 

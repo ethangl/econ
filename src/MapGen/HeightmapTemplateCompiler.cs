@@ -121,7 +121,6 @@ namespace MapGen.Core
             switch (template)
             {
                 case HeightmapTemplateType.LowIsland:
-                case HeightmapTemplateType.Atoll:
                     return (0.10f, 0.60f);
                 case HeightmapTemplateType.HighIsland:
                 case HeightmapTemplateType.Volcano:
@@ -129,19 +128,14 @@ namespace MapGen.Core
                 case HeightmapTemplateType.Archipelago:
                     return (0.08f, 0.68f);
                 case HeightmapTemplateType.Shattered:
-                case HeightmapTemplateType.Fractious:
                     return (0.15f, 0.68f);
                 case HeightmapTemplateType.Continents:
-                case HeightmapTemplateType.Mediterranean:
                     return (0.25f, 0.82f);
                 case HeightmapTemplateType.Peninsula:
-                case HeightmapTemplateType.Isthmus:
                     return (0.20f, 0.78f);
                 case HeightmapTemplateType.Pangea:
                 case HeightmapTemplateType.OldWorld:
                     return (0.35f, 0.92f);
-                case HeightmapTemplateType.Taklamakan:
-                    return (0.20f, 0.86f);
                 default:
                     return (0.15f, 0.85f);
             }

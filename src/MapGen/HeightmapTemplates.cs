@@ -108,19 +108,6 @@ Pit 3-5 625m-1875m 15-85 20-80
 ";
 
         /// <summary>
-        /// Atoll: Ring islands around central lagoon.
-        /// Good for: Tropical paradise, isolated settings.
-        /// </summary>
-        public const string Atoll = @"
-Hill 1 4687.5m-5000m 50-60 45-55
-Hill 1.5 1875m-3125m 25-75 30-70
-Hill .5 1875m-3125m 25-35 30-70
-Smooth 1
-Multiply 0.2 312.5m-5000m
-Hill 0.5 625m-1250m 50-55 48-52
-";
-
-        /// <summary>
         /// Peninsula: Land extending into water.
         /// Good for: Coastal kingdoms, maritime settings.
         /// </summary>
@@ -136,53 +123,11 @@ Smooth 3
 Invert 0.4 both
 ";
 
-        /// <summary>
-        /// Mediterranean: Inland sea with surrounding land.
-        /// Good for: Ancient world settings, trade-focused campaigns.
-        /// </summary>
-        public const string Mediterranean = @"
-Range 4-6 1875m-5000m 0-100 0-10
-Range 4-6 1875m-5000m 0-100 90-100
-Hill 6-8 1875m-3125m 10-90 0-5
-Hill 6-8 1875m-3125m 10-90 95-100
-Multiply 0.9 land
-Mask -2
-Smooth 1
-Hill 2-3 1875m-4375m 0-5 20-80
-Hill 2-3 1875m-4375m 95-100 20-80
-Trough 3-6 2500m-3125m 0-100 0-10
-Trough 3-6 2500m-3125m 0-100 90-100
-";
-
-        public const string Isthmus = @"
-Hill 5-10 937.5m-1875m 0-30 0-20
-Hill 5-10 937.5m-1875m 10-50 20-40
-Hill 5-10 937.5m-1875m 30-70 40-60
-Hill 5-10 937.5m-1875m 50-90 60-80
-Hill 5-10 937.5m-1875m 70-100 80-100
-Smooth 2
-Trough 4-8 937.5m-1875m 0-30 0-20
-Trough 4-8 937.5m-1875m 10-50 20-40
-Trough 4-8 937.5m-1875m 30-70 40-60
-Trough 4-8 937.5m-1875m 50-90 60-80
-Trough 4-8 937.5m-1875m 70-100 80-100
-Invert 0.25 x
-";
-
         public const string Shattered = @"
 Hill 8 2187.5m-2500m 15-85 30-70
 Trough 10-20 2500m-3125m 5-95 5-95
 Range 5-7 1875m-2500m 10-90 20-80
 Pit 12-20 1875m-2500m 15-85 20-80
-";
-
-        public const string Taklamakan = @"
-Hill 1-3 1250m-1875m 30-70 30-70
-Hill 2-4 3750m-5312.5m 0-5 0-100
-Hill 2-4 3750m-5312.5m 95-100 0-100
-Hill 3-4 3750m-5312.5m 20-80 0-5
-Hill 3-4 3750m-5312.5m 20-80 95-100
-Smooth 3
 ";
 
         public const string OldWorld = @"
@@ -199,14 +144,6 @@ Trough 6-8 1250m-3125m 15-85 45-65
 Pit 5-6 1250m-1875m 10-90 10-90
 ";
 
-        public const string Fractious = @"
-Hill 12-15 3125m-5000m 5-95 5-95
-Mask -1.5
-Mask 3
-Add -1250m 625m-5000m
-Range 6-8 2500m-3125m 5-95 10-90
-";
-
         /// <summary>
         /// Get template by name (case-insensitive).
         /// Returns null if not found.
@@ -221,14 +158,9 @@ Range 6-8 2500m-3125m 5-95 10-90
                 case "continents": return Continents;
                 case "pangea": return Pangea;
                 case "highisland": return HighIsland;
-                case "atoll": return Atoll;
                 case "peninsula": return Peninsula;
-                case "mediterranean": return Mediterranean;
-                case "isthmus": return Isthmus;
                 case "shattered": return Shattered;
-                case "taklamakan": return Taklamakan;
                 case "oldworld": return OldWorld;
-                case "fractious": return Fractious;
                 default: return null;
             }
         }
@@ -249,14 +181,9 @@ Range 6-8 2500m-3125m 5-95 10-90
             "Continents",
             "Pangea",
             "HighIsland",
-            "Atoll",
             "Peninsula",
-            "Mediterranean",
-            "Isthmus",
             "Shattered",
-            "Taklamakan",
-            "OldWorld",
-            "Fractious"
+            "OldWorld"
         };
     }
 }
