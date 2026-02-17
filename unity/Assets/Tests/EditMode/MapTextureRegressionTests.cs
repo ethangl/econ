@@ -54,13 +54,19 @@ namespace EconSim.Tests
             }
 
             bool updateMode = TextureTestHarness.IsBaselineUpdateModeEnabled();
+            var runAGoldenHashes = new Dictionary<string, string>(GoldenTextureProperties.Length);
+            foreach (string textureProperty in GoldenTextureProperties)
+            {
+                runAGoldenHashes[textureProperty] = runAHashes[textureProperty];
+            }
+
             if (updateMode)
             {
-                TextureTestHarness.UpsertExpectedTextureHashes(seed, template, cellCount, runAHashes);
+                TextureTestHarness.UpsertExpectedTextureHashes(seed, template, cellCount, runAGoldenHashes);
             }
 
             Dictionary<string, string> expectedHashes = updateMode
-                ? runAHashes
+                ? runAGoldenHashes
                 : TextureTestHarness.LoadExpectedTextureHashes(seed, template, cellCount);
 
             foreach (var expectedKey in expectedHashes.Keys)

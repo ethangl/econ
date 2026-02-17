@@ -160,6 +160,8 @@ namespace EconSim.Core.Simulation.Systems
                 var pair = _activeFacilitiesBuffer[i];
                 if (pair.facility.WageRate + 0.0001f < subsistenceWage)
                     continue;
+                if (pair.facility.WageDebtDays >= DistressedDebtDays)
+                    continue;
 
                 int needed = Math.Max(0, pair.facility.GetRequiredLabor(pair.def) - pair.facility.AssignedWorkers);
                 if (needed <= 0 || idle <= 0)

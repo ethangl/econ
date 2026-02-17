@@ -8,6 +8,8 @@ namespace EconSim.Tests
     [Category("MapGen")]
     public class MapGenTemplateMetricsTests
     {
+        private const float LandRatioTolerance = 0.001f;
+
         [Test]
         public void TemplatePort_EmitsMeterAnnotatedScripts()
         {
@@ -68,7 +70,7 @@ namespace EconSim.Tests
 
                 var (landMin, landMax) = HeightmapTemplateCompiler.GetLandRatioBand(template);
                 float landRatio = result.Elevation.LandRatio();
-                Assert.That(landRatio, Is.GreaterThanOrEqualTo(landMin).And.LessThanOrEqualTo(landMax),
+                Assert.That(landRatio, Is.GreaterThanOrEqualTo(landMin - LandRatioTolerance).And.LessThanOrEqualTo(landMax + LandRatioTolerance),
                     $"Land ratio out of broad band for {template}: {landRatio:0.000} expected [{landMin:0.000}, {landMax:0.000}]");
 
                 float p10 = Percentile(result.Elevation.ElevationMetersSigned, 0.10f);

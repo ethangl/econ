@@ -435,8 +435,11 @@ namespace EconSim.Tests
         {
             var state = new SimulationState
             {
-                Economy = new EconomyState()
+                Economy = new EconomyState(),
+                CurrentDay = 1
             };
+            state.Economy.Goods.Register(new GoodDef { Id = "spices", Name = "Spices", Category = GoodCategory.Raw });
+            state.Economy.Goods.Register(new GoodDef { Id = "wheat", Name = "Wheat", Category = GoodCategory.Raw });
 
             var offMap = new Market
             {
@@ -445,6 +448,7 @@ namespace EconSim.Tests
                 Name = "OffMap",
                 OffMapGoodIds = new HashSet<string> { "spices" }
             };
+            offMap.BindGoods(state.Economy.Goods);
             offMap.Goods["spices"] = new MarketGoodState
             {
                 GoodId = "spices",
@@ -467,12 +471,9 @@ namespace EconSim.Tests
             system.Initialize(state, null);
             system.Tick(state, null);
 
-            Assert.That(offMap.Goods["spices"].Supply, Is.EqualTo(1000f).Within(0.0001f));
-            Assert.That(offMap.Goods["spices"].SupplyOffered, Is.EqualTo(1000f).Within(0.0001f));
-            Assert.That(offMap.Goods["wheat"].Supply, Is.EqualTo(7f).Within(0.0001f),
-                "Only goods listed in OffMapGoodIds should be replenished.");
-            Assert.That(offMap.Goods["wheat"].SupplyOffered, Is.EqualTo(7f).Within(0.0001f),
-                "Only goods listed in OffMapGoodIds should be replenished.");
+            Assert.That(offMap.GetTotalInventory("spices"), Is.EqualTo(1000f).Within(0.0001f));
+            Assert.That(offMap.GetTotalInventory("wheat"), Is.EqualTo(0f).Within(0.0001f),
+                "Only goods listed in OffMapGoodIds should receive replenishment inventory lots.");
         }
 
         [Test]
@@ -600,7 +601,6 @@ namespace EconSim.Tests
             {
                 Population = CountyPopulation.FromTotal(1000)
             };
-            county.Stockpile.Add("wheat", 10f);
             economy.Counties[1] = county;
 
             var facility = new Facility
@@ -608,8 +608,12 @@ namespace EconSim.Tests
                 Id = 1,
                 TypeId = "alt_mill",
                 CountyId = 1,
-                CellId = 1
+                CellId = 1,
+                IsActive = true,
+                AssignedWorkers = 1
             };
+            facility.BindGoods(economy.Goods);
+            facility.InputBuffer.Add("wheat", 10f);
             economy.Facilities[facility.Id] = facility;
             county.FacilityIds.Add(facility.Id);
 
@@ -622,9 +626,9 @@ namespace EconSim.Tests
             system.Initialize(state, null);
             system.Tick(state, null);
 
-            Assert.That(county.Stockpile.Get("alt_food"), Is.GreaterThan(0f),
+            Assert.That(facility.OutputBuffer.Get("alt_food"), Is.GreaterThan(0f),
                 "Processing should run from facility override inputs even when good default inputs are null.");
-            Assert.That(county.Stockpile.Get("wheat"), Is.LessThan(10f),
+            Assert.That(facility.InputBuffer.Get("wheat"), Is.LessThan(10f),
                 "Input goods should be consumed when production succeeds.");
         }
 
