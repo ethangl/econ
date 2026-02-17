@@ -86,3 +86,5 @@ crashlytics-build.properties
 
 # Python bytecode caches
 **/__pycache__/
+
+/scripts/*.txt

@@ -653,6 +653,9 @@ namespace EconSim.Core.Simulation
                 _mapData, _state.Economy, _state.Transport, nextId, _marketZoneMaxTransportCost);
             foreach (var offMapMarket in offMapResult.Markets)
             {
+                // OffMapMarketPlacer pre-populates Goods and prices, but runtime IDs are unresolved
+                // until the market is bound to the active goods registry.
+                offMapMarket.BindGoods(_state.Economy.Goods);
                 _state.Economy.Markets[offMapMarket.Id] = offMapMarket;
             }
             if (offMapResult.Markets.Count > 0)
