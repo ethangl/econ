@@ -14,11 +14,14 @@ namespace MapGen.Core
 
             CellMesh mesh = GenerateMesh(config);
             WorldMetadata world = BuildWorldMetadata(config, mesh);
+            float terrainDomainMaxElevation = ResolveTerrainDomainMaxElevation(config);
+            float terrainDomainMaxSeaDepth = ResolveTerrainDomainMaxSeaDepth(config);
             var elevation = new ElevationField(
                 mesh,
-                config.MaxSeaDepthMeters,
-                config.MaxElevationMeters,
-                config.TerrainShapeReferenceSpanMeters);
+                terrainDomainMaxSeaDepth,
+                terrainDomainMaxElevation,
+                config.TerrainShapeReferenceSpanMeters,
+                config.TerrainShapeInitialSeaDepthMeters);
             GenerateElevationFromDsl(elevation, config);
             EnsureNonDegenerateLandWater(elevation);
             var climate = new ClimateField(mesh);
@@ -30,6 +33,12 @@ namespace MapGen.Core
             BiomeGenerationOps.Compute(biomes, elevation, climate, rivers, config);
             var political = new PoliticalField(mesh);
             PoliticalGenerationOps.Compute(political, biomes, rivers, elevation, config);
+            RemapElevationToWorldEnvelope(
+                elevation,
+                terrainDomainMaxSeaDepth,
+                terrainDomainMaxElevation,
+                config.MaxSeaDepthMeters,
+                config.MaxElevationMeters);
 
             return new MapGenResult
             {
@@ -150,6 +159,58 @@ namespace MapGen.Core
 
             elevation[minIndex] = -0.1f * elevation.MaxSeaDepthMeters;
             elevation[maxIndex] = 0.1f * elevation.MaxElevationMeters;
+        }
+
+        static float ResolveTerrainDomainMaxElevation(MapGenConfig config)
+        {
+            float domain = config.TerrainShapeDomainMaxElevationMeters;
+            if (float.IsNaN(domain) || float.IsInfinity(domain) || domain <= 0f)
+                domain = config.MaxElevationMeters;
+            return Math.Min(config.MaxElevationMeters, domain);
+        }
+
+        static float ResolveTerrainDomainMaxSeaDepth(MapGenConfig config)
+        {
+            float domain = config.TerrainShapeDomainMaxSeaDepthMeters;
+            if (float.IsNaN(domain) || float.IsInfinity(domain) || domain <= 0f)
+                domain = config.MaxSeaDepthMeters;
+            return Math.Min(config.MaxSeaDepthMeters, domain);
+        }
+
+        static void RemapElevationToWorldEnvelope(
+            ElevationField elevation,
+            float fromSeaDepthMeters,
+            float fromMaxElevationMeters,
+            float toSeaDepthMeters,
+            float toMaxElevationMeters)
+        {
+            if (Math.Abs(fromSeaDepthMeters - toSeaDepthMeters) <= 0.0001f
+                && Math.Abs(fromMaxElevationMeters - toMaxElevationMeters) <= 0.0001f)
+            {
+                return;
+            }
+
+            float invFromSea = fromSeaDepthMeters > 0f ? 1f / fromSeaDepthMeters : 0f;
+            float invFromLand = fromMaxElevationMeters > 0f ? 1f / fromMaxElevationMeters : 0f;
+
+            for (int i = 0; i < elevation.CellCount; i++)
+            {
+                float h = elevation.ElevationMetersSigned[i];
+                if (h > 0f)
+                {
+                    float t = h * invFromLand;
+                    if (t < 0f) t = 0f;
+                    if (t > 1f) t = 1f;
+                    elevation.ElevationMetersSigned[i] = t * toMaxElevationMeters;
+                }
+                else if (h < 0f)
+                {
+                    float t = -h * invFromSea;
+                    if (t < 0f) t = 0f;
+                    if (t > 1f) t = 1f;
+                    elevation.ElevationMetersSigned[i] = -t * toSeaDepthMeters;
+                }
+            }
         }
 
         static WorldMetadata BuildWorldMetadata(MapGenConfig config, CellMesh mesh)

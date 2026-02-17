@@ -16,11 +16,18 @@ namespace MapGen.Core
         public float LatitudeSouth = -50f;
 
         // Elevation envelope in signed meters (sea level = 0).
-        public float MaxElevationMeters = 5000f;
-        public float MaxSeaDepthMeters = 5000f;
+        public float MaxElevationMeters = 8000f;
+        public float MaxSeaDepthMeters = 8000f;
+        // Terrain-shaping domain ceilings. The generator clamps into this domain first,
+        // then values are remapped to the world envelope when the envelope is larger.
+        public float TerrainShapeDomainMaxElevationMeters = 5000f;
+        public float TerrainShapeDomainMaxSeaDepthMeters = 5000f;
         // Reference span used by terrain-shaping DSL ops (Hill/Pit/Range/Trough/Strait).
         // Keep fixed to preserve morphology when only the elevation envelope changes.
         public float TerrainShapeReferenceSpanMeters = 6250f;
+        // Initial water fill depth for terrain shaping before DSL ops (sea level = 0).
+        // This is clamped to MaxSeaDepthMeters at runtime.
+        public float TerrainShapeInitialSeaDepthMeters = 1250f;
 
         // Climate defaults.
         public float EquatorTempC = 29f;
@@ -119,8 +126,14 @@ namespace MapGen.Core
                 throw new ArgumentOutOfRangeException(nameof(LatitudeSouth), "LatitudeSouth must be within [-90, 90].");
             if (MaxElevationMeters <= 0f) throw new ArgumentOutOfRangeException(nameof(MaxElevationMeters), "MaxElevationMeters must be positive.");
             if (MaxSeaDepthMeters <= 0f) throw new ArgumentOutOfRangeException(nameof(MaxSeaDepthMeters), "MaxSeaDepthMeters must be positive.");
+            if (float.IsNaN(TerrainShapeDomainMaxElevationMeters) || float.IsInfinity(TerrainShapeDomainMaxElevationMeters) || TerrainShapeDomainMaxElevationMeters <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(TerrainShapeDomainMaxElevationMeters), "TerrainShapeDomainMaxElevationMeters must be positive and finite.");
+            if (float.IsNaN(TerrainShapeDomainMaxSeaDepthMeters) || float.IsInfinity(TerrainShapeDomainMaxSeaDepthMeters) || TerrainShapeDomainMaxSeaDepthMeters <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(TerrainShapeDomainMaxSeaDepthMeters), "TerrainShapeDomainMaxSeaDepthMeters must be positive and finite.");
             if (float.IsNaN(TerrainShapeReferenceSpanMeters) || float.IsInfinity(TerrainShapeReferenceSpanMeters) || TerrainShapeReferenceSpanMeters <= 0f)
                 throw new ArgumentOutOfRangeException(nameof(TerrainShapeReferenceSpanMeters), "TerrainShapeReferenceSpanMeters must be positive and finite.");
+            if (float.IsNaN(TerrainShapeInitialSeaDepthMeters) || float.IsInfinity(TerrainShapeInitialSeaDepthMeters) || TerrainShapeInitialSeaDepthMeters <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(TerrainShapeInitialSeaDepthMeters), "TerrainShapeInitialSeaDepthMeters must be positive and finite.");
             if (LapseRateCPerKm <= 0f) throw new ArgumentOutOfRangeException(nameof(LapseRateCPerKm), "LapseRateCPerKm must be positive.");
             if (MaxAnnualPrecipitationMm <= 0f) throw new ArgumentOutOfRangeException(nameof(MaxAnnualPrecipitationMm), "MaxAnnualPrecipitationMm must be positive.");
             if (RiverThreshold <= 0f) throw new ArgumentOutOfRangeException(nameof(RiverThreshold), "RiverThreshold must be positive.");
