@@ -534,7 +534,6 @@ namespace EconSim.Core.Economy
                 { "sawmill", "timber" },
                 { "shearing_shed", "sheep" },
                 { "tannery", "hides" },
-                { "dairy", "goats" },
                 { "malthouse", "barley" },
                 { "salt_warehouse", "raw_salt" },
                 { "dye_works", "dye_plants" }
@@ -591,7 +590,6 @@ namespace EconSim.Core.Economy
                 { "workshop", new List<string> { "sawmill" } },
                 { "spinning_mill", new List<string> { "shearing_shed" } },
                 { "cobbler", new List<string> { "tannery" } },
-                { "creamery", new List<string> { "dairy" } },
                 { "brewery", new List<string> { "malthouse" } },
                 { "dyer", new List<string> { "dye_works" } }
             };

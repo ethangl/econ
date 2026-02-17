@@ -54,7 +54,7 @@ The analyzer prints:
 
 ## Recommended Workflow
 
-1. Generate a fresh dump with the bridge (`runMonths`, `runDays`, or `dump`).
+1. Generate a fresh dump with the bridge (`generate_and_run`, `run_months`, or `dump`).
 2. Run chain diagnosis:
 
 ```bash
@@ -75,6 +75,9 @@ scripts/compare_econ_dumps.sh <bench.json> <candidate.json> 15
 ```
 
 5. Re-run chain diagnosis on both benchmark and candidate to confirm the classification changed in the expected direction.
+
+For the canonical hands-off 90-day benchmark flow, follow:
+- `docs/debug/ECON_DEBUG_BRIDGE.md` section `Hands-off 90-day benchmark process (canonical)`.
 
 ## Interpretation Notes
 

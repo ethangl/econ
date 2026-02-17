@@ -603,52 +603,6 @@ namespace EconSim.Core.Economy
                 BasePrice = 20.0f  // 1 cloth (8.0) + 1 dye (5.0) + skilled dyeing
             });
 
-            // =============================================
-            // CHAIN 6: Dairy (Goats → Milk → Cheese)
-            // Milk is a pure intermediate (perishable, must be processed into cheese)
-            // =============================================
-
-            registry.Register(new GoodDef
-            {
-                Id = "goats",
-                Name = "Goats",
-                Category = GoodCategory.Raw,
-                HarvestMethod = "herding",
-                TerrainAffinity = new List<string> { "Grassland", "Steppe", "Highland" },
-                BaseYield = 6f,
-                DecayRate = 0f,  // Livestock
-                TheftRisk = 0.2f,
-                BasePrice = 1.0f
-            });
-
-            registry.Register(new GoodDef
-            {
-                Id = "milk",
-                Name = "Milk",
-                Category = GoodCategory.Refined,
-                Inputs = new List<GoodInput> { new GoodInput("goats", 2) },
-                FacilityType = "dairy",
-                ProcessingTicks = 1,
-                // Pure intermediate — historically consumed same-day or processed into cheese
-                DecayRate = 0.08f,  // 8% per day - highly perishable
-                TheftRisk = 0.1f,  // Perishable, low fence value
-                BasePrice = 3.0f
-            });
-
-            registry.Register(new GoodDef
-            {
-                Id = "cheese",
-                Name = "Cheese",
-                Category = GoodCategory.Finished,
-                Inputs = new List<GoodInput> { new GoodInput("milk", 2) },
-                FacilityType = "creamery",
-                ProcessingTicks = 2,
-                NeedCategory = NeedCategory.Comfort,
-                BaseConsumption = 0.002f,
-                DecayRate = 0.003f,  // 0.3% per day - hard aged cheese lasts months
-                TheftRisk = 0f,
-                BasePrice = 8.0f  // 2 milk (6.0) + aging/processing
-            });
         }
 
         /// <summary>
@@ -659,7 +613,6 @@ namespace EconSim.Core.Economy
         {
             // Keep only category overrides in V2.
             // Consumption-rate overrides caused demand to scale unrealistically.
-            SetNeedCategory(registry, "cheese", NeedCategory.Basic);
             SetNeedCategory(registry, "clothes", NeedCategory.Comfort);
         }
 
@@ -822,18 +775,6 @@ namespace EconSim.Core.Economy
                 LaborRequired = 10,
                 LaborType = LaborType.Unskilled,
                 BaseThroughput = 4f,
-                IsExtraction = true,
-                TerrainRequirements = new List<string> { "Grassland", "Steppe", "Highland" }
-            });
-
-            registry.Register(new FacilityDef
-            {
-                Id = "goat_farm",
-                Name = "Goat Farm",
-                OutputGoodId = "goats",
-                LaborRequired = 10,
-                LaborType = LaborType.Unskilled,
-                BaseThroughput = 6f,
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Grassland", "Steppe", "Highland" }
             });
@@ -1055,28 +996,6 @@ namespace EconSim.Core.Economy
                 Id = "cobbler",
                 Name = "Cobbler",
                 OutputGoodId = "shoes",
-                LaborRequired = 3,
-                LaborType = LaborType.Skilled,
-                BaseThroughput = 3f,
-                IsExtraction = false
-            });
-
-            registry.Register(new FacilityDef
-            {
-                Id = "dairy",
-                Name = "Dairy",
-                OutputGoodId = "milk",
-                LaborRequired = 2,
-                LaborType = LaborType.Unskilled,
-                BaseThroughput = 4f,
-                IsExtraction = false
-            });
-
-            registry.Register(new FacilityDef
-            {
-                Id = "creamery",
-                Name = "Creamery",
-                OutputGoodId = "cheese",
                 LaborRequired = 3,
                 LaborType = LaborType.Skilled,
                 BaseThroughput = 3f,

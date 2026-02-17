@@ -19,8 +19,6 @@ namespace EconSim.Core.Simulation.Systems
         private readonly Dictionary<string, int> _goodRuntimeIdCache = new Dictionary<string, int>();
         private int[] _breadSubsistenceRuntimeIds = Array.Empty<int>();
         private int _breadRuntimeId = -1;
-        private int _cheeseRuntimeId = -1;
-        private int _goatsRuntimeId = -1;
 
         private struct OrderLine
         {
@@ -64,8 +62,6 @@ namespace EconSim.Core.Simulation.Systems
             }
 
             _breadRuntimeId = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, "bread");
-            _cheeseRuntimeId = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, "cheese");
-            _goatsRuntimeId = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, "goats");
         }
 
         public void Tick(SimulationState state, MapData mapData)
@@ -93,9 +89,7 @@ namespace EconSim.Core.Simulation.Systems
                     _demandByGoodBuffer,
                     _tierLinesBuffer,
                     _breadSubsistenceRuntimeIds,
-                    _breadRuntimeId,
-                    _cheeseRuntimeId,
-                    _goatsRuntimeId);
+                    _breadRuntimeId);
                 PostFacilityInputOrders(state, economy, county, market, transportCost, _goodRuntimeIdCache);
             }
         }
@@ -109,9 +103,7 @@ namespace EconSim.Core.Simulation.Systems
             Dictionary<int, float> demandByGood,
             List<OrderLine> tierLinesBuffer,
             int[] breadSubsistenceRuntimeIds,
-            int breadRuntimeId,
-            int cheeseRuntimeId,
-            int goatsRuntimeId)
+            int breadRuntimeId)
         {
             int population = county.Population.Total;
             if (population <= 0)
@@ -133,7 +125,7 @@ namespace EconSim.Core.Simulation.Systems
                 demandByGood[good.RuntimeId] = perCapita * population;
             }
 
-            ApplySubsistenceFromStockpile(county, demandByGood, breadSubsistenceRuntimeIds, breadRuntimeId, cheeseRuntimeId, goatsRuntimeId);
+            ApplySubsistenceFromStockpile(county, demandByGood, breadSubsistenceRuntimeIds, breadRuntimeId);
 
             float budget = Math.Max(0f, county.Population.Treasury);
             budget -= PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Basic, budget);
@@ -332,9 +324,7 @@ namespace EconSim.Core.Simulation.Systems
             CountyEconomy county,
             Dictionary<int, float> demandByGood,
             int[] breadSubsistenceRuntimeIds,
-            int breadRuntimeId,
-            int cheeseRuntimeId,
-            int goatsRuntimeId)
+            int breadRuntimeId)
         {
             if (breadRuntimeId >= 0 && demandByGood.TryGetValue(breadRuntimeId, out float breadNeed) && breadNeed > 0f)
             {
@@ -360,18 +350,6 @@ namespace EconSim.Core.Simulation.Systems
                 }
             }
 
-            if (cheeseRuntimeId >= 0 && goatsRuntimeId >= 0 && demandByGood.TryGetValue(cheeseRuntimeId, out float cheeseNeed) && cheeseNeed > 0f)
-            {
-                float goats = county.Stockpile.Get(goatsRuntimeId);
-                float equivalent = goats * 0.3f;
-                float covered = Math.Min(cheeseNeed, equivalent);
-                if (covered > 0f)
-                {
-                    float goatsToUse = covered / 0.3f;
-                    county.Stockpile.Remove(goatsRuntimeId, goatsToUse);
-                    demandByGood[cheeseRuntimeId] = Math.Max(0f, cheeseNeed - covered);
-                }
-            }
         }
 
         private static void RemoveProportional(
