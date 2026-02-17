@@ -14,12 +14,21 @@ namespace MapGen.Core
         public float SeaLevelMeters => 0f;
         public float MaxElevationMeters { get; }
         public float MaxSeaDepthMeters { get; }
+        public float TerrainShapeReferenceSpanMeters { get; }
 
-        public ElevationField(CellMesh mesh, float maxSeaDepthMeters, float maxElevationMeters)
+        public ElevationField(
+            CellMesh mesh,
+            float maxSeaDepthMeters,
+            float maxElevationMeters,
+            float terrainShapeReferenceSpanMeters = 0f)
         {
             Mesh = mesh;
             MaxSeaDepthMeters = maxSeaDepthMeters;
             MaxElevationMeters = maxElevationMeters;
+            float fallbackSpan = maxElevationMeters + maxSeaDepthMeters;
+            TerrainShapeReferenceSpanMeters = terrainShapeReferenceSpanMeters > 0f
+                ? terrainShapeReferenceSpanMeters
+                : fallbackSpan;
             ElevationMetersSigned = new float[mesh.CellCount];
             for (int i = 0; i < ElevationMetersSigned.Length; i++)
                 ElevationMetersSigned[i] = -MaxSeaDepthMeters;

@@ -14,7 +14,11 @@ namespace MapGen.Core
 
             CellMesh mesh = GenerateMesh(config);
             WorldMetadata world = BuildWorldMetadata(config, mesh);
-            var elevation = new ElevationField(mesh, config.MaxSeaDepthMeters, config.MaxElevationMeters);
+            var elevation = new ElevationField(
+                mesh,
+                config.MaxSeaDepthMeters,
+                config.MaxElevationMeters,
+                config.TerrainShapeReferenceSpanMeters);
             GenerateElevationFromDsl(elevation, config);
             EnsureNonDegenerateLandWater(elevation);
             var climate = new ClimateField(mesh);

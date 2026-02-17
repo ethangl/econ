@@ -18,6 +18,9 @@ namespace MapGen.Core
         // Elevation envelope in signed meters (sea level = 0).
         public float MaxElevationMeters = 5000f;
         public float MaxSeaDepthMeters = 1250f;
+        // Reference span used by terrain-shaping DSL ops (Hill/Pit/Range/Trough/Strait).
+        // Keep fixed to preserve morphology when only the elevation envelope changes.
+        public float TerrainShapeReferenceSpanMeters = 6250f;
 
         // Climate defaults.
         public float EquatorTempC = 29f;
@@ -116,6 +119,8 @@ namespace MapGen.Core
                 throw new ArgumentOutOfRangeException(nameof(LatitudeSouth), "LatitudeSouth must be within [-90, 90].");
             if (MaxElevationMeters <= 0f) throw new ArgumentOutOfRangeException(nameof(MaxElevationMeters), "MaxElevationMeters must be positive.");
             if (MaxSeaDepthMeters <= 0f) throw new ArgumentOutOfRangeException(nameof(MaxSeaDepthMeters), "MaxSeaDepthMeters must be positive.");
+            if (float.IsNaN(TerrainShapeReferenceSpanMeters) || float.IsInfinity(TerrainShapeReferenceSpanMeters) || TerrainShapeReferenceSpanMeters <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(TerrainShapeReferenceSpanMeters), "TerrainShapeReferenceSpanMeters must be positive and finite.");
             if (LapseRateCPerKm <= 0f) throw new ArgumentOutOfRangeException(nameof(LapseRateCPerKm), "LapseRateCPerKm must be positive.");
             if (MaxAnnualPrecipitationMm <= 0f) throw new ArgumentOutOfRangeException(nameof(MaxAnnualPrecipitationMm), "MaxAnnualPrecipitationMm must be positive.");
             if (RiverThreshold <= 0f) throw new ArgumentOutOfRangeException(nameof(RiverThreshold), "RiverThreshold must be positive.");
