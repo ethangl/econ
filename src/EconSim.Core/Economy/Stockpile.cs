@@ -182,7 +182,7 @@ namespace EconSim.Core.Economy
         {
             foreach (var input in inputs)
             {
-                if (!Has(input.GoodId, input.Quantity))
+                if (!Has(input.GoodId, input.QuantityKg))
                     return false;
             }
             return true;
@@ -195,7 +195,7 @@ namespace EconSim.Core.Economy
 
             foreach (var input in inputs)
             {
-                Remove(input.GoodId, input.Quantity);
+                Remove(input.GoodId, input.QuantityKg);
             }
             return true;
         }

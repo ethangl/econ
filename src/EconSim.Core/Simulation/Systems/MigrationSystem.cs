@@ -143,7 +143,7 @@ namespace EconSim.Core.Simulation.Systems
         {
             int pop = county.Population.Total;
             if (pop <= 0) return FoodDaysSupplyBase;
-            float dailyDemand = pop * 0.01f; // bread BaseConsumption
+            float dailyDemand = pop * 0.01f; // bread BaseConsumption (kg per capita per day)
             if (dailyDemand <= 0f) return FoodDaysSupplyBase;
             return county.Stockpile.Get(FoodGoodId) / dailyDemand;
         }

@@ -223,7 +223,7 @@ namespace EconSim.Core.Simulation.Systems
                         ? inputMarket.Price
                         : economy.Goods.GetByRuntimeId(inputRuntimeId)?.BasePrice ?? 0f;
 
-                    hypoInputCost += inputPrice * input.Quantity * nominalThroughput * (1f + transportCost * V2TransportFeeRate);
+                    hypoInputCost += inputPrice * input.QuantityKg * nominalThroughput * (1f + transportCost * V2TransportFeeRate);
                 }
             }
 
@@ -393,7 +393,7 @@ namespace EconSim.Core.Simulation.Systems
                 var input = inputs[i];
                 int inputRuntimeId = _inputRuntimeIdsBuffer[i];
                 float available = facility.InputBuffer.Get(inputRuntimeId);
-                float canMake = available / input.Quantity;
+                float canMake = available / input.QuantityKg;
                 if (canMake < possibleBatches)
                     possibleBatches = canMake;
             }
@@ -405,7 +405,7 @@ namespace EconSim.Core.Simulation.Systems
             {
                 var input = inputs[i];
                 int inputRuntimeId = _inputRuntimeIdsBuffer[i];
-                facility.InputBuffer.Remove(inputRuntimeId, input.Quantity * possibleBatches);
+                facility.InputBuffer.Remove(inputRuntimeId, input.QuantityKg * possibleBatches);
             }
 
             facility.OutputBuffer.Add(outputRuntimeId, possibleBatches);

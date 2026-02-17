@@ -115,7 +115,7 @@ namespace EconSim.Core.Simulation.Systems
                 if (!good.NeedCategory.HasValue)
                     continue;
 
-                float perCapita = good.BaseConsumption;
+                float perCapita = good.BaseConsumptionKgPerCapitaPerDay;
                 if (perCapita <= 0f)
                     continue;
 
@@ -287,7 +287,7 @@ namespace EconSim.Core.Simulation.Systems
                     if (!targetMarket.TryGetGoodState(inputRuntimeId, out var marketGood))
                         continue;
 
-                    float needed = input.Quantity * currentThroughput;
+                    float needed = input.QuantityKg * currentThroughput;
                     float have = facility.InputBuffer.Get(inputRuntimeId);
                     float toBuy = Math.Max(0f, needed - have);
                     if (toBuy <= 0.0001f)

@@ -31,7 +31,7 @@ namespace EconSim.Core.Economy
         /// <summary>Type of workers needed.</summary>
         public LaborType LaborType;
 
-        /// <summary>Units produced per tick at full staffing.</summary>
+        /// <summary>Kilograms produced per tick at full staffing.</summary>
         public float BaseThroughput;
 
         /// <summary>
@@ -52,6 +52,15 @@ namespace EconSim.Core.Economy
         /// (e.g. rye_mill produces flour from rye instead of grain).
         /// </summary>
         public List<GoodInput> InputOverrides;
+
+        /// <summary>
+        /// Explicit-unit alias for <see cref="BaseThroughput"/>.
+        /// </summary>
+        public float BaseThroughputKgPerDay
+        {
+            get => BaseThroughput;
+            set => BaseThroughput = value;
+        }
 
         public bool HasTerrainRequirement => TerrainRequirements != null && TerrainRequirements.Count > 0;
     }

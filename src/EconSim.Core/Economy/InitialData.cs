@@ -4,7 +4,9 @@ namespace EconSim.Core.Economy
 {
     /// <summary>
     /// Initial good and facility definitions for the v1 economy.
-    /// Thirteen production chains: Food, Tools, Jewelry, Furniture, Clothing (4-tier), Dairy, Leatherwork, Copperwork, Sugar, Spices, Salt, Beer, Dyed Clothes.
+    /// Twelve production chains: Food, Tools, Jewelry, Furniture, Clothing (4-tier),
+    /// Leatherwork, Copperwork, Sugar, Spices, Salt, Beer, Dyed Clothes.
+    /// Quantity convention: all good quantities are modeled as kilograms.
     /// </summary>
     public static class InitialData
     {
@@ -19,6 +21,7 @@ namespace EconSim.Core.Economy
 
         public static void RegisterGoods(GoodRegistry registry)
         {
+            // Unit convention: all BaseYield / Inputs / BaseConsumption values are kilograms.
             // =============================================
             // CHAIN 1: Food (Grain → Flour → Food)
             // Multiple grain types feed into this chain from different biomes:
