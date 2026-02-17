@@ -560,7 +560,15 @@ namespace EconSim.Core.Economy
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
 
-                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 0);
+                    int laborLimitedCount = ComputeFacilityCount(
+                        economy.GetCounty(countyId).Population,
+                        facilityDef,
+                        minPerCounty: 0);
+                    int count = ComputeInputConstrainedFacilityCount(
+                        economy,
+                        countyId,
+                        facilityDef,
+                        laborLimitedCount);
                     if (count <= 0)
                         continue;
 
@@ -769,14 +777,22 @@ namespace EconSim.Core.Economy
         /// </summary>
         private static int ComputeFacilityCount(CountyPopulation pop, FacilityDef def, int minPerCounty = 0)
         {
-            const float ScaleFactor = 3f;
+            const float ExtractionScaleFactor = 3f;
+            const float ProcessingUnskilledScaleFactor = 4f;
+            const float ProcessingSkilledScaleFactor = 5f;
             const int MaxPerType = 50;
 
             int workerPool = def.LaborType == LaborType.Unskilled
                 ? pop.TotalUnskilled
                 : pop.TotalSkilled;
 
-            int count = (int)(workerPool / (def.LaborRequired * ScaleFactor));
+            float scaleFactor = def.IsExtraction
+                ? ExtractionScaleFactor
+                : (def.LaborType == LaborType.Skilled
+                    ? ProcessingSkilledScaleFactor
+                    : ProcessingUnskilledScaleFactor);
+
+            int count = (int)(workerPool / (def.LaborRequired * scaleFactor));
             return Math.Max(minPerCounty, Math.Min(MaxPerType, count));
         }
 

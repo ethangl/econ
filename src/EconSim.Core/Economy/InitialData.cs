@@ -1177,7 +1177,7 @@ namespace EconSim.Core.Economy
                 Name = "Sawmill",
                 OutputGoodId = "lumber",
                 LaborRequired = 3,
-                LaborType = LaborType.Skilled,
+                LaborType = LaborType.Unskilled,
                 BaseThroughput = 4f,
                 IsExtraction = false
             });
