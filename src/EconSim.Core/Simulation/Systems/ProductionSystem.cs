@@ -30,8 +30,10 @@ namespace EconSim.Core.Simulation.Systems
         private const int V2InactiveExtractionRecheckDays = 3;
         private const int V2InactiveMediumDormancyDays = 30;
         private const int V2InactiveLongDormancyDays = 120;
-        private const float V2FacilityAskMarkup = 0.12f;
-        private const float V2FacilityAskBaseFloorMultiplier = 0.25f;
+        private const float V2FacilityAskMarkupUnsubsidized = 0.12f;
+        private const float V2FacilityAskMarkupSubsidized = 0.03f;
+        private const float V2FacilityAskBaseFloorMultiplierUnsubsidized = 0.25f;
+        private const float V2FacilityAskBaseFloorMultiplierSubsidized = 0.10f;
 
         private readonly Dictionary<string, float> _producedThisTick = new Dictionary<string, float>();
         private readonly List<KeyValuePair<int, float>> _outputGoodsBuffer = new List<KeyValuePair<int, float>>(8);
@@ -566,9 +568,17 @@ namespace EconSim.Core.Simulation.Systems
             float haulingCostPerUnit = Math.Max(0f, marketPrice) * Math.Max(0f, transportCost) * V2TransportFeeRate;
             float operatingCostPerUnit = inputCostPerUnit + wageCostPerUnit + haulingCostPerUnit;
 
-            float minFromCost = operatingCostPerUnit * (1f + V2FacilityAskMarkup);
+            bool subsidized = SimulationConfig.Economy.EnableFacilitySubsidies;
+            float askMarkup = subsidized
+                ? V2FacilityAskMarkupSubsidized
+                : V2FacilityAskMarkupUnsubsidized;
+            float baseFloorMultiplier = subsidized
+                ? V2FacilityAskBaseFloorMultiplierSubsidized
+                : V2FacilityAskBaseFloorMultiplierUnsubsidized;
+
+            float minFromCost = operatingCostPerUnit * (1f + askMarkup);
             float minFromBase = outputGood != null
-                ? outputGood.BasePrice * V2FacilityAskBaseFloorMultiplier
+                ? outputGood.BasePrice * baseFloorMultiplier
                 : 0f;
 
             return Math.Max(0f, Math.Max(minFromCost, minFromBase));

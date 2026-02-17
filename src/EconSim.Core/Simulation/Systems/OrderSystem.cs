@@ -12,6 +12,12 @@ namespace EconSim.Core.Simulation.Systems
     public class OrderSystem : ITickSystem
     {
         private const float BuyerTransportFeeRate = 0.005f;
+        private const float BasicAffordabilityElasticity = 0.75f;
+        private const float ComfortAffordabilityElasticity = 1.00f;
+        private const float LuxuryAffordabilityElasticity = 1.25f;
+        private const float BasicMinDemandScale = 0.15f;
+        private const float ComfortMinDemandScale = 0.02f;
+        private const float LuxuryMinDemandScale = 0.00f;
 
         private static readonly string[] BreadSubsistenceGoods = { "wheat", "rye", "barley", "rice_grain" };
         private readonly Dictionary<int, float> _demandByGoodBuffer = new Dictionary<int, float>();
@@ -177,6 +183,12 @@ namespace EconSim.Core.Simulation.Systems
                 if (effectivePrice <= 0f)
                     continue;
 
+                float baseEffectivePrice = marketGood.BasePrice * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
+                float affordabilityScale = ComputeAffordabilityDemandScale(tier, effectivePrice, baseEffectivePrice);
+                qty *= affordabilityScale;
+                if (qty <= 0.0001f)
+                    continue;
+
                 float fullCost = qty * effectivePrice;
                 linesBuffer.Add(new OrderLine(
                     good.Id,
@@ -231,6 +243,38 @@ namespace EconSim.Core.Simulation.Systems
             }
 
             return Math.Min(spent, budget);
+        }
+
+        private static float ComputeAffordabilityDemandScale(
+            NeedCategory tier,
+            float effectivePrice,
+            float baseEffectivePrice)
+        {
+            if (effectivePrice <= 0f || baseEffectivePrice <= 0f)
+                return 1f;
+
+            float ratio = Clamp(baseEffectivePrice / effectivePrice, 0f, 1f);
+            float elasticity;
+            float minScale;
+            switch (tier)
+            {
+                case NeedCategory.Basic:
+                    elasticity = BasicAffordabilityElasticity;
+                    minScale = BasicMinDemandScale;
+                    break;
+                case NeedCategory.Comfort:
+                    elasticity = ComfortAffordabilityElasticity;
+                    minScale = ComfortMinDemandScale;
+                    break;
+                case NeedCategory.Luxury:
+                default:
+                    elasticity = LuxuryAffordabilityElasticity;
+                    minScale = LuxuryMinDemandScale;
+                    break;
+            }
+
+            float scaled = (float)Math.Pow(ratio, elasticity);
+            return Clamp(scaled, minScale, 1f);
         }
 
         private static void PostFacilityInputOrders(
@@ -454,6 +498,13 @@ namespace EconSim.Core.Simulation.Systems
             offMapMarket = bestMarket;
             offMapTransportCost = Math.Max(0f, bestCost);
             return true;
+        }
+
+        private static float Clamp(float value, float min, float max)
+        {
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
         }
     }
 }
