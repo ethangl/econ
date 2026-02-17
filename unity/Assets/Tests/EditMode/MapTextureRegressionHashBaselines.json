@@ -1,145 +1,364 @@
 {
-  "cases": [
-    {
-      "seed": 12345,
-      "template": "LowIsland",
-      "cellCount": 5000,
-      "textures": [
-        { "property": "_HeightmapTex", "sha256": "926D735BECC283A5B59711515AE543D65122575656F534C39794464A0A454AFA" },
-        { "property": "_RiverMaskTex", "sha256": "3B648D04BA07DE0EBE2C08952724E13B32AA55EA4E01C537683A7F345E840D14" },
-        { "property": "_RealmBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_ProvinceBorderDistTex", "sha256": "44FDFF6A3D3A6C8DDE37F617D637D1CF2A576EF72DF29C7689E506EA24E90460" },
-        { "property": "_CountyBorderDistTex", "sha256": "F5FD5B22D9B2D34829C37C3646131B6B36D25B3E3AC8FC171E6EB96657F67895" },
-        { "property": "_MarketBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_CellToMarketTex", "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179" },
-        { "property": "_RoadMaskTex", "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8" }
-      ]
-    },
-    {
-      "seed": 12345,
-      "template": "LowIsland",
-      "cellCount": 5000,
-      "platform": "OSXEditor",
-      "textures": [
-        { "property": "_HeightmapTex", "sha256": "926D735BECC283A5B59711515AE543D65122575656F534C39794464A0A454AFA" },
-        { "property": "_RiverMaskTex", "sha256": "3B648D04BA07DE0EBE2C08952724E13B32AA55EA4E01C537683A7F345E840D14" },
-        { "property": "_RealmBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_ProvinceBorderDistTex", "sha256": "24B6A1973357AD30CA8333B54516C9B1915F09AA101EA6F9381F5AF64015E8D7" },
-        { "property": "_CountyBorderDistTex", "sha256": "F5FD5B22D9B2D34829C37C3646131B6B36D25B3E3AC8FC171E6EB96657F67895" },
-        { "property": "_MarketBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_CellToMarketTex", "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179" },
-        { "property": "_RoadMaskTex", "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8" }
-      ]
-    },
-    {
-      "seed": 12345,
-      "template": "LowIsland",
-      "cellCount": 5000,
-      "platform": "LinuxEditor",
-      "textures": [
-        { "property": "_HeightmapTex", "sha256": "926D735BECC283A5B59711515AE543D65122575656F534C39794464A0A454AFA" },
-        { "property": "_RiverMaskTex", "sha256": "81453588DFB85E8CF0D1489D2EB2580568EA40E7F27F3796D49B1EC706220B12" },
-        { "property": "_RealmBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_ProvinceBorderDistTex", "sha256": "D2254CE78D453F2D0982C40D94E813F2E61B61D494C6CE5527776B0221FAF852" },
-        { "property": "_CountyBorderDistTex", "sha256": "20E45C6AF57EE1603980616CDCB260A0FF678C45E377E4DB96C6C793EBE8A26F" },
-        { "property": "_MarketBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_CellToMarketTex", "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179" },
-        { "property": "_RoadMaskTex", "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8" }
-      ]
-    },
-    {
-      "seed": 424242,
-      "template": "Continents",
-      "cellCount": 5000,
-      "textures": [
-        { "property": "_HeightmapTex", "sha256": "F09668A45DB9D0E115A5203A491357DFD38EB42FF081DA6018845BBD15A545DC" },
-        { "property": "_RiverMaskTex", "sha256": "9DA98F7887837CDB1C9111099042A097407638ADF5FAFBAAE09F584CA7D492F2" },
-        { "property": "_RealmBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_ProvinceBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_CountyBorderDistTex", "sha256": "CB0D19849729F7A5CE9445B1E1677C35654DD2B54EF723311B0DA48643235F71" },
-        { "property": "_MarketBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_CellToMarketTex", "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179" },
-        { "property": "_RoadMaskTex", "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8" }
-      ]
-    },
-    {
-      "seed": 424242,
-      "template": "Continents",
-      "cellCount": 5000,
-      "platform": "OSXEditor",
-      "textures": [
-        { "property": "_HeightmapTex", "sha256": "F09668A45DB9D0E115A5203A491357DFD38EB42FF081DA6018845BBD15A545DC" },
-        { "property": "_RiverMaskTex", "sha256": "9DA98F7887837CDB1C9111099042A097407638ADF5FAFBAAE09F584CA7D492F2" },
-        { "property": "_RealmBorderDistTex", "sha256": "669E9100D77898FFF44457CD3F009BACA365B20CD6B1C66E4A87DF2C6C76D868" },
-        { "property": "_ProvinceBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_CountyBorderDistTex", "sha256": "CB0D19849729F7A5CE9445B1E1677C35654DD2B54EF723311B0DA48643235F71" },
-        { "property": "_MarketBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_CellToMarketTex", "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179" },
-        { "property": "_RoadMaskTex", "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8" }
-      ]
-    },
-    {
-      "seed": 424242,
-      "template": "Continents",
-      "cellCount": 5000,
-      "platform": "LinuxEditor",
-      "textures": [
-        { "property": "_HeightmapTex", "sha256": "F09668A45DB9D0E115A5203A491357DFD38EB42FF081DA6018845BBD15A545DC" },
-        { "property": "_RiverMaskTex", "sha256": "F15967733145CE4D43CE405B4E77F5AB56F88B2BC82C56E4D018F532734E51C5" },
-        { "property": "_RealmBorderDistTex", "sha256": "7EA02130810F420498051F0B3555C981EC0CFA2A4811F9F9682797EC8786DDD5" },
-        { "property": "_ProvinceBorderDistTex", "sha256": "BC479067F406CA04BE6FD36EFE940118CC16FCF71747EADDFCD2E406F79978D6" },
-        { "property": "_CountyBorderDistTex", "sha256": "6C7EE05CF297082C8C3A4CFDB4CB34C49A085BA5498138E78055D0D2993095B3" },
-        { "property": "_MarketBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_CellToMarketTex", "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179" },
-        { "property": "_RoadMaskTex", "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8" }
-      ]
-    },
-    {
-      "seed": 8675309,
-      "template": "Pangea",
-      "cellCount": 5000,
-      "textures": [
-        { "property": "_HeightmapTex", "sha256": "57431E37F62150A5449DB798419D4B588A749BC7BFBC6BD669922B93795F0E4C" },
-        { "property": "_RiverMaskTex", "sha256": "B51F0A39001C7543500C37D76FEED6BE2EA96603EB974B8582D3EE1A90BC98EA" },
-        { "property": "_RealmBorderDistTex", "sha256": "A1F79A14F60D7A33A416BD929BBE0C36C4D81B5974DA72393265D6332FCCB5CB" },
-        { "property": "_ProvinceBorderDistTex", "sha256": "E1C7798E009C91085CE91078B05A796538556726D75FC31EDCDE3D74D6705705" },
-        { "property": "_CountyBorderDistTex", "sha256": "88FCF0B2D8384DF97CEFB6A011235B51B2E65BB85A0C9A4B0063E7F8C0960CEA" },
-        { "property": "_MarketBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_CellToMarketTex", "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179" },
-        { "property": "_RoadMaskTex", "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8" }
-      ]
-    },
-    {
-      "seed": 8675309,
-      "template": "Pangea",
-      "cellCount": 5000,
-      "platform": "OSXEditor",
-      "textures": [
-        { "property": "_HeightmapTex", "sha256": "57431E37F62150A5449DB798419D4B588A749BC7BFBC6BD669922B93795F0E4C" },
-        { "property": "_RiverMaskTex", "sha256": "B51F0A39001C7543500C37D76FEED6BE2EA96603EB974B8582D3EE1A90BC98EA" },
-        { "property": "_RealmBorderDistTex", "sha256": "FE35898DA2D703A3E4E10817CB7CCD271D5DD2C3E82CA8E9B31765FE83BED659" },
-        { "property": "_ProvinceBorderDistTex", "sha256": "E1C7798E009C91085CE91078B05A796538556726D75FC31EDCDE3D74D6705705" },
-        { "property": "_CountyBorderDistTex", "sha256": "88FCF0B2D8384DF97CEFB6A011235B51B2E65BB85A0C9A4B0063E7F8C0960CEA" },
-        { "property": "_MarketBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_CellToMarketTex", "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179" },
-        { "property": "_RoadMaskTex", "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8" }
-      ]
-    },
-    {
-      "seed": 8675309,
-      "template": "Pangea",
-      "cellCount": 5000,
-      "platform": "LinuxEditor",
-      "textures": [
-        { "property": "_HeightmapTex", "sha256": "57431E37F62150A5449DB798419D4B588A749BC7BFBC6BD669922B93795F0E4C" },
-        { "property": "_RiverMaskTex", "sha256": "F4DEB23F088C9120BCE1C7A2D9B5F7D519BA3FD3990F52243048ED9AA7EF3999" },
-        { "property": "_RealmBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_ProvinceBorderDistTex", "sha256": "E26BF4F19B8A79D9880DA9B8D509116E7AD035021DEA63EBB6BF826A656EB62E" },
-        { "property": "_CountyBorderDistTex", "sha256": "C0AD13A6A7C01A3CB4861F04EA9EB9D36875B14D1978CC32C6FB8604F297A140" },
-        { "property": "_MarketBorderDistTex", "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F" },
-        { "property": "_CellToMarketTex", "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179" },
-        { "property": "_RoadMaskTex", "sha256": "642495CDD35DF2BA1D6E9B2749BE930CFB00D1D9079ABA5DECBC69019C9CDD07" }
-      ]
-    }
-  ]
+    "cases": [
+        {
+            "seed": 12345,
+            "template": "LowIsland",
+            "cellCount": 5000,
+            "platform": "",
+            "textures": [
+                {
+                    "property": "_HeightmapTex",
+                    "sha256": "58EE3D2BE356A5F6ACE73CF58AFC922234F6D678027E437F45AA8CE071DA31C0"
+                },
+                {
+                    "property": "_RiverMaskTex",
+                    "sha256": "3B648D04BA07DE0EBE2C08952724E13B32AA55EA4E01C537683A7F345E840D14"
+                },
+                {
+                    "property": "_RealmBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_ProvinceBorderDistTex",
+                    "sha256": "44FDFF6A3D3A6C8DDE37F617D637D1CF2A576EF72DF29C7689E506EA24E90460"
+                },
+                {
+                    "property": "_CountyBorderDistTex",
+                    "sha256": "F5FD5B22D9B2D34829C37C3646131B6B36D25B3E3AC8FC171E6EB96657F67895"
+                },
+                {
+                    "property": "_MarketBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_CellToMarketTex",
+                    "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179"
+                },
+                {
+                    "property": "_RoadMaskTex",
+                    "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8"
+                }
+            ]
+        },
+        {
+            "seed": 12345,
+            "template": "LowIsland",
+            "cellCount": 5000,
+            "platform": "LinuxEditor",
+            "textures": [
+                {
+                    "property": "_HeightmapTex",
+                    "sha256": "58EE3D2BE356A5F6ACE73CF58AFC922234F6D678027E437F45AA8CE071DA31C0"
+                },
+                {
+                    "property": "_RiverMaskTex",
+                    "sha256": "81453588DFB85E8CF0D1489D2EB2580568EA40E7F27F3796D49B1EC706220B12"
+                },
+                {
+                    "property": "_RealmBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_ProvinceBorderDistTex",
+                    "sha256": "D2254CE78D453F2D0982C40D94E813F2E61B61D494C6CE5527776B0221FAF852"
+                },
+                {
+                    "property": "_CountyBorderDistTex",
+                    "sha256": "20E45C6AF57EE1603980616CDCB260A0FF678C45E377E4DB96C6C793EBE8A26F"
+                },
+                {
+                    "property": "_MarketBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_CellToMarketTex",
+                    "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179"
+                },
+                {
+                    "property": "_RoadMaskTex",
+                    "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8"
+                }
+            ]
+        },
+        {
+            "seed": 12345,
+            "template": "LowIsland",
+            "cellCount": 5000,
+            "platform": "OSXEditor",
+            "textures": [
+                {
+                    "property": "_CellToMarketTex",
+                    "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179"
+                },
+                {
+                    "property": "_CountyBorderDistTex",
+                    "sha256": "7A3CAA7301F4734DBF0326464600A5D5423FF0E950EAA4F0558C86A0799057B3"
+                },
+                {
+                    "property": "_HeightmapTex",
+                    "sha256": "58EE3D2BE356A5F6ACE73CF58AFC922234F6D678027E437F45AA8CE071DA31C0"
+                },
+                {
+                    "property": "_MarketBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_ProvinceBorderDistTex",
+                    "sha256": "B5201656278185A6AA7115CAFC8D839930418C7408AC7B0CDDEB7B4DC47BB5FD"
+                },
+                {
+                    "property": "_RealmBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_RiverMaskTex",
+                    "sha256": "3B7A8C15585AD566B9ABA1535ADE6FEE5B524024EA61234B63A93A0F1F19E7F0"
+                },
+                {
+                    "property": "_RoadMaskTex",
+                    "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8"
+                }
+            ]
+        },
+        {
+            "seed": 424242,
+            "template": "Continents",
+            "cellCount": 5000,
+            "platform": "",
+            "textures": [
+                {
+                    "property": "_HeightmapTex",
+                    "sha256": "5025EA003744B880EF15102AC22C5F067542BF05036FF39ECC4019B6CBD0E784"
+                },
+                {
+                    "property": "_RiverMaskTex",
+                    "sha256": "9DA98F7887837CDB1C9111099042A097407638ADF5FAFBAAE09F584CA7D492F2"
+                },
+                {
+                    "property": "_RealmBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_ProvinceBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_CountyBorderDistTex",
+                    "sha256": "CB0D19849729F7A5CE9445B1E1677C35654DD2B54EF723311B0DA48643235F71"
+                },
+                {
+                    "property": "_MarketBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_CellToMarketTex",
+                    "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179"
+                },
+                {
+                    "property": "_RoadMaskTex",
+                    "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8"
+                }
+            ]
+        },
+        {
+            "seed": 424242,
+            "template": "Continents",
+            "cellCount": 5000,
+            "platform": "LinuxEditor",
+            "textures": [
+                {
+                    "property": "_HeightmapTex",
+                    "sha256": "5025EA003744B880EF15102AC22C5F067542BF05036FF39ECC4019B6CBD0E784"
+                },
+                {
+                    "property": "_RiverMaskTex",
+                    "sha256": "F15967733145CE4D43CE405B4E77F5AB56F88B2BC82C56E4D018F532734E51C5"
+                },
+                {
+                    "property": "_RealmBorderDistTex",
+                    "sha256": "7EA02130810F420498051F0B3555C981EC0CFA2A4811F9F9682797EC8786DDD5"
+                },
+                {
+                    "property": "_ProvinceBorderDistTex",
+                    "sha256": "BC479067F406CA04BE6FD36EFE940118CC16FCF71747EADDFCD2E406F79978D6"
+                },
+                {
+                    "property": "_CountyBorderDistTex",
+                    "sha256": "6C7EE05CF297082C8C3A4CFDB4CB34C49A085BA5498138E78055D0D2993095B3"
+                },
+                {
+                    "property": "_MarketBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_CellToMarketTex",
+                    "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179"
+                },
+                {
+                    "property": "_RoadMaskTex",
+                    "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8"
+                }
+            ]
+        },
+        {
+            "seed": 424242,
+            "template": "Continents",
+            "cellCount": 5000,
+            "platform": "OSXEditor",
+            "textures": [
+                {
+                    "property": "_CellToMarketTex",
+                    "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179"
+                },
+                {
+                    "property": "_CountyBorderDistTex",
+                    "sha256": "E69F4B67377ED1206EC7B9AF0FF679BFE72343B18491AD2E395F6D220F42681A"
+                },
+                {
+                    "property": "_HeightmapTex",
+                    "sha256": "5025EA003744B880EF15102AC22C5F067542BF05036FF39ECC4019B6CBD0E784"
+                },
+                {
+                    "property": "_MarketBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_ProvinceBorderDistTex",
+                    "sha256": "C0ED7DD13D3C6D3AE9925BD300DF0EBF12D972544D63ACDA36EEFDD7C7324007"
+                },
+                {
+                    "property": "_RealmBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_RiverMaskTex",
+                    "sha256": "A83CB4EC0742316A2BABDB1BE7981232A6875D820343135A072CD1F3EC2372EF"
+                },
+                {
+                    "property": "_RoadMaskTex",
+                    "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8"
+                }
+            ]
+        },
+        {
+            "seed": 8675309,
+            "template": "Pangea",
+            "cellCount": 5000,
+            "platform": "",
+            "textures": [
+                {
+                    "property": "_HeightmapTex",
+                    "sha256": "D844E68D2CA67BB35F8F4B1C719F68DA9BF60B6A3B94D28B6AFFD561632FBFD7"
+                },
+                {
+                    "property": "_RiverMaskTex",
+                    "sha256": "B51F0A39001C7543500C37D76FEED6BE2EA96603EB974B8582D3EE1A90BC98EA"
+                },
+                {
+                    "property": "_RealmBorderDistTex",
+                    "sha256": "A1F79A14F60D7A33A416BD929BBE0C36C4D81B5974DA72393265D6332FCCB5CB"
+                },
+                {
+                    "property": "_ProvinceBorderDistTex",
+                    "sha256": "E1C7798E009C91085CE91078B05A796538556726D75FC31EDCDE3D74D6705705"
+                },
+                {
+                    "property": "_CountyBorderDistTex",
+                    "sha256": "88FCF0B2D8384DF97CEFB6A011235B51B2E65BB85A0C9A4B0063E7F8C0960CEA"
+                },
+                {
+                    "property": "_MarketBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_CellToMarketTex",
+                    "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179"
+                },
+                {
+                    "property": "_RoadMaskTex",
+                    "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8"
+                }
+            ]
+        },
+        {
+            "seed": 8675309,
+            "template": "Pangea",
+            "cellCount": 5000,
+            "platform": "LinuxEditor",
+            "textures": [
+                {
+                    "property": "_HeightmapTex",
+                    "sha256": "D844E68D2CA67BB35F8F4B1C719F68DA9BF60B6A3B94D28B6AFFD561632FBFD7"
+                },
+                {
+                    "property": "_RiverMaskTex",
+                    "sha256": "F4DEB23F088C9120BCE1C7A2D9B5F7D519BA3FD3990F52243048ED9AA7EF3999"
+                },
+                {
+                    "property": "_RealmBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_ProvinceBorderDistTex",
+                    "sha256": "E26BF4F19B8A79D9880DA9B8D509116E7AD035021DEA63EBB6BF826A656EB62E"
+                },
+                {
+                    "property": "_CountyBorderDistTex",
+                    "sha256": "C0AD13A6A7C01A3CB4861F04EA9EB9D36875B14D1978CC32C6FB8604F297A140"
+                },
+                {
+                    "property": "_MarketBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_CellToMarketTex",
+                    "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179"
+                },
+                {
+                    "property": "_RoadMaskTex",
+                    "sha256": "642495CDD35DF2BA1D6E9B2749BE930CFB00D1D9079ABA5DECBC69019C9CDD07"
+                }
+            ]
+        },
+        {
+            "seed": 8675309,
+            "template": "Pangea",
+            "cellCount": 5000,
+            "platform": "OSXEditor",
+            "textures": [
+                {
+                    "property": "_CellToMarketTex",
+                    "sha256": "4F50FCE39BC10D6DE4A8A1AE5F3422630D0602E8D6263F0E68E35FD2AFB06179"
+                },
+                {
+                    "property": "_CountyBorderDistTex",
+                    "sha256": "6E5F5A3B895B4CCD874DCD0F8640F65479B2E966C610CA62793C06764800B9C7"
+                },
+                {
+                    "property": "_HeightmapTex",
+                    "sha256": "D844E68D2CA67BB35F8F4B1C719F68DA9BF60B6A3B94D28B6AFFD561632FBFD7"
+                },
+                {
+                    "property": "_MarketBorderDistTex",
+                    "sha256": "99A13DB88037BEA8FEC44D4CCD8F996E2215A30BEC82CFA63092B4DA67224E5F"
+                },
+                {
+                    "property": "_ProvinceBorderDistTex",
+                    "sha256": "E65F68D71F10BE83541E7FD53F62D5BFC9EB957DE6FEDAFDFE909D78C9A75C3F"
+                },
+                {
+                    "property": "_RealmBorderDistTex",
+                    "sha256": "660C1BFB9E84E88B69F6DEFF29347E9C2115AC2DEE722FF4FE99F3EB8E91E65A"
+                },
+                {
+                    "property": "_RiverMaskTex",
+                    "sha256": "BEE50172E4A4D5E53F3A91792E2B305A9C27747026E81A4FF4D0A5F8BDE7A434"
+                },
+                {
+                    "property": "_RoadMaskTex",
+                    "sha256": "F6B1E6E9502A28C22150DF006610ECC315A291DC5498B6235C529827E754AEB8"
+                }
+            ]
+        }
+    ]
 }

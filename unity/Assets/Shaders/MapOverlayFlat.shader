@@ -4,6 +4,7 @@ Shader "EconSim/MapOverlayFlat"
     {
         // Heightmap for terrain (Phase 6)
         _HeightmapTex ("Heightmap", 2D) = "gray" {}
+        _ReliefNormalTex ("Relief Normal", 2D) = "bump" {}
         _HeightScale ("Height Scale", Float) = 0.2
         _SeaLevel ("Sea Level (Normalized)", Float) = 0.5
         _UseHeightDisplacement ("Use Height Displacement", Int) = 0

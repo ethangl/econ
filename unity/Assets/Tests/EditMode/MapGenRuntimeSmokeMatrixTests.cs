@@ -12,7 +12,7 @@ namespace EconSim.Tests
     {
         readonly SmokeCase[] _cases =
         {
-            new SmokeCase(1101, HeightmapTemplateType.LowIsland, 5000, 0.15f, 0.60f, 0, 120, -700f, 900f),
+            new SmokeCase(1101, HeightmapTemplateType.LowIsland, 5000, 0.15f, 0.60f, 0, 130, -700f, 900f),
             new SmokeCase(2202, HeightmapTemplateType.Continents, 5000, 0.30f, 0.82f, 5, 250, -500f, 1800f),
             new SmokeCase(3303, HeightmapTemplateType.Volcano, 5000, 0.20f, 0.72f, 0, 150, -900f, 1500f),
         };

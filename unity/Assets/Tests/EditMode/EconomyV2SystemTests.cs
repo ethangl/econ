@@ -45,6 +45,7 @@ namespace EconSim.Tests
                     }
                 }
             };
+            market.BindGoods(economy.Goods);
 
             market.AddInventoryLot(new ConsignmentLot
             {
@@ -220,7 +221,7 @@ namespace EconSim.Tests
             {
                 Economy = economy,
                 SubsistenceWage = 1f,
-                CurrentDay = 7
+                CurrentDay = 8
             };
 
             var system = new LaborSystem();
