@@ -10,7 +10,7 @@ Shader "EconSim/MapOverlayBiome"
         _ReliefAmbient ("Relief Ambient", Range(0, 1)) = 0.65
         _ReliefLightDir ("Relief Light Direction", Vector) = (0.4, 0.85, 0.3, 0)
         _HeightScale ("Height Scale", Float) = 0.2
-        _SeaLevel ("Sea Level (Normalized)", Float) = 0.2
+        _SeaLevel ("Sea Level (Normalized)", Float) = 0.5
         _UseHeightDisplacement ("Use Height Displacement", Int) = 0
 
         // River mask (Phase 8) - knocks out rivers from land, showing water underneath

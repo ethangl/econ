@@ -186,6 +186,25 @@ Mirrors the elevation map along an axis with a given probability (default 0.5). 
 **Example:** `Invert 0.4 both` — 40% chance of mirroring the entire map.
 **Example:** `Invert 0.25 x` — 25% chance of horizontal flip only.
 
+### DepthRemap / DepthCurve
+
+```
+DepthRemap <exponent>
+DepthCurve <exponent>
+```
+
+Sets a template-level underwater remap exponent used when terrain domain is remapped
+into a larger world sea-depth envelope.
+
+- `1.0` = linear depth remap
+- `< 1.0` = pushes more water cells toward abyssal depths
+- `> 1.0` = keeps more cells on continental shelf / shallower bands
+
+This directive does not directly modify elevations during DSL execution. It configures
+the post-generation underwater remap curve applied by the pipeline.
+
+**Example:** `DepthRemap 0.75` — bias more ocean floor toward deep water.
+
 ## Template Composition Patterns
 
 Templates typically follow this structure:

@@ -1,0 +1,208 @@
+using System;
+using MapGen.Core;
+using NUnit.Framework;
+
+namespace EconSim.Tests
+{
+    [TestFixture]
+    [Category("MapGen")]
+    public class MapGenEnvelopeRegressionTests
+    {
+        readonly EnvelopeCase[] _cases =
+        {
+            new EnvelopeCase(1101, HeightmapTemplateType.LowIsland, 5000),
+            new EnvelopeCase(2202, HeightmapTemplateType.Continents, 5000),
+            new EnvelopeCase(3303, HeightmapTemplateType.Volcano, 5000),
+        };
+
+        [Test]
+        public void IncreasingSeaDepthEnvelope_To5000_KeepsTopologyAndDistributionNearBaseline()
+        {
+            foreach (EnvelopeCase c in _cases)
+            {
+                Metrics baseline = RunMetrics(c.Template, c.Seed, c.CellCount, maxSeaDepthMeters: 1250f);
+                Metrics candidate = RunMetrics(c.Template, c.Seed, c.CellCount, maxSeaDepthMeters: 5000f);
+
+                string label = $"{c.Template} seed={c.Seed} cells={c.CellCount}";
+                Assert.That(Math.Abs(candidate.LandRatio - baseline.LandRatio), Is.LessThanOrEqualTo(0.02f),
+                    $"{label}: land ratio drift too high.");
+                Assert.That(Math.Abs(candidate.CoastRatio - baseline.CoastRatio), Is.LessThanOrEqualTo(0.02f),
+                    $"{label}: coast ratio drift too high.");
+                Assert.That(Math.Abs(candidate.RiverCount - baseline.RiverCount), Is.LessThanOrEqualTo(20),
+                    $"{label}: river count drift too high.");
+                Assert.That(Math.Abs(candidate.P50 - baseline.P50), Is.LessThanOrEqualTo(200f),
+                    $"{label}: p50 signed elevation drift too high.");
+            }
+        }
+
+        [Test]
+        public void ExpandingEnvelope_To8000_PreservesTopology_AndExpandsVerticalRange()
+        {
+            foreach (EnvelopeCase c in _cases)
+            {
+                Metrics baseline = RunMetrics(
+                    c.Template,
+                    c.Seed,
+                    c.CellCount,
+                    maxElevationMeters: 5000f,
+                    maxSeaDepthMeters: 5000f);
+                Metrics candidate = RunMetrics(
+                    c.Template,
+                    c.Seed,
+                    c.CellCount,
+                    maxElevationMeters: 8000f,
+                    maxSeaDepthMeters: 8000f);
+
+                string label = $"{c.Template} seed={c.Seed} cells={c.CellCount}";
+                Assert.That(Math.Abs(candidate.LandRatio - baseline.LandRatio), Is.LessThanOrEqualTo(0.02f),
+                    $"{label}: land ratio drift too high.");
+                Assert.That(Math.Abs(candidate.CoastRatio - baseline.CoastRatio), Is.LessThanOrEqualTo(0.02f),
+                    $"{label}: coast ratio drift too high.");
+                Assert.That(Math.Abs(candidate.RiverCount - baseline.RiverCount), Is.LessThanOrEqualTo(20),
+                    $"{label}: river count drift too high.");
+                Assert.That(candidate.P90, Is.GreaterThan(baseline.P90 + 100f),
+                    $"{label}: expected higher highland envelope after expansion.");
+                Assert.That(candidate.P10, Is.LessThan(baseline.P10 - 50f),
+                    $"{label}: expected deeper bathymetry envelope after expansion.");
+            }
+        }
+
+        [Test]
+        public void DepthRemapExponent_LowerValue_PushesBathymetryDeeper()
+        {
+            Metrics linear = RunMetrics(
+                HeightmapTemplateType.LowIsland,
+                seed: 1101,
+                cellCount: 5000,
+                maxSeaDepthMeters: 8000f,
+                maxElevationMeters: 8000f,
+                depthRemapExponent: 1f);
+            Metrics abyssBias = RunMetrics(
+                HeightmapTemplateType.LowIsland,
+                seed: 1101,
+                cellCount: 5000,
+                maxSeaDepthMeters: 8000f,
+                maxElevationMeters: 8000f,
+                depthRemapExponent: 0.75f);
+
+            Assert.That(abyssBias.P10, Is.LessThan(linear.P10 - 100f),
+                "Lower depth remap exponent should deepen lower-ocean percentile.");
+            Assert.That(Math.Abs(abyssBias.LandRatio - linear.LandRatio), Is.LessThanOrEqualTo(0.02f),
+                "Depth remap exponent should not materially change land ratio.");
+        }
+
+        static Metrics RunMetrics(
+            HeightmapTemplateType template,
+            int seed,
+            int cellCount,
+            float maxSeaDepthMeters,
+            float maxElevationMeters = 5000f,
+            float depthRemapExponent = 1f)
+        {
+            var config = new MapGenConfig
+            {
+                Seed = seed,
+                CellCount = cellCount,
+                Template = template,
+                MaxElevationMeters = maxElevationMeters,
+                MaxSeaDepthMeters = maxSeaDepthMeters,
+                TerrainShapeReferenceSpanMeters = 6250f,
+                TerrainShapeInitialSeaDepthMeters = 1250f,
+                TerrainDepthRemapExponent = depthRemapExponent,
+                RiverThreshold = 180f,
+                RiverTraceThreshold = 10f,
+                MinRiverVertices = 8
+            };
+
+            MapGenResult result = MapGenPipeline.Generate(config);
+            float landRatio = result.Elevation.LandRatio();
+            float coastRatio = ComputeCoastRatio(result.Mesh, result.Elevation);
+            int riverCount = result.Rivers.Rivers.Length;
+            float p10 = Percentile(result.Elevation.ElevationMetersSigned, 0.10f);
+            float p50 = Percentile(result.Elevation.ElevationMetersSigned, 0.50f);
+            float p90 = Percentile(result.Elevation.ElevationMetersSigned, 0.90f);
+            return new Metrics(landRatio, coastRatio, riverCount, p10, p50, p90);
+        }
+
+        static float ComputeCoastRatio(CellMesh mesh, ElevationField elevation)
+        {
+            int candidateEdges = 0;
+            int coastEdges = 0;
+
+            for (int i = 0; i < mesh.EdgeCount; i++)
+            {
+                var edge = mesh.EdgeCells[i];
+                int c0 = edge.C0;
+                int c1 = edge.C1;
+                if (c0 < 0 || c1 < 0)
+                    continue;
+
+                candidateEdges++;
+                bool land0 = elevation.IsLand(c0);
+                bool land1 = elevation.IsLand(c1);
+                if (land0 != land1)
+                    coastEdges++;
+            }
+
+            if (candidateEdges == 0)
+                return 0f;
+
+            return (float)coastEdges / candidateEdges;
+        }
+
+        static float Percentile(float[] values, float q)
+        {
+            if (values == null || values.Length == 0)
+                return 0f;
+
+            var sorted = (float[])values.Clone();
+            Array.Sort(sorted);
+
+            if (q <= 0f) return sorted[0];
+            if (q >= 1f) return sorted[sorted.Length - 1];
+
+            float index = q * (sorted.Length - 1);
+            int lo = (int)Math.Floor(index);
+            int hi = (int)Math.Ceiling(index);
+            if (lo == hi)
+                return sorted[lo];
+
+            float t = index - lo;
+            return sorted[lo] + (sorted[hi] - sorted[lo]) * t;
+        }
+
+        readonly struct EnvelopeCase
+        {
+            public readonly int Seed;
+            public readonly HeightmapTemplateType Template;
+            public readonly int CellCount;
+
+            public EnvelopeCase(int seed, HeightmapTemplateType template, int cellCount)
+            {
+                Seed = seed;
+                Template = template;
+                CellCount = cellCount;
+            }
+        }
+
+        readonly struct Metrics
+        {
+            public readonly float LandRatio;
+            public readonly float CoastRatio;
+            public readonly int RiverCount;
+            public readonly float P10;
+            public readonly float P50;
+            public readonly float P90;
+
+            public Metrics(float landRatio, float coastRatio, int riverCount, float p10, float p50, float p90)
+            {
+                LandRatio = landRatio;
+                CoastRatio = coastRatio;
+                RiverCount = riverCount;
+                P10 = p10;
+                P50 = p50;
+                P90 = p90;
+            }
+        }
+    }
+}

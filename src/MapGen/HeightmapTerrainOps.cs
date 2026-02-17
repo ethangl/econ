@@ -30,7 +30,7 @@ namespace MapGen.Core
 
         static float ShapeUnitMeters(ElevationField field)
         {
-            float unit = (field.MaxElevationMeters + field.MaxSeaDepthMeters) / 100f;
+            float unit = field.TerrainShapeReferenceSpanMeters / 100f;
             if (unit <= 0f || float.IsNaN(unit) || float.IsInfinity(unit))
                 return 1f;
             return unit;
@@ -571,7 +571,7 @@ namespace MapGen.Core
                         float h = field[c];
                         float carve = Math.Max(FromShapeUnits(field, 6f), Math.Abs(h) * 0.55f);
                         h -= carve;
-                        h -= field.MaxSeaDepthMeters * 0.03f;
+                        h -= FromShapeUnits(field, 0.6f);
                         field[c] = h;
                     }
                 }

@@ -167,6 +167,24 @@ trough 6 400m 60-65 35-45
             TestContext.WriteLine(report.ToString());
         }
 
+        [Test]
+        public void DepthRemapDirective_CapturesTemplateLevelOverride()
+        {
+            ElevationField field = CreateField(seed: 700, cellCount: 1200, aspectRatio: 16f / 9f);
+            string script = @"
+depthremap 0.75
+hill 1 500m 45-55 45-55
+";
+
+            var context = new HeightmapDslExecutionContext();
+            HeightmapDsl.Execute(field, script, seed: 1234, context: context);
+
+            Assert.That(context.DepthRemapExponentOverride.HasValue, Is.True,
+                "Expected DSL context to capture depth remap override.");
+            Assert.That(context.DepthRemapExponentOverride.Value, Is.EqualTo(0.75f).Within(0.0001f),
+                "Depth remap exponent mismatch.");
+        }
+
         static void AssertPlacementWithinRequested(HeightmapDslOpMetrics m, string label)
         {
             Assert.That(m.PlacementCount, Is.GreaterThan(0), $"{label}: expected at least one placement.");
