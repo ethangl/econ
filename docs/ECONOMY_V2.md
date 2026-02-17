@@ -8,7 +8,7 @@ Replace the supply-push barter system with a demand-driven monetary economy wher
 2. Production chains have temporal depth (wheat today → flour tomorrow → bread the day after)
 3. Prices emerge from supply and demand, and facilities respond to price signals
 4. Workers earn wages and move toward higher-paying facilities
-5. Gold coins are the unit of account, mined from the ground
+5. Crowns are the unit of account, minted from mined gold
 
 ## Core Principles
 
@@ -46,21 +46,21 @@ LUXURY
 
 ### Unit
 
-Gold coin. Derived from the gold production chain: gold_ore → refinery → gold. The `gold` good doubles as currency. All prices are denominated in gold coins.
+Crown. One Crown is defined as `0.001 kg` of gold (1 gram). Derived from the gold production chain: gold_ore → refinery → gold. All prices are denominated in `Crowns/kg`.
 
 ### Initial Endowment
 
 The simulation bootstraps with money already in circulation:
 
-- **Population**: each person starts with enough gold to cover ~30 days of basic consumption at base prices
-- **Facilities**: each starts with operating capital for ~7 days (input costs + wages)
+- **Population**: each person starts with enough Crowns to cover ~30 days of basic consumption at base prices
+- **Facilities**: each starts with operating capital for ~7 days (input costs + wages) in Crowns
 - **Markets**: start with initial inventory at base prices (small buffer to prevent day-1 stockouts)
 
 These represent a pre-existing economy. The simulation models ongoing dynamics, not the founding of civilization.
 
 ### Money Supply
 
-- **Source**: gold mining → refining → coins entering circulation
+- **Source**: gold mining → refining → Crown-denominated money entering circulation
 - **Sinks**: gold consumed by jewelers (luxury vs monetary tension)
 - **No central bank.** Money supply is determined by geology and gold facility activity.
 
@@ -68,7 +68,7 @@ Transport costs are **not** a monetary sink. The monetary component of transport
 
 ### Gold as Good and Money
 
-Gold has dual nature: it's a tradeable refined good AND the currency. The jeweler consumes gold to make jewelry (removing it from money supply). Gold miners add to money supply. This creates natural tension between monetary and luxury uses.
+Gold has dual nature: it's a tradeable refined good and the monetary backing for Crowns (`1 Crown = 0.001 kg gold`). The jeweler consumes gold to make jewelry (removing monetary backing from circulation). Gold miners add monetary backing. This creates natural tension between monetary and luxury uses.
 
 **Deflation risk**: if jewelers consume gold faster than miners produce it, the money supply contracts. Safeguards:
 
@@ -89,11 +89,11 @@ Added to `CountyPopulation` and `Facility`:
 
 ```csharp
 // On CountyPopulation
-float Treasury;  // gold coins held by population of this county
+float Treasury;  // Crowns held by population of this county
 
 // On Facility
-float Treasury;       // operating capital (gold coins)
-float WageRate;       // gold per worker per day
+float Treasury;       // operating capital (Crowns)
+float WageRate;       // Crowns per worker per day
 bool IsActive;        // true if facility is operating (existing field, new semantics)
 ```
 
@@ -125,10 +125,10 @@ Non-consumer goods (raw, refined) have `BaseConsumption = 0` — they're facilit
 ```csharp
 float Supply;           // units available for sale
 float Demand;           // units wanted by buyers
-float Price;            // current posted price (in gold coins)
-float BasePrice;        // reference price (from GoodDef)
+float Price;            // current posted price (Crowns/kg)
+float BasePrice;        // reference price (Crowns/kg)
 float LastTradeVolume;  // units actually traded last clearing
-float Revenue;          // gold collected from sales last clearing
+float Revenue;          // Crowns collected from sales last clearing
 ```
 
 ### Modified: CountyEconomy

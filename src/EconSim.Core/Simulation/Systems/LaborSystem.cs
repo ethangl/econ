@@ -52,7 +52,8 @@ namespace EconSim.Core.Simulation.Systems
                     _countyFacilitiesBuffer.Add((facility, def));
                 }
 
-                HandleDistressedExit(_countyFacilitiesBuffer);
+                if (!SimulationConfig.Economy.EnableFacilitySubsidies)
+                    HandleDistressedExit(_countyFacilitiesBuffer);
 
                 ReallocateType(county, _countyFacilitiesBuffer, LaborType.Unskilled, state.SubsistenceWage);
                 ReallocateType(county, _countyFacilitiesBuffer, LaborType.Skilled, state.SubsistenceWage);
@@ -160,7 +161,8 @@ namespace EconSim.Core.Simulation.Systems
                 var pair = _activeFacilitiesBuffer[i];
                 if (pair.facility.WageRate + 0.0001f < subsistenceWage)
                     continue;
-                if (pair.facility.WageDebtDays >= DistressedDebtDays)
+                if (!SimulationConfig.Economy.EnableFacilitySubsidies
+                    && pair.facility.WageDebtDays >= DistressedDebtDays)
                     continue;
 
                 int needed = Math.Max(0, pair.facility.GetRequiredLabor(pair.def) - pair.facility.AssignedWorkers);

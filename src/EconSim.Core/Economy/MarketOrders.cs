@@ -43,6 +43,11 @@ namespace EconSim.Core.Economy
         public string GoodId;
         public int? GoodRuntimeId;
         public float Quantity;
+        /// <summary>
+        /// Seller reservation floor for this lot (Crowns per kg).
+        /// Market clears this lot only if current price meets/exceeds this value.
+        /// </summary>
+        public float MinUnitPrice;
         public int DayListed;
     }
 

@@ -12,11 +12,20 @@ namespace EconSim.Core.Simulation.Systems
     public class OrderSystem : ITickSystem
     {
         private const float BuyerTransportFeeRate = 0.005f;
+        private const float BasicAffordabilityElasticity = 0.75f;
+        private const float ComfortAffordabilityElasticity = 1.00f;
+        private const float LuxuryAffordabilityElasticity = 1.25f;
+        private const float BasicMinDemandScale = 0.15f;
+        private const float ComfortMinDemandScale = 0.02f;
+        private const float LuxuryMinDemandScale = 0.00f;
+        private const float InterMarketTransferCost = 120f;
+        private const float MillInputOrderHorizonDays = 0.25f;
 
         private static readonly string[] BreadSubsistenceGoods = { "wheat", "rye", "barley", "rice_grain" };
         private readonly Dictionary<int, float> _demandByGoodBuffer = new Dictionary<int, float>();
         private readonly List<OrderLine> _tierLinesBuffer = new List<OrderLine>();
         private readonly Dictionary<string, int> _goodRuntimeIdCache = new Dictionary<string, int>();
+        private readonly Dictionary<long, float> _countyMarketTransportCostCache = new Dictionary<long, float>();
         private int[] _breadSubsistenceRuntimeIds = Array.Empty<int>();
         private int _breadRuntimeId = -1;
 
@@ -61,7 +70,8 @@ namespace EconSim.Core.Simulation.Systems
                 _breadSubsistenceRuntimeIds[i] = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, BreadSubsistenceGoods[i]);
             }
 
-            _breadRuntimeId = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, "bread");
+            // Apply subsistence cover to staple flour demand (not comfort bread demand).
+            _breadRuntimeId = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, "flour");
         }
 
         public void Tick(SimulationState state, MapData mapData)
@@ -70,6 +80,7 @@ namespace EconSim.Core.Simulation.Systems
             if (economy == null)
                 return;
 
+            _countyMarketTransportCostCache.Clear();
             foreach (var county in economy.Counties.Values)
             {
                 if (!economy.CountyToMarket.TryGetValue(county.CountyId, out int marketId))
@@ -89,8 +100,9 @@ namespace EconSim.Core.Simulation.Systems
                     _demandByGoodBuffer,
                     _tierLinesBuffer,
                     _breadSubsistenceRuntimeIds,
-                    _breadRuntimeId);
-                PostFacilityInputOrders(state, economy, county, market, transportCost, _goodRuntimeIdCache);
+                    _breadRuntimeId,
+                    _countyMarketTransportCostCache);
+                PostFacilityInputOrders(state, economy, county, market, transportCost, _goodRuntimeIdCache, _countyMarketTransportCostCache);
             }
         }
 
@@ -103,7 +115,8 @@ namespace EconSim.Core.Simulation.Systems
             Dictionary<int, float> demandByGood,
             List<OrderLine> tierLinesBuffer,
             int[] breadSubsistenceRuntimeIds,
-            int breadRuntimeId)
+            int breadRuntimeId,
+            Dictionary<long, float> countyMarketTransportCostCache)
         {
             int population = county.Population.Total;
             if (population <= 0)
@@ -113,6 +126,8 @@ namespace EconSim.Core.Simulation.Systems
             foreach (var good in economy.Goods.ConsumerGoods)
             {
                 if (!good.NeedCategory.HasValue)
+                    continue;
+                if (!SimulationConfig.Economy.IsGoodEnabled(good.Id))
                     continue;
 
                 float perCapita = good.BaseConsumptionKgPerCapitaPerDay;
@@ -128,13 +143,13 @@ namespace EconSim.Core.Simulation.Systems
             ApplySubsistenceFromStockpile(county, demandByGood, breadSubsistenceRuntimeIds, breadRuntimeId);
 
             float budget = Math.Max(0f, county.Population.Treasury);
-            budget -= PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Basic, budget);
+            budget -= PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Basic, budget, countyMarketTransportCostCache);
             if (budget <= 0f) return;
 
-            budget -= PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Comfort, budget);
+            budget -= PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Comfort, budget, countyMarketTransportCostCache);
             if (budget <= 0f) return;
 
-            PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Luxury, budget);
+            PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Luxury, budget, countyMarketTransportCostCache);
         }
 
         private static float PostTierOrders(
@@ -146,7 +161,8 @@ namespace EconSim.Core.Simulation.Systems
             Dictionary<int, float> demandByGood,
             List<OrderLine> linesBuffer,
             NeedCategory tier,
-            float availableBudget)
+            float availableBudget,
+            Dictionary<long, float> countyMarketTransportCostCache)
         {
             linesBuffer.Clear();
             float totalCost = 0f;
@@ -161,20 +177,31 @@ namespace EconSim.Core.Simulation.Systems
 
                 if (good.NeedCategory != tier)
                     continue;
+                if (!SimulationConfig.Economy.IsGoodEnabled(good.Id))
+                    continue;
 
-                Market targetMarket = market;
-                float targetTransportCost = transportCost;
-                if (TryResolveOffMapMarket(economy, county.CountyId, good.Id, out var offMapMarket, out float offMapTransportCost))
-                {
-                    targetMarket = offMapMarket;
-                    targetTransportCost = offMapTransportCost;
-                }
-
-                if (!targetMarket.TryGetGoodState(good.RuntimeId, out var marketGood))
+                if (!TryResolveBestMarketForGood(
+                    state,
+                    economy,
+                    county.CountyId,
+                    market,
+                    transportCost,
+                    good.Id,
+                    good.RuntimeId,
+                    countyMarketTransportCostCache,
+                    out var targetMarket,
+                    out float targetTransportCost,
+                    out var marketGood))
                     continue;
 
                 float effectivePrice = marketGood.Price * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
                 if (effectivePrice <= 0f)
+                    continue;
+
+                float baseEffectivePrice = marketGood.BasePrice * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
+                float affordabilityScale = ComputeAffordabilityDemandScale(tier, effectivePrice, baseEffectivePrice);
+                qty *= affordabilityScale;
+                if (qty <= 0.0001f)
                     continue;
 
                 float fullCost = qty * effectivePrice;
@@ -233,13 +260,46 @@ namespace EconSim.Core.Simulation.Systems
             return Math.Min(spent, budget);
         }
 
+        private static float ComputeAffordabilityDemandScale(
+            NeedCategory tier,
+            float effectivePrice,
+            float baseEffectivePrice)
+        {
+            if (effectivePrice <= 0f || baseEffectivePrice <= 0f)
+                return 1f;
+
+            float ratio = Clamp(baseEffectivePrice / effectivePrice, 0f, 1f);
+            float elasticity;
+            float minScale;
+            switch (tier)
+            {
+                case NeedCategory.Basic:
+                    elasticity = BasicAffordabilityElasticity;
+                    minScale = BasicMinDemandScale;
+                    break;
+                case NeedCategory.Comfort:
+                    elasticity = ComfortAffordabilityElasticity;
+                    minScale = ComfortMinDemandScale;
+                    break;
+                case NeedCategory.Luxury:
+                default:
+                    elasticity = LuxuryAffordabilityElasticity;
+                    minScale = LuxuryMinDemandScale;
+                    break;
+            }
+
+            float scaled = (float)Math.Pow(ratio, elasticity);
+            return Clamp(scaled, minScale, 1f);
+        }
+
         private static void PostFacilityInputOrders(
             SimulationState state,
             EconomyState economy,
             CountyEconomy county,
             Market market,
             float transportCost,
-            Dictionary<string, int> runtimeIdCache)
+            Dictionary<string, int> runtimeIdCache,
+            Dictionary<long, float> countyMarketTransportCostCache)
         {
             foreach (int facilityId in county.FacilityIds)
             {
@@ -248,6 +308,9 @@ namespace EconSim.Core.Simulation.Systems
 
                 var def = economy.FacilityDefs.Get(facility.TypeId);
                 if (def == null || def.IsExtraction)
+                    continue;
+                if (!SimulationConfig.Economy.IsFacilityEnabled(facility.TypeId)
+                    || !SimulationConfig.Economy.IsGoodEnabled(def.OutputGoodId))
                     continue;
 
                 // Zero-staffed facilities cannot consume inputs this tick.
@@ -262,33 +325,51 @@ namespace EconSim.Core.Simulation.Systems
                 if (output == null)
                     continue;
 
-                var inputs = def.InputOverrides ?? output.Inputs;
-                if (inputs == null || inputs.Count == 0)
+                var selectedInputs = SelectBestInputVariantForOrders(
+                    state,
+                    economy,
+                    county.CountyId,
+                    market,
+                    transportCost,
+                    def,
+                    output,
+                    countyMarketTransportCostCache);
+                if (selectedInputs == null || selectedInputs.Count == 0)
                     continue;
 
                 float remainingTreasury = Math.Max(0f, facility.Treasury);
                 if (remainingTreasury <= 0f)
                     continue;
 
-                foreach (var input in inputs)
+                foreach (var input in selectedInputs)
                 {
                     int inputRuntimeId = ResolveRuntimeId(economy.Goods, runtimeIdCache, input.GoodId);
                     if (inputRuntimeId < 0)
                         continue;
+                    if (!SimulationConfig.Economy.IsGoodEnabled(input.GoodId))
+                        continue;
 
-                    Market targetMarket = market;
-                    float targetTransportCost = transportCost;
-                    if (TryResolveOffMapMarket(economy, county.CountyId, input.GoodId, out var offMapMarket, out float offMapTransportCost))
-                    {
-                        targetMarket = offMapMarket;
-                        targetTransportCost = offMapTransportCost;
-                    }
-
-                    if (!targetMarket.TryGetGoodState(inputRuntimeId, out var marketGood))
+                    if (!TryResolveBestMarketForGood(
+                        state,
+                        economy,
+                        county.CountyId,
+                        market,
+                        transportCost,
+                        input.GoodId,
+                        inputRuntimeId,
+                        countyMarketTransportCostCache,
+                        out var targetMarket,
+                        out float targetTransportCost,
+                        out var marketGood))
                         continue;
 
                     float needed = input.QuantityKg * currentThroughput;
+                    if (IsMillFacility(def))
+                        needed *= MillInputOrderHorizonDays;
+
                     float have = facility.InputBuffer.Get(inputRuntimeId);
+                    if (IsMillFacility(def) && IsReserveGrainGood(input.GoodId))
+                        have += county.Stockpile.Get(inputRuntimeId);
                     float toBuy = Math.Max(0f, needed - have);
                     if (toBuy <= 0.0001f)
                         continue;
@@ -320,6 +401,103 @@ namespace EconSim.Core.Simulation.Systems
             }
         }
 
+        private static List<GoodInput> SelectBestInputVariantForOrders(
+            SimulationState state,
+            EconomyState economy,
+            int countyId,
+            Market localMarket,
+            float localTransportCost,
+            FacilityDef def,
+            GoodDef output,
+            Dictionary<long, float> countyMarketTransportCostCache)
+        {
+            List<GoodInput> bestInputs = null;
+            float bestCost = float.MaxValue;
+
+            foreach (var inputs in EnumerateInputVariants(def, output))
+            {
+                if (inputs == null || inputs.Count == 0)
+                    continue;
+
+                float variantCost = 0f;
+                bool valid = true;
+                for (int i = 0; i < inputs.Count; i++)
+                {
+                    var input = inputs[i];
+                    if (input.QuantityKg <= 0f)
+                    {
+                        valid = false;
+                        break;
+                    }
+
+                    if (!economy.Goods.TryGetRuntimeId(input.GoodId, out int inputRuntimeId))
+                    {
+                        valid = false;
+                        break;
+                    }
+                    if (!TryResolveBestMarketForGood(
+                        state,
+                        economy,
+                        countyId,
+                        localMarket,
+                        localTransportCost,
+                        input.GoodId,
+                        inputRuntimeId,
+                        countyMarketTransportCostCache,
+                        out _,
+                        out float targetTransportCost,
+                        out var marketGood))
+                    {
+                        valid = false;
+                        break;
+                    }
+
+                    float effectivePrice = marketGood.Price * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
+                    if (effectivePrice <= 0f)
+                    {
+                        valid = false;
+                        break;
+                    }
+
+                    variantCost += input.QuantityKg * effectivePrice;
+                }
+
+                if (!valid || variantCost >= bestCost)
+                    continue;
+
+                bestCost = variantCost;
+                bestInputs = inputs;
+            }
+
+            return bestInputs;
+        }
+
+        private static IEnumerable<List<GoodInput>> EnumerateInputVariants(FacilityDef def, GoodDef output)
+        {
+            if (def?.InputOverrides != null && def.InputOverrides.Count > 0)
+            {
+                yield return def.InputOverrides;
+                yield break;
+            }
+
+            bool yieldedVariant = false;
+            if (output?.InputVariants != null)
+            {
+                for (int i = 0; i < output.InputVariants.Count; i++)
+                {
+                    var variant = output.InputVariants[i];
+                    if (variant?.Inputs == null || variant.Inputs.Count == 0)
+                        continue;
+
+                    yieldedVariant = true;
+                    yield return variant.Inputs;
+                }
+            }
+
+            if (!yieldedVariant && output?.Inputs != null && output.Inputs.Count > 0)
+                yield return output.Inputs;
+        }
+
         private static void ApplySubsistenceFromStockpile(
             CountyEconomy county,
             Dictionary<int, float> demandByGood,
@@ -341,7 +519,9 @@ namespace EconSim.Core.Simulation.Systems
                     equivalent += available * 0.5f;
                 }
 
-                float covered = Math.Min(breadNeed, equivalent);
+                float subsistenceShare = Clamp(SimulationConfig.Economy.BreadSubsistenceShare, 0f, 1f);
+                float subsistenceCap = breadNeed * subsistenceShare;
+                float covered = Math.Min(subsistenceCap, equivalent);
                 if (covered > 0f)
                 {
                     float requiredRaw = covered / 0.5f;
@@ -412,6 +592,181 @@ namespace EconSim.Core.Simulation.Systems
             return runtimeId;
         }
 
+        private static bool IsMillFacility(FacilityDef def)
+        {
+            if (def == null)
+                return false;
+
+            return def.Id == "mill" || def.Id == "rye_mill" || def.Id == "barley_mill";
+        }
+
+        private static bool IsReserveGrainGood(string goodId)
+        {
+            if (string.IsNullOrWhiteSpace(goodId))
+                return false;
+
+            for (int i = 0; i < BreadSubsistenceGoods.Length; i++)
+            {
+                if (string.Equals(BreadSubsistenceGoods[i], goodId, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryResolveBestMarketForGood(
+            SimulationState state,
+            EconomyState economy,
+            int countyId,
+            Market localMarket,
+            float localTransportCost,
+            string goodId,
+            int goodRuntimeId,
+            Dictionary<long, float> countyMarketTransportCostCache,
+            out Market targetMarket,
+            out float targetTransportCost,
+            out MarketGoodState targetGoodState)
+        {
+            targetMarket = null;
+            targetTransportCost = 0f;
+            targetGoodState = null;
+
+            if (economy == null || countyId <= 0 || goodRuntimeId < 0)
+                return false;
+
+            float bestEffectivePrice = float.MaxValue;
+            float bestTransportCost = float.MaxValue;
+
+            if (localMarket != null
+                && localMarket.TryGetGoodState(goodRuntimeId, out var localGoodState))
+            {
+                float localCost = Math.Max(0f, localTransportCost);
+                float effectivePrice = localGoodState.Price * (1f + localCost * BuyerTransportFeeRate);
+                if (effectivePrice > 0f)
+                {
+                    bestEffectivePrice = effectivePrice;
+                    bestTransportCost = localCost;
+                    targetMarket = localMarket;
+                    targetTransportCost = localCost;
+                    targetGoodState = localGoodState;
+                }
+            }
+
+            foreach (var market in economy.Markets.Values)
+            {
+                if (market == null || market.Type != MarketType.Legitimate)
+                    continue;
+                if (localMarket != null && market.Id == localMarket.Id)
+                    continue;
+                if (!market.TryGetGoodState(goodRuntimeId, out var marketGoodState))
+                    continue;
+                if (!TryResolveCountyToMarketTransportCost(
+                    state,
+                    economy,
+                    countyId,
+                    market,
+                    localMarket,
+                    localTransportCost,
+                    countyMarketTransportCostCache,
+                    out float transportCost))
+                {
+                    continue;
+                }
+
+                float effectivePrice = marketGoodState.Price * (1f + Math.Max(0f, transportCost) * BuyerTransportFeeRate);
+                if (effectivePrice <= 0f)
+                    continue;
+
+                bool cheaper = effectivePrice < bestEffectivePrice - 0.0001f;
+                bool tieAndCloser = Math.Abs(effectivePrice - bestEffectivePrice) <= 0.0001f
+                    && transportCost < bestTransportCost;
+                if (!cheaper && !tieAndCloser)
+                    continue;
+
+                bestEffectivePrice = effectivePrice;
+                bestTransportCost = transportCost;
+                targetMarket = market;
+                targetTransportCost = transportCost;
+                targetGoodState = marketGoodState;
+            }
+
+            if (TryResolveOffMapMarket(economy, countyId, goodId, out var offMapMarket, out float offMapTransportCost)
+                && offMapMarket.TryGetGoodState(goodRuntimeId, out var offMapGoodState))
+            {
+                float effectivePrice = offMapGoodState.Price * (1f + Math.Max(0f, offMapTransportCost) * BuyerTransportFeeRate);
+                if (effectivePrice > 0f)
+                {
+                    bool cheaper = effectivePrice < bestEffectivePrice - 0.0001f;
+                    bool tieAndCloser = Math.Abs(effectivePrice - bestEffectivePrice) <= 0.0001f
+                        && offMapTransportCost < bestTransportCost;
+                    if (cheaper || tieAndCloser || targetMarket == null)
+                    {
+                        targetMarket = offMapMarket;
+                        targetTransportCost = Math.Max(0f, offMapTransportCost);
+                        targetGoodState = offMapGoodState;
+                    }
+                }
+            }
+
+            return targetMarket != null && targetGoodState != null;
+        }
+
+        private static bool TryResolveCountyToMarketTransportCost(
+            SimulationState state,
+            EconomyState economy,
+            int countyId,
+            Market market,
+            Market localMarket,
+            float localTransportCost,
+            Dictionary<long, float> countyMarketTransportCostCache,
+            out float transportCost)
+        {
+            transportCost = 0f;
+            if (economy == null || countyId <= 0 || market == null)
+                return false;
+
+            if (localMarket != null && market.Id == localMarket.Id)
+            {
+                transportCost = Math.Max(0f, localTransportCost);
+                return true;
+            }
+
+            long cacheKey = ComposeCountyMarketKey(countyId, market.Id);
+            if (countyMarketTransportCostCache != null
+                && countyMarketTransportCostCache.TryGetValue(cacheKey, out float cachedCost))
+            {
+                transportCost = cachedCost;
+                return true;
+            }
+
+            if (!economy.CountySeatCell.TryGetValue(countyId, out int seatCellId) || seatCellId <= 0)
+                return false;
+
+            if (market.ZoneCellCosts != null
+                && market.ZoneCellCosts.TryGetValue(seatCellId, out float zonedCost)
+                && float.IsFinite(zonedCost))
+            {
+                transportCost = Math.Max(0f, zonedCost);
+            }
+            else
+            {
+                float baseCost = localTransportCost > 0f
+                    ? localTransportCost
+                    : Math.Max(0f, economy.GetCountyTransportCost(countyId));
+                transportCost = baseCost + InterMarketTransferCost;
+            }
+
+            if (countyMarketTransportCostCache != null)
+                countyMarketTransportCostCache[cacheKey] = transportCost;
+
+            return true;
+        }
+
+        private static long ComposeCountyMarketKey(int countyId, int marketId)
+        {
+            return ((long)countyId << 32) | (uint)marketId;
+        }
+
         private static bool TryResolveOffMapMarket(
             EconomyState economy,
             int countyId,
@@ -454,6 +809,13 @@ namespace EconSim.Core.Simulation.Systems
             offMapMarket = bestMarket;
             offMapTransportCost = Math.Max(0f, bestCost);
             return true;
+        }
+
+        private static float Clamp(float value, float min, float max)
+        {
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
         }
     }
 }

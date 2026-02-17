@@ -17,6 +17,10 @@ namespace EconSim.Core.Economy
         private const float Elevation40FractionAboveSea = 0.25f;
         private const float Elevation45FractionAboveSea = 0.3125f;
         private const float Elevation50FractionAboveSea = 0.375f;
+        private const float BootstrapGrainReserveDays = 270f; // 9 months to avoid cold-start starvation.
+        private const float BootstrapRawGrainKgPerFlourKg = 1f / 0.72f;
+        private const float BootstrapSaltReserveKgPerCapita = 7.5f; // Midpoint of 5-10 kg/person reserve.
+        private static readonly string[] BootstrapReserveGrainGoodIds = { "wheat", "rye", "barley", "rice_grain" };
 
         /// <summary>
         /// Fully initialize economy from map data.
@@ -102,14 +106,25 @@ namespace EconSim.Core.Economy
                 county.Population.Treasury = dailyBasicCost * 30f;
             }
 
+            SeedCountyGrainReserves(economy);
+            SeedCountySaltReserves(economy);
+
             foreach (var facility in economy.Facilities.Values)
             {
                 var def = economy.FacilityDefs.Get(facility.TypeId);
                 if (def == null)
                     continue;
+                if (!SimulationConfig.Economy.IsFacilityEnabled(facility.TypeId)
+                    || !SimulationConfig.Economy.IsGoodEnabled(def.OutputGoodId))
+                {
+                    facility.IsActive = false;
+                    facility.AssignedWorkers = 0;
+                    facility.Treasury = 0f;
+                    continue;
+                }
 
                 var outputGood = economy.Goods.Get(def.OutputGoodId);
-                var inputs = outputGood != null ? (def.InputOverrides ?? outputGood.Inputs) : null;
+                var inputs = SelectInputsForFacilityByBaseCost(economy, def, outputGood);
 
                 float weeklyInputCost = 0f;
                 if (inputs != null)
@@ -137,9 +152,12 @@ namespace EconSim.Core.Economy
                 var def = economy.FacilityDefs.Get(facility.TypeId);
                 if (def == null || def.IsExtraction)
                     continue;
+                if (!SimulationConfig.Economy.IsFacilityEnabled(facility.TypeId)
+                    || !SimulationConfig.Economy.IsGoodEnabled(def.OutputGoodId))
+                    continue;
 
                 var outputGood = economy.Goods.Get(def.OutputGoodId);
-                var inputs = outputGood != null ? (def.InputOverrides ?? outputGood.Inputs) : null;
+                var inputs = SelectInputsForFacilityByBaseCost(economy, def, outputGood);
                 if (inputs == null)
                     continue;
 
@@ -177,6 +195,8 @@ namespace EconSim.Core.Economy
 
                 foreach (string goodId in localOutputs)
                 {
+                    if (!SimulationConfig.Economy.IsGoodEnabled(goodId))
+                        continue;
                     var good = economy.Goods.Get(goodId);
                     if (good == null)
                         continue;
@@ -219,6 +239,8 @@ namespace EconSim.Core.Economy
                 {
                     if (!IsBasicNeed(good))
                         continue;
+                    if (!SimulationConfig.Economy.IsGoodEnabled(good.Id))
+                        continue;
                     if (!market.Goods.TryGetValue(good.Id, out var marketGood))
                         continue;
 
@@ -251,15 +273,20 @@ namespace EconSim.Core.Economy
                     var def = economy.FacilityDefs.Get(facility.TypeId);
                     if (def == null || def.IsExtraction)
                         continue;
+                    if (!SimulationConfig.Economy.IsFacilityEnabled(facility.TypeId)
+                        || !SimulationConfig.Economy.IsGoodEnabled(def.OutputGoodId))
+                        continue;
 
                     var outputGood = economy.Goods.Get(def.OutputGoodId);
-                    var inputs = outputGood != null ? (def.InputOverrides ?? outputGood.Inputs) : null;
+                    var inputs = SelectInputsForFacilityByBaseCost(economy, def, outputGood);
                     if (inputs == null)
                         continue;
 
                     float remainingTreasury = facility.Treasury;
                     foreach (var input in inputs)
                     {
+                        if (!SimulationConfig.Economy.IsGoodEnabled(input.GoodId))
+                            continue;
                         if (!market.Goods.TryGetValue(input.GoodId, out var marketGood))
                             continue;
                         if (!economy.Goods.TryGetRuntimeId(input.GoodId, out int inputRuntimeId))
@@ -482,9 +509,6 @@ namespace EconSim.Core.Economy
 
             SimLog.Log("Economy", "Placing extraction facilities:");
 
-            // Track which counties have extraction facilities (for co-locating processing)
-            var extractionCounties = new Dictionary<string, List<int>>(); // output good -> countyIds with facilities
-
             // Place extraction facilities (multiple per eligible county)
             foreach (var facilityDef in economy.FacilityDefs.ExtractionFacilities)
             {
@@ -494,7 +518,6 @@ namespace EconSim.Core.Economy
                     continue;
                 }
 
-                extractionCounties[facilityDef.OutputGoodId] = new List<int>();
                 int placed = 0;
 
                 foreach (var countyId in candidates)
@@ -508,175 +531,39 @@ namespace EconSim.Core.Economy
 
                     economy.CreateFacility(facilityDef.Id, cellId, count);
                     placed += count;
-                    extractionCounties[facilityDef.OutputGoodId].Add(countyId);
                 }
                 SimLog.Log("Economy", $"  {facilityDef.Id}: placed {placed} in {candidates.Count} candidates");
             }
 
-            // Place processing facilities in stages
-            SimLog.Log("Economy", "Placing processing facilities:");
-
-            // Track where each facility type is placed (by countyId)
-            var facilityCounties = new Dictionary<string, List<int>>();
-
-            // Stage 1: Primary processors - place in extraction counties
-            var primaryProcessors = new Dictionary<string, string>
+            // Place non-harvesting facilities in every county.
+            // This keeps processing/manufacturing universally available while extraction stays resource-gated.
+            SimLog.Log("Economy", "Placing non-harvesting facilities in all counties:");
+            foreach (var facilityDef in economy.FacilityDefs.All)
             {
-                { "mill", "wheat" },
-                { "rye_mill", "rye" },
-                { "barley_mill", "barley" },
-                { "rice_mill", "rice_grain" },
-                { "sugar_press", "sugarcane" },
-                { "spice_house", "spice_plants" },
-                { "smelter", "iron_ore" },
-                { "copper_smelter", "copper_ore" },
-                { "refinery", "gold_ore" },
-                { "sawmill", "timber" },
-                { "shearing_shed", "sheep" },
-                { "tannery", "hides" },
-                { "malthouse", "barley" },
-                { "salt_warehouse", "raw_salt" },
-                { "dye_works", "dye_plants" }
-            };
-
-            foreach (var kvp in primaryProcessors)
-            {
-                var facilityId = kvp.Key;
-                var sourceGood = kvp.Value;
-                var facilityDef = economy.FacilityDefs.Get(facilityId);
-                if (facilityDef == null) continue;
-
-                if (!extractionCounties.TryGetValue(sourceGood, out var candidates) || candidates.Count == 0)
-                {
-                    SimLog.Log("Economy", $"  {facilityId}: no extraction counties for {sourceGood}");
+                if (facilityDef == null || facilityDef.IsExtraction)
                     continue;
-                }
+                if (!SimulationConfig.Economy.IsFacilityEnabled(facilityDef.Id)
+                    || !SimulationConfig.Economy.IsGoodEnabled(facilityDef.OutputGoodId))
+                    continue;
 
-                facilityCounties[facilityId] = new List<int>();
                 int placed = 0;
-                foreach (var countyId in candidates)
+                int countyCount = 0;
+                foreach (var county in economy.Counties.Values)
                 {
-                    int cellId = GetCountySeatCell(countyId, mapData);
-                    if (cellId < 0) continue;
+                    int cellId = GetCountySeatCell(county.CountyId, mapData);
+                    if (cellId < 0)
+                        continue;
 
-                    int laborLimitedCount = ComputeFacilityCount(
-                        economy.GetCounty(countyId).Population,
-                        facilityDef,
-                        minPerCounty: 0);
-                    int count = ComputeInputConstrainedFacilityCount(
-                        economy,
-                        countyId,
-                        facilityDef,
-                        laborLimitedCount);
+                    int count = ComputeFacilityCount(county.Population, facilityDef, minPerCounty: 1);
                     if (count <= 0)
                         continue;
 
-                    economy.CreateFacility(facilityId, cellId, count);
+                    economy.CreateFacility(facilityDef.Id, cellId, count);
                     placed += count;
-                    facilityCounties[facilityId].Add(countyId);
-                }
-                SimLog.Log("Economy", $"  {facilityId}: placed {placed} in {sourceGood} counties");
-            }
-
-            // Stage 2: Secondary processors - place where primary processors are
-            // Value is a list of upstream facilities (bakery goes wherever any flour mill is)
-            var secondaryProcessors = new Dictionary<string, List<string>>
-            {
-                { "bakery", new List<string> { "mill", "rye_mill", "barley_mill" } },
-                { "sugar_refinery", new List<string> { "sugar_press" } },
-                { "smithy", new List<string> { "smelter" } },
-                { "coppersmith", new List<string> { "copper_smelter" } },
-                { "jeweler", new List<string> { "refinery" } },
-                { "workshop", new List<string> { "sawmill" } },
-                { "spinning_mill", new List<string> { "shearing_shed" } },
-                { "cobbler", new List<string> { "tannery" } },
-                { "brewery", new List<string> { "malthouse" } },
-                { "dyer", new List<string> { "dye_works" } }
-            };
-            var secondaryLocalInputRequirements = new Dictionary<string, HashSet<string>>
-            {
-                // Dyers should cluster in dye-producing counties, but cloth can be imported through trade.
-                { "dyer", new HashSet<string> { "dye" } }
-            };
-
-            foreach (var kvp in secondaryProcessors)
-            {
-                var facilityId = kvp.Key;
-                var upstreamFacilities = kvp.Value;
-                var facilityDef = economy.FacilityDefs.Get(facilityId);
-                if (facilityDef == null) continue;
-
-                // Union all counties from all upstream facility types
-                var allCandidates = new HashSet<int>();
-                foreach (var upstream in upstreamFacilities)
-                {
-                    if (facilityCounties.TryGetValue(upstream, out var counties))
-                        allCandidates.UnionWith(counties);
+                    countyCount++;
                 }
 
-                if (allCandidates.Count == 0)
-                {
-                    SimLog.Log("Economy", $"  {facilityId}: no counties with upstream facilities");
-                    continue;
-                }
-
-                facilityCounties[facilityId] = new List<int>();
-                int placed = 0;
-                foreach (var countyId in allCandidates)
-                {
-                    int cellId = GetCountySeatCell(countyId, mapData);
-                    if (cellId < 0) continue;
-                    int laborLimitedCount = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 0);
-                    secondaryLocalInputRequirements.TryGetValue(facilityId, out var requiredLocalInputGoodIds);
-                    int count = ComputeInputConstrainedFacilityCount(
-                        economy,
-                        countyId,
-                        facilityDef,
-                        laborLimitedCount,
-                        requiredLocalInputGoodIds);
-                    if (count <= 0)
-                        continue;
-
-                    economy.CreateFacility(facilityId, cellId, count);
-                    placed += count;
-                    facilityCounties[facilityId].Add(countyId);
-                }
-                SimLog.Log("Economy", $"  {facilityId}: placed {placed} in {allCandidates.Count} counties");
-            }
-
-            // Stage 3: Tertiary processors - place where secondary processors are
-            var tertiaryProcessors = new Dictionary<string, string>
-            {
-                { "tailor", "spinning_mill" }
-            };
-
-            foreach (var kvp in tertiaryProcessors)
-            {
-                var facilityId = kvp.Key;
-                var upstreamFacility = kvp.Value;
-                var facilityDef = economy.FacilityDefs.Get(facilityId);
-                if (facilityDef == null) continue;
-
-                if (!facilityCounties.TryGetValue(upstreamFacility, out var candidates) || candidates.Count == 0)
-                {
-                    SimLog.Log("Economy", $"  {facilityId}: no counties with {upstreamFacility}");
-                    continue;
-                }
-
-                int placed = 0;
-                foreach (var countyId in candidates)
-                {
-                    int cellId = GetCountySeatCell(countyId, mapData);
-                    if (cellId < 0) continue;
-                    int laborLimitedCount = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 0);
-                    int count = ComputeInputConstrainedFacilityCount(economy, countyId, facilityDef, laborLimitedCount);
-                    if (count <= 0)
-                        continue;
-
-                    economy.CreateFacility(facilityId, cellId, count);
-                    placed += count;
-                }
-                SimLog.Log("Economy", $"  {facilityId}: placed {placed} in {candidates.Count} counties");
+                SimLog.Log("Economy", $"  {facilityDef.Id}: placed {placed} across {countyCount} counties");
             }
 
             SimLog.Log("Economy", $"Total facilities: {economy.Facilities.Count}");
@@ -805,7 +692,7 @@ namespace EconSim.Core.Economy
                 return 0;
 
             var outputGood = economy.Goods.Get(targetDef.OutputGoodId);
-            var inputs = targetDef.InputOverrides ?? outputGood?.Inputs;
+            var inputs = SelectInputsForFacilityByBaseCost(economy, targetDef, outputGood);
             if (inputs == null || inputs.Count == 0)
                 return laborLimitedCount;
 
@@ -860,6 +747,60 @@ namespace EconSim.Core.Economy
             return Math.Max(1, Math.Min(laborLimitedCount, inputLimitedCount));
         }
 
+        private static List<GoodInput> SelectInputsForFacilityByBaseCost(
+            EconomyState economy,
+            FacilityDef def,
+            GoodDef outputGood)
+        {
+            if (def?.InputOverrides != null && def.InputOverrides.Count > 0)
+                return def.InputOverrides;
+
+            if (outputGood?.InputVariants != null && outputGood.InputVariants.Count > 0)
+            {
+                List<GoodInput> bestInputs = null;
+                float bestCost = float.MaxValue;
+                for (int i = 0; i < outputGood.InputVariants.Count; i++)
+                {
+                    var variant = outputGood.InputVariants[i];
+                    var variantInputs = variant?.Inputs;
+                    if (variantInputs == null || variantInputs.Count == 0)
+                        continue;
+
+                    float cost = 0f;
+                    bool valid = true;
+                    for (int j = 0; j < variantInputs.Count; j++)
+                    {
+                        var input = variantInputs[j];
+                        if (input.QuantityKg <= 0f)
+                        {
+                            valid = false;
+                            break;
+                        }
+
+                        var inputGood = economy.Goods.Get(input.GoodId);
+                        if (inputGood == null)
+                        {
+                            valid = false;
+                            break;
+                        }
+
+                        cost += inputGood.BasePrice * input.QuantityKg;
+                    }
+
+                    if (!valid || cost >= bestCost)
+                        continue;
+
+                    bestCost = cost;
+                    bestInputs = variantInputs;
+                }
+
+                if (bestInputs != null)
+                    return bestInputs;
+            }
+
+            return outputGood?.Inputs;
+        }
+
         /// <summary>
         /// Get the seat cell for a county (used for processing facility placement).
         /// </summary>
@@ -882,7 +823,134 @@ namespace EconSim.Core.Economy
             return aboveSeaFraction * Elevation.ResolveMaxElevationMeters(info);
         }
 
-        private static bool IsBasicNeed(GoodDef good) => good.NeedCategory == NeedCategory.Basic;
+        private static bool IsBasicNeed(GoodDef good)
+        {
+            return good != null
+                && good.NeedCategory == NeedCategory.Basic
+                && SimulationConfig.Economy.IsGoodEnabled(good.Id);
+        }
+
+        private static void SeedCountyGrainReserves(EconomyState economy)
+        {
+            if (economy == null)
+                return;
+
+            float stapleFlourPerCapitaPerDay = 160f / 365f;
+            var flour = economy.Goods.Get("flour");
+            if (flour != null
+                && flour.NeedCategory == NeedCategory.Basic
+                && flour.BaseConsumptionKgPerCapitaPerDay > 0f)
+            {
+                stapleFlourPerCapitaPerDay = flour.BaseConsumptionKgPerCapitaPerDay;
+            }
+
+            float totalSeededKg = 0f;
+            int seededCounties = 0;
+            foreach (var county in economy.Counties.Values)
+            {
+                int population = county.Population.Total;
+                if (population <= 0)
+                    continue;
+
+                float dailyRawNeed = population * stapleFlourPerCapitaPerDay * BootstrapRawGrainKgPerFlourKg;
+                float seedTargetKg = Math.Max(0f, dailyRawNeed * BootstrapGrainReserveDays);
+                if (seedTargetKg <= 0f)
+                    continue;
+
+                float[] weights = new float[BootstrapReserveGrainGoodIds.Length];
+                float weightSum = 0f;
+                for (int i = 0; i < BootstrapReserveGrainGoodIds.Length; i++)
+                {
+                    string goodId = BootstrapReserveGrainGoodIds[i];
+                    float weight = 0f;
+                    if (county.Resources != null
+                        && county.Resources.TryGetValue(goodId, out float localAbundance)
+                        && localAbundance > 0f)
+                    {
+                        weight = localAbundance;
+                    }
+
+                    weights[i] = weight;
+                    weightSum += weight;
+                }
+
+                // Fallback cereal mix if county has no explicit grain resource profile.
+                if (weightSum <= 0f)
+                {
+                    for (int i = 0; i < BootstrapReserveGrainGoodIds.Length; i++)
+                        weights[i] = 0f;
+
+                    int wheatIndex = Array.IndexOf(BootstrapReserveGrainGoodIds, "wheat");
+                    int ryeIndex = Array.IndexOf(BootstrapReserveGrainGoodIds, "rye");
+                    int barleyIndex = Array.IndexOf(BootstrapReserveGrainGoodIds, "barley");
+
+                    if (wheatIndex >= 0) weights[wheatIndex] = 1f;
+                    if (ryeIndex >= 0) weights[ryeIndex] = 1f;
+                    if (barleyIndex >= 0) weights[barleyIndex] = 1f;
+                    weightSum = 3f;
+                }
+
+                if (weightSum <= 0f)
+                    continue;
+
+                float seededHere = 0f;
+                for (int i = 0; i < BootstrapReserveGrainGoodIds.Length; i++)
+                {
+                    if (weights[i] <= 0f)
+                        continue;
+
+                    string goodId = BootstrapReserveGrainGoodIds[i];
+                    if (!economy.Goods.TryGetRuntimeId(goodId, out int runtimeId) || runtimeId < 0)
+                        continue;
+
+                    float quantity = seedTargetKg * (weights[i] / weightSum);
+                    if (quantity <= 0f)
+                        continue;
+
+                    county.Stockpile.Add(runtimeId, quantity);
+                    seededHere += quantity;
+                }
+
+                if (seededHere > 0f)
+                {
+                    seededCounties++;
+                    totalSeededKg += seededHere;
+                }
+            }
+
+            SimLog.Log(
+                "Economy",
+                $"Seeded county grain reserves: counties={seededCounties}, total={totalSeededKg:F0} kg, targetDays={BootstrapGrainReserveDays:F0}");
+        }
+
+        private static void SeedCountySaltReserves(EconomyState economy)
+        {
+            if (economy == null)
+                return;
+            if (!economy.Goods.TryGetRuntimeId("salt", out int saltRuntimeId) || saltRuntimeId < 0)
+                return;
+
+            float totalSeededKg = 0f;
+            int seededCounties = 0;
+            foreach (var county in economy.Counties.Values)
+            {
+                int population = county.Population.Total;
+                if (population <= 0)
+                    continue;
+
+                float quantity = population * BootstrapSaltReserveKgPerCapita;
+                if (quantity <= 0f)
+                    continue;
+
+                county.Stockpile.Add(saltRuntimeId, quantity);
+                seededCounties++;
+                totalSeededKg += quantity;
+            }
+
+            SimLog.Log(
+                "Economy",
+                $"Seeded county salt reserves: counties={seededCounties}, total={totalSeededKg:F0} kg, perCapita={BootstrapSaltReserveKgPerCapita:F1} kg");
+        }
 
     }
 }

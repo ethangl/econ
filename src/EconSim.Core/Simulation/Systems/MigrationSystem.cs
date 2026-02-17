@@ -23,7 +23,7 @@ namespace EconSim.Core.Simulation.Systems
         private const float CulturalAffinityForeign = 0.2f;
         private const int MinMigrationPop = 1;
         private const float MerchantFixedPush = 0.1f;
-        private const string FoodGoodId = "bread";
+        private const string FoodGoodId = "flour";
         private const float FoodDaysSupplyBase = 30f; // Days of food = no push/full pull
 
         // Estate mobility weights
@@ -143,7 +143,7 @@ namespace EconSim.Core.Simulation.Systems
         {
             int pop = county.Population.Total;
             if (pop <= 0) return FoodDaysSupplyBase;
-            float dailyDemand = pop * 0.01f; // bread BaseConsumption (kg per capita per day)
+            float dailyDemand = pop * (160f / 365f); // Flour staple consumption baseline (kg per capita per day)
             if (dailyDemand <= 0f) return FoodDaysSupplyBase;
             return county.Stockpile.Get(FoodGoodId) / dailyDemand;
         }

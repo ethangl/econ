@@ -60,6 +60,17 @@ namespace EconSim.Core.Economy
     }
 
     /// <summary>
+    /// Alternative recipe option for producing the same output good.
+    /// Exactly one variant is used for each produced unit.
+    /// </summary>
+    [Serializable]
+    public class GoodInputVariant
+    {
+        public string Id;
+        public List<GoodInput> Inputs = new List<GoodInput>();
+    }
+
+    /// <summary>
     /// Static definition of a good (raw resource, refined material, or finished product).
     /// Loaded from data files, immutable at runtime.
     /// </summary>
@@ -91,6 +102,11 @@ namespace EconSim.Core.Economy
         // === Refined and Finished goods ===
         /// <summary>Input goods required to produce one unit.</summary>
         public List<GoodInput> Inputs;
+        /// <summary>
+        /// Alternative input sets for the same output.
+        /// If present, a facility may choose any one variant per production batch.
+        /// </summary>
+        public List<GoodInputVariant> InputVariants;
         /// <summary>Facility type required for production.</summary>
         public string FacilityType;
         /// <summary>Ticks to produce one batch.</summary>
@@ -119,7 +135,7 @@ namespace EconSim.Core.Economy
 
         // === Pricing ===
         /// <summary>
-        /// Base market price when supply equals demand.
+        /// Base market price in Crowns per kilogram when supply equals demand.
         /// Raw goods ~1, refined ~2-5, finished basics ~5-10, luxury ~50+.
         /// </summary>
         public float BasePrice = 1.0f;
@@ -187,16 +203,37 @@ namespace EconSim.Core.Economy
             if (!IsFinite(good.BaseConsumption) || good.BaseConsumption < 0f)
                 throw new ArgumentException($"GoodDef {good.Id} has invalid BaseConsumption: {good.BaseConsumption}");
 
-            if (good.Inputs == null)
+            ValidateInputList(good.Id, good.Inputs);
+
+            if (good.InputVariants == null)
                 return;
 
-            for (int i = 0; i < good.Inputs.Count; i++)
+            for (int i = 0; i < good.InputVariants.Count; i++)
             {
-                var input = good.Inputs[i];
+                var variant = good.InputVariants[i];
+                if (variant == null || variant.Inputs == null || variant.Inputs.Count == 0)
+                {
+                    throw new ArgumentException(
+                        $"GoodDef {good.Id} has invalid input variant at index {i} (missing inputs).");
+                }
+
+                string variantId = string.IsNullOrWhiteSpace(variant.Id) ? $"variant#{i}" : variant.Id;
+                ValidateInputList($"{good.Id}:{variantId}", variant.Inputs);
+            }
+        }
+
+        private static void ValidateInputList(string ownerId, List<GoodInput> inputs)
+        {
+            if (inputs == null)
+                return;
+
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                var input = inputs[i];
                 if (!IsFinite(input.Quantity) || input.Quantity <= 0f)
                 {
                     throw new ArgumentException(
-                        $"GoodDef {good.Id} has invalid input quantity for {input.GoodId}: {input.Quantity}");
+                        $"GoodDef {ownerId} has invalid input quantity for {input.GoodId}: {input.Quantity}");
                 }
             }
         }

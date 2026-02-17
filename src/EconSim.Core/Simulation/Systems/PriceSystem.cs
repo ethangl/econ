@@ -10,8 +10,12 @@ namespace EconSim.Core.Simulation.Systems
     {
         private const float AdjustmentRate = 0.1f;
         private const float AdjustmentClamp = 0.5f;
-        private const float MinMultiplier = 0.25f;
-        private const float MaxMultiplier = 4f;
+        private const float MarketDepthEpsilon = 5f;
+        private const float MaxDailyIncrease = 0.01f;
+        private const float MaxDailyDecrease = 0.03f;
+        private const float MinUpwardLiquidityGate = 0.15f;
+        private const float PriceUnlockMinIncrease = 0.03f;
+        private const float PriceUnlockMaxIncrease = 0.05f;
 
         public string Name => "Prices";
         public int TickInterval => SimulationConfig.Intervals.Daily;
@@ -35,13 +39,35 @@ namespace EconSim.Core.Simulation.Systems
                 {
                     float supply = goodState.Supply;
                     float demand = goodState.Demand;
-                    float ratio = (demand + 0.1f) / (supply + 0.1f);
+                    float ratio = (demand + MarketDepthEpsilon) / (supply + MarketDepthEpsilon);
 
                     float adjustment = Clamp(ratio - 1f, -AdjustmentClamp, AdjustmentClamp);
-                    goodState.Price *= 1f + (AdjustmentRate * adjustment);
+                    float priceDelta = AdjustmentRate * adjustment;
+                    if (priceDelta > 0f && demand > 0f)
+                    {
+                        float tradeFill = goodState.LastTradeVolume <= 0f
+                            ? 0f
+                            : Clamp(goodState.LastTradeVolume / demand, 0f, 1f);
+                        float liquidityGate = MinUpwardLiquidityGate + ((1f - MinUpwardLiquidityGate) * tradeFill);
+                        priceDelta *= liquidityGate;
+                    }
 
-                    float basePrice = goodState.BasePrice;
-                    goodState.Price = Clamp(goodState.Price, basePrice * MinMultiplier, basePrice * MaxMultiplier);
+                    // If demand exists and stock is offered but no supply clears at current price,
+                    // accelerate upward repricing to break out of min-price lock conditions.
+                    bool priceLocked = demand > 0f
+                        && goodState.SupplyOffered > 0f
+                        && supply <= 0f
+                        && goodState.LastTradeVolume <= 0.0001f;
+                    if (priceLocked && priceDelta < PriceUnlockMinIncrease)
+                        priceDelta = PriceUnlockMinIncrease;
+
+                    float maxDailyIncrease = priceLocked
+                        ? PriceUnlockMaxIncrease
+                        : MaxDailyIncrease;
+                    priceDelta = Clamp(priceDelta, -MaxDailyDecrease, maxDailyIncrease);
+                    goodState.Price *= 1f + priceDelta;
+                    if (goodState.Price < 0.0001f)
+                        goodState.Price = 0.0001f;
                 }
             }
 

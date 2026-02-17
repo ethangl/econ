@@ -58,6 +58,8 @@ namespace EconSim.Core.Simulation.Systems
                 _inventoryByGoodBuffer.Clear();
                 foreach (var offMapGoodId in market.OffMapGoodIds)
                 {
+                    if (!SimulationConfig.Economy.IsGoodEnabled(offMapGoodId))
+                        continue;
                     if (!state.Economy.Goods.TryGetRuntimeId(offMapGoodId, out int runtimeId))
                         continue;
 
@@ -69,6 +71,8 @@ namespace EconSim.Core.Simulation.Systems
                 int sellerId = MarketOrderIds.MakeOffMapSellerId(market.Id);
                 foreach (var goodId in market.OffMapGoodIds)
                 {
+                    if (!SimulationConfig.Economy.IsGoodEnabled(goodId))
+                        continue;
                     if (!state.Economy.Goods.TryGetRuntimeId(goodId, out int runtimeId))
                         continue;
 
