@@ -24,6 +24,11 @@ The script auto-discovers the newest dump from:
 - `unity/econ_debug_output*.json`
 - `unity/debug/econ/**/*.json`
 
+Parser compatibility notes:
+- Quantity semantics are weight-based (kilograms) in the economy model.
+- The analyzer accepts market/goods payloads in either object or array form.
+- Demand/volume fields are read from either `demand`/`volume` or `demandRequested`/`volumeTraded`.
+
 ## Output Sections
 
 The analyzer prints:
