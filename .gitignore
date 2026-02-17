@@ -83,3 +83,6 @@ crashlytics-build.properties
 
 # Thumbnails
 ._*
+
+# Python bytecode caches
+**/__pycache__/
