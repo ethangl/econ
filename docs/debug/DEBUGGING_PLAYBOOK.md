@@ -9,6 +9,7 @@ Use this as the first stop when a bug appears in map generation, rendering, econ
 For rendering/shader-specific deep dives, see:
 
 - `docs/debug/SHADER_OVERLAY_DEBUGGING.md`
+- `docs/debug/ECON_CHAIN_DIAGNOSIS.md` (systemic vs chain-level economy diagnosis)
 
 ---
 
@@ -114,6 +115,11 @@ Check:
 - county/market assignments,
 - transport connectivity and movement costs,
 - stockpile updates through production/consumption/trade order.
+
+Then run:
+
+- `scripts/analyze_econ_chains.py unity/econ_debug_output.json`
+- Use `docs/debug/ECON_CHAIN_DIAGNOSIS.md` to classify systemic failures vs chain bottlenecks.
 
 ### 4) "Roads don’t appear or look wrong"
 
