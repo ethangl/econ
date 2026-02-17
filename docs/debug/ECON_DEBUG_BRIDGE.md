@@ -85,6 +85,79 @@ Then compare all collected runs:
 scripts/compare_econ_dump_sets.sh "unity/debug/econ/bench/*.json" "unity/debug/econ/candidate/*.json" 12
 ```
 
+### Hands-off 90-day benchmark process (canonical)
+
+Use this when you want a fully repeatable candidate run and immediate benchmark comparison with no manual analysis steps.
+
+Ownership split:
+- User: request run scope/seed.
+- Operator (Codex/agent): performs every action below, including bridge execution, archiving, comparison, and diagnosis artifact generation.
+
+Assumptions:
+- A benchmark corpus already exists under `unity/debug/econ/bench/`.
+- You want an approximately 90-day run from fresh map start.
+- You are using `generate_and_run` with `months: 3` (this completes at `currentDay: 91` because day counting starts at 1).
+
+#### 1) Generate the candidate 90-day dump
+
+Write command:
+
+```json
+{
+  "action": "generate_and_run",
+  "seed": 2202,
+  "cellCount": 100000,
+  "template": "Continents",
+  "months": 3
+}
+```
+
+Save as `unity/econ_debug_cmd.json`, have the operator execute **Tools > EconDebug > Execute Command** (manually or via Unity MCP `execute_menu_item`), then wait for:
+- `unity/econ_debug_status.json` with `"state": "complete"`
+- `unity/econ_debug_output.json` present and updated
+
+#### 2) Archive current output as candidate
+
+```bash
+scripts/archive_econ_dump.sh candidate unity/econ_debug_output.json unity/debug/econ
+```
+
+#### 3) Compare latest benchmark vs latest candidate
+
+```bash
+LATEST_BENCH="$(ls -1t unity/debug/econ/bench/*.json | head -n1)"
+LATEST_CANDIDATE="$(ls -1t unity/debug/econ/candidate/*.json | head -n1)"
+
+scripts/compare_econ_dumps.sh "$LATEST_BENCH" "$LATEST_CANDIDATE" 15 \
+  > scripts/econ_dump_compare_latest.txt
+```
+
+#### 4) Run multi-run aggregate comparison (noise-resistant)
+
+```bash
+scripts/compare_econ_dump_sets.sh "unity/debug/econ/bench/*.json" "unity/debug/econ/candidate/*.json" 12 \
+  > scripts/econ_dump_compare_sets.txt
+```
+
+#### 5) Generate chain diagnosis artifacts for both sides
+
+```bash
+scripts/analyze_econ_chains.py "$LATEST_BENCH" > scripts/econ_chain_diagnosis_benchmark.txt
+scripts/analyze_econ_chains.py "$LATEST_CANDIDATE" > scripts/econ_chain_diagnosis_candidate.txt
+```
+
+#### 6) Required sanity checks before interpreting deltas
+
+- `compare_econ_dumps.sh` header fields should match intent (`day`, `economySeed`, counties/markets/facilities) unless map topology changes were intentional.
+- If identity fields differ unintentionally, treat results as non-comparable and re-run with locked settings.
+- Use `scripts/econ_dump_compare_sets.txt` as the source of truth when multiple runs exist; do not rely on one-off drift alone.
+
+Expected artifacts after a successful run:
+- `unity/debug/econ/candidate/econ_debug_output_candidate_*.json`
+- `scripts/econ_dump_compare_latest.txt`
+- `scripts/econ_dump_compare_sets.txt`
+- `scripts/econ_chain_diagnosis_candidate.txt`
+
 Single command sequence (example):
 
 ```bash

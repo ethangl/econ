@@ -76,7 +76,7 @@ namespace EconSim.Core.Economy
                 if (!IsBasicNeed(good))
                     continue;
 
-                basicBasket += good.BasePrice * good.BaseConsumption;
+                basicBasket += good.BasePrice * good.BaseConsumptionKgPerCapitaPerDay;
             }
 
             state.SmoothedBasketCost = basicBasket;
@@ -96,7 +96,7 @@ namespace EconSim.Core.Economy
                     if (!IsBasicNeed(good))
                         continue;
 
-                    dailyBasicCost += good.BasePrice * good.BaseConsumption * county.Population.Total;
+                    dailyBasicCost += good.BasePrice * good.BaseConsumptionKgPerCapitaPerDay * county.Population.Total;
                 }
 
                 county.Population.Treasury = dailyBasicCost * 30f;
@@ -120,7 +120,7 @@ namespace EconSim.Core.Economy
                         var inputGood = economy.Goods.Get(input.GoodId);
                         if (inputGood == null)
                             continue;
-                        weeklyInputCost += inputGood.BasePrice * input.Quantity * nominalThroughput * 7f;
+                        weeklyInputCost += inputGood.BasePrice * input.QuantityKg * nominalThroughput * 7f;
                     }
                 }
 
@@ -146,7 +146,7 @@ namespace EconSim.Core.Economy
                 float nominalThroughput = facility.GetNominalThroughput(def);
                 foreach (var input in inputs)
                 {
-                    facility.InputBuffer.Add(input.GoodId, input.Quantity * nominalThroughput * 3f);
+                    facility.InputBuffer.Add(input.GoodId, input.QuantityKg * nominalThroughput * 3f);
                 }
             }
 
@@ -187,7 +187,7 @@ namespace EconSim.Core.Economy
                         if (kvp.Value != market.Id || !economy.Counties.TryGetValue(kvp.Key, out var county))
                             continue;
 
-                        weeklyDemand += good.BaseConsumption * county.Population.Total * 7f;
+                        weeklyDemand += good.BaseConsumptionKgPerCapitaPerDay * county.Population.Total * 7f;
                     }
 
                     if (weeklyDemand <= 0f)
@@ -222,7 +222,7 @@ namespace EconSim.Core.Economy
                     if (!market.Goods.TryGetValue(good.Id, out var marketGood))
                         continue;
 
-                    float quantity = good.BaseConsumption * county.Population.Total;
+                    float quantity = good.BaseConsumptionKgPerCapitaPerDay * county.Population.Total;
                     if (quantity <= 0f)
                         continue;
 
@@ -265,7 +265,7 @@ namespace EconSim.Core.Economy
                         if (!economy.Goods.TryGetRuntimeId(input.GoodId, out int inputRuntimeId))
                             continue;
 
-                        float needed = input.Quantity * facility.GetNominalThroughput(def);
+                        float needed = input.QuantityKg * facility.GetNominalThroughput(def);
                         float have = facility.InputBuffer.Get(inputRuntimeId);
                         float toBuy = Math.Max(0f, needed - have);
                         if (toBuy <= 0f)
@@ -534,7 +534,6 @@ namespace EconSim.Core.Economy
                 { "sawmill", "timber" },
                 { "shearing_shed", "sheep" },
                 { "tannery", "hides" },
-                { "dairy", "goats" },
                 { "malthouse", "barley" },
                 { "salt_warehouse", "raw_salt" },
                 { "dye_works", "dye_plants" }
@@ -560,7 +559,15 @@ namespace EconSim.Core.Economy
                     int cellId = GetCountySeatCell(countyId, mapData);
                     if (cellId < 0) continue;
 
-                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 0);
+                    int laborLimitedCount = ComputeFacilityCount(
+                        economy.GetCounty(countyId).Population,
+                        facilityDef,
+                        minPerCounty: 0);
+                    int count = ComputeInputConstrainedFacilityCount(
+                        economy,
+                        countyId,
+                        facilityDef,
+                        laborLimitedCount);
                     if (count <= 0)
                         continue;
 
@@ -583,7 +590,6 @@ namespace EconSim.Core.Economy
                 { "workshop", new List<string> { "sawmill" } },
                 { "spinning_mill", new List<string> { "shearing_shed" } },
                 { "cobbler", new List<string> { "tannery" } },
-                { "creamery", new List<string> { "dairy" } },
                 { "brewery", new List<string> { "malthouse" } },
                 { "dyer", new List<string> { "dye_works" } }
             };
@@ -769,14 +775,22 @@ namespace EconSim.Core.Economy
         /// </summary>
         private static int ComputeFacilityCount(CountyPopulation pop, FacilityDef def, int minPerCounty = 0)
         {
-            const float ScaleFactor = 3f;
+            const float ExtractionScaleFactor = 3f;
+            const float ProcessingUnskilledScaleFactor = 4f;
+            const float ProcessingSkilledScaleFactor = 5f;
             const int MaxPerType = 50;
 
             int workerPool = def.LaborType == LaborType.Unskilled
                 ? pop.TotalUnskilled
                 : pop.TotalSkilled;
 
-            int count = (int)(workerPool / (def.LaborRequired * ScaleFactor));
+            float scaleFactor = def.IsExtraction
+                ? ExtractionScaleFactor
+                : (def.LaborType == LaborType.Skilled
+                    ? ProcessingSkilledScaleFactor
+                    : ProcessingUnskilledScaleFactor);
+
+            int count = (int)(workerPool / (def.LaborRequired * scaleFactor));
             return Math.Max(minPerCounty, Math.Min(MaxPerType, count));
         }
 
@@ -804,7 +818,7 @@ namespace EconSim.Core.Economy
 
             foreach (var input in inputs)
             {
-                if (input.Quantity <= 0f)
+                if (input.QuantityKg <= 0f)
                     continue;
                 if (requiredLocalInputGoodIds != null &&
                     requiredLocalInputGoodIds.Count > 0 &&
@@ -830,7 +844,7 @@ namespace EconSim.Core.Economy
                 if (localInputPerDay <= 0f)
                     return 0;
 
-                float inputLimitedThroughput = localInputPerDay / input.Quantity;
+                float inputLimitedThroughput = localInputPerDay / input.QuantityKg;
                 if (inputLimitedThroughput < maxThroughputFromInputs)
                     maxThroughputFromInputs = inputLimitedThroughput;
             }
@@ -838,7 +852,7 @@ namespace EconSim.Core.Economy
             if (!hasInputConstraint || maxThroughputFromInputs == float.MaxValue)
                 return laborLimitedCount;
 
-            float targetThroughput = Math.Max(0.0001f, targetDef.BaseThroughput);
+            float targetThroughput = Math.Max(0.0001f, targetDef.BaseThroughputKgPerDay);
             int inputLimitedCount = (int)Math.Ceiling(maxThroughputFromInputs / targetThroughput);
             if (inputLimitedCount <= 0)
                 return 0;

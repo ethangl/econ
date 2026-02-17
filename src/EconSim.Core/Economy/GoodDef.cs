@@ -4,6 +4,14 @@ using System.Collections.Generic;
 namespace EconSim.Core.Economy
 {
     /// <summary>
+    /// Canonical quantity unit for economy goods.
+    /// </summary>
+    public enum GoodQuantityUnit
+    {
+        Kilogram
+    }
+
+    /// <summary>
     /// Category in the production chain.
     /// </summary>
     public enum GoodCategory
@@ -30,12 +38,24 @@ namespace EconSim.Core.Economy
     public struct GoodInput
     {
         public string GoodId;
+        /// <summary>
+        /// Input amount in kilograms required per one kilogram of output.
+        /// </summary>
         public float Quantity;
 
         public GoodInput(string goodId, float quantity)
         {
             GoodId = goodId;
             Quantity = quantity;
+        }
+
+        /// <summary>
+        /// Alias for <see cref="Quantity"/> with explicit units.
+        /// </summary>
+        public float QuantityKg
+        {
+            get => Quantity;
+            set => Quantity = value;
         }
     }
 
@@ -54,13 +74,18 @@ namespace EconSim.Core.Economy
         public int RuntimeId = -1;
         public string Name;
         public GoodCategory Category;
+        /// <summary>
+        /// Canonical unit for all quantities involving this good.
+        /// For now, all goods are modeled in kilograms.
+        /// </summary>
+        public GoodQuantityUnit QuantityUnit = GoodQuantityUnit.Kilogram;
 
         // === Raw resources only ===
         /// <summary>How this resource is harvested (logging, mining, farming, etc.).</summary>
         public string HarvestMethod;
         /// <summary>Terrain/biome types where this resource can be found.</summary>
         public List<string> TerrainAffinity;
-        /// <summary>Base units harvested per day per facility.</summary>
+        /// <summary>Base kilograms harvested per day per facility at full staffing.</summary>
         public float BaseYield;
 
         // === Refined and Finished goods ===
@@ -74,7 +99,7 @@ namespace EconSim.Core.Economy
         // === Finished goods only (consumer demand) ===
         /// <summary>What need this good satisfies (null for non-consumer goods).</summary>
         public NeedCategory? NeedCategory;
-        /// <summary>Base consumption rate per capita per day.</summary>
+        /// <summary>Base consumption rate in kilograms per capita per day.</summary>
         public float BaseConsumption;
 
         // === Storage properties ===
@@ -103,6 +128,24 @@ namespace EconSim.Core.Economy
         public bool IsRefined => Category == GoodCategory.Refined;
         public bool IsFinished => Category == GoodCategory.Finished;
         public bool IsConsumerGood => NeedCategory.HasValue;
+
+        /// <summary>
+        /// Explicit-unit alias for <see cref="BaseYield"/>.
+        /// </summary>
+        public float BaseYieldKgPerDay
+        {
+            get => BaseYield;
+            set => BaseYield = value;
+        }
+
+        /// <summary>
+        /// Explicit-unit alias for <see cref="BaseConsumption"/>.
+        /// </summary>
+        public float BaseConsumptionKgPerCapitaPerDay
+        {
+            get => BaseConsumption;
+            set => BaseConsumption = value;
+        }
     }
 
     /// <summary>
@@ -119,6 +162,8 @@ namespace EconSim.Core.Economy
             if (good == null || string.IsNullOrWhiteSpace(good.Id))
                 throw new ArgumentException("GoodDef and GoodDef.Id are required for registration.");
 
+            ValidateQuantities(good);
+
             if (_runtimeIdByGoodId.TryGetValue(good.Id, out int existingRuntimeId))
             {
                 good.RuntimeId = existingRuntimeId;
@@ -132,6 +177,33 @@ namespace EconSim.Core.Economy
             _runtimeIdByGoodId[good.Id] = runtimeId;
             _goodsByRuntimeId.Add(good);
             _goods[good.Id] = good;
+        }
+
+        private static void ValidateQuantities(GoodDef good)
+        {
+            if (!IsFinite(good.BaseYield) || good.BaseYield < 0f)
+                throw new ArgumentException($"GoodDef {good.Id} has invalid BaseYield: {good.BaseYield}");
+
+            if (!IsFinite(good.BaseConsumption) || good.BaseConsumption < 0f)
+                throw new ArgumentException($"GoodDef {good.Id} has invalid BaseConsumption: {good.BaseConsumption}");
+
+            if (good.Inputs == null)
+                return;
+
+            for (int i = 0; i < good.Inputs.Count; i++)
+            {
+                var input = good.Inputs[i];
+                if (!IsFinite(input.Quantity) || input.Quantity <= 0f)
+                {
+                    throw new ArgumentException(
+                        $"GoodDef {good.Id} has invalid input quantity for {input.GoodId}: {input.Quantity}");
+                }
+            }
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
 
         public GoodDef Get(string id)

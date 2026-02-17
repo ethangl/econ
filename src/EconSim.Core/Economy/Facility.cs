@@ -119,10 +119,10 @@ namespace EconSim.Core.Economy
         /// </summary>
         public float GetNominalThroughput(FacilityDef def)
         {
-            if (def == null || def.BaseThroughput <= 0f)
+            if (def == null || def.BaseThroughputKgPerDay <= 0f)
                 return 0f;
 
-            return def.BaseThroughput * Math.Max(1, UnitCount);
+            return def.BaseThroughputKgPerDay * Math.Max(1, UnitCount);
         }
 
         /// <summary>

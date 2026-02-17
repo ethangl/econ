@@ -83,10 +83,10 @@ BEGIN {
 }'
 echo
 
-BENCH_PENDING="$(jq -r '([.markets[].pendingOrders] | add) // 0' "$BENCH_FILE")"
-NEW_PENDING="$(jq -r '([.markets[].pendingOrders] | add) // 0' "$NEW_FILE")"
-BENCH_LOTS="$(jq -r '([.markets[].consignmentLots] | add) // 0' "$BENCH_FILE")"
-NEW_LOTS="$(jq -r '([.markets[].consignmentLots] | add) // 0' "$NEW_FILE")"
+BENCH_PENDING="$(jq -r '[(.markets // [] | if type=="array" then .[] elif type=="object" then .[] else empty end | (.pendingOrders // 0))] | add // 0' "$BENCH_FILE")"
+NEW_PENDING="$(jq -r '[(.markets // [] | if type=="array" then .[] elif type=="object" then .[] else empty end | (.pendingOrders // 0))] | add // 0' "$NEW_FILE")"
+BENCH_LOTS="$(jq -r '[(.markets // [] | if type=="array" then .[] elif type=="object" then .[] else empty end | (.consignmentLots // 0))] | add // 0' "$BENCH_FILE")"
+NEW_LOTS="$(jq -r '[(.markets // [] | if type=="array" then .[] elif type=="object" then .[] else empty end | (.consignmentLots // 0))] | add // 0' "$NEW_FILE")"
 
 echo "== Global Book Cardinality =="
 awk -v bp="$BENCH_PENDING" -v np="$NEW_PENDING" -v bl="$BENCH_LOTS" -v nl="$NEW_LOTS" '
@@ -145,8 +145,8 @@ BEGIN {
 }'
 echo
 
-jq -r '.markets[] | [.id, .pendingOrders, .consignmentLots] | @tsv' "$BENCH_FILE" | sort -n > "$TMP_DIR/bench_markets.tsv"
-jq -r '.markets[] | [.id, .pendingOrders, .consignmentLots] | @tsv' "$NEW_FILE" | sort -n > "$TMP_DIR/new_markets.tsv"
+jq -r '(.markets // [] | if type=="array" then .[] elif type=="object" then .[] else empty end) | [.id, (.pendingOrders // 0), (.consignmentLots // 0)] | @tsv' "$BENCH_FILE" | sort -n > "$TMP_DIR/bench_markets.tsv"
+jq -r '(.markets // [] | if type=="array" then .[] elif type=="object" then .[] else empty end) | [.id, (.pendingOrders // 0), (.consignmentLots // 0)] | @tsv' "$NEW_FILE" | sort -n > "$TMP_DIR/new_markets.tsv"
 
 echo "== Per-Market Book Deltas =="
 join -t $'\t' -a1 -a2 -e NA -o 0,1.2,2.2,1.3,2.3 \
@@ -166,8 +166,46 @@ BEGIN {
 }'
 echo
 
-jq -r '.markets[] | .id as $mid | .goods | to_entries[] | [($mid|tostring) + ":" + .key, (.value.price|tostring), (.value.supplyOffered|tostring), (.value.demand|tostring), (.value.volume|tostring)] | @tsv' "$BENCH_FILE" | sort > "$TMP_DIR/bench_goods.tsv"
-jq -r '.markets[] | .id as $mid | .goods | to_entries[] | [($mid|tostring) + ":" + .key, (.value.price|tostring), (.value.supplyOffered|tostring), (.value.demand|tostring), (.value.volume|tostring)] | @tsv' "$NEW_FILE" | sort > "$TMP_DIR/new_goods.tsv"
+jq -r '
+(.markets // [] | if type=="array" then .[] elif type=="object" then .[] else empty end) as $market
+| $market.id as $mid
+| ($market.goods // {}) as $goods
+| if ($goods | type) == "object" then
+    ($goods | to_entries[] | { good_id: (.key | tostring), payload: .value })
+  elif ($goods | type) == "array" then
+    ($goods[] | { good_id: ((.goodId // .id // "unknown") | tostring), payload: . })
+  else
+    empty
+  end
+| [
+    (($mid | tostring) + ":" + .good_id),
+    ((.payload.price // 0) | tostring),
+    ((.payload.supplyOffered // .payload.supply // 0) | tostring),
+    ((.payload.demand // .payload.demandRequested // 0) | tostring),
+    ((.payload.volume // .payload.volumeTraded // 0) | tostring)
+  ]
+| @tsv
+' "$BENCH_FILE" | sort > "$TMP_DIR/bench_goods.tsv"
+jq -r '
+(.markets // [] | if type=="array" then .[] elif type=="object" then .[] else empty end) as $market
+| $market.id as $mid
+| ($market.goods // {}) as $goods
+| if ($goods | type) == "object" then
+    ($goods | to_entries[] | { good_id: (.key | tostring), payload: .value })
+  elif ($goods | type) == "array" then
+    ($goods[] | { good_id: ((.goodId // .id // "unknown") | tostring), payload: . })
+  else
+    empty
+  end
+| [
+    (($mid | tostring) + ":" + .good_id),
+    ((.payload.price // 0) | tostring),
+    ((.payload.supplyOffered // .payload.supply // 0) | tostring),
+    ((.payload.demand // .payload.demandRequested // 0) | tostring),
+    ((.payload.volume // .payload.volumeTraded // 0) | tostring)
+  ]
+| @tsv
+' "$NEW_FILE" | sort > "$TMP_DIR/new_goods.tsv"
 
 join -t $'\t' -a1 -a2 -e NA -o 0,1.2,2.2,1.3,2.3,1.4,2.4,1.5,2.5 \
   "$TMP_DIR/bench_goods.tsv" "$TMP_DIR/new_goods.tsv" > "$TMP_DIR/joined_goods.tsv"

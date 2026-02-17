@@ -247,14 +247,41 @@ def safe_float(value: object) -> float:
         return 0.0
 
 
+def as_list(value: object) -> List[dict]:
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    if isinstance(value, dict):
+        return [item for item in value.values() if isinstance(item, dict)]
+    return []
+
+
+def iter_market_goods(market: dict) -> Iterable[Tuple[str, dict]]:
+    goods_obj = market.get("goods") or {}
+    if isinstance(goods_obj, dict):
+        for good_id, payload in goods_obj.items():
+            if not isinstance(payload, dict):
+                continue
+            yield str(good_id), payload
+        return
+
+    if isinstance(goods_obj, list):
+        for payload in goods_obj:
+            if not isinstance(payload, dict):
+                continue
+            good_id = payload.get("goodId", payload.get("id"))
+            if good_id is None:
+                continue
+            yield str(good_id), payload
+
+
 def aggregate_goods(markets: Sequence[dict]) -> Dict[str, GoodMetrics]:
     goods: Dict[str, GoodMetrics] = {}
     for market in markets:
-        for good_id, payload in (market.get("goods") or {}).items():
+        for good_id, payload in iter_market_goods(market):
             gm = goods.setdefault(good_id, GoodMetrics())
             supply = safe_float(payload.get("supplyOffered", payload.get("supply", 0.0)))
-            demand = safe_float(payload.get("demand", 0.0))
-            volume = safe_float(payload.get("volume", 0.0))
+            demand = safe_float(payload.get("demand", payload.get("demandRequested", 0.0)))
+            volume = safe_float(payload.get("volume", payload.get("volumeTraded", 0.0)))
             price = safe_float(payload.get("price", 0.0))
 
             gm.supply += supply
@@ -484,10 +511,10 @@ def print_offmap_section(markets: Sequence[dict]) -> None:
     print("== Off-map Markets ==")
     for market in offmap:
         nonzero_goods = 0
-        for payload in (market.get("goods") or {}).values():
+        for _, payload in iter_market_goods(market):
             supply = safe_float(payload.get("supplyOffered", payload.get("supply", 0.0)))
-            demand = safe_float(payload.get("demand", 0.0))
-            volume = safe_float(payload.get("volume", 0.0))
+            demand = safe_float(payload.get("demand", payload.get("demandRequested", 0.0)))
+            volume = safe_float(payload.get("volume", payload.get("volumeTraded", 0.0)))
             if supply != 0 or demand != 0 or volume != 0:
                 nonzero_goods += 1
         print(
@@ -556,8 +583,8 @@ def main() -> int:
     day_of_month = payload.get("dayOfMonth", "NA")
     summary = payload.get("summary") or {}
     seed = summary.get("economySeed", "NA")
-    markets = payload.get("markets") or []
-    counties = payload.get("counties") or []
+    markets = as_list(payload.get("markets"))
+    counties = as_list(payload.get("counties"))
 
     print("== Econ Chain Analysis ==")
     print(f"dump={dump_path}")

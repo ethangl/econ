@@ -136,7 +136,7 @@ namespace EconSim.Core.Simulation.Systems
                     if (!market.TryGetGoodState(good.RuntimeId, out var marketGood))
                         continue;
 
-                    marketBasket += marketGood.Price * good.BaseConsumption;
+                    marketBasket += marketGood.Price * good.BaseConsumptionKgPerCapitaPerDay;
                 }
 
                 weightedBasket += marketBasket * zonePopulation;
@@ -151,7 +151,7 @@ namespace EconSim.Core.Simulation.Systems
             foreach (var good in economy.Goods.ConsumerGoods)
             {
                 if (good.NeedCategory == NeedCategory.Basic)
-                    baseBasket += good.BasePrice * good.BaseConsumption;
+                    baseBasket += good.BasePrice * good.BaseConsumptionKgPerCapitaPerDay;
             }
 
             return baseBasket;
