@@ -218,7 +218,7 @@ Material:
     - _RiverDarken: 1
     - _RiverDepth: 0.5
     - _RoadWidth: 0.045
-    - _SeaLevel: 0.2
+    - _SeaLevel: 0.5
     - _SelectedCellId: -1
     - _SelectedCountyId: -1
     - _SelectedMarketId: -1

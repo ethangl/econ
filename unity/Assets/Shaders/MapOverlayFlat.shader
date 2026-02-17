@@ -5,7 +5,7 @@ Shader "EconSim/MapOverlayFlat"
         // Heightmap for terrain (Phase 6)
         _HeightmapTex ("Heightmap", 2D) = "gray" {}
         _HeightScale ("Height Scale", Float) = 0.2
-        _SeaLevel ("Sea Level (Normalized)", Float) = 0.2
+        _SeaLevel ("Sea Level (Normalized)", Float) = 0.5
         _UseHeightDisplacement ("Use Height Displacement", Int) = 0
 
         // River mask (Phase 8) - knocks out rivers from land, showing water underneath
