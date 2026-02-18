@@ -6,6 +6,14 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 **Stack:** Unity + C# + R3 + UI Toolkit
 
+## Dumps / Dump Analysis
+
+The user runs economy simulations via the EconDebugBridge in Unity, which writes results to `unity/econ_debug_output.json`. To analyze a dump:
+
+1. **Wait for the user** to tell you a dump is ready. Do NOT trigger dumps yourself.
+2. Run the analyzer: `python3 scripts/analyze_econ.py`
+3. The script reads `unity/econ_debug_output.json` and prints a full summary (economy, fiscal, convergence, roads, etc.).
+
 ### Unity Instructions
 
 **Important: Do NOT use [SerializeField] before features are complete.** Unity's serialization causes Inspector values to override code defaults, making iteration difficult. Use hardcoded constants or non-serialized fields until the feature is confirmed to work.
