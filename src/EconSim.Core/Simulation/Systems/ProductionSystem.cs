@@ -35,7 +35,6 @@ namespace EconSim.Core.Simulation.Systems
         private const float V2FacilityAskBaseFloorMultiplierUnsubsidized = 0.25f;
         private const float V2FacilityAskBaseFloorMultiplierSubsidized = 0.10f;
         private const float GrainReserveTargetDays = 540f; // 1.5 years of staple reserve.
-        private const float AvgGrainKgPerFlourKg = 1f / 0.72f;
         private const float MillDemandBufferFactor = 1.10f;
         private static readonly string[] ReserveGrainGoods = { "wheat", "rye", "barley", "rice_grain" };
 
@@ -755,6 +754,8 @@ namespace EconSim.Core.Simulation.Systems
         {
             if (string.IsNullOrWhiteSpace(goodId))
                 return false;
+            if (!SimulationConfig.Economy.IsGoodEnabled(goodId))
+                return false;
 
             for (int i = 0; i < ReserveGrainGoods.Length; i++)
             {
@@ -787,7 +788,7 @@ namespace EconSim.Core.Simulation.Systems
             if (flour != null && flour.NeedCategory == NeedCategory.Basic && flour.BaseConsumptionKgPerCapitaPerDay > 0f)
                 stapleFlourPerCapitaPerDay = flour.BaseConsumptionKgPerCapitaPerDay;
 
-            float dailyRawNeed = population * stapleFlourPerCapitaPerDay * AvgGrainKgPerFlourKg;
+            float dailyRawNeed = population * stapleFlourPerCapitaPerDay * SimulationConfig.Economy.RawGrainKgPerFlourKg;
             return Math.Max(0f, dailyRawNeed * GrainReserveTargetDays);
         }
 
@@ -799,7 +800,10 @@ namespace EconSim.Core.Simulation.Systems
             float total = 0f;
             for (int i = 0; i < ReserveGrainGoods.Length; i++)
             {
-                if (!economy.Goods.TryGetRuntimeId(ReserveGrainGoods[i], out int runtimeId) || runtimeId < 0)
+                string goodId = ReserveGrainGoods[i];
+                if (!SimulationConfig.Economy.IsGoodEnabled(goodId))
+                    continue;
+                if (!economy.Goods.TryGetRuntimeId(goodId, out int runtimeId) || runtimeId < 0)
                     continue;
 
                 total += county.Stockpile.Get(runtimeId);

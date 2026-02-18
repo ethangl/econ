@@ -88,6 +88,12 @@ namespace EconSim.Core.Simulation
             /// </summary>
             public const float BreadSubsistenceShare = 0.99f;
 
+            /// <summary>
+            /// Grain-to-flour conversion baseline used across reserve and subsistence logic.
+            /// </summary>
+            public const float RawGrainKgPerFlourKg = 1f / 0.72f;
+            public const float FlourKgPerRawGrainKg = 1f / RawGrainKgPerFlourKg;
+
             private static readonly HashSet<string> EnabledGoods = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
             {
                 "raw_salt",

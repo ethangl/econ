@@ -67,11 +67,19 @@ namespace EconSim.Core.Simulation.Systems
             _breadSubsistenceRuntimeIds = new int[BreadSubsistenceGoods.Length];
             for (int i = 0; i < BreadSubsistenceGoods.Length; i++)
             {
+                if (!SimulationConfig.Economy.IsGoodEnabled(BreadSubsistenceGoods[i]))
+                {
+                    _breadSubsistenceRuntimeIds[i] = -1;
+                    continue;
+                }
+
                 _breadSubsistenceRuntimeIds[i] = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, BreadSubsistenceGoods[i]);
             }
 
             // Apply subsistence cover to staple flour demand (not comfort bread demand).
-            _breadRuntimeId = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, "flour");
+            _breadRuntimeId = SimulationConfig.Economy.IsGoodEnabled("flour")
+                ? ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, "flour")
+                : -1;
         }
 
         public void Tick(SimulationState state, MapData mapData)
@@ -507,16 +515,18 @@ namespace EconSim.Core.Simulation.Systems
             if (breadRuntimeId >= 0 && demandByGood.TryGetValue(breadRuntimeId, out float breadNeed) && breadNeed > 0f)
             {
                 float equivalent = 0f;
-                for (int i = 0; i < BreadSubsistenceGoods.Length; i++)
+                float flourPerRawKg = SimulationConfig.Economy.FlourKgPerRawGrainKg;
+                if (flourPerRawKg <= 0f)
+                    return;
+                int count = breadSubsistenceRuntimeIds?.Length ?? 0;
+                for (int i = 0; i < count; i++)
                 {
-                    int runtimeId = (breadSubsistenceRuntimeIds != null && i < breadSubsistenceRuntimeIds.Length)
-                        ? breadSubsistenceRuntimeIds[i]
-                        : -1;
+                    int runtimeId = breadSubsistenceRuntimeIds[i];
                     if (runtimeId < 0)
                         continue;
 
                     float available = county.Stockpile.Get(runtimeId);
-                    equivalent += available * 0.5f;
+                    equivalent += available * flourPerRawKg;
                 }
 
                 float subsistenceShare = Clamp(SimulationConfig.Economy.BreadSubsistenceShare, 0f, 1f);
@@ -524,7 +534,7 @@ namespace EconSim.Core.Simulation.Systems
                 float covered = Math.Min(subsistenceCap, equivalent);
                 if (covered > 0f)
                 {
-                    float requiredRaw = covered / 0.5f;
+                    float requiredRaw = covered / flourPerRawKg;
                     RemoveProportional(county.Stockpile, breadSubsistenceRuntimeIds, requiredRaw);
                     demandByGood[breadRuntimeId] = Math.Max(0f, breadNeed - covered);
                 }

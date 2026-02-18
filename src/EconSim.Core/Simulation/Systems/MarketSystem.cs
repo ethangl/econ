@@ -20,7 +20,6 @@ namespace EconSim.Core.Simulation.Systems
         private const float ReserveActivationDemandFloorKg = 0.5f;
         private const float CountyRetainedDaysForGrain = 540f;
         private const float CountyRetainedDaysForSalt = 180f;
-        private const float GrainKgPerFlourKg = 1f / 0.72f;
         private const float FallbackDailyGrainNeedPerCapitaKg = 0.60f;
         private static readonly string[] ReserveGoodIds = { "wheat", "rye", "barley", "rice_grain", "salt" };
         private static readonly string[] ReserveGrainGoodIds = { "wheat", "rye", "barley", "rice_grain" };
@@ -310,6 +309,8 @@ namespace EconSim.Core.Simulation.Systems
             for (int i = 0; i < ReserveGoodIds.Length; i++)
             {
                 string goodId = ReserveGoodIds[i];
+                if (!SimulationConfig.Economy.IsGoodEnabled(goodId))
+                    continue;
                 if (!economy.Goods.TryGetRuntimeId(goodId, out int runtimeId) || runtimeId < 0)
                     continue;
 
@@ -550,7 +551,7 @@ namespace EconSim.Core.Simulation.Systems
             {
                 var flour = economy.Goods.GetByRuntimeId(flourRuntimeId);
                 if (flour != null && flour.BaseConsumption > 0f)
-                    return flour.BaseConsumption * GrainKgPerFlourKg;
+                    return flour.BaseConsumption * SimulationConfig.Economy.RawGrainKgPerFlourKg;
             }
 
             return FallbackDailyGrainNeedPerCapitaKg;
@@ -559,6 +560,8 @@ namespace EconSim.Core.Simulation.Systems
         private static bool IsReserveGrain(string goodId)
         {
             if (string.IsNullOrWhiteSpace(goodId))
+                return false;
+            if (!SimulationConfig.Economy.IsGoodEnabled(goodId))
                 return false;
 
             for (int i = 0; i < ReserveGrainGoodIds.Length; i++)

@@ -18,7 +18,6 @@ namespace EconSim.Core.Economy
         private const float Elevation45FractionAboveSea = 0.3125f;
         private const float Elevation50FractionAboveSea = 0.375f;
         private const float BootstrapGrainReserveDays = 270f; // 9 months to avoid cold-start starvation.
-        private const float BootstrapRawGrainKgPerFlourKg = 1f / 0.72f;
         private const float BootstrapSaltReserveKgPerCapita = 7.5f; // Midpoint of 5-10 kg/person reserve.
         private static readonly string[] BootstrapReserveGrainGoodIds = { "wheat", "rye", "barley", "rice_grain" };
 
@@ -852,7 +851,7 @@ namespace EconSim.Core.Economy
                 if (population <= 0)
                     continue;
 
-                float dailyRawNeed = population * stapleFlourPerCapitaPerDay * BootstrapRawGrainKgPerFlourKg;
+                float dailyRawNeed = population * stapleFlourPerCapitaPerDay * SimulationConfig.Economy.RawGrainKgPerFlourKg;
                 float seedTargetKg = Math.Max(0f, dailyRawNeed * BootstrapGrainReserveDays);
                 if (seedTargetKg <= 0f)
                     continue;
@@ -862,6 +861,12 @@ namespace EconSim.Core.Economy
                 for (int i = 0; i < BootstrapReserveGrainGoodIds.Length; i++)
                 {
                     string goodId = BootstrapReserveGrainGoodIds[i];
+                    if (!SimulationConfig.Economy.IsGoodEnabled(goodId))
+                    {
+                        weights[i] = 0f;
+                        continue;
+                    }
+
                     float weight = 0f;
                     if (county.Resources != null
                         && county.Resources.TryGetValue(goodId, out float localAbundance)
@@ -884,10 +889,21 @@ namespace EconSim.Core.Economy
                     int ryeIndex = Array.IndexOf(BootstrapReserveGrainGoodIds, "rye");
                     int barleyIndex = Array.IndexOf(BootstrapReserveGrainGoodIds, "barley");
 
-                    if (wheatIndex >= 0) weights[wheatIndex] = 1f;
-                    if (ryeIndex >= 0) weights[ryeIndex] = 1f;
-                    if (barleyIndex >= 0) weights[barleyIndex] = 1f;
-                    weightSum = 3f;
+                    if (wheatIndex >= 0 && SimulationConfig.Economy.IsGoodEnabled("wheat"))
+                    {
+                        weights[wheatIndex] = 1f;
+                        weightSum += 1f;
+                    }
+                    if (ryeIndex >= 0 && SimulationConfig.Economy.IsGoodEnabled("rye"))
+                    {
+                        weights[ryeIndex] = 1f;
+                        weightSum += 1f;
+                    }
+                    if (barleyIndex >= 0 && SimulationConfig.Economy.IsGoodEnabled("barley"))
+                    {
+                        weights[barleyIndex] = 1f;
+                        weightSum += 1f;
+                    }
                 }
 
                 if (weightSum <= 0f)
