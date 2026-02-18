@@ -437,6 +437,8 @@ namespace EconSim.Editor
                 WriteRoads(j, st);
             if (scope == "all" || scope == "economy")
                 WriteEconomy(j, st);
+            if (scope == "all" || scope == "trade")
+                WriteTrade(j, st);
 
             j.ObjClose();
             File.WriteAllText(OutputPath, j.ToString());
@@ -591,9 +593,93 @@ namespace EconSim.Editor
                 j.KV("minStock", snap.MinStock);
                 j.KV("maxStock", snap.MaxStock);
                 j.KV("medianProductivity", snap.MedianProductivity);
+                j.KV("ducalTax", snap.TotalDucalTax);
+                j.KV("ducalRelief", snap.TotalDucalRelief);
+                j.KV("provincialStockpile", snap.TotalProvincialStockpile);
+                j.KV("royalTax", snap.TotalRoyalTax);
+                j.KV("royalRelief", snap.TotalRoyalRelief);
+                j.KV("royalStockpile", snap.TotalRoyalStockpile);
                 j.ObjClose();
             }
             j.ArrClose();
+
+            j.ObjClose();
+        }
+
+        static void WriteTrade(JW j, SimulationState st)
+        {
+            j.Key("trade"); j.ObjOpen();
+
+            var econ = st.Economy;
+            if (econ == null || econ.Provinces == null)
+            {
+                j.KV("provinceCount", 0);
+                j.ObjClose();
+                return;
+            }
+
+            // County-level stats
+            int countyCount = 0;
+            float totalTaxPaid = 0f, totalRelief = 0f;
+            int taxPayingCounties = 0, reliefReceivingCounties = 0;
+
+            for (int i = 0; i < econ.Counties.Length; i++)
+            {
+                var ce = econ.Counties[i];
+                if (ce == null) continue;
+                countyCount++;
+                totalTaxPaid += ce.TaxPaid;
+                totalRelief += ce.Relief;
+                if (ce.TaxPaid > 0f) taxPayingCounties++;
+                if (ce.Relief > 0f) reliefReceivingCounties++;
+            }
+
+            j.KV("countyCount", countyCount);
+            j.KV("totalDucalTax", totalTaxPaid);
+            j.KV("totalDucalRelief", totalRelief);
+            j.KV("taxPayingCounties", taxPayingCounties);
+            j.KV("reliefReceivingCounties", reliefReceivingCounties);
+
+            // Per-province summary
+            j.Key("provinces"); j.ArrOpen();
+            float totalProvStockpile = 0f;
+            for (int i = 0; i < econ.Provinces.Length; i++)
+            {
+                var pe = econ.Provinces[i];
+                if (pe == null) continue;
+                totalProvStockpile += pe.Stockpile;
+
+                j.ObjOpen();
+                j.KV("id", i);
+                j.KV("stockpile", pe.Stockpile);
+                j.KV("taxCollected", pe.TaxCollected);
+                j.KV("reliefGiven", pe.ReliefGiven);
+                j.ObjClose();
+            }
+            j.ArrClose();
+            j.KV("totalProvincialStockpile", totalProvStockpile);
+
+            // Per-realm summary
+            if (econ.Realms != null)
+            {
+                j.Key("realms"); j.ArrOpen();
+                float totalRealmStockpile = 0f;
+                for (int i = 0; i < econ.Realms.Length; i++)
+                {
+                    var re = econ.Realms[i];
+                    if (re == null) continue;
+                    totalRealmStockpile += re.Stockpile;
+
+                    j.ObjOpen();
+                    j.KV("id", i);
+                    j.KV("stockpile", re.Stockpile);
+                    j.KV("taxCollected", re.TaxCollected);
+                    j.KV("reliefGiven", re.ReliefGiven);
+                    j.ObjClose();
+                }
+                j.ArrClose();
+                j.KV("totalRoyalStockpile", totalRealmStockpile);
+            }
 
             j.ObjClose();
         }

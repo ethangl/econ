@@ -1,7 +1,7 @@
 namespace EconSim.Core.Economy
 {
     /// <summary>
-    /// Per-county runtime economic state. Each county is an isolated autarky.
+    /// Per-county runtime economic state.
     /// </summary>
     public class CountyEconomy
     {
@@ -22,5 +22,11 @@ namespace EconSim.Core.Economy
 
         /// <summary>Shortfall when stock hits zero.</summary>
         public float UnmetNeed;
+
+        /// <summary>Tax paid to provincial stockpile this tick.</summary>
+        public float TaxPaid;
+
+        /// <summary>Relief received from provincial stockpile this tick.</summary>
+        public float Relief;
     }
 }

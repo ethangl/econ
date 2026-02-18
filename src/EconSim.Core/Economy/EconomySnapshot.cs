@@ -16,5 +16,13 @@ namespace EconSim.Core.Economy
         public float MinStock;
         public float MaxStock;
         public float MedianProductivity;
+
+        // Feudal redistribution (Layer 2)
+        public float TotalDucalTax;
+        public float TotalDucalRelief;
+        public float TotalProvincialStockpile;
+        public float TotalRoyalTax;
+        public float TotalRoyalRelief;
+        public float TotalRoyalStockpile;
     }
 }

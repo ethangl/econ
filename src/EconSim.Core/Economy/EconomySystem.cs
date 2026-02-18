@@ -116,6 +116,8 @@ namespace EconSim.Core.Economy
                 snap.TotalProduction += ce.Production;
                 snap.TotalConsumption += ce.Consumption;
                 snap.TotalUnmetNeed += ce.UnmetNeed;
+                snap.TotalDucalTax += ce.TaxPaid;
+                snap.TotalDucalRelief += ce.Relief;
 
                 if (ce.Stock < snap.MinStock) snap.MinStock = ce.Stock;
                 if (ce.Stock > snap.MaxStock) snap.MaxStock = ce.Stock;
@@ -132,6 +134,30 @@ namespace EconSim.Core.Economy
             {
                 snap.MinStock = 0;
                 snap.MaxStock = 0;
+            }
+
+            // Provincial stockpile stats
+            if (econ.Provinces != null)
+            {
+                for (int i = 0; i < econ.Provinces.Length; i++)
+                {
+                    var pe = econ.Provinces[i];
+                    if (pe == null) continue;
+                    snap.TotalProvincialStockpile += pe.Stockpile;
+                }
+            }
+
+            // Royal stockpile stats
+            if (econ.Realms != null)
+            {
+                for (int i = 0; i < econ.Realms.Length; i++)
+                {
+                    var re = econ.Realms[i];
+                    if (re == null) continue;
+                    snap.TotalRoyalTax += re.TaxCollected;
+                    snap.TotalRoyalRelief += re.ReliefGiven;
+                    snap.TotalRoyalStockpile += re.Stockpile;
+                }
             }
 
             snap.MedianProductivity = econ.MedianProductivity;

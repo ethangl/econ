@@ -4,7 +4,7 @@
 
 Build the economy in layers, each adding one mechanism. Every layer must run and produce observable data before the next begins. No speculative infrastructure.
 
-## Layer 1: Autarky (current)
+## Layer 1: Autarky
 
 Single abstract good called "Goods". Each county produces and consumes independently. No trade, no prices, no markets.
 
@@ -39,38 +39,59 @@ Single abstract good called "Goods". Each county produces and consumes independe
 | 8   | Hot Desert     | 0.3  |     | 18  | Lake                | 0.0  |
 | 9   | Cold Desert    | 0.3  |     |     |                     |      |
 
-### Observed Behavior (12 months, 651 counties)
+## Layer 2: Feudal Tax Redistribution (current)
 
-- Avg productivity 1.03, range 0.57–1.34
-- 360 surplus counties (productivity > 1.0), 291 starving (productivity < 1.0)
-- Steady state reached immediately — surplus counties accumulate linearly, starving counties sit at zero stock with constant unmet need
-- Economy system: ~0.16ms/tick
+Two-tier feudal redistribution replaces autarky isolation. Goods flow through the political hierarchy: counts pay dukes, dukes pay kings, and relief flows back down. No prices or markets — this is administrative fiat within a realm.
 
-## Layer 2: Local Trade
+**Hierarchy:** County (count) → Province (duke) → Realm (king). Each tier taxes the one below and redistributes downward.
 
-Counties within a realm can transfer surplus to deficit counties. No prices yet — just redistribution.
+**Tick order** (runs daily after EconomySystem production/consumption):
 
-- Surplus counties export excess stock to the nearest deficit county (by transport cost)
-- Transport cost reduces goods in transit (existing `TransportGraph` efficiency formula)
-- Snapshot adds: total traded, total transport loss
+1. **Duke taxes surplus counties.** For each county with stock above daily need, the duke takes `DucalTaxRate` (20%) of the surplus into the provincial stockpile.
+2. **King taxes surplus provinces.** For each province with stockpile > 0, the king takes `RoyalTaxRate` (20%) into the royal stockpile.
+3. **King distributes to deficit provinces.** Royal stockpile allocated proportionally to each province's unmet county need (net of local stockpile). A province that can cover its own deficit locally gets nothing from the king.
+4. **Duke distributes to deficit counties.** Provincial stockpile (now topped up by the king) allocated proportionally to each county's shortfall (dailyNeed - stock).
 
-**Goal:** Starving counties get partially fed. Total unmet need drops but doesn't hit zero (transport losses, geography).
+Goods flow county → province → realm → province → county in a single tick.
 
-## Layer 3: Prices
+**Constraints:** Redistribution is realm-internal. Realm borders are hard walls — no inter-realm trade at this layer.
 
-Goods get a price. Supply/demand imbalance at each county drives price up or down.
+**Steady-state behavior:** Royal stockpiles drain to zero each tick (kings fully distribute). Provincial stockpiles stabilize at a small positive level for surplus provinces. ~15% of counties still starve because total map production is structurally below total consumption need — no amount of redistribution can close that gap.
 
-- Counties with surplus sell at lower prices, deficit counties bid higher
-- Trade becomes directional: goods flow from low-price to high-price counties
-- Price acts as a signal — no central planner, just local price gradients
+**Observed results** (12mo, 433 counties, 5 realms, 31 provinces):
 
-## Layer 4: Multiple Goods
+| Model | Starving | Unmet Need |
+|---|---|---|
+| Autarky | 208 (48%) | 42,934 |
+| Duke + King | 66 (15%) | 12,126 |
+
+### Files
+
+- `Economy/CountyEconomy.cs` — adds TaxPaid, Relief per county
+- `Economy/ProvinceEconomy.cs` — Stockpile, TaxCollected, ReliefGiven per province
+- `Economy/RealmEconomy.cs` — Stockpile, TaxCollected, ReliefGiven per realm
+- `Economy/EconomyState.cs` — adds Provinces[], Realms[] arrays
+- `Economy/EconomySnapshot.cs` — adds ducal/royal tax/relief/stockpile aggregates
+- `Economy/TradeSystem.cs` — ITickSystem (daily): builds province/realm mappings at init, 4-phase tick
+
+## Layer 3: Multiple Goods
 
 Split "Goods" into distinct types (food, timber, ore). Each biome produces different goods at different rates. Counties now have comparative advantage.
 
 - Biome productivity table expands: each biome produces a mix of goods
 - Consumption requires specific goods (food is essential, timber/ore are optional)
+- Feudal redistribution applies per good type
 - Trade becomes interesting — a forest county exports timber, imports food
+
+## Layer 4: Inter-Realm Trade
+
+Price-driven trade between realms at market towns. This is where prices emerge — feudal redistribution is administrative, but cross-border exchange requires negotiation.
+
+- Market placement by geographic suitability (rivers, coast, centrality)
+- Counties assigned to nearest market by transport cost
+- Market clears buy/sell orders, sets prices
+- Inter-market trade for goods not locally available
+- Transport cost reduces goods in transit
 
 ## Layer 5: Production Chains
 
@@ -79,15 +100,6 @@ Raw goods → refined goods → finished goods. Facilities transform inputs to o
 - Facilities placed by geography (sawmill near forest, smelter near ore)
 - Labor requirements from county population
 - Processing takes time (input consumed, output buffered)
-
-## Layer 6: Markets
-
-Physical market towns aggregate regional supply/demand. Prices discovered at markets rather than per-county.
-
-- Market placement by geographic suitability (rivers, coast, centrality)
-- Counties assigned to nearest market by transport cost
-- Market clears buy/sell orders, sets prices
-- Inter-market trade for goods not locally available
 
 ## Later Layers (unordered)
 
