@@ -11,7 +11,6 @@ namespace EconSim.Core.Simulation.Systems
     /// </summary>
     public class MarketSystem : ITickSystem
     {
-        private const float BuyerTransportFeeRate = 0.005f;
         private const float LotCullThreshold = 0.01f;
         private const float ReserveTargetDays = 30f;
         private const float ReserveRefillSharePerDay = 0.04f;
@@ -198,7 +197,7 @@ namespace EconSim.Core.Simulation.Systems
 
                     float unitPrice = goodState.Price;
                     float baseCost = desiredQty * unitPrice;
-                    float fee = baseCost * Math.Max(0f, order.TransportCost) * BuyerTransportFeeRate;
+                    float fee = desiredQty * Math.Max(0f, order.TransportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                     float gross = baseCost + fee;
                     if (gross <= 0f)
                     {

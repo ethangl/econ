@@ -96,13 +96,11 @@ namespace EconSim.Core.Simulation
             public const float BeerSubsistenceShare = 0.50f;
 
             /// <summary>
-            /// Two-cap home-brew controls:
-            /// - Only a share of population is eligible for home brewing.
-            /// - Eligible population has a fixed maximum beer kg/day from subsistence stock.
+            /// Flat hauling fee in Crowns per kilogram per transport-cost unit.
+            /// Applied uniformly across all goods.
+            /// Tuned to be microscopic at short distances.
             /// </summary>
-            public const float BeerSubsistenceEligiblePopShare = 1.00f;
-            // True 50/50 with beer demand at 1.5 kg/day => 0.75 kg/day home-brew cap.
-            public const float BeerSubsistenceMaxKgPerCapitaPerDay = 0.75f;
+            public const float FlatHaulingFeePerKgPerTransportCostUnit = 0.00002f;
 
             /// <summary>
             /// Grain-to-flour conversion baseline used across reserve and subsistence logic.

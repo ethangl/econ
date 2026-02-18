@@ -17,7 +17,6 @@ namespace EconSim.Core.Simulation.Systems
 
         private const float V2SubsistenceFraction = 0.20f;
         private const float V2TransportLossRate = 0.01f;
-        private const float V2TransportFeeRate = 0.005f;
         private const int V2LossDaysToDeactivate = 42;
         private const int V2TreasuryBufferDays = 5;
         private const float V2ReactivationWageLossTolerance = 0.75f;
@@ -293,7 +292,8 @@ namespace EconSim.Core.Simulation.Systems
             float outputPrice = outputMarket.Price;
             float nominalThroughput = facility.GetNominalThroughput(def);
             float hypoRevenue = outputPrice * nominalThroughput * sellEfficiency;
-            float hypoSellFee = nominalThroughput * outputPrice * transportCost * V2TransportFeeRate;
+            float flatHaulPerUnit = Math.Max(0f, transportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
+            float hypoSellFee = nominalThroughput * flatHaulPerUnit;
 
             float hypoInputCost = 0f;
             var outputGood = economy.Goods.Get(def.OutputGoodId);
@@ -310,7 +310,8 @@ namespace EconSim.Core.Simulation.Systems
                         ? inputMarket.Price
                         : economy.Goods.GetByRuntimeId(inputRuntimeId)?.BasePrice ?? 0f;
 
-                    hypoInputCost += inputPrice * input.QuantityKg * nominalThroughput * (1f + transportCost * V2TransportFeeRate);
+                    float landedInputPrice = inputPrice + flatHaulPerUnit;
+                    hypoInputCost += landedInputPrice * input.QuantityKg * nominalThroughput;
                 }
             }
 
@@ -740,7 +741,7 @@ namespace EconSim.Core.Simulation.Systems
                     marketPrice,
                     transportCost);
 
-                float haulingFee = quantity * marketPrice * transportCost * V2TransportFeeRate;
+                float haulingFee = quantity * Math.Max(0f, transportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                 if (haulingFee > 0f && facility.Treasury < haulingFee)
                 {
                     float scale = facility.Treasury / haulingFee;
@@ -821,7 +822,7 @@ namespace EconSim.Core.Simulation.Systems
                         else
                             inputPrice = economy.Goods.Get(input.GoodId)?.BasePrice ?? 0f;
 
-                        float landedInputPrice = inputPrice * (1f + Math.Max(0f, transportCost) * V2TransportFeeRate);
+                        float landedInputPrice = inputPrice + Math.Max(0f, transportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                         variantCost += input.QuantityKg * landedInputPrice;
                     }
 
@@ -833,7 +834,7 @@ namespace EconSim.Core.Simulation.Systems
                     inputCostPerUnit = bestVariantCost;
             }
 
-            float haulingCostPerUnit = Math.Max(0f, marketPrice) * Math.Max(0f, transportCost) * V2TransportFeeRate;
+            float haulingCostPerUnit = Math.Max(0f, transportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
             float operatingCostPerUnit = inputCostPerUnit + wageCostPerUnit + haulingCostPerUnit;
 
             bool subsidized = SimulationConfig.Economy.EnableFacilitySubsidies;

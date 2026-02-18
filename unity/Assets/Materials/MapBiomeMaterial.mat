@@ -153,8 +153,8 @@ Material:
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0
-    - _HoveredCountyId: -1
+    - _HoverIntensity: 0.9995978
+    - _HoveredCountyId: 0.008407721
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1

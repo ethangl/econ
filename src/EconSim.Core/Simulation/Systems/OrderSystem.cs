@@ -11,7 +11,6 @@ namespace EconSim.Core.Simulation.Systems
     /// </summary>
     public class OrderSystem : ITickSystem
     {
-        private const float BuyerTransportFeeRate = 0.005f;
         private const float BasicAffordabilityElasticity = 0.75f;
         private const float ComfortAffordabilityElasticity = 1.00f;
         private const float LuxuryAffordabilityElasticity = 1.25f;
@@ -265,14 +264,14 @@ namespace EconSim.Core.Simulation.Systems
                     continue;
                 }
 
-                float effectivePrice = marketGood.Price * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
+                float effectivePrice = marketGood.Price + Math.Max(0f, targetTransportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                 if (effectivePrice <= 0f)
                 {
                     AccumulateUnpostedDemandDiagnostic(market, good.RuntimeId, noRouteQty: 0f, priceRejectQty: requestedQty);
                     continue;
                 }
 
-                float baseEffectivePrice = marketGood.BasePrice * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
+                float baseEffectivePrice = marketGood.BasePrice + Math.Max(0f, targetTransportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                 float affordabilityScale = ComputeAffordabilityDemandScale(tier, effectivePrice, baseEffectivePrice);
                 float qtyAfterElasticity = qty * affordabilityScale;
                 float affordabilityRejectedQty = Math.Max(0f, qty - qtyAfterElasticity);
@@ -496,7 +495,7 @@ namespace EconSim.Core.Simulation.Systems
                     if (toBuy <= 0.0001f)
                         continue;
 
-                    float effectivePrice = marketGood.Price * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
+                    float effectivePrice = marketGood.Price + Math.Max(0f, targetTransportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                     if (effectivePrice <= 0f)
                         continue;
 
@@ -580,7 +579,7 @@ namespace EconSim.Core.Simulation.Systems
                     if (marketGood.Supply <= 0.001f && marketGood.SupplyOffered <= 0.001f)
                         hasOfferedSupply = false;
 
-                    float effectivePrice = marketGood.Price * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
+                    float effectivePrice = marketGood.Price + Math.Max(0f, targetTransportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                     if (effectivePrice <= 0f)
                     {
                         valid = false;
@@ -700,10 +699,6 @@ namespace EconSim.Core.Simulation.Systems
 
                 float subsistenceShare = Clamp(SimulationConfig.Economy.BeerSubsistenceShare, 0f, 1f);
                 float subsistenceCap = beerNeed * subsistenceShare;
-                float eligiblePopShare = Clamp(SimulationConfig.Economy.BeerSubsistenceEligiblePopShare, 0f, 1f);
-                float subsistenceKgPerCapitaCap = Math.Max(0f, SimulationConfig.Economy.BeerSubsistenceMaxKgPerCapitaPerDay);
-                float absoluteCap = county.Population.Total * eligiblePopShare * subsistenceKgPerCapitaCap;
-                subsistenceCap = Math.Min(subsistenceCap, absoluteCap);
                 float covered = Math.Min(subsistenceCap, equivalentBeer);
                 if (covered > 0f)
                 {
@@ -1010,7 +1005,7 @@ namespace EconSim.Core.Simulation.Systems
                 && localMarket.TryGetGoodState(goodRuntimeId, out var localGoodState))
             {
                 float localCost = Math.Max(0f, localTransportCost);
-                float effectivePrice = localGoodState.Price * (1f + localCost * BuyerTransportFeeRate);
+                float effectivePrice = localGoodState.Price + localCost * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                 if (effectivePrice > 0f)
                 {
                     bestEffectivePrice = effectivePrice;
@@ -1042,7 +1037,7 @@ namespace EconSim.Core.Simulation.Systems
                     continue;
                 }
 
-                float effectivePrice = marketGoodState.Price * (1f + Math.Max(0f, transportCost) * BuyerTransportFeeRate);
+                float effectivePrice = marketGoodState.Price + Math.Max(0f, transportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                 if (effectivePrice <= 0f)
                     continue;
 
@@ -1062,7 +1057,7 @@ namespace EconSim.Core.Simulation.Systems
             if (TryResolveOffMapMarket(economy, countyId, goodId, out var offMapMarket, out float offMapTransportCost)
                 && offMapMarket.TryGetGoodState(goodRuntimeId, out var offMapGoodState))
             {
-                float effectivePrice = offMapGoodState.Price * (1f + Math.Max(0f, offMapTransportCost) * BuyerTransportFeeRate);
+                float effectivePrice = offMapGoodState.Price + Math.Max(0f, offMapTransportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                 if (effectivePrice > 0f)
                 {
                     bool cheaper = effectivePrice < bestEffectivePrice - 0.0001f;
