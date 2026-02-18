@@ -7,7 +7,9 @@ using EconSim.Core.Simulation.Systems;
 namespace EconSim.Core.Economy
 {
     /// <summary>
-    /// Single-good production/consumption loop. Each county is an isolated autarky.
+    /// Multi-good production/consumption loop.
+    /// Production: all goods produced per biome productivity.
+    /// Consumption: food only (Phase A). Timber/Ore accumulate.
     /// </summary>
     public class EconomySystem : ITickSystem
     {
@@ -15,6 +17,7 @@ namespace EconSim.Core.Economy
         public int TickInterval => SimulationConfig.Intervals.Daily;
 
         const float ConsumptionPerPop = 1.0f;
+        const int Food = (int)GoodType.Food;
 
         public void Initialize(SimulationState state, MapData mapData)
         {
@@ -32,21 +35,25 @@ namespace EconSim.Core.Economy
             {
                 var ce = new CountyEconomy();
                 ce.Population = county.TotalPopulation;
-                ce.Productivity = ComputeCountyProductivity(county, mapData);
+                ComputeCountyProductivity(county, mapData, ce.Productivity);
                 econ.Counties[county.Id] = ce;
             }
 
-            // Compute median productivity once (it's static)
-            var productivities = new List<float>(mapData.Counties.Count);
-            foreach (var county in mapData.Counties)
-                productivities.Add(econ.Counties[county.Id].Productivity);
-            productivities.Sort();
-            if (productivities.Count > 0)
+            // Compute median productivity per good (static)
+            econ.MedianProductivity = new float[Goods.Count];
+            for (int g = 0; g < Goods.Count; g++)
             {
-                int mid = productivities.Count / 2;
-                econ.MedianProductivity = productivities.Count % 2 == 0
-                    ? (productivities[mid - 1] + productivities[mid]) / 2f
-                    : productivities[mid];
+                var productivities = new List<float>(mapData.Counties.Count);
+                foreach (var county in mapData.Counties)
+                    productivities.Add(econ.Counties[county.Id].Productivity[g]);
+                productivities.Sort();
+                if (productivities.Count > 0)
+                {
+                    int mid = productivities.Count / 2;
+                    econ.MedianProductivity[g] = productivities.Count % 2 == 0
+                        ? (productivities[mid - 1] + productivities[mid]) / 2f
+                        : productivities[mid];
+                }
             }
 
             state.Economy = econ;
@@ -64,37 +71,52 @@ namespace EconSim.Core.Economy
 
                 float pop = ce.Population;
 
-                // Production
-                float produced = pop * ce.Productivity;
-                ce.Stock += produced;
-                ce.Production = produced;
+                // Production — all goods
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    float produced = pop * ce.Productivity[g];
+                    ce.Stock[g] += produced;
+                    ce.Production[g] = produced;
+                }
 
-                // Consumption
+                // Consumption — food only (Phase A)
                 float needed = pop * ConsumptionPerPop;
-                float consumed = Math.Min(ce.Stock, needed);
-                ce.Stock -= consumed;
-                ce.Consumption = consumed;
-                ce.UnmetNeed = needed - consumed;
+                float consumed = Math.Min(ce.Stock[Food], needed);
+                ce.Stock[Food] -= consumed;
+                ce.Consumption[Food] = consumed;
+                ce.UnmetNeed[Food] = needed - consumed;
+
+                // Timber/Ore: no consumption yet (Phase B)
+                ce.Consumption[(int)GoodType.Timber] = 0f;
+                ce.Consumption[(int)GoodType.Ore] = 0f;
+                ce.UnmetNeed[(int)GoodType.Timber] = 0f;
+                ce.UnmetNeed[(int)GoodType.Ore] = 0f;
             }
 
             // Record snapshot
             econ.TimeSeries.Add(BuildSnapshot(state.CurrentDay, econ));
         }
 
-        static float ComputeCountyProductivity(County county, MapData mapData)
+        static void ComputeCountyProductivity(County county, MapData mapData, float[] output)
         {
             int landCells = 0;
-            float totalProductivity = 0f;
+            for (int g = 0; g < Goods.Count; g++)
+                output[g] = 0f;
 
             foreach (int cellId in county.CellIds)
             {
                 var cell = mapData.CellById[cellId];
                 if (!cell.IsLand) continue;
                 landCells++;
-                totalProductivity += BiomeProductivity.Get(cell.BiomeId);
+                for (int g = 0; g < Goods.Count; g++)
+                    output[g] += BiomeProductivity.Get(cell.BiomeId, (GoodType)g);
             }
 
-            return landCells > 0 ? totalProductivity / landCells : 0f;
+            if (landCells > 0)
+            {
+                for (int g = 0; g < Goods.Count; g++)
+                    output[g] /= landCells;
+            }
         }
 
         static EconomySnapshot BuildSnapshot(int day, EconomyState econ)
@@ -103,6 +125,8 @@ namespace EconSim.Core.Economy
             snap.Day = day;
             snap.MinStock = float.MaxValue;
             snap.MaxStock = float.MinValue;
+            snap.TotalStockByGood = new float[Goods.Count];
+            snap.TotalProductionByGood = new float[Goods.Count];
 
             int countyCount = 0;
 
@@ -112,23 +136,33 @@ namespace EconSim.Core.Economy
                 if (ce == null) continue;
 
                 countyCount++;
-                snap.TotalStock += ce.Stock;
-                snap.TotalProduction += ce.Production;
-                snap.TotalConsumption += ce.Consumption;
-                snap.TotalUnmetNeed += ce.UnmetNeed;
-                snap.TotalDucalTax += ce.TaxPaid;
-                snap.TotalDucalRelief += ce.Relief;
 
-                if (ce.Stock < snap.MinStock) snap.MinStock = ce.Stock;
-                if (ce.Stock > snap.MaxStock) snap.MaxStock = ce.Stock;
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    snap.TotalStockByGood[g] += ce.Stock[g];
+                    snap.TotalProductionByGood[g] += ce.Production[g];
+                }
 
-                if (ce.UnmetNeed > 0)
+                snap.TotalConsumption += ce.Consumption[Food];
+                snap.TotalUnmetNeed += ce.UnmetNeed[Food];
+                snap.TotalDucalTax += ce.TaxPaid[Food];
+                snap.TotalDucalRelief += ce.Relief[Food];
+
+                float foodStock = ce.Stock[Food];
+                if (foodStock < snap.MinStock) snap.MinStock = foodStock;
+                if (foodStock > snap.MaxStock) snap.MaxStock = foodStock;
+
+                if (ce.UnmetNeed[Food] > 0)
                     snap.StarvingCounties++;
-                else if (ce.Production < ce.Consumption)
+                else if (ce.Production[Food] < ce.Consumption[Food])
                     snap.DeficitCounties++;
                 else
                     snap.SurplusCounties++;
             }
+
+            // Backward-compat scalars = food values
+            snap.TotalStock = snap.TotalStockByGood[Food];
+            snap.TotalProduction = snap.TotalProductionByGood[Food];
 
             if (countyCount == 0)
             {
@@ -143,7 +177,7 @@ namespace EconSim.Core.Economy
                 {
                     var pe = econ.Provinces[i];
                     if (pe == null) continue;
-                    snap.TotalProvincialStockpile += pe.Stockpile;
+                    snap.TotalProvincialStockpile += pe.Stockpile[Food];
                 }
             }
 
@@ -154,13 +188,13 @@ namespace EconSim.Core.Economy
                 {
                     var re = econ.Realms[i];
                     if (re == null) continue;
-                    snap.TotalRoyalTax += re.TaxCollected;
-                    snap.TotalRoyalRelief += re.ReliefGiven;
-                    snap.TotalRoyalStockpile += re.Stockpile;
+                    snap.TotalRoyalTax += re.TaxCollected[Food];
+                    snap.TotalRoyalRelief += re.ReliefGiven[Food];
+                    snap.TotalRoyalStockpile += re.Stockpile[Food];
                 }
             }
 
-            snap.MedianProductivity = econ.MedianProductivity;
+            snap.MedianProductivity = econ.MedianProductivity[Food];
 
             return snap;
         }

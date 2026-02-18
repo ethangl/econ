@@ -2,10 +2,17 @@ namespace EconSim.Core.Economy
 {
     /// <summary>
     /// Single time series data point, aggregated across all counties.
+    /// Scalar fields are food values for backward compatibility.
     /// </summary>
     public class EconomySnapshot
     {
         public int Day;
+
+        // Per-good aggregates (Layer 3)
+        public float[] TotalStockByGood;
+        public float[] TotalProductionByGood;
+
+        // Backward-compat scalars = food values
         public float TotalStock;
         public float TotalProduction;
         public float TotalConsumption;

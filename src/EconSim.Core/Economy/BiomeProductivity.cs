@@ -1,41 +1,57 @@
 namespace EconSim.Core.Economy
 {
     /// <summary>
-    /// Static biome -> productivity lookup. Goods produced per person per day.
+    /// Static biome -> productivity lookup. kg produced per person per day.
+    /// Indexed by [biomeId, goodType].
     /// </summary>
     public static class BiomeProductivity
     {
-        static readonly float[] Values =
+        // [biomeId, goodType] — Food=0, Timber=1, Ore=2
+        static readonly float[,] Values =
         {
-            0.0f,  // 0  Glacier
-            0.2f,  // 1  Tundra
-            0.1f,  // 2  Salt Flat
-            0.7f,  // 3  Coastal Marsh
-            0.2f,  // 4  Alpine Barren
-            0.4f,  // 5  Mountain Shrub
-            1.4f,  // 6  Floodplain
-            0.7f,  // 7  Wetland
-            0.3f,  // 8  Hot Desert
-            0.3f,  // 9  Cold Desert
-            0.5f,  // 10 Scrubland
-            0.8f,  // 11 Tropical Rainforest
-            0.9f,  // 12 Tropical Dry Forest
-            1.1f,  // 13 Savanna
-            0.6f,  // 14 Boreal Forest
-            0.9f,  // 15 Temperate Forest
-            1.3f,  // 16 Grassland
-            1.0f,  // 17 Woodland
-            0.0f,  // 18 Lake
+            //                     Food  Timber  Ore
+            /* 0  Glacier         */ { 0.0f, 0.0f, 0.0f },
+            /* 1  Tundra          */ { 0.2f, 0.0f, 0.0f },
+            /* 2  Salt Flat       */ { 0.1f, 0.0f, 0.1f },
+            /* 3  Coastal Marsh   */ { 0.7f, 0.0f, 0.0f },
+            /* 4  Alpine Barren   */ { 0.2f, 0.0f, 0.4f },
+            /* 5  Mountain Shrub  */ { 0.4f, 0.1f, 0.3f },
+            /* 6  Floodplain      */ { 1.4f, 0.0f, 0.0f },
+            /* 7  Wetland         */ { 0.7f, 0.1f, 0.0f },
+            /* 8  Hot Desert      */ { 0.3f, 0.0f, 0.2f },
+            /* 9  Cold Desert     */ { 0.3f, 0.0f, 0.2f },
+            /* 10 Scrubland       */ { 0.5f, 0.1f, 0.1f },
+            /* 11 Tropical Rainf  */ { 0.8f, 0.5f, 0.0f },
+            /* 12 Tropical Dry F  */ { 0.9f, 0.4f, 0.0f },
+            /* 13 Savanna         */ { 1.1f, 0.1f, 0.0f },
+            /* 14 Boreal Forest   */ { 0.6f, 0.5f, 0.0f },
+            /* 15 Temperate Fore  */ { 0.9f, 0.5f, 0.0f },
+            /* 16 Grassland       */ { 1.3f, 0.0f, 0.0f },
+            /* 17 Woodland        */ { 1.0f, 0.3f, 0.0f },
+            /* 18 Lake            */ { 0.0f, 0.0f, 0.0f },
         };
 
+        static readonly int BiomeCount = Values.GetLength(0);
+
         /// <summary>
-        /// Get productivity for a biome ID. Returns 0 for unknown biomes.
+        /// Get food productivity for a biome ID. Returns 0 for unknown biomes.
+        /// Backward-compatible shorthand for Get(biomeId, GoodType.Food).
         /// </summary>
-        public static float Get(int biomeId)
+        public static float GetFood(int biomeId)
         {
-            if (biomeId < 0 || biomeId >= Values.Length)
+            if (biomeId < 0 || biomeId >= BiomeCount)
                 return 0f;
-            return Values[biomeId];
+            return Values[biomeId, (int)GoodType.Food];
+        }
+
+        /// <summary>
+        /// Get productivity for a biome ID and good type. Returns 0 for unknown biomes.
+        /// </summary>
+        public static float Get(int biomeId, GoodType good)
+        {
+            if (biomeId < 0 || biomeId >= BiomeCount)
+                return 0f;
+            return Values[biomeId, (int)good];
         }
     }
 }

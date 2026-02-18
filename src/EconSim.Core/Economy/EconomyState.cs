@@ -16,8 +16,8 @@ namespace EconSim.Core.Economy
         /// <summary>Per-realm economy (king's treasury), indexed by realm ID.</summary>
         public RealmEconomy[] Realms;
 
-        /// <summary>Median productivity across all counties (computed once at init).</summary>
-        public float MedianProductivity;
+        /// <summary>Median productivity across all counties, per good type (computed once at init).</summary>
+        public float[] MedianProductivity;
 
         /// <summary>Recorded each tick for analysis.</summary>
         public List<EconomySnapshot> TimeSeries = new List<EconomySnapshot>();

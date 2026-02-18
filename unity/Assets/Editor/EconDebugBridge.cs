@@ -561,21 +561,45 @@ namespace EconSim.Editor
 
             // Init stats
             int countyCount = 0;
-            float sumProd = 0f, minProd = float.MaxValue, maxProd = float.MinValue;
+            float[] sumProd = new float[Goods.Count];
+            float[] minProd = new float[Goods.Count];
+            float[] maxProd = new float[Goods.Count];
+            for (int g = 0; g < Goods.Count; g++)
+            {
+                minProd[g] = float.MaxValue;
+                maxProd[g] = float.MinValue;
+            }
             for (int i = 0; i < econ.Counties.Length; i++)
             {
                 var ce = econ.Counties[i];
                 if (ce == null) continue;
                 countyCount++;
-                sumProd += ce.Productivity;
-                if (ce.Productivity < minProd) minProd = ce.Productivity;
-                if (ce.Productivity > maxProd) maxProd = ce.Productivity;
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    sumProd[g] += ce.Productivity[g];
+                    if (ce.Productivity[g] < minProd[g]) minProd[g] = ce.Productivity[g];
+                    if (ce.Productivity[g] > maxProd[g]) maxProd[g] = ce.Productivity[g];
+                }
             }
 
             j.KV("countyCount", countyCount);
-            j.KV("avgProductivity", countyCount > 0 ? sumProd / countyCount : 0f);
-            j.KV("minProductivity", countyCount > 0 ? minProd : 0f);
-            j.KV("maxProductivity", countyCount > 0 ? maxProd : 0f);
+            // Backward compat: food productivity
+            j.KV("avgProductivity", countyCount > 0 ? sumProd[0] / countyCount : 0f);
+            j.KV("minProductivity", countyCount > 0 ? minProd[0] : 0f);
+            j.KV("maxProductivity", countyCount > 0 ? maxProd[0] : 0f);
+
+            // Per-good productivity
+            string[] goodNames = { "food", "timber", "ore" };
+            j.Key("productivityByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+            {
+                j.Key(goodNames[g]); j.ObjOpen();
+                j.KV("avg", countyCount > 0 ? sumProd[g] / countyCount : 0f);
+                j.KV("min", countyCount > 0 ? minProd[g] : 0f);
+                j.KV("max", countyCount > 0 ? maxProd[g] : 0f);
+                j.ObjClose();
+            }
+            j.ObjClose();
 
             // Time series
             j.Key("timeSeries"); j.ArrOpen();
@@ -599,6 +623,23 @@ namespace EconSim.Editor
                 j.KV("royalTax", snap.TotalRoyalTax);
                 j.KV("royalRelief", snap.TotalRoyalRelief);
                 j.KV("royalStockpile", snap.TotalRoyalStockpile);
+
+                // Per-good breakdowns
+                if (snap.TotalStockByGood != null)
+                {
+                    j.Key("stockByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalStockByGood.Length; g++)
+                        j.Val(snap.TotalStockByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalProductionByGood != null)
+                {
+                    j.Key("productionByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalProductionByGood.Length; g++)
+                        j.Val(snap.TotalProductionByGood[g]);
+                    j.ArrClose();
+                }
+
                 j.ObjClose();
             }
             j.ArrClose();
@@ -618,6 +659,8 @@ namespace EconSim.Editor
                 return;
             }
 
+            const int F = (int)GoodType.Food;
+
             // County-level stats
             int countyCount = 0;
             float totalTaxPaid = 0f, totalRelief = 0f;
@@ -628,10 +671,10 @@ namespace EconSim.Editor
                 var ce = econ.Counties[i];
                 if (ce == null) continue;
                 countyCount++;
-                totalTaxPaid += ce.TaxPaid;
-                totalRelief += ce.Relief;
-                if (ce.TaxPaid > 0f) taxPayingCounties++;
-                if (ce.Relief > 0f) reliefReceivingCounties++;
+                totalTaxPaid += ce.TaxPaid[F];
+                totalRelief += ce.Relief[F];
+                if (ce.TaxPaid[F] > 0f) taxPayingCounties++;
+                if (ce.Relief[F] > 0f) reliefReceivingCounties++;
             }
 
             j.KV("countyCount", countyCount);
@@ -647,13 +690,13 @@ namespace EconSim.Editor
             {
                 var pe = econ.Provinces[i];
                 if (pe == null) continue;
-                totalProvStockpile += pe.Stockpile;
+                totalProvStockpile += pe.Stockpile[F];
 
                 j.ObjOpen();
                 j.KV("id", i);
-                j.KV("stockpile", pe.Stockpile);
-                j.KV("taxCollected", pe.TaxCollected);
-                j.KV("reliefGiven", pe.ReliefGiven);
+                j.KV("stockpile", pe.Stockpile[F]);
+                j.KV("taxCollected", pe.TaxCollected[F]);
+                j.KV("reliefGiven", pe.ReliefGiven[F]);
                 j.ObjClose();
             }
             j.ArrClose();
@@ -668,13 +711,13 @@ namespace EconSim.Editor
                 {
                     var re = econ.Realms[i];
                     if (re == null) continue;
-                    totalRealmStockpile += re.Stockpile;
+                    totalRealmStockpile += re.Stockpile[F];
 
                     j.ObjOpen();
                     j.KV("id", i);
-                    j.KV("stockpile", re.Stockpile);
-                    j.KV("taxCollected", re.TaxCollected);
-                    j.KV("reliefGiven", re.ReliefGiven);
+                    j.KV("stockpile", re.Stockpile[F]);
+                    j.KV("taxCollected", re.TaxCollected[F]);
+                    j.KV("reliefGiven", re.ReliefGiven[F]);
                     j.ObjClose();
                 }
                 j.ArrClose();

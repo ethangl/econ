@@ -58,13 +58,6 @@ Goods flow county → province → realm → province → county in a single tic
 
 **Steady-state behavior:** Royal stockpiles drain to zero each tick (kings fully distribute). Provincial stockpiles stabilize at a small positive level for surplus provinces. ~15% of counties still starve because total map production is structurally below total consumption need — no amount of redistribution can close that gap.
 
-**Observed results** (12mo, 433 counties, 5 realms, 31 provinces):
-
-| Model | Starving | Unmet Need |
-|---|---|---|
-| Autarky | 208 (48%) | 42,934 |
-| Duke + King | 66 (15%) | 12,126 |
-
 ### Files
 
 - `Economy/CountyEconomy.cs` — adds TaxPaid, Relief per county
@@ -76,12 +69,52 @@ Goods flow county → province → realm → province → county in a single tic
 
 ## Layer 3: Multiple Goods
 
-Split "Goods" into distinct types (food, timber, ore). Each biome produces different goods at different rates. Counties now have comparative advantage.
+Split "Goods" into distinct types (food, timber, ore). Each biome produces different goods at different rates. Counties now have comparative advantage. Units: **kg** per person per day for all goods.
 
-- Biome productivity table expands: each biome produces a mix of goods
-- Consumption requires specific goods (food is essential, timber/ore are optional)
-- Feudal redistribution applies per good type
-- Trade becomes interesting — a forest county exports timber, imports food
+**GoodType enum:** Food=0, Timber=1, Ore=2. `Goods.Count = 3`.
+
+### Phase A: Multi-Good Data Model + Production
+
+Per-good production with food-only consumption and redistribution. Timber/Ore accumulate in county stockpiles as observable data. Food production = unchanged Layer 2 values. Food balance and starvation rates identical to Layer 2.
+
+- `CountyEconomy` fields → `float[Goods.Count]` arrays (Stock, Productivity, Production, Consumption, UnmetNeed, TaxPaid, Relief)
+- `ProvinceEconomy` / `RealmEconomy` fields → `float[Goods.Count]` arrays (Stockpile, TaxCollected, ReliefGiven)
+- `BiomeProductivity` → 2D table (biomeId × goodType)
+- Production loop produces all goods; consumption and redistribution operate on food index only
+
+### Phase B: Multi-Good Consumption
+
+Food is essential (starvation on shortfall). Timber/Ore are optional consumption goods (quality of life, no starvation).
+
+### Phase C: Per-Good Feudal Redistribution
+
+Tax and relief flows operate per good type. Timber/Ore flow through the feudal hierarchy alongside food.
+
+### Biome Productivity Table (kg/person/day)
+
+| Id | Biome               | Food | Timber | Ore |
+|----|---------------------|------|--------|-----|
+| 0  | Glacier             | 0.0  | 0.0    | 0.0 |
+| 1  | Tundra              | 0.2  | 0.0    | 0.0 |
+| 2  | Salt Flat           | 0.1  | 0.0    | 0.1 |
+| 3  | Coastal Marsh       | 0.7  | 0.0    | 0.0 |
+| 4  | Alpine Barren       | 0.2  | 0.0    | 0.4 |
+| 5  | Mountain Shrub      | 0.4  | 0.1    | 0.3 |
+| 6  | Floodplain          | 1.4  | 0.0    | 0.0 |
+| 7  | Wetland             | 0.7  | 0.1    | 0.0 |
+| 8  | Hot Desert          | 0.3  | 0.0    | 0.2 |
+| 9  | Cold Desert         | 0.3  | 0.0    | 0.2 |
+| 10 | Scrubland           | 0.5  | 0.1    | 0.1 |
+| 11 | Tropical Rainforest | 0.8  | 0.5    | 0.0 |
+| 12 | Tropical Dry Forest | 0.9  | 0.4    | 0.0 |
+| 13 | Savanna             | 1.1  | 0.1    | 0.0 |
+| 14 | Boreal Forest       | 0.6  | 0.5    | 0.0 |
+| 15 | Temperate Forest    | 0.9  | 0.5    | 0.0 |
+| 16 | Grassland           | 1.3  | 0.0    | 0.0 |
+| 17 | Woodland            | 1.0  | 0.3    | 0.0 |
+| 18 | Lake                | 0.0  | 0.0    | 0.0 |
+
+Design: forests produce timber, mountains/deserts produce ore, food unchanged from Layer 1.
 
 ## Layer 4: Inter-Realm Trade
 
