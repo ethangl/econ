@@ -105,22 +105,22 @@ namespace EconSim.Core.Simulation
             /// <summary>
             /// Cold-start bootstrap: initial staffing share assigned to each active facility.
             /// </summary>
-            public const float BootstrapFacilityEmploymentShare = 0.55f;
+            public const float BootstrapFacilityEmploymentShare = 0.40f;
 
             /// <summary>
             /// Cold-start bootstrap: days of input inventory seeded into processing facilities.
             /// </summary>
-            public const float BootstrapProcessingInputBufferDays = 7f;
+            public const float BootstrapProcessingInputBufferDays = 3f;
 
             /// <summary>
             /// Cold-start bootstrap: county grain reserve target in days of staple raw-grain need.
             /// </summary>
-            public const float BootstrapGrainReserveDays = 270f;
+            public const float BootstrapGrainReserveDays = 90f;
 
             /// <summary>
             /// Cold-start bootstrap: county salt reserve per capita in kilograms.
             /// </summary>
-            public const float BootstrapSaltReserveKgPerCapita = 1.0f;
+            public const float BootstrapSaltReserveKgPerCapita = 0.25f;
 
             /// <summary>
             /// Grain-to-flour conversion baseline used across reserve and subsistence logic.
@@ -141,15 +141,15 @@ namespace EconSim.Core.Simulation
             private static readonly Dictionary<string, float> BootstrapMarketInventoryWeeksByGood =
                 new Dictionary<string, float>(System.StringComparer.OrdinalIgnoreCase)
             {
-                ["wheat"] = 16f,
-                ["rye"] = 20f,
-                ["barley"] = 8f,
-                ["flour"] = 14f,
-                ["bread"] = 8f,
-                ["malt"] = 14f,
-                ["beer"] = 10f,
-                ["raw_salt"] = 0.5f,
-                ["salt"] = 0.25f,
+                ["wheat"] = 6f,
+                ["rye"] = 2f,
+                ["barley"] = 2f,
+                ["flour"] = 6f,
+                ["bread"] = 3f,
+                ["malt"] = 4f,
+                ["beer"] = 3f,
+                ["raw_salt"] = 0.25f,
+                ["salt"] = 0.10f,
             };
 
             private static readonly HashSet<string> EnabledGoods = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)

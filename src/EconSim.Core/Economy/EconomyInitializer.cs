@@ -541,7 +541,7 @@ namespace EconSim.Core.Economy
 
             SimLog.Log("Economy", "Placing extraction facilities:");
 
-            // Place extraction facilities (multiple per eligible county)
+            // Place extraction facilities (multiple per eligible county, labor-scaled)
             foreach (var facilityDef in economy.FacilityDefs.ExtractionFacilities)
             {
                 if (!resourceCounties.TryGetValue(facilityDef.OutputGoodId, out var candidates))
@@ -557,7 +557,7 @@ namespace EconSim.Core.Economy
                     int cellId = FindCellWithResource(countyId, facilityDef.OutputGoodId, mapData, cellResources);
                     if (cellId < 0) continue;
 
-                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 1);
+                    int count = ComputeFacilityCount(economy.GetCounty(countyId).Population, facilityDef, minPerCounty: 0);
                     if (count <= 0)
                         continue;
 
@@ -567,9 +567,9 @@ namespace EconSim.Core.Economy
                 SimLog.Log("Economy", $"  {facilityDef.Id}: placed {placed} in {candidates.Count} candidates");
             }
 
-            // Place non-harvesting facilities in every county.
-            // This keeps processing/manufacturing universally available while extraction stays resource-gated.
-            SimLog.Log("Economy", "Placing non-harvesting facilities in all counties:");
+            // Place non-harvesting facilities in all counties with labor-scaled counts.
+            // No hard per-county minimum: low-pop counties can naturally have zero facilities.
+            SimLog.Log("Economy", "Placing non-harvesting facilities with labor scaling:");
             foreach (var facilityDef in economy.FacilityDefs.All)
             {
                 if (facilityDef == null || facilityDef.IsExtraction)
@@ -586,7 +586,7 @@ namespace EconSim.Core.Economy
                     if (cellId < 0)
                         continue;
 
-                    int count = ComputeFacilityCount(county.Population, facilityDef, minPerCounty: 1);
+                    int count = ComputeFacilityCount(county.Population, facilityDef, minPerCounty: 0);
                     if (count <= 0)
                         continue;
 
