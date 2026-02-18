@@ -21,6 +21,13 @@ namespace EconSim.Core.Simulation.Systems
         private const float InterMarketTransferCost = 120f;
         private const float MillInputOrderHorizonDays = 0.25f;
         private const float ProcessingInputDemandBufferFactor = 1.10f;
+        private const float BreweryTradeEmaDays = 14f;
+        private const float BreweryDemandEmaDays = 7f;
+        private const float BreweryTradeWeight = 0.70f;
+        private const float BreweryDemandWeight = 0.30f;
+        private const float BreweryStructuralDemandWeight = 0.50f;
+        private const float BreweryObservedDemandWeight = 0.50f;
+        private const float BreweryDemandForecastBufferFactor = 1.10f;
 
         private static readonly string[] BreadSubsistenceGoods = { "wheat", "rye", "barley", "rice_grain" };
         private static readonly string[] BeerSubsistenceGoods = { "barley" };
@@ -28,10 +35,19 @@ namespace EconSim.Core.Simulation.Systems
         private readonly List<OrderLine> _tierLinesBuffer = new List<OrderLine>();
         private readonly Dictionary<string, int> _goodRuntimeIdCache = new Dictionary<string, int>();
         private readonly Dictionary<long, float> _countyMarketTransportCostCache = new Dictionary<long, float>();
+        private readonly Dictionary<long, BreweryForecastState> _breweryForecastByMarketGood = new Dictionary<long, BreweryForecastState>();
+        private readonly Dictionary<int, int> _marketPopulationById = new Dictionary<int, int>();
         private int[] _breadSubsistenceRuntimeIds = Array.Empty<int>();
         private int[] _beerSubsistenceRuntimeIds = Array.Empty<int>();
         private int _breadRuntimeId = -1;
         private int _beerRuntimeId = -1;
+
+        private struct BreweryForecastState
+        {
+            public float TradeEma;
+            public float DemandEma;
+            public int LastUpdatedDay;
+        }
 
         private struct OrderLine
         {
@@ -68,6 +84,7 @@ namespace EconSim.Core.Simulation.Systems
         public void Initialize(SimulationState state, MapData mapData)
         {
             _goodRuntimeIdCache.Clear();
+            _breweryForecastByMarketGood.Clear();
             _breadSubsistenceRuntimeIds = new int[BreadSubsistenceGoods.Length];
             for (int i = 0; i < BreadSubsistenceGoods.Length; i++)
             {
@@ -108,6 +125,7 @@ namespace EconSim.Core.Simulation.Systems
                 return;
 
             _countyMarketTransportCostCache.Clear();
+            BuildMarketPopulationIndex(economy);
             foreach (var county in economy.Counties.Values)
             {
                 if (!economy.CountyToMarket.TryGetValue(county.CountyId, out int marketId))
@@ -131,7 +149,16 @@ namespace EconSim.Core.Simulation.Systems
                     _beerSubsistenceRuntimeIds,
                     _beerRuntimeId,
                     _countyMarketTransportCostCache);
-                PostFacilityInputOrders(state, economy, county, market, transportCost, _goodRuntimeIdCache, _countyMarketTransportCostCache);
+                PostFacilityInputOrders(
+                    state,
+                    economy,
+                    county,
+                    market,
+                    transportCost,
+                    _goodRuntimeIdCache,
+                    _countyMarketTransportCostCache,
+                    _breweryForecastByMarketGood,
+                    _marketPopulationById);
             }
         }
 
@@ -336,7 +363,9 @@ namespace EconSim.Core.Simulation.Systems
             Market market,
             float transportCost,
             Dictionary<string, int> runtimeIdCache,
-            Dictionary<long, float> countyMarketTransportCostCache)
+            Dictionary<long, float> countyMarketTransportCostCache,
+            Dictionary<long, BreweryForecastState> breweryForecastByMarketGood,
+            Dictionary<int, int> marketPopulationById)
         {
             foreach (int facilityId in county.FacilityIds)
             {
@@ -366,8 +395,25 @@ namespace EconSim.Core.Simulation.Systems
                     && output.RuntimeId >= 0
                     && market.TryGetGoodState(output.RuntimeId, out var outputState))
                 {
-                    float unmetDemand = Math.Max(0f, outputState.Demand - outputState.Supply);
-                    float demandLimitedThroughput = unmetDemand * ProcessingInputDemandBufferFactor;
+                    float demandLimitedThroughput;
+                    if (def.Id == "brewery")
+                    {
+                        float projectedDemand = GetBreweryProjectedDemand(
+                            state.CurrentDay,
+                            market.Id,
+                            marketPopulationById,
+                            output,
+                            output.RuntimeId,
+                            outputState,
+                            breweryForecastByMarketGood);
+                        demandLimitedThroughput = projectedDemand * BreweryDemandForecastBufferFactor;
+                    }
+                    else
+                    {
+                        float unmetDemand = Math.Max(0f, outputState.Demand - outputState.Supply);
+                        demandLimitedThroughput = unmetDemand * ProcessingInputDemandBufferFactor;
+                    }
+
                     currentThroughput = Math.Min(currentThroughput, demandLimitedThroughput);
                 }
 
@@ -626,6 +672,10 @@ namespace EconSim.Core.Simulation.Systems
 
                 float subsistenceShare = Clamp(SimulationConfig.Economy.BeerSubsistenceShare, 0f, 1f);
                 float subsistenceCap = beerNeed * subsistenceShare;
+                float eligiblePopShare = Clamp(SimulationConfig.Economy.BeerSubsistenceEligiblePopShare, 0f, 1f);
+                float subsistenceKgPerCapitaCap = Math.Max(0f, SimulationConfig.Economy.BeerSubsistenceMaxKgPerCapitaPerDay);
+                float absoluteCap = county.Population.Total * eligiblePopShare * subsistenceKgPerCapitaCap;
+                subsistenceCap = Math.Min(subsistenceCap, absoluteCap);
                 float covered = Math.Min(subsistenceCap, equivalentBeer);
                 if (covered > 0f)
                 {
@@ -720,6 +770,103 @@ namespace EconSim.Core.Simulation.Systems
             if (runtimeIdCache != null)
                 runtimeIdCache[goodId] = runtimeId;
             return runtimeId;
+        }
+
+        private void BuildMarketPopulationIndex(EconomyState economy)
+        {
+            _marketPopulationById.Clear();
+            if (economy?.Counties == null || economy.CountyToMarket == null)
+                return;
+
+            foreach (var county in economy.Counties.Values)
+            {
+                if (county == null || county.Population == null)
+                    continue;
+
+                if (!economy.CountyToMarket.TryGetValue(county.CountyId, out int marketId))
+                    continue;
+
+                int pop = Math.Max(0, county.Population.Total);
+                if (pop <= 0)
+                    continue;
+
+                if (_marketPopulationById.TryGetValue(marketId, out int existing))
+                    _marketPopulationById[marketId] = existing + pop;
+                else
+                    _marketPopulationById[marketId] = pop;
+            }
+        }
+
+        private static float GetBreweryProjectedDemand(
+            int currentDay,
+            int marketId,
+            Dictionary<int, int> marketPopulationById,
+            GoodDef outputDef,
+            int outputRuntimeId,
+            MarketGoodState outputState,
+            Dictionary<long, BreweryForecastState> breweryForecastByMarketGood)
+        {
+            if (outputState == null)
+                return 0f;
+
+            float observedTrade = Math.Max(0f, outputState.LastTradeVolume);
+            float observedDemand = Math.Max(0f, outputState.Demand);
+            if (breweryForecastByMarketGood == null)
+                return observedTrade * BreweryTradeWeight + observedDemand * BreweryDemandWeight;
+
+            long key = MakeMarketGoodKey(marketId, outputRuntimeId);
+            if (!breweryForecastByMarketGood.TryGetValue(key, out var forecastState))
+            {
+                forecastState = new BreweryForecastState
+                {
+                    TradeEma = observedTrade,
+                    DemandEma = observedDemand,
+                    LastUpdatedDay = currentDay
+                };
+            }
+            else if (forecastState.LastUpdatedDay != currentDay)
+            {
+                float tradeAlpha = ComputeEmaAlpha(BreweryTradeEmaDays);
+                float demandAlpha = ComputeEmaAlpha(BreweryDemandEmaDays);
+                forecastState.TradeEma += (observedTrade - forecastState.TradeEma) * tradeAlpha;
+                forecastState.DemandEma += (observedDemand - forecastState.DemandEma) * demandAlpha;
+                forecastState.LastUpdatedDay = currentDay;
+            }
+
+            breweryForecastByMarketGood[key] = forecastState;
+
+            float observedProjectedDemand = forecastState.TradeEma * BreweryTradeWeight
+                + forecastState.DemandEma * BreweryDemandWeight;
+            if (float.IsNaN(observedProjectedDemand) || float.IsInfinity(observedProjectedDemand))
+                return 0f;
+
+            int marketPopulation = 0;
+            if (marketPopulationById != null)
+                marketPopulationById.TryGetValue(marketId, out marketPopulation);
+
+            float baseBeerDemandPerCapita = Math.Max(0f, outputDef?.BaseConsumptionKgPerCapitaPerDay ?? 0f);
+            float homeBrewShare = Clamp(SimulationConfig.Economy.BeerSubsistenceShare, 0f, 1f);
+            float structuralMarketDemand = marketPopulation * baseBeerDemandPerCapita * (1f - homeBrewShare);
+
+            float projectedDemand = structuralMarketDemand * BreweryStructuralDemandWeight
+                + observedProjectedDemand * BreweryObservedDemandWeight;
+            if (float.IsNaN(projectedDemand) || float.IsInfinity(projectedDemand))
+                return 0f;
+
+            return Math.Max(0f, projectedDemand);
+        }
+
+        private static long MakeMarketGoodKey(int marketId, int runtimeId)
+        {
+            return ((long)marketId << 32) ^ (uint)runtimeId;
+        }
+
+        private static float ComputeEmaAlpha(float windowDays)
+        {
+            if (windowDays <= 0f)
+                return 1f;
+
+            return Clamp(2f / (windowDays + 1f), 0f, 1f);
         }
 
         private static bool IsMillFacility(FacilityDef def)
