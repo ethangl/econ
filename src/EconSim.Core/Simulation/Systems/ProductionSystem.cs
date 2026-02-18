@@ -31,7 +31,7 @@ namespace EconSim.Core.Simulation.Systems
         private const int V2InactiveMediumDormancyDays = 30;
         private const int V2InactiveLongDormancyDays = 120;
         private const float V2FacilityAskMarkupUnsubsidized = 0.12f;
-        private const float V2FacilityAskMarkupSubsidized = 0.03f;
+        private const float V2FacilityAskMarkupSubsidized = 0.00f;
         private const float V2FacilityAskBaseFloorMultiplierUnsubsidized = 0.25f;
         private const float V2FacilityAskBaseFloorMultiplierSubsidized = 0.10f;
         private const float V2ProcessingDemandFloorKg = 0.5f;
