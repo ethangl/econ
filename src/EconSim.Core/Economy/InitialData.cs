@@ -688,7 +688,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "barley",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 10000f / 365f, // 6.3x baseline: 10,000 kg/year at full staffing
+                BaseThroughput = 8000f / 365f, // 5x baseline: 8,000 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Highland", "Steppe" }
             });
