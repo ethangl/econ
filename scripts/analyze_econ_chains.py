@@ -110,8 +110,8 @@ CHAIN_DEFS: List[ChainDef] = [
     ChainDef(
         name="Food",
         stages=[
-            ChainStage("Raw grain", ["wheat", "rye", "barley", "rice_grain"], ["farm", "rye_farm", "barley_farm", "rice_paddy"]),
-            ChainStage("Flour", ["flour"], ["mill", "rye_mill", "barley_mill"]),
+            ChainStage("Raw grain", ["wheat", "rye", "rice_grain"], ["farm", "rye_farm", "rice_paddy"]),
+            ChainStage("Flour", ["flour"], ["mill"]),
             ChainStage("Bread", ["bread"], ["bakery", "rice_mill"]),
         ],
     ),

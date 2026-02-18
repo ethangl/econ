@@ -659,7 +659,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "wheat",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 140000f / 365f, // 100x baseline: 140,000 kg/year at full staffing
+                BaseThroughput = 20000f / 365f, // 14.3x baseline: 20,000 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Grassland", "Savanna" }
             });
@@ -671,7 +671,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "rye",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 150000f / 365f, // 100x baseline: 150,000 kg/year at full staffing
+                BaseThroughput = 20000f / 365f, // 13.3x baseline: 20,000 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Steppe", "Taiga" }
             });
@@ -683,7 +683,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "barley",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 12000f / 365f, // 7.5x baseline: 12,000 kg/year at full staffing
+                BaseThroughput = 20000f / 365f, // 12.5x baseline: 20,000 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Highland", "Steppe" }
             });
