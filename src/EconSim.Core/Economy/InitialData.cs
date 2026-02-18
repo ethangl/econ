@@ -565,7 +565,7 @@ namespace EconSim.Core.Economy
                 FacilityType = "brewery",
                 ProcessingTicks = 2,
                 NeedCategory = NeedCategory.Basic,
-                BaseConsumption = 1.0f,  // 1.0 kg/person/day tuned demand baseline
+                BaseConsumption = 0.5f,  // Market-only proxy: halve direct market need to represent prior subsistence share
                 DecayRate = 0.06f,  // 6% per day - beer quality collapses over ~2 weeks
                 TheftRisk = 0.3f,  // Bulky liquid, moderate value
                 BasePrice = 0.04f  // 0.04 Crowns/kg historical proxy pricing
