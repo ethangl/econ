@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.UIElements;
 using EconSim.Core.Data;
-using EconSim.Core.Economy;
 using EconSim.Core.Simulation;
 using EconSim.Renderer;
 using System.Linq;
@@ -32,17 +31,11 @@ namespace EconSim.UI
         private Label _cultureValue;
         private Label _religionValue;
         private Label _popTotal;
-        private Label _popWorkers;
-        private Label _popEmployed;
+
         private VisualElement _resourcesSection;
         private VisualElement _resourcesList;
-        private VisualElement _stockpileSection;
-        private VisualElement _stockpileList;
-        private VisualElement _facilitiesSection;
-        private Label _facilitiesCount;
 
         private MapData _mapData;
-        private EconomyState _economy;
 
         // Selection state - what's currently selected based on mode
         private int _selectedCountyId = -1;
@@ -71,11 +64,6 @@ namespace EconSim.UI
             if (gameManager != null)
             {
                 _mapData = gameManager.MapData;
-                var sim = gameManager.Simulation;
-                if (sim != null)
-                {
-                    _economy = sim.GetState().Economy;
-                }
             }
 
             // Find MapView if not assigned
@@ -106,7 +94,7 @@ namespace EconSim.UI
         {
             if (_mapView == null) return;
 
-            // Don't show in non-political modes (Market/Biomes have their own panels or no panel)
+            // Don't show in non-political modes
             var mode = _mapView.CurrentMode;
             if (mode != MapView.MapMode.Political &&
                 mode != MapView.MapMode.Province &&
@@ -172,14 +160,9 @@ namespace EconSim.UI
             _cultureValue = _root.Q<Label>("culture-value");
             _religionValue = _root.Q<Label>("religion-value");
             _popTotal = _root.Q<Label>("pop-total");
-            _popWorkers = _root.Q<Label>("pop-workers");
-            _popEmployed = _root.Q<Label>("pop-employed");
+
             _resourcesSection = _root.Q<VisualElement>("resources-section");
             _resourcesList = _root.Q<VisualElement>("resources-list");
-            _stockpileSection = _root.Q<VisualElement>("stockpile-section");
-            _stockpileList = _root.Q<VisualElement>("stockpile-list");
-            _facilitiesSection = _root.Q<VisualElement>("facilities-section");
-            _facilitiesCount = _root.Q<Label>("facilities-count");
 
             // Wire up close button
             _closeButton?.RegisterCallback<ClickEvent>(evt => Hide());
@@ -289,8 +272,7 @@ namespace EconSim.UI
             SetLabel(_provinceValue, "-");
             SetLabel(_stateValue, "-");
 
-            string capitalName = "-";
-            capitalName = GetBurgNameById(realm.CapitalBurgId);
+            string capitalName = GetBurgNameById(realm.CapitalBurgId);
             SetLabel(_terrainValue, capitalName);
             SetLabel(_cultureValue, GetCultureName(_selectedRealmId));
             SetLabel(_religionValue, GetReligionName(_selectedRealmId));
@@ -304,39 +286,20 @@ namespace EconSim.UI
                     label.text = "Capital";
             }
 
-            // Population - aggregate from all counties in this realm
+            // Population - aggregate from all cells in this realm
             long totalPop = 0;
-            long totalWorkers = 0;
-            long totalEmployed = 0;
-            int countyCount = 0;
 
             foreach (var cell in _mapData.Cells)
             {
                 if (cell.RealmId != _selectedRealmId || !cell.IsLand) continue;
-                countyCount++;
-
-                if (_economy != null && _economy.Counties.TryGetValue(cell.Id, out var countyEcon))
-                {
-                    totalPop += countyEcon.Population.Total;
-                    totalWorkers += countyEcon.Population.LaborEligible;
-                    totalEmployed += countyEcon.Population.EmployedUnskilled + countyEcon.Population.EmployedSkilled;
-                }
-                else
-                {
-                    totalPop += (long)cell.Population;
-                }
+                totalPop += (long)cell.Population;
             }
 
             SetLabel(_popTotal, totalPop.ToString("N0"));
-            SetLabel(_popWorkers, totalWorkers.ToString("N0"));
-            SetLabel(_popEmployed, totalEmployed.ToString("N0"));
+
 
             // Show provinces list in resources section
             ShowSectionAsProvincesList(realm);
-
-            // Hide stockpile and facilities sections
-            SetSectionVisible(_stockpileSection, false);
-            SetSectionVisible(_facilitiesSection, false);
         }
 
         private void UpdateProvinceDisplay()
@@ -357,8 +320,7 @@ namespace EconSim.UI
             }
             SetLabel(_stateValue, realmName);
 
-            string capitalName = "-";
-            capitalName = GetBurgNameById(province.CapitalBurgId);
+            string capitalName = GetBurgNameById(province.CapitalBurgId);
             SetLabel(_terrainValue, capitalName);
             SetLabel(_cultureValue, GetCultureName(province.RealmId));
             SetLabel(_religionValue, GetReligionName(province.RealmId));
@@ -372,37 +334,20 @@ namespace EconSim.UI
                     label.text = "Capital";
             }
 
-            // Population - aggregate from all counties in this province
+            // Population - aggregate from all cells in this province
             long totalPop = 0;
-            long totalWorkers = 0;
-            long totalEmployed = 0;
 
             foreach (var cell in _mapData.Cells)
             {
                 if (cell.ProvinceId != _selectedProvinceId || !cell.IsLand) continue;
-
-                if (_economy != null && _economy.Counties.TryGetValue(cell.Id, out var countyEcon))
-                {
-                    totalPop += countyEcon.Population.Total;
-                    totalWorkers += countyEcon.Population.LaborEligible;
-                    totalEmployed += countyEcon.Population.EmployedUnskilled + countyEcon.Population.EmployedSkilled;
-                }
-                else
-                {
-                    totalPop += (long)cell.Population;
-                }
+                totalPop += (long)cell.Population;
             }
 
             SetLabel(_popTotal, totalPop.ToString("N0"));
-            SetLabel(_popWorkers, totalWorkers.ToString("N0"));
-            SetLabel(_popEmployed, totalEmployed.ToString("N0"));
+
 
             // Show counties list in resources section
             ShowSectionAsCountiesList(province);
-
-            // Hide stockpile and facilities sections
-            SetSectionVisible(_stockpileSection, false);
-            SetSectionVisible(_facilitiesSection, false);
         }
 
         private void UpdateCountyDisplay()
@@ -445,45 +390,18 @@ namespace EconSim.UI
             SetLabel(_cultureValue, GetCultureName(county.RealmId));
             SetLabel(_religionValue, GetReligionName(county.RealmId));
 
-            // Show all sections for county mode
+            // Show resources section for county mode
             SetSectionVisible(_resourcesSection, true);
-            SetSectionVisible(_stockpileSection, true);
-            SetSectionVisible(_facilitiesSection, true);
 
             // Restore resources section header
             var resourcesHeader = _resourcesSection?.Q<Label>(className: "section-header");
             if (resourcesHeader != null)
                 resourcesHeader.text = "Resources";
 
-            // Population data from economy
-            if (_economy != null && _economy.Counties.TryGetValue(_selectedCountyId, out var countyEcon))
-            {
-                var pop = countyEcon.Population;
-                SetLabel(_popTotal, pop.Total.ToString("N0"));
-                SetLabel(_popWorkers, pop.LaborEligible.ToString("N0"));
-                int employed = pop.EmployedUnskilled + pop.EmployedSkilled;
-                SetLabel(_popEmployed, employed.ToString("N0"));
+            // Population from county data
+            SetLabel(_popTotal, ((int)county.TotalPopulation).ToString("N0"));
 
-                // Resources
-                UpdateResourcesList(countyEcon);
-
-                // Stockpile
-                UpdateStockpileList(countyEcon);
-
-                // Facilities
-                int facilityCount = countyEcon.FacilityIds?.Count ?? 0;
-                SetLabel(_facilitiesCount, $"{facilityCount} facilities");
-            }
-            else
-            {
-                // No economy data yet - use total population from county data
-                SetLabel(_popTotal, ((int)county.TotalPopulation).ToString("N0"));
-                SetLabel(_popWorkers, "-");
-                SetLabel(_popEmployed, "-");
-                ClearList(_resourcesList);
-                ClearList(_stockpileList);
-                SetLabel(_facilitiesCount, "0 facilities");
-            }
+            ClearList(_resourcesList);
         }
 
         private void ShowSectionAsProvincesList(Realm realm)
@@ -575,77 +493,6 @@ namespace EconSim.UI
         {
             if (section == null) return;
             section.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
-        }
-
-        private void UpdateResourcesList(CountyEconomy county)
-        {
-            if (_resourcesList == null) return;
-
-            _resourcesList.Clear();
-
-            if (county.Resources == null || county.Resources.Count == 0)
-            {
-                var noneLabel = new Label("None");
-                noneLabel.style.color = new Color(0.5f, 0.5f, 0.5f);
-                noneLabel.style.fontSize = 11;
-                _resourcesList.Add(noneLabel);
-                return;
-            }
-
-            foreach (var kvp in county.Resources)
-            {
-                if (kvp.Value <= 0) continue;
-
-                var row = new VisualElement();
-                row.AddToClassList("resource-item");
-
-                var nameLabel = new Label(kvp.Key);
-                var valueLabel = new Label($"{kvp.Value:P0}");
-
-                row.Add(nameLabel);
-                row.Add(valueLabel);
-                _resourcesList.Add(row);
-            }
-        }
-
-        private void UpdateStockpileList(CountyEconomy county)
-        {
-            if (_stockpileList == null) return;
-
-            _stockpileList.Clear();
-
-            var stockpile = county.Stockpile;
-            if (stockpile == null || stockpile.IsEmpty)
-            {
-                var noneLabel = new Label("Empty");
-                noneLabel.style.color = new Color(0.5f, 0.5f, 0.5f);
-                noneLabel.style.fontSize = 11;
-                _stockpileList.Add(noneLabel);
-                return;
-            }
-
-            foreach (var kvp in stockpile.All)
-            {
-                if (kvp.Value < 0.1f) continue;
-
-                var row = new VisualElement();
-                row.AddToClassList("stockpile-item");
-
-                var nameLabel = new Label(kvp.Key);
-                var valueLabel = new Label($"{kvp.Value:F1}");
-
-                row.Add(nameLabel);
-                row.Add(valueLabel);
-                _stockpileList.Add(row);
-            }
-
-            if (_stockpileList.childCount == 0)
-            {
-                var noneLabel = new Label("Empty");
-                noneLabel.style.color = new Color(0.5f, 0.5f, 0.5f);
-                noneLabel.style.fontSize = 11;
-                _stockpileList.Add(noneLabel);
-            }
         }
 
         private void SetLabel(Label label, string text)

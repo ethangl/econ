@@ -25,7 +25,6 @@ namespace EconSim.Renderer
         [SerializeField] private Material biomeTerrainMaterial;
         [SerializeField] private bool renderLandOnly = false;
         private bool showRealmCapitalMarkers = true;
-        private bool showMarketLocationMarkers = true;
         private float realmCapitalMarkerHeight = 0.1f;
         private float realmCapitalMarkerDiameter = 0.02f;
         private float realmCapitalMarkerBaseOffset = 0.02f;
@@ -82,15 +81,12 @@ namespace EconSim.Renderer
         public event Action<SelectionScope> OnSelectionChanged;
 
         private MapData mapData;
-        private EconSim.Core.Economy.EconomyState economyState;
         private MeshFilter meshFilter;
         private MeshRenderer meshRenderer;
         private Mesh mesh;
         private MapOverlayManager overlayManager;
         private Transform realmCapitalMarkerRoot;
-        private Transform marketLocationMarkerRoot;
         private Material realmCapitalMarkerMaterial;
-        private bool marketLocationMarkersDirty = true;
 
         // Cell mesh data
         private List<Vector3> vertices = new List<Vector3>();
@@ -103,7 +99,7 @@ namespace EconSim.Renderer
 
         // Selection state
         public enum SelectionScope { None, Realm, Province, County }
-        private enum ModeSelectionTarget { Realm, Province, County, Market }
+        private enum ModeSelectionTarget { Realm, Province, County }
 
         private SelectionScope selectionScope = SelectionScope.None;
         private int selectedRealmId = -1;
@@ -120,11 +116,9 @@ namespace EconSim.Renderer
             Political = 0,      // Colored by realm (zoomed-in 0-25%)
             Province = 1,       // Colored by province (zoomed-in 25-75%)
             County = 2,         // Colored by county/cell (zoomed-in 75-100%)
-            Market = 3,         // Colored by market zone (key: 3)
             Biomes = 4,         // Biomes (vertex-blended) (key: 2)
             ChannelInspector = 5, // Debug channel visualization (key: 0)
             TransportCost = 6, // Local per-cell transport difficulty heatmap (key: 5)
-            MarketAccess = 7 // Cell-to-assigned-market transport cost heatmap (key: 6)
         }
 
         public MapMode CurrentMode => currentMode;
@@ -135,11 +129,10 @@ namespace EconSim.Renderer
             "Political",
             "Province",
             "County",
-            "Market",
+            "",  // unused (was Market)
             "Biomes",
             "Channel Inspector",
-            "Transport Cost",
-            "Market Access"
+            "Transport Cost"
         };
 
         private static readonly MapOverlayManager.OverlayLayer[] NoOverlayCycle =
@@ -157,11 +150,9 @@ namespace EconSim.Renderer
             new Dictionary<MapMode, MapOverlayManager.OverlayLayer[]>
             {
                 { MapMode.Political, PoliticalOverlayCycle },
-                { MapMode.Market, NoOverlayCycle },
                 { MapMode.Biomes, NoOverlayCycle },
                 { MapMode.ChannelInspector, NoOverlayCycle },
                 { MapMode.TransportCost, NoOverlayCycle },
-                { MapMode.MarketAccess, NoOverlayCycle }
             };
 
         private readonly Dictionary<MapMode, MapOverlayManager.OverlayLayer> selectedOverlayByScope =
@@ -194,7 +185,6 @@ namespace EconSim.Renderer
             OnCellClicked -= HandleShaderSelection;
 
             DestroyRealmCapitalMarkers();
-            DestroyMarketLocationMarkers();
             DestroyRealmCapitalMarkerMaterial();
 
             // Clean up overlay manager textures
@@ -227,20 +217,10 @@ namespace EconSim.Renderer
                 SetMapMode(MapMode.Biomes);
                 Debug.Log("Map mode: Biomes (2)");
             }
-            else if (Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3))
-            {
-                SetMapMode(MapMode.Market);
-                Debug.Log("Map mode: Market (3)");
-            }
             else if (Input.GetKeyDown(KeyCode.Alpha5) || Input.GetKeyDown(KeyCode.Keypad5))
             {
                 SetMapMode(MapMode.TransportCost);
                 Debug.Log("Map mode: Transport Cost (5)");
-            }
-            else if (Input.GetKeyDown(KeyCode.Alpha6) || Input.GetKeyDown(KeyCode.Keypad6))
-            {
-                SetMapMode(MapMode.MarketAccess);
-                Debug.Log("Map mode: Market Access (6)");
             }
             else if (Input.GetKeyDown(KeyCode.Alpha0) || Input.GetKeyDown(KeyCode.Keypad0))
             {
@@ -308,7 +288,6 @@ namespace EconSim.Renderer
             {
                 MapMode.Political => ModeSelectionTarget.Realm,
                 MapMode.Province => ModeSelectionTarget.Province,
-                MapMode.Market => ModeSelectionTarget.Market,
                 _ => ModeSelectionTarget.County
             };
         }
@@ -606,16 +585,6 @@ namespace EconSim.Renderer
                 case ModeSelectionTarget.Province:
                     overlayManager.SetHoveredProvince(cell.ProvinceId);
                     break;
-                case ModeSelectionTarget.Market:
-                    if (economyState != null && economyState.CellToMarket.TryGetValue(cellId, out int marketId))
-                    {
-                        overlayManager.SetHoveredMarket(marketId);
-                    }
-                    else
-                    {
-                        hasActiveHover = false;
-                    }
-                    break;
                 case ModeSelectionTarget.County:
                 default:
                     overlayManager.SetHoveredCounty(cell.CountyId);
@@ -678,8 +647,6 @@ namespace EconSim.Renderer
                 {
                     if (current.ClassListContains("panel") ||
                         current.name == "selection-panel" ||
-                        current.name == "market-panel" ||
-                        current.name == "economy-panel" ||
                         current.name == "time-control-panel")
                     {
                         return true;
@@ -749,8 +716,6 @@ namespace EconSim.Renderer
             Profiler.End();
 
             BuildRealmCapitalMarkers();
-            DestroyMarketLocationMarkers();
-            marketLocationMarkersDirty = true;
             UpdateModeMarkerVisibility();
 
             // Subscribe to cell clicks for shader selection
@@ -797,7 +762,7 @@ namespace EconSim.Renderer
         /// <summary>
         /// Set road state for shader-based road rendering. Call after economy initialization.
         /// </summary>
-        public void SetRoadState(EconSim.Core.Economy.RoadState roads)
+        public void SetRoadState(EconSim.Core.Transport.RoadState roads)
         {
             overlayManager?.SetRoadState(roads);
         }
@@ -828,12 +793,6 @@ namespace EconSim.Renderer
             }
 
             ModeSelectionTarget target = ResolveModeSelectionTarget(currentMode);
-            if (target == ModeSelectionTarget.Market)
-            {
-                HandleMarketSelection(cell, cellId);
-                return;
-            }
-
             SelectionScope scope = ToSelectionScope(target);
             SelectByScope(scope, cell);
 
@@ -897,31 +856,6 @@ namespace EconSim.Renderer
 
             // Notify listeners
             OnSelectionChanged?.Invoke(SelectionScope.None);
-        }
-
-        /// <summary>
-        /// Handle market mode selection.
-        /// </summary>
-        private void HandleMarketSelection(Cell cell, int cellId)
-        {
-            Bounds? selectionBounds = null;
-
-            if (economyState != null && economyState.CellToMarket.TryGetValue(cellId, out int marketId))
-            {
-                SetSelectionActive(true);
-                overlayManager.SetSelectedMarket(marketId);
-                selectionBounds = GetMarketBounds(marketId);
-            }
-            else
-            {
-                SetSelectionActive(false);
-                overlayManager.ClearSelection();
-            }
-
-            if (selectionBounds.HasValue && mapCameraController != null)
-            {
-                mapCameraController.FocusOn(selectionBounds.Value.center);
-            }
         }
 
         /// <summary>
@@ -1013,30 +947,6 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
-        /// Get world-space centroid of a market zone.
-        /// </summary>
-        private Vector3? GetMarketCentroid(int marketId)
-        {
-            if (marketId <= 0 || economyState == null) return null;
-
-            // Calculate from all cells assigned to this market
-            float sumX = 0, sumY = 0;
-            int count = 0;
-            foreach (var kvp in economyState.CellToMarket)
-            {
-                if (kvp.Value == marketId && mapData.CellById.TryGetValue(kvp.Key, out var cell))
-                {
-                    sumX += cell.Center.X;
-                    sumY += cell.Center.Y;
-                    count++;
-                }
-            }
-            if (count == 0) return null;
-
-            return DataToWorld(sumX / count, sumY / count);
-        }
-
-        /// <summary>
         /// Get world-space bounds of a county.
         /// </summary>
         private Bounds? GetCountyBounds(int countyId)
@@ -1072,26 +982,6 @@ namespace EconSim.Renderer
                 if (cell.RealmId == realmId && cell.IsLand)
                 {
                     cellIds.Add(cell.Id);
-                }
-            }
-
-            return GetCellListBounds(cellIds);
-        }
-
-        /// <summary>
-        /// Get world-space bounds of a market zone.
-        /// </summary>
-        private Bounds? GetMarketBounds(int marketId)
-        {
-            if (marketId <= 0 || economyState == null) return null;
-
-            // Collect all cells assigned to this market
-            var cellIds = new List<int>();
-            foreach (var kvp in economyState.CellToMarket)
-            {
-                if (kvp.Value == marketId)
-                {
-                    cellIds.Add(kvp.Key);
                 }
             }
 
@@ -1157,11 +1047,6 @@ namespace EconSim.Renderer
                 bool preserveSelection = ShouldPreserveSelectionOnModeChange(previousMode, mode);
                 if (!preserveSelection)
                     ClearSelectionState();
-
-                if (mode == MapMode.Market)
-                {
-                    EnsureMarketLocationMarkersBuilt();
-                }
 
                 UpdateModeMarkerVisibility();
             }
@@ -1270,96 +1155,9 @@ namespace EconSim.Renderer
             }
         }
 
-        private void BuildMarketLocationMarkers()
-        {
-            DestroyMarketLocationMarkers();
-
-            if (!showMarketLocationMarkers || mapData == null || economyState?.Markets == null || economyState.Markets.Count == 0)
-                return;
-
-            if (mapData.CellById == null)
-            {
-                mapData.BuildLookups();
-            }
-
-            EnsureRealmCapitalMarkerMaterial();
-
-            var root = new GameObject("MarketLocationMarkers");
-            root.transform.SetParent(transform, false);
-            marketLocationMarkerRoot = root.transform;
-
-            float markerHeight = Mathf.Max(0.1f, realmCapitalMarkerHeight);
-            float markerDiameter = Mathf.Max(0.005f, realmCapitalMarkerDiameter);
-            float markerScaleY = markerHeight * 0.5f; // Unity cylinder mesh has height 2 at scale.y = 1
-
-            foreach (var market in economyState.Markets.Values)
-            {
-                if (market == null || market.Id <= 0)
-                    continue;
-
-                int locationCellId = market.LocationCellId;
-                if (locationCellId <= 0 || !mapData.CellById.TryGetValue(locationCellId, out var locationCell))
-                    continue;
-
-                if (!locationCell.IsLand)
-                    continue;
-
-                GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                marker.name = $"MarketLocationMarker_{market.Id}";
-                marker.transform.SetParent(marketLocationMarkerRoot, false);
-
-                float surfaceY = GetCellSurfaceY(locationCell);
-                marker.transform.localPosition = DataToLocal(locationCell.Center.X, locationCell.Center.Y) +
-                    Vector3.up * (surfaceY + realmCapitalMarkerBaseOffset + markerHeight * 0.5f);
-                marker.transform.localScale = new Vector3(markerDiameter, markerScaleY, markerDiameter);
-
-                var collider = marker.GetComponent<Collider>();
-                if (collider != null)
-                    Destroy(collider);
-
-                var renderer = marker.GetComponent<MeshRenderer>();
-                if (renderer != null && realmCapitalMarkerMaterial != null)
-                {
-                    renderer.sharedMaterial = realmCapitalMarkerMaterial;
-                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                    renderer.receiveShadows = false;
-                }
-            }
-        }
-
-        private void UpdateMarketLocationMarkersVisibility()
-        {
-            bool isVisible = showMarketLocationMarkers && currentMode == MapMode.Market;
-            if (isVisible)
-            {
-                EnsureMarketLocationMarkersBuilt();
-            }
-
-            if (marketLocationMarkerRoot == null)
-                return;
-
-            if (marketLocationMarkerRoot.gameObject.activeSelf != isVisible)
-            {
-                marketLocationMarkerRoot.gameObject.SetActive(isVisible);
-            }
-        }
-
-        private void EnsureMarketLocationMarkersBuilt()
-        {
-            if (!showMarketLocationMarkers || mapData == null || economyState?.Markets == null || economyState.Markets.Count == 0)
-                return;
-
-            if (!marketLocationMarkersDirty && marketLocationMarkerRoot != null)
-                return;
-
-            BuildMarketLocationMarkers();
-            marketLocationMarkersDirty = false;
-        }
-
         private void UpdateModeMarkerVisibility()
         {
             UpdateRealmCapitalMarkersVisibility();
-            UpdateMarketLocationMarkersVisibility();
         }
 
         private void DestroyRealmCapitalMarkers()
@@ -1377,23 +1175,6 @@ namespace EconSim.Renderer
             }
 
             realmCapitalMarkerRoot = null;
-        }
-
-        private void DestroyMarketLocationMarkers()
-        {
-            if (marketLocationMarkerRoot == null)
-                return;
-
-            if (Application.isPlaying)
-            {
-                Destroy(marketLocationMarkerRoot.gameObject);
-            }
-            else
-            {
-                DestroyImmediate(marketLocationMarkerRoot.gameObject);
-            }
-
-            marketLocationMarkerRoot = null;
         }
 
         private void EnsureRealmCapitalMarkerMaterial()
@@ -1745,14 +1526,11 @@ namespace EconSim.Renderer
                     return GetProvinceColor(cell);
                 case MapMode.County:
                     return GetCountyColor(cell);
-                case MapMode.Market:
-                    return GetMarketColor(cell);
                 case MapMode.Biomes:
                     return GetTerrainColor(cell);  // Fallback; biome tint is shader-driven
                 case MapMode.ChannelInspector:
                     return GetTerrainColor(cell);  // Shader debug visualization overrides this.
                 case MapMode.TransportCost:
-                case MapMode.MarketAccess:
                     return GetTerrainColor(cell);  // Transport heatmaps are shader-only.
                 default:
                     return new Color32(128, 128, 128, 255);
@@ -1847,33 +1625,6 @@ namespace EconSim.Renderer
             return new Color32(100, 100, 100, 255);
         }
 
-        private Color32 GetMarketColor(Cell cell)
-        {
-            // Water cells
-            if (!cell.IsLand)
-            {
-                return GetWaterColor(cell);
-            }
-
-            if (economyState == null)
-            {
-                return new Color32(100, 100, 100, 255);  // Gray - no economy data
-            }
-
-            if (economyState.CellToMarket.TryGetValue(cell.Id, out int marketId))
-            {
-                // Check if this cell is in the market hub's province (highlights the whole province)
-                if (IsInMarketHubProvince(cell, out int hubMarketId))
-                {
-                    return MarketHubColor(hubMarketId);
-                }
-                return MarketIdToColor(marketId);
-            }
-
-            // Cell not assigned to any market - dim gray
-            return new Color32(60, 60, 60, 255);
-        }
-
         /// <summary>
         /// Get color for water cells based on feature type (ocean vs lake).
         /// </summary>
@@ -1896,104 +1647,6 @@ namespace EconSim.Renderer
                 new Color32(20, 50, 100, 255),    // Deep ocean
                 depthFactor
             );
-        }
-
-        /// <summary>
-        /// Check if a cell is a market hub (the cell where the market is located).
-        /// </summary>
-        public bool IsMarketHub(int cellId)
-        {
-            if (economyState?.Markets == null) return false;
-            foreach (var market in economyState.Markets.Values)
-            {
-                if (market.LocationCellId == cellId) return true;
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Check if a cell is in the same province as any market hub.
-        /// Returns true and the market ID if so.
-        /// </summary>
-        private bool IsInMarketHubProvince(Cell cell, out int marketId)
-        {
-            marketId = 0;
-            if (economyState?.Markets == null || mapData == null) return false;
-
-            foreach (var market in economyState.Markets.Values)
-            {
-                if (mapData.CellById.TryGetValue(market.LocationCellId, out var hubCell))
-                {
-                    // Same province as market hub
-                    if (cell.ProvinceId > 0 && cell.ProvinceId == hubCell.ProvinceId)
-                    {
-                        marketId = market.Id;
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Get the market located at a cell, or null if none.
-        /// </summary>
-        public EconSim.Core.Economy.Market GetMarketAtCell(int cellId)
-        {
-            // Invalid cell ID (e.g., clicked on ocean)
-            if (cellId < 0) return null;
-            if (economyState?.Markets == null) return null;
-            foreach (var market in economyState.Markets.Values)
-            {
-                if (market.LocationCellId == cellId) return market;
-            }
-            return null;
-        }
-
-        // Predefined market zone colors - distinct, muted pastels for large areas
-        private static readonly Color32[] MarketZoneColors = new Color32[]
-        {
-            new Color32(100, 149, 237, 255),  // Cornflower blue
-            new Color32(144, 238, 144, 255),  // Light green
-            new Color32(255, 182, 108, 255),  // Light orange
-            new Color32(221, 160, 221, 255),  // Plum
-            new Color32(240, 230, 140, 255),  // Khaki
-            new Color32(127, 255, 212, 255),  // Aquamarine
-            new Color32(255, 160, 122, 255),  // Light salmon
-            new Color32(176, 196, 222, 255),  // Light steel blue
-        };
-
-        // Predefined market hub colors - vivid, high-contrast versions
-        private static readonly Color32[] MarketHubColors = new Color32[]
-        {
-            new Color32(0, 71, 171, 255),     // Cobalt blue
-            new Color32(0, 128, 0, 255),      // Green
-            new Color32(255, 140, 0, 255),    // Dark orange
-            new Color32(148, 0, 211, 255),    // Dark violet
-            new Color32(184, 134, 11, 255),   // Dark goldenrod
-            new Color32(0, 139, 139, 255),    // Dark cyan
-            new Color32(220, 20, 60, 255),    // Crimson
-            new Color32(70, 130, 180, 255),   // Steel blue
-        };
-
-        /// <summary>
-        /// Get zone color for a market. Uses predefined palette for clarity.
-        /// </summary>
-        private Color32 MarketIdToColor(int marketId)
-        {
-            int index = (marketId - 1) % MarketZoneColors.Length;
-            if (index < 0) index = 0;
-            return MarketZoneColors[index];
-        }
-
-        /// <summary>
-        /// Get hub color for a market. Much more vivid than zone color for contrast.
-        /// </summary>
-        private Color32 MarketHubColor(int marketId)
-        {
-            int index = (marketId - 1) % MarketHubColors.Length;
-            if (index < 0) index = 0;
-            return MarketHubColors[index];
         }
 
         private void CenterMap()
@@ -2040,28 +1693,6 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
-        /// Initialize economy state reference for market map mode.
-        /// Call this after economy initialization.
-        /// </summary>
-        public void SetEconomyState(EconSim.Core.Economy.EconomyState economy)
-        {
-            economyState = economy;
-
-            // Forward to overlay manager for market zone visualization
-            if (overlayManager != null)
-            {
-                overlayManager.SetEconomyState(economy);
-            }
-
-            marketLocationMarkersDirty = true;
-            DestroyMarketLocationMarkers();
-            if (currentMode == MapMode.Market)
-            {
-                EnsureMarketLocationMarkersBuilt();
-            }
-            UpdateModeMarkerVisibility();
-        }
-
         public IEnumerator RunDeferredStartupWork()
         {
             if (overlayManager == null)
@@ -2178,33 +1809,6 @@ namespace EconSim.Renderer
                         .AppendLine();
                     break;
 
-                case MapMode.Market:
-                case MapMode.MarketAccess:
-                    if (TryGetAssignedMarket(cell.Id, cell.CountyId, out int marketId, out var market))
-                    {
-                        probeBuilder.Append("Market: Id=").Append(marketId)
-                            .Append(" Name=").Append(market?.Name ?? $"Market {marketId}")
-                            .Append(" Type=").Append(market?.Type.ToString() ?? "Unknown");
-
-                        if (market != null &&
-                            market.ZoneCellCosts != null &&
-                            market.ZoneCellCosts.TryGetValue(cell.Id, out float zoneCost))
-                        {
-                            probeBuilder.Append(" Cost=").Append(zoneCost.ToString("F2"));
-                        }
-                        else
-                        {
-                            probeBuilder.Append(" Cost=n/a");
-                        }
-
-                        probeBuilder.AppendLine();
-                    }
-                    else
-                    {
-                        probeBuilder.Append("Market: none").AppendLine();
-                    }
-                    break;
-
                 case MapMode.Biomes:
                     string biomeName = "Unknown";
                     if (mapData.Biomes != null)
@@ -2263,26 +1867,6 @@ namespace EconSim.Renderer
             probeText = probeBuilder.ToString();
         }
 
-        private bool TryGetAssignedMarket(int cellId, int countyId, out int marketId, out EconSim.Core.Economy.Market market)
-        {
-            marketId = 0;
-            market = null;
-
-            if (economyState == null || economyState.Markets == null)
-                return false;
-
-            if (economyState.CellToMarket == null || !economyState.CellToMarket.TryGetValue(cellId, out marketId))
-            {
-                economyState.CountyToMarket?.TryGetValue(countyId, out marketId);
-            }
-
-            if (marketId <= 0)
-                return false;
-
-            return economyState.Markets.TryGetValue(marketId, out market);
-        }
-
-
         private static string FormatNorm(int value)
         {
             return (value / 65535f).ToString("F6");
@@ -2300,7 +1884,7 @@ namespace EconSim.Renderer
             GUI.Box(new Rect(10, 10, width, height), GUIContent.none);
             GUI.Label(
                 new Rect(18, 18, width - 16, height - 16),
-                probeText + "\nKeys: 2=Biomes, 5=Local Transport, 6=Market Transport, 0=Channel Inspector, O=Cycle Channel, P=Toggle Probe");
+                probeText + "\nKeys: 2=Biomes, 5=Local Transport, 0=Channel Inspector, O=Cycle Channel, P=Toggle Probe");
         }
 
 #if UNITY_EDITOR
@@ -2325,14 +1909,8 @@ namespace EconSim.Renderer
         [ContextMenu("Set Mode: Biomes")]
         private void SetModeBiomes() => SetMapMode(MapMode.Biomes);
 
-        [ContextMenu("Set Mode: Market")]
-        private void SetModeMarket() => SetMapMode(MapMode.Market);
-
         [ContextMenu("Set Mode: Transport Cost")]
         private void SetModeTransportCost() => SetMapMode(MapMode.TransportCost);
-
-        [ContextMenu("Set Mode: Market Access")]
-        private void SetModeMarketAccess() => SetMapMode(MapMode.MarketAccess);
 
         [ContextMenu("Set Mode: Channel Inspector")]
         private void SetModeChannelInspector() => SetMapMode(MapMode.ChannelInspector);
@@ -2346,11 +1924,6 @@ namespace EconSim.Renderer
             {
                 GenerateMesh();
                 BuildRealmCapitalMarkers();
-                marketLocationMarkersDirty = true;
-                if (currentMode == MapMode.Market)
-                {
-                    EnsureMarketLocationMarkersBuilt();
-                }
                 UpdateModeMarkerVisibility();
                 if (overlayManager != null)
                 {

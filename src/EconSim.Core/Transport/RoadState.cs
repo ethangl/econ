@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace EconSim.Core.Economy
+namespace EconSim.Core.Transport
 {
     /// <summary>
     /// Road tier levels.

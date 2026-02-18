@@ -44,7 +44,7 @@ namespace EconSim.Tests
             {
                 SetSelectionState(mapView, MapView.SelectionScope.Realm, realmId: 9, provinceId: 31, countyId: 82);
 
-                mapView.SetMapMode(MapView.MapMode.Market);
+                mapView.SetMapMode(MapView.MapMode.Biomes);
 
                 Assert.That(GetSelectionScope(mapView), Is.EqualTo(MapView.SelectionScope.None));
                 Assert.That(mapView.SelectedRealmId, Is.EqualTo(-1));
