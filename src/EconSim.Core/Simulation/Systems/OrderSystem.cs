@@ -11,12 +11,6 @@ namespace EconSim.Core.Simulation.Systems
     /// </summary>
     public class OrderSystem : ITickSystem
     {
-        private const float BasicAffordabilityElasticity = 0.75f;
-        private const float ComfortAffordabilityElasticity = 1.00f;
-        private const float LuxuryAffordabilityElasticity = 1.25f;
-        private const float BasicMinDemandScale = 0.15f;
-        private const float ComfortMinDemandScale = 0.02f;
-        private const float LuxuryMinDemandScale = 0.00f;
         private const float InterMarketTransferCost = 120f;
         private const float MillInputOrderHorizonDays = 0.25f;
         private const float ProcessingInputDemandBufferFactor = 1.10f;
@@ -271,26 +265,6 @@ namespace EconSim.Core.Simulation.Systems
                     continue;
                 }
 
-                float baseEffectivePrice = marketGood.BasePrice + Math.Max(0f, targetTransportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
-                float affordabilityScale = ComputeAffordabilityDemandScale(tier, effectivePrice, baseEffectivePrice);
-                float qtyAfterElasticity = qty * affordabilityScale;
-                float affordabilityRejectedQty = Math.Max(0f, qty - qtyAfterElasticity);
-                qty = qtyAfterElasticity;
-
-                // Hard-cap posted beer demand by immediately affordable quantity at observed market price.
-                if (string.Equals(good.Id, "beer", StringComparison.OrdinalIgnoreCase))
-                {
-                    float beerAffordableQty = availableBudget > 0f ? (availableBudget / effectivePrice) : 0f;
-                    if (beerAffordableQty < qty)
-                    {
-                        affordabilityRejectedQty += Math.Max(0f, qty - beerAffordableQty);
-                        qty = Math.Max(0f, beerAffordableQty);
-                    }
-                }
-
-                if (affordabilityRejectedQty > 0f)
-                    AccumulateUnpostedDemandDiagnostic(market, good.RuntimeId, noRouteQty: 0f, priceRejectQty: affordabilityRejectedQty);
-
                 if (qty <= 0.0001f)
                     continue;
 
@@ -348,38 +322,6 @@ namespace EconSim.Core.Simulation.Systems
             }
 
             return Math.Min(spent, budget);
-        }
-
-        private static float ComputeAffordabilityDemandScale(
-            NeedCategory tier,
-            float effectivePrice,
-            float baseEffectivePrice)
-        {
-            if (effectivePrice <= 0f || baseEffectivePrice <= 0f)
-                return 1f;
-
-            float ratio = Clamp(baseEffectivePrice / effectivePrice, 0f, 1f);
-            float elasticity;
-            float minScale;
-            switch (tier)
-            {
-                case NeedCategory.Basic:
-                    elasticity = BasicAffordabilityElasticity;
-                    minScale = BasicMinDemandScale;
-                    break;
-                case NeedCategory.Comfort:
-                    elasticity = ComfortAffordabilityElasticity;
-                    minScale = ComfortMinDemandScale;
-                    break;
-                case NeedCategory.Luxury:
-                default:
-                    elasticity = LuxuryAffordabilityElasticity;
-                    minScale = LuxuryMinDemandScale;
-                    break;
-            }
-
-            float scaled = (float)Math.Pow(ratio, elasticity);
-            return Clamp(scaled, minScale, 1f);
         }
 
         private static void PostFacilityInputOrders(
