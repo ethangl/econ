@@ -100,8 +100,9 @@ namespace EconSim.Core.Simulation
             /// - Only a share of population is eligible for home brewing.
             /// - Eligible population has a fixed maximum beer kg/day from subsistence stock.
             /// </summary>
-            public const float BeerSubsistenceEligiblePopShare = 0.60f;
-            public const float BeerSubsistenceMaxKgPerCapitaPerDay = 0.25f;
+            public const float BeerSubsistenceEligiblePopShare = 1.00f;
+            // True 50/50 with beer demand at 1.5 kg/day => 0.75 kg/day home-brew cap.
+            public const float BeerSubsistenceMaxKgPerCapitaPerDay = 0.75f;
 
             /// <summary>
             /// Grain-to-flour conversion baseline used across reserve and subsistence logic.

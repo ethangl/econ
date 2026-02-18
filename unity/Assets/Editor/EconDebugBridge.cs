@@ -530,6 +530,7 @@ namespace EconSim.Editor
 
             // Aggregate market stats
             float totalSupplyOffered = 0f, totalClosingSupply = 0f, totalDemand = 0f, totalVolume = 0f;
+            float totalUnfilledNoFunds = 0f, totalUnfilledNoStock = 0f, totalUnfilledNoRoute = 0f, totalUnfilledPriceReject = 0f;
             foreach (var market in econ.Markets.Values)
             {
                 foreach (var gs in market.Goods.Values)
@@ -538,12 +539,20 @@ namespace EconSim.Editor
                     totalClosingSupply += gs.Supply;
                     totalDemand += gs.Demand;
                     totalVolume += gs.LastTradeVolume;
+                    totalUnfilledNoFunds += gs.UnfilledNoFunds;
+                    totalUnfilledNoStock += gs.UnfilledNoStock;
+                    totalUnfilledNoRoute += gs.UnfilledNoRoute;
+                    totalUnfilledPriceReject += gs.UnfilledPriceReject;
                 }
             }
             j.KV("totalMarketSupply", totalSupplyOffered);
             j.KV("totalMarketClosingSupply", totalClosingSupply);
             j.KV("totalMarketDemand", totalDemand);
             j.KV("totalMarketVolume", totalVolume);
+            j.KV("totalUnfilledNoFunds", totalUnfilledNoFunds);
+            j.KV("totalUnfilledNoStock", totalUnfilledNoStock);
+            j.KV("totalUnfilledNoRoute", totalUnfilledNoRoute);
+            j.KV("totalUnfilledPriceReject", totalUnfilledPriceReject);
 
             int totalPendingOrders = 0;
             int totalConsignmentLots = 0;
@@ -647,6 +656,10 @@ namespace EconSim.Editor
                     j.KV("demand", gs.Demand);
                     j.KV("volume", gs.LastTradeVolume);
                     j.KV("revenue", gs.Revenue);
+                    j.KV("unfilledNoFunds", gs.UnfilledNoFunds);
+                    j.KV("unfilledNoStock", gs.UnfilledNoStock);
+                    j.KV("unfilledNoRoute", gs.UnfilledNoRoute);
+                    j.KV("unfilledPriceReject", gs.UnfilledPriceReject);
                     j.ObjClose();
                 }
                 j.ObjClose();

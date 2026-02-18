@@ -109,7 +109,7 @@ namespace EconSim.Core.Economy
                 },
                 FacilityType = "mill",
                 ProcessingTicks = 1,
-                NeedCategory = NeedCategory.Basic,
+                NeedCategory = NeedCategory.Comfort,
                 BaseConsumption = 160f / 365f, // Flour-equivalent staple intake (household cooking/baking)
                 DecayRate = 0.015f,  // 1.5% per day - roughly ~2 month shelf-life
                 TheftRisk = 0.4f,  // Processed, more valuable
@@ -169,7 +169,7 @@ namespace EconSim.Core.Economy
                 Inputs = new List<GoodInput> { new GoodInput("iron", 1) },
                 FacilityType = "smithy",
                 ProcessingTicks = 2,
-                NeedCategory = NeedCategory.Comfort,
+                NeedCategory = NeedCategory.Basic,
                 BaseConsumption = 0.001f,  // Tools last longer, lower consumption
                 DecayRate = 0f,  // Durable goods
                 TheftRisk = 0.8f, // High value, high demand
@@ -564,7 +564,7 @@ namespace EconSim.Core.Economy
                 Inputs = new List<GoodInput> { new GoodInput("malt", 1f / 3f) }, // 1 kg malt -> 3 kg beer (volume proxy)
                 FacilityType = "brewery",
                 ProcessingTicks = 2,
-                NeedCategory = NeedCategory.Comfort,
+                NeedCategory = NeedCategory.Basic,
                 BaseConsumption = 1.5f,  // 1.5 kg/person/day proxy for historical small-beer intake
                 DecayRate = 0.06f,  // 6% per day - beer quality collapses over ~2 weeks
                 TheftRisk = 0.3f,  // Bulky liquid, moderate value

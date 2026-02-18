@@ -238,6 +238,7 @@ namespace EconSim.Core.Simulation.Systems
 
                 if (!demandByGood.TryGetValue(good.RuntimeId, out float qty) || qty <= 0.0001f)
                     continue;
+                float requestedQty = qty;
 
                 if (good.NeedCategory != tier)
                     continue;
@@ -256,15 +257,38 @@ namespace EconSim.Core.Simulation.Systems
                     out var targetMarket,
                     out float targetTransportCost,
                     out var marketGood))
+                {
+                    AccumulateUnpostedDemandDiagnostic(market, good.RuntimeId, noRouteQty: requestedQty, priceRejectQty: 0f);
                     continue;
+                }
 
                 float effectivePrice = marketGood.Price * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
                 if (effectivePrice <= 0f)
+                {
+                    AccumulateUnpostedDemandDiagnostic(market, good.RuntimeId, noRouteQty: 0f, priceRejectQty: requestedQty);
                     continue;
+                }
 
                 float baseEffectivePrice = marketGood.BasePrice * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
                 float affordabilityScale = ComputeAffordabilityDemandScale(tier, effectivePrice, baseEffectivePrice);
-                qty *= affordabilityScale;
+                float qtyAfterElasticity = qty * affordabilityScale;
+                float affordabilityRejectedQty = Math.Max(0f, qty - qtyAfterElasticity);
+                qty = qtyAfterElasticity;
+
+                // Hard-cap posted beer demand by immediately affordable quantity at observed market price.
+                if (string.Equals(good.Id, "beer", StringComparison.OrdinalIgnoreCase))
+                {
+                    float beerAffordableQty = availableBudget > 0f ? (availableBudget / effectivePrice) : 0f;
+                    if (beerAffordableQty < qty)
+                    {
+                        affordabilityRejectedQty += Math.Max(0f, qty - beerAffordableQty);
+                        qty = Math.Max(0f, beerAffordableQty);
+                    }
+                }
+
+                if (affordabilityRejectedQty > 0f)
+                    AccumulateUnpostedDemandDiagnostic(market, good.RuntimeId, noRouteQty: 0f, priceRejectQty: affordabilityRejectedQty);
+
                 if (qty <= 0.0001f)
                     continue;
 
@@ -751,6 +775,23 @@ namespace EconSim.Core.Simulation.Systems
                 stockpile.Remove(runtimeId, take);
                 remaining -= take;
             }
+        }
+
+        private static void AccumulateUnpostedDemandDiagnostic(
+            Market market,
+            int goodRuntimeId,
+            float noRouteQty,
+            float priceRejectQty)
+        {
+            if (market == null || goodRuntimeId < 0)
+                return;
+            if (!market.TryGetGoodState(goodRuntimeId, out var goodState) || goodState == null)
+                return;
+
+            if (noRouteQty > 0f)
+                goodState.UnfilledNoRoute += noRouteQty;
+            if (priceRejectQty > 0f)
+                goodState.UnfilledPriceReject += priceRejectQty;
         }
 
         private static int ResolveRuntimeId(
