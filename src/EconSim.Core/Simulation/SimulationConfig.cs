@@ -91,9 +91,9 @@ namespace EconSim.Core.Simulation
             /// <summary>
             /// Share of beer demand covered by local home brewing from county grain stockpiles
             /// before remaining demand is routed to markets.
-            /// 0.85 means 85% home-brew / 15% market.
+            /// 0.50 means 50% home-brew / 50% market.
             /// </summary>
-            public const float BeerSubsistenceShare = 0.85f;
+            public const float BeerSubsistenceShare = 0.50f;
 
             /// <summary>
             /// Grain-to-flour conversion baseline used across reserve and subsistence logic.

@@ -32,15 +32,6 @@ namespace EconSim.UI
             SimulationConfig.Speed.Hyper
         };
 
-        private static readonly string[] SpeedNames =
-        {
-            "Slow",
-            "Normal",
-            "Fast",
-            "Ultra",
-            "Hyper"
-        };
-
         private void Start()
         {
             if (EconSim.Core.GameManager.IsMapReady)
@@ -190,7 +181,7 @@ namespace EconSim.UI
         {
             if (_speedLabel != null)
             {
-                _speedLabel.text = $"{SpeedNames[_currentSpeedIndex]} ({SpeedPresets[_currentSpeedIndex]}x)";
+                _speedLabel.text = $"{SpeedPresets[_currentSpeedIndex]:0.##}x";
             }
         }
     }
