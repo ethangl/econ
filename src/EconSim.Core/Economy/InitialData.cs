@@ -530,12 +530,12 @@ namespace EconSim.Core.Economy
                 Id = "malt",
                 Name = "Malt",
                 Category = GoodCategory.Refined,
-                Inputs = new List<GoodInput> { new GoodInput("barley", 2) },
-                FacilityType = "malthouse",
+                Inputs = new List<GoodInput> { new GoodInput("barley", 1f / 0.8f) }, // 80% conversion yield
+                FacilityType = "malt_house",
                 ProcessingTicks = 1,
                 DecayRate = 0.003f,  // 0.3% per day - malted grain stores reasonably well
                 TheftRisk = 0.2f,
-                BasePrice = 3.0f  // 2 barley (2.0) + malting
+                BasePrice = 3.0f  // 1.25 barley (1.25) + malting
             });
 
             registry.Register(new GoodDef
@@ -543,14 +543,14 @@ namespace EconSim.Core.Economy
                 Id = "beer",
                 Name = "Beer",
                 Category = GoodCategory.Finished,
-                Inputs = new List<GoodInput> { new GoodInput("malt", 2) },
+                Inputs = new List<GoodInput> { new GoodInput("malt", 1f / 3f) }, // 1 kg malt -> 3 kg beer (volume proxy)
                 FacilityType = "brewery",
                 ProcessingTicks = 2,
                 NeedCategory = NeedCategory.Comfort,
-                BaseConsumption = 0.003f,  // Popular drink, moderate consumption
-                DecayRate = 0.01f,  // 1% per day - ale spoils in weeks
+                BaseConsumption = 1.5f,  // 1.5 kg/person/day proxy for historical small-beer intake
+                DecayRate = 0.06f,  // 6% per day - beer quality collapses over ~2 weeks
                 TheftRisk = 0.3f,  // Bulky liquid, moderate value
-                BasePrice = 10.0f  // 2 malt (6.0) + brewing
+                BasePrice = 0.04f  // 0.04 Crowns/kg historical proxy pricing
             });
 
             // =============================================
@@ -1075,12 +1075,12 @@ namespace EconSim.Core.Economy
 
             registry.Register(new FacilityDef
             {
-                Id = "malthouse",
-                Name = "Malthouse",
+                Id = "malt_house",
+                Name = "Malt House",
                 OutputGoodId = "malt",
-                LaborRequired = 3,
+                LaborRequired = 4,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 4f,
+                BaseThroughput = 25000f / 365f, // 25,000 kg/year at full staffing
                 IsExtraction = false
             });
 
@@ -1089,9 +1089,9 @@ namespace EconSim.Core.Economy
                 Id = "brewery",
                 Name = "Brewery",
                 OutputGoodId = "beer",
-                LaborRequired = 4,
+                LaborRequired = 5,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 3f,
+                BaseThroughput = 75000f / 365f, // 75,000 kg/year at full staffing
                 IsExtraction = false
             });
 

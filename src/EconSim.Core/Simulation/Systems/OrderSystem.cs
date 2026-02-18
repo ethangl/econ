@@ -22,12 +22,15 @@ namespace EconSim.Core.Simulation.Systems
         private const float MillInputOrderHorizonDays = 0.25f;
 
         private static readonly string[] BreadSubsistenceGoods = { "wheat", "rye", "barley", "rice_grain" };
+        private static readonly string[] BeerSubsistenceGoods = { "barley" };
         private readonly Dictionary<int, float> _demandByGoodBuffer = new Dictionary<int, float>();
         private readonly List<OrderLine> _tierLinesBuffer = new List<OrderLine>();
         private readonly Dictionary<string, int> _goodRuntimeIdCache = new Dictionary<string, int>();
         private readonly Dictionary<long, float> _countyMarketTransportCostCache = new Dictionary<long, float>();
         private int[] _breadSubsistenceRuntimeIds = Array.Empty<int>();
+        private int[] _beerSubsistenceRuntimeIds = Array.Empty<int>();
         private int _breadRuntimeId = -1;
+        private int _beerRuntimeId = -1;
 
         private struct OrderLine
         {
@@ -76,9 +79,24 @@ namespace EconSim.Core.Simulation.Systems
                 _breadSubsistenceRuntimeIds[i] = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, BreadSubsistenceGoods[i]);
             }
 
+            _beerSubsistenceRuntimeIds = new int[BeerSubsistenceGoods.Length];
+            for (int i = 0; i < BeerSubsistenceGoods.Length; i++)
+            {
+                if (!SimulationConfig.Economy.IsGoodEnabled(BeerSubsistenceGoods[i]))
+                {
+                    _beerSubsistenceRuntimeIds[i] = -1;
+                    continue;
+                }
+
+                _beerSubsistenceRuntimeIds[i] = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, BeerSubsistenceGoods[i]);
+            }
+
             // Apply subsistence cover to staple flour demand (not comfort bread demand).
             _breadRuntimeId = SimulationConfig.Economy.IsGoodEnabled("flour")
                 ? ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, "flour")
+                : -1;
+            _beerRuntimeId = SimulationConfig.Economy.IsGoodEnabled("beer")
+                ? ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, "beer")
                 : -1;
         }
 
@@ -109,6 +127,8 @@ namespace EconSim.Core.Simulation.Systems
                     _tierLinesBuffer,
                     _breadSubsistenceRuntimeIds,
                     _breadRuntimeId,
+                    _beerSubsistenceRuntimeIds,
+                    _beerRuntimeId,
                     _countyMarketTransportCostCache);
                 PostFacilityInputOrders(state, economy, county, market, transportCost, _goodRuntimeIdCache, _countyMarketTransportCostCache);
             }
@@ -124,6 +144,8 @@ namespace EconSim.Core.Simulation.Systems
             List<OrderLine> tierLinesBuffer,
             int[] breadSubsistenceRuntimeIds,
             int breadRuntimeId,
+            int[] beerSubsistenceRuntimeIds,
+            int beerRuntimeId,
             Dictionary<long, float> countyMarketTransportCostCache)
         {
             int population = county.Population.Total;
@@ -148,7 +170,13 @@ namespace EconSim.Core.Simulation.Systems
                 demandByGood[good.RuntimeId] = perCapita * population;
             }
 
-            ApplySubsistenceFromStockpile(county, demandByGood, breadSubsistenceRuntimeIds, breadRuntimeId);
+            ApplySubsistenceFromStockpile(
+                county,
+                demandByGood,
+                breadSubsistenceRuntimeIds,
+                breadRuntimeId,
+                beerSubsistenceRuntimeIds,
+                beerRuntimeId);
 
             float budget = Math.Max(0f, county.Population.Treasury);
             budget -= PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Basic, budget, countyMarketTransportCostCache);
@@ -510,7 +538,9 @@ namespace EconSim.Core.Simulation.Systems
             CountyEconomy county,
             Dictionary<int, float> demandByGood,
             int[] breadSubsistenceRuntimeIds,
-            int breadRuntimeId)
+            int breadRuntimeId,
+            int[] beerSubsistenceRuntimeIds,
+            int beerRuntimeId)
         {
             if (breadRuntimeId >= 0 && demandByGood.TryGetValue(breadRuntimeId, out float breadNeed) && breadNeed > 0f)
             {
@@ -537,6 +567,35 @@ namespace EconSim.Core.Simulation.Systems
                     float requiredRaw = covered / flourPerRawKg;
                     RemoveProportional(county.Stockpile, breadSubsistenceRuntimeIds, requiredRaw);
                     demandByGood[breadRuntimeId] = Math.Max(0f, breadNeed - covered);
+                }
+            }
+
+            if (beerRuntimeId >= 0 && demandByGood.TryGetValue(beerRuntimeId, out float beerNeed) && beerNeed > 0f)
+            {
+                float equivalentBeer = 0f;
+                float beerPerRawKg = SimulationConfig.Economy.BeerKgPerRawBarleyKg;
+                if (beerPerRawKg <= 0f)
+                    return;
+
+                int count = beerSubsistenceRuntimeIds?.Length ?? 0;
+                for (int i = 0; i < count; i++)
+                {
+                    int runtimeId = beerSubsistenceRuntimeIds[i];
+                    if (runtimeId < 0)
+                        continue;
+
+                    float available = county.Stockpile.Get(runtimeId);
+                    equivalentBeer += available * beerPerRawKg;
+                }
+
+                float subsistenceShare = Clamp(SimulationConfig.Economy.BeerSubsistenceShare, 0f, 1f);
+                float subsistenceCap = beerNeed * subsistenceShare;
+                float covered = Math.Min(subsistenceCap, equivalentBeer);
+                if (covered > 0f)
+                {
+                    float requiredRaw = covered / beerPerRawKg;
+                    RemoveProportional(county.Stockpile, beerSubsistenceRuntimeIds, requiredRaw);
+                    demandByGood[beerRuntimeId] = Math.Max(0f, beerNeed - covered);
                 }
             }
 
