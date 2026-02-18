@@ -37,6 +37,7 @@ namespace EconSim.Core.Simulation.Systems
         private const float V2ProcessingDemandFloorKg = 0.5f;
         private const float GrainReserveTargetDays = 540f; // 1.5 years of staple reserve.
         private const float MillDemandBufferFactor = 1.10f;
+        private const float MaltTargetDaysCover = 14f;
         private static readonly string[] ReserveGrainGoods = { "wheat", "rye", "barley", "rice_grain" };
 
         private readonly Dictionary<string, float> _producedThisTick = new Dictionary<string, float>();
@@ -588,9 +589,17 @@ namespace EconSim.Core.Simulation.Systems
                 var market = economy.GetMarketForCounty(facility.CountyId);
                 if (market != null && market.TryGetGoodState(outputRuntimeId, out var outputState))
                 {
-                    float unmetDemand = Math.Max(0f, outputState.Demand - outputState.Supply);
-                    float demandLimitedThroughput = unmetDemand * MillDemandBufferFactor;
-                    throughput = Math.Min(throughput, demandLimitedThroughput);
+                    if (string.Equals(def.Id, "malt_house", StringComparison.OrdinalIgnoreCase))
+                    {
+                        float desiredThroughput = ComputeMaltHouseDerivedDemandThroughput(economy, market, outputState);
+                        throughput = Math.Min(throughput, desiredThroughput);
+                    }
+                    else
+                    {
+                        float unmetDemand = Math.Max(0f, outputState.Demand - outputState.Supply);
+                        float demandLimitedThroughput = unmetDemand * MillDemandBufferFactor;
+                        throughput = Math.Min(throughput, demandLimitedThroughput);
+                    }
                 }
             }
 
@@ -937,6 +946,70 @@ namespace EconSim.Core.Simulation.Systems
                 return false;
 
             return IsReserveGrainGood(good.Id);
+        }
+
+        private float ComputeMaltHouseDerivedDemandThroughput(
+            EconomyState economy,
+            Market market,
+            MarketGoodState maltState)
+        {
+            if (economy == null || market == null || maltState == null)
+                return 0f;
+
+            if (!economy.Goods.TryGetRuntimeId("beer", out int beerRuntimeId) || beerRuntimeId < 0)
+                return 0f;
+            if (!market.TryGetGoodState(beerRuntimeId, out var beerState) || beerState == null)
+                return 0f;
+
+            float projectedBeerDemandKg = Math.Max(0f, Math.Max(beerState.LastTradeVolume, beerState.Demand));
+            if (projectedBeerDemandKg <= 0.001f)
+                return 0f;
+
+            float beerPerMaltKg = Math.Max(0.001f, SimulationConfig.Economy.BeerKgPerMaltKg);
+            float requiredMaltPerDay = projectedBeerDemandKg / beerPerMaltKg;
+            float targetMaltInventory = requiredMaltPerDay * MaltTargetDaysCover;
+            float currentMaltInventory = Math.Max(0f, maltState.SupplyOffered);
+
+            if (targetMaltInventory > 0f && currentMaltInventory >= targetMaltInventory)
+                return 0f;
+
+            float refillGap = Math.Max(0f, targetMaltInventory - currentMaltInventory);
+            float totalDesiredForMarket = requiredMaltPerDay + Math.Min(requiredMaltPerDay, refillGap);
+
+            int activeMaltHouses = CountActiveFacilitiesForMarketAndType(economy, market.Id, "malt_house");
+            if (activeMaltHouses <= 0)
+                activeMaltHouses = 1;
+
+            return Math.Max(0f, totalDesiredForMarket / activeMaltHouses);
+        }
+
+        private static int CountActiveFacilitiesForMarketAndType(
+            EconomyState economy,
+            int marketId,
+            string facilityTypeId)
+        {
+            if (economy == null || marketId <= 0 || string.IsNullOrWhiteSpace(facilityTypeId))
+                return 0;
+
+            var facilities = economy.GetFacilitiesDense();
+            int count = 0;
+            for (int i = 0; i < facilities.Count; i++)
+            {
+                var facility = facilities[i];
+                if (facility == null || !facility.IsActive || facility.AssignedWorkers <= 0)
+                    continue;
+
+                if (!string.Equals(facility.TypeId, facilityTypeId, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (!economy.CountyToMarket.TryGetValue(facility.CountyId, out int facilityMarketId))
+                    continue;
+
+                if (facilityMarketId == marketId)
+                    count++;
+            }
+
+            return count;
         }
 
         private static float ComputeCountyGrainReserveTargetKg(EconomyState economy, CountyEconomy county)
