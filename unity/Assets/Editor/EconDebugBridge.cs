@@ -8,6 +8,7 @@ using UnityEditor;
 using UnityEngine;
 using EconSim.Core;
 using EconSim.Core.Data;
+using EconSim.Core.Economy;
 using EconSim.Core.Simulation;
 using EconSim.Core.Transport;
 using MapGen.Core;
@@ -434,6 +435,8 @@ namespace EconSim.Editor
             }
             if (scope == "all" || scope == "roads")
                 WriteRoads(j, st);
+            if (scope == "all" || scope == "economy")
+                WriteEconomy(j, st);
 
             j.ObjClose();
             File.WriteAllText(OutputPath, j.ToString());
@@ -535,6 +538,59 @@ namespace EconSim.Editor
                 j.KV("cellB", r.Item2);
                 j.KV("tier", r.Item3.ToString());
                 j.KV("traffic", st.Roads.GetTraffic(r.Item1, r.Item2));
+                j.ObjClose();
+            }
+            j.ArrClose();
+
+            j.ObjClose();
+        }
+
+        static void WriteEconomy(JW j, SimulationState st)
+        {
+            j.Key("economy"); j.ObjOpen();
+
+            var econ = st.Economy;
+            if (econ == null || econ.Counties == null)
+            {
+                j.KV("countyCount", 0);
+                j.ObjClose();
+                return;
+            }
+
+            // Init stats
+            int countyCount = 0;
+            float sumProd = 0f, minProd = float.MaxValue, maxProd = float.MinValue;
+            for (int i = 0; i < econ.Counties.Length; i++)
+            {
+                var ce = econ.Counties[i];
+                if (ce == null) continue;
+                countyCount++;
+                sumProd += ce.Productivity;
+                if (ce.Productivity < minProd) minProd = ce.Productivity;
+                if (ce.Productivity > maxProd) maxProd = ce.Productivity;
+            }
+
+            j.KV("countyCount", countyCount);
+            j.KV("avgProductivity", countyCount > 0 ? sumProd / countyCount : 0f);
+            j.KV("minProductivity", countyCount > 0 ? minProd : 0f);
+            j.KV("maxProductivity", countyCount > 0 ? maxProd : 0f);
+
+            // Time series
+            j.Key("timeSeries"); j.ArrOpen();
+            foreach (var snap in econ.TimeSeries)
+            {
+                j.ObjOpen();
+                j.KV("day", snap.Day);
+                j.KV("totalStock", snap.TotalStock);
+                j.KV("totalProduction", snap.TotalProduction);
+                j.KV("totalConsumption", snap.TotalConsumption);
+                j.KV("totalUnmetNeed", snap.TotalUnmetNeed);
+                j.KV("surplusCounties", snap.SurplusCounties);
+                j.KV("deficitCounties", snap.DeficitCounties);
+                j.KV("starvingCounties", snap.StarvingCounties);
+                j.KV("minStock", snap.MinStock);
+                j.KV("maxStock", snap.MaxStock);
+                j.KV("medianProductivity", snap.MedianProductivity);
                 j.ObjClose();
             }
             j.ArrClose();

@@ -1,3 +1,4 @@
+using EconSim.Core.Economy;
 using EconSim.Core.Transport;
 
 namespace EconSim.Core.Simulation
@@ -41,5 +42,10 @@ namespace EconSim.Core.Simulation
         /// Runtime timing metrics for whole ticks and tick systems.
         /// </summary>
         public SimulationPerformanceStats Performance { get; set; } = new SimulationPerformanceStats();
+
+        /// <summary>
+        /// Economy state (production, consumption, stock per county).
+        /// </summary>
+        public EconomyState Economy { get; set; }
     }
 }
