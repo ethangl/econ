@@ -9,14 +9,15 @@ namespace EconSim.Core.Economy
     /// <summary>
     /// Multi-good production/consumption loop.
     /// Production: all goods produced per biome productivity.
-    /// Consumption: food only (Phase A). Timber/Ore accumulate.
+    /// Consumption: food (staple, 1.0/pop), timber (comfort, 0.2/pop), ore (comfort, 0.1/pop).
+    /// Staple shortfall = starvation. Comfort shortfall = unmet need only.
     /// </summary>
     public class EconomySystem : ITickSystem
     {
         public string Name => "Economy";
         public int TickInterval => SimulationConfig.Intervals.Daily;
 
-        const float ConsumptionPerPop = 1.0f;
+        static readonly float[] ConsumptionPerPop = { 1.0f, 0.2f, 0.01f }; // Food, Timber, Ore
         const int Food = (int)GoodType.Food;
 
         public void Initialize(SimulationState state, MapData mapData)
@@ -79,13 +80,15 @@ namespace EconSim.Core.Economy
                     ce.Production[g] = produced;
                 }
 
-                // Consumption — food only (Phase A)
-                float needed = pop * ConsumptionPerPop;
-                float consumed = Math.Min(ce.Stock[Food], needed);
-                ce.Stock[Food] -= consumed;
-                ce.Consumption[Food] = consumed;
-                ce.UnmetNeed[Food] = needed - consumed;
-
+                // Consumption — all goods
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    float needed = pop * ConsumptionPerPop[g];
+                    float consumed = Math.Min(ce.Stock[g], needed);
+                    ce.Stock[g] -= consumed;
+                    ce.Consumption[g] = consumed;
+                    ce.UnmetNeed[g] = needed - consumed;
+                }
             }
 
             // Record snapshot
@@ -122,6 +125,8 @@ namespace EconSim.Core.Economy
             snap.MaxStock = float.MinValue;
             snap.TotalStockByGood = new float[Goods.Count];
             snap.TotalProductionByGood = new float[Goods.Count];
+            snap.TotalConsumptionByGood = new float[Goods.Count];
+            snap.TotalUnmetNeedByGood = new float[Goods.Count];
 
             int countyCount = 0;
 
@@ -136,10 +141,10 @@ namespace EconSim.Core.Economy
                 {
                     snap.TotalStockByGood[g] += ce.Stock[g];
                     snap.TotalProductionByGood[g] += ce.Production[g];
+                    snap.TotalConsumptionByGood[g] += ce.Consumption[g];
+                    snap.TotalUnmetNeedByGood[g] += ce.UnmetNeed[g];
                 }
 
-                snap.TotalConsumption += ce.Consumption[Food];
-                snap.TotalUnmetNeed += ce.UnmetNeed[Food];
                 snap.TotalDucalTax += ce.TaxPaid[Food];
                 snap.TotalDucalRelief += ce.Relief[Food];
 
@@ -158,6 +163,8 @@ namespace EconSim.Core.Economy
             // Backward-compat scalars = food values
             snap.TotalStock = snap.TotalStockByGood[Food];
             snap.TotalProduction = snap.TotalProductionByGood[Food];
+            snap.TotalConsumption = snap.TotalConsumptionByGood[Food];
+            snap.TotalUnmetNeed = snap.TotalUnmetNeedByGood[Food];
 
             if (countyCount == 0)
             {

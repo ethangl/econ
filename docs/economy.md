@@ -39,7 +39,7 @@ Single abstract good called "Goods". Each county produces and consumes independe
 | 8   | Hot Desert     | 0.3  |     | 18  | Lake                | 0.0  |
 | 9   | Cold Desert    | 0.3  |     |     |                     |      |
 
-## Layer 2: Feudal Tax Redistribution (current)
+## Layer 2: Feudal Tax Redistribution
 
 Two-tier feudal redistribution replaces autarky isolation. Goods flow through the political hierarchy: counts pay dukes, dukes pay kings, and relief flows back down. No prices or markets — this is administrative fiat within a realm.
 
@@ -67,7 +67,7 @@ Goods flow county → province → realm → province → county in a single tic
 - `Economy/EconomySnapshot.cs` — adds ducal/royal tax/relief/stockpile aggregates
 - `Economy/TradeSystem.cs` — ITickSystem (daily): builds province/realm mappings at init, 4-phase tick
 
-## Layer 3: Multiple Goods
+## Layer 3: Multiple Goods (current)
 
 Split "Goods" into distinct types (food, timber, ore). Each biome produces different goods at different rates. Counties now have comparative advantage. Units: **kg** per person per day for all goods.
 
@@ -82,9 +82,13 @@ Per-good production with food-only consumption and redistribution. Timber/Ore ac
 - `BiomeProductivity` → 2D table (biomeId × goodType)
 - Production loop produces all goods; consumption and redistribution operate on food index only
 
-### Phase B: Multi-Good Consumption
+### Phase B: Multi-Good Consumption (current)
 
-Food is essential (starvation on shortfall). Timber/Ore are optional consumption goods (quality of life, no starvation).
+All goods consumed daily. Food is a staple (shortfall = starvation). Timber/Ore are comfort goods (shortfall = unmet need, no starvation).
+
+**Consumption rates (kg/person/day):** Food 1.0, Timber 0.2, Ore 0.01.
+
+**Behavior:** Each good consumed independently from county stock. Unmet need tracked per good type. `StarvingCounties` count still based on food only — comfort shortfall has no gameplay consequence yet (observable data for future welfare mechanics).
 
 ### Phase C: Per-Good Feudal Redistribution
 

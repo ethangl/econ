@@ -11,6 +11,8 @@ namespace EconSim.Core.Economy
         // Per-good aggregates (Layer 3)
         public float[] TotalStockByGood;
         public float[] TotalProductionByGood;
+        public float[] TotalConsumptionByGood;
+        public float[] TotalUnmetNeedByGood;
 
         // Backward-compat scalars = food values
         public float TotalStock;

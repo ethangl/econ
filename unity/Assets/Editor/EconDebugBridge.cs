@@ -639,6 +639,20 @@ namespace EconSim.Editor
                         j.Val(snap.TotalProductionByGood[g]);
                     j.ArrClose();
                 }
+                if (snap.TotalConsumptionByGood != null)
+                {
+                    j.Key("consumptionByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalConsumptionByGood.Length; g++)
+                        j.Val(snap.TotalConsumptionByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalUnmetNeedByGood != null)
+                {
+                    j.Key("unmetNeedByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalUnmetNeedByGood.Length; g++)
+                        j.Val(snap.TotalUnmetNeedByGood[g]);
+                    j.ArrClose();
+                }
 
                 j.ObjClose();
             }
