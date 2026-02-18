@@ -41,7 +41,7 @@ namespace EconSim.Core.Economy
                 BaseYield = 10f,
                 DecayRate = 0.005f,  // 0.5% per day - grain stores well if dry
                 TheftRisk = 0.3f,   // Bulk, moderate value
-                BasePrice = 1.0f
+                BasePrice = 0.025f
             });
 
             registry.Register(new GoodDef
@@ -54,7 +54,7 @@ namespace EconSim.Core.Economy
                 BaseYield = 8f,     // Hardy but less productive than wheat
                 DecayRate = 0.005f,
                 TheftRisk = 0.3f,
-                BasePrice = 1.0f
+                BasePrice = 0.018f
             });
 
             registry.Register(new GoodDef
@@ -67,7 +67,7 @@ namespace EconSim.Core.Economy
                 BaseYield = 6f,     // Grows in harsh conditions, lower yield
                 DecayRate = 0.005f,
                 TheftRisk = 0.3f,
-                BasePrice = 1.0f
+                BasePrice = 0.015f
             });
 
             registry.Register(new GoodDef
@@ -89,13 +89,31 @@ namespace EconSim.Core.Economy
                 Name = "Flour",
                 Category = GoodCategory.Refined,
                 Inputs = new List<GoodInput> { new GoodInput("wheat", 1f / 0.75f) }, // 75% yield
+                InputVariants = new List<GoodInputVariant>
+                {
+                    new GoodInputVariant
+                    {
+                        Id = "wheat_preferred",
+                        Inputs = new List<GoodInput> { new GoodInput("wheat", 1f / 0.75f) } // 75% yield
+                    },
+                    new GoodInputVariant
+                    {
+                        Id = "rye_fallback",
+                        Inputs = new List<GoodInput> { new GoodInput("rye", 1f / 0.75f) } // 75% yield
+                    },
+                    new GoodInputVariant
+                    {
+                        Id = "barley_last_resort",
+                        Inputs = new List<GoodInput> { new GoodInput("barley", 1f / 0.65f) } // 65% yield
+                    }
+                },
                 FacilityType = "mill",
                 ProcessingTicks = 1,
                 NeedCategory = NeedCategory.Basic,
                 BaseConsumption = 160f / 365f, // Flour-equivalent staple intake (household cooking/baking)
-                DecayRate = 0.02f,  // 2% per day - flour is perishable versus durable grain stores
+                DecayRate = 0.015f,  // 1.5% per day - roughly ~2 month shelf-life
                 TheftRisk = 0.4f,  // Processed, more valuable
-                BasePrice = 3.0f   // 2 grain (2.0) + processing
+                BasePrice = 0.03f
             });
 
             registry.Register(new GoodDef
@@ -533,9 +551,9 @@ namespace EconSim.Core.Economy
                 Inputs = new List<GoodInput> { new GoodInput("barley", 1f / 0.8f) }, // 80% conversion yield
                 FacilityType = "malt_house",
                 ProcessingTicks = 1,
-                DecayRate = 0.003f,  // 0.3% per day - malted grain stores reasonably well
+                DecayRate = 0.004f,  // ~0.4% per day - ~9 month storage horizon
                 TheftRisk = 0.2f,
-                BasePrice = 3.0f  // 1.25 barley (1.25) + malting
+                BasePrice = 0.02f  // Baseline tuned for barley at 0.015 Crowns/kg
             });
 
             registry.Register(new GoodDef
@@ -646,7 +664,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "wheat",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 1400f / 365f, // 1,400 kg/year at full staffing
+                BaseThroughput = 140000f / 365f, // 100x baseline: 140,000 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Grassland", "Savanna" }
             });
@@ -658,7 +676,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "rye",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 1500f / 365f, // 1,500 kg/year at full staffing
+                BaseThroughput = 150000f / 365f, // 100x baseline: 150,000 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Steppe", "Taiga" }
             });
@@ -670,7 +688,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "barley",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 1600f / 365f, // 1600 kg/year at full staffing
+                BaseThroughput = 160000f / 365f, // 100x baseline: 160,000 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Highland", "Steppe" }
             });
@@ -682,7 +700,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "rice_grain",
                 LaborRequired = 25,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 20f,
+                BaseThroughput = 2000f, // 100x baseline daily throughput
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Tropical seasonal forest", "Tropical rainforest" }
             });

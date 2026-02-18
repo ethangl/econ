@@ -115,7 +115,7 @@ CHAIN_DEFS: List[ChainDef] = [
         name="Beer",
         stages=[
             ChainStage("Barley", ["barley"], ["barley_farm"]),
-            ChainStage("Malt", ["malt"], ["malthouse"]),
+            ChainStage("Malt", ["malt"], ["malt_house"]),
             ChainStage("Beer", ["beer"], ["brewery"]),
         ],
     ),

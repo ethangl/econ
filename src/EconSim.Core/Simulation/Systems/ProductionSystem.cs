@@ -34,6 +34,7 @@ namespace EconSim.Core.Simulation.Systems
         private const float V2FacilityAskMarkupSubsidized = 0.03f;
         private const float V2FacilityAskBaseFloorMultiplierUnsubsidized = 0.25f;
         private const float V2FacilityAskBaseFloorMultiplierSubsidized = 0.10f;
+        private const float V2ProcessingDemandFloorKg = 0.5f;
         private const float GrainReserveTargetDays = 540f; // 1.5 years of staple reserve.
         private const float MillDemandBufferFactor = 1.10f;
         private static readonly string[] ReserveGrainGoods = { "wheat", "rye", "barley", "rice_grain" };
@@ -44,11 +45,17 @@ namespace EconSim.Core.Simulation.Systems
         private readonly Dictionary<int, int> _availableUnskilledByCounty = new Dictionary<int, int>();
         private readonly Dictionary<int, int> _availableSkilledByCounty = new Dictionary<int, int>();
         private readonly Dictionary<string, int> _goodRuntimeIdCache = new Dictionary<string, int>();
+        private readonly Dictionary<int, List<int>> _downstreamOutputsByInputRuntimeId = new Dictionary<int, List<int>>();
+        private readonly Dictionary<long, bool> _demandReachabilityMemo = new Dictionary<long, bool>();
+        private readonly HashSet<int> _demandReachabilityVisited = new HashSet<int>();
 
         public void Initialize(SimulationState state, MapData mapData)
         {
             var economy = state.Economy;
             if (economy == null) return;
+
+            _goodRuntimeIdCache.Clear();
+            RebuildDownstreamDemandGraph(economy);
 
             var facilityCounts = new Dictionary<string, int>();
             var unitCounts = new Dictionary<string, int>();
@@ -83,6 +90,7 @@ namespace EconSim.Core.Simulation.Systems
             if (economy == null) return;
 
             _producedThisTick.Clear();
+            _demandReachabilityMemo.Clear();
             BuildAvailableWorkerCaches(economy);
             ApplyFacilitySubsidiesV2(state, economy);
 
@@ -182,12 +190,32 @@ namespace EconSim.Core.Simulation.Systems
             Dictionary<int, int> availableSkilledByCounty)
         {
             float subsistence = state.SubsistenceWage > 0f ? state.SubsistenceWage : 1f;
+            var market = economy.GetMarketForCounty(facility.CountyId);
+            int outputRuntimeId = ResolveRuntimeId(economy.Goods, def.OutputGoodId);
+            bool hasDemandPull = def.IsExtraction
+                || (market != null && outputRuntimeId >= 0 && HasDirectOrDownstreamDemand(economy, market, outputRuntimeId));
 
             if (facility.IsActive)
             {
                 // Keep extractive sectors stable to avoid raw-input starvation cascades.
                 if (def.IsExtraction)
                     return;
+
+                if (!hasDemandPull)
+                {
+                    if (facility.GraceDaysRemaining > 0)
+                    {
+                        facility.GraceDaysRemaining--;
+                        return;
+                    }
+
+                    int releasedWorkers = facility.AssignedWorkers;
+                    facility.IsActive = false;
+                    facility.AssignedWorkers = 0;
+                    if (releasedWorkers > 0)
+                        AdjustAvailableWorkers(availableUnskilledByCounty, availableSkilledByCounty, facility.CountyId, def.LaborType, releasedWorkers);
+                    return;
+                }
 
                 if (facility.AssignedWorkers <= 0)
                 {
@@ -239,15 +267,16 @@ namespace EconSim.Core.Simulation.Systems
             if (availableWorkers < Math.Max(1, (int)Math.Ceiling(requiredLaborForActivation * V2ReactivationLaborFloorRatio)))
                 return;
 
-            var market = economy.GetMarketForCounty(facility.CountyId);
             if (market == null)
                 return;
 
             float transportCost = economy.GetCountyTransportCost(facility.CountyId);
             float sellEfficiency = 1f / (1f + transportCost * V2TransportLossRate);
 
-            int outputRuntimeId = ResolveRuntimeId(economy.Goods, def.OutputGoodId);
             if (outputRuntimeId < 0)
+                return;
+
+            if (!hasDemandPull)
                 return;
 
             if (!market.TryGetGoodState(outputRuntimeId, out var outputMarket))
@@ -288,6 +317,120 @@ namespace EconSim.Core.Simulation.Systems
                 facility.IsActive = true;
                 facility.GraceDaysRemaining = V2GraceDaysOnActivation;
                 facility.ConsecutiveLossDays = 0;
+            }
+        }
+
+        private bool HasDirectOrDownstreamDemand(EconomyState economy, Market market, int goodRuntimeId)
+        {
+            if (economy == null || market == null || goodRuntimeId < 0)
+                return false;
+
+            long memoKey = ((long)market.Id << 32) | (uint)goodRuntimeId;
+            if (_demandReachabilityMemo.TryGetValue(memoKey, out bool cached))
+                return cached;
+
+            _demandReachabilityVisited.Clear();
+            bool hasDemand = HasDirectOrDownstreamDemandRecursive(economy, market, goodRuntimeId);
+            _demandReachabilityMemo[memoKey] = hasDemand;
+            return hasDemand;
+        }
+
+        private bool HasDirectOrDownstreamDemandRecursive(EconomyState economy, Market market, int goodRuntimeId)
+        {
+            if (!_demandReachabilityVisited.Add(goodRuntimeId))
+                return false;
+
+            try
+            {
+                if (market.TryGetGoodState(goodRuntimeId, out var goodState))
+                {
+                    if (goodState.Demand > V2ProcessingDemandFloorKg)
+                        return true;
+                    if (goodState.Demand > goodState.Supply * V2DemandPressureRatio)
+                        return true;
+                }
+
+                if (!_downstreamOutputsByInputRuntimeId.TryGetValue(goodRuntimeId, out var downstreamOutputs)
+                    || downstreamOutputs == null
+                    || downstreamOutputs.Count == 0)
+                {
+                    return false;
+                }
+
+                for (int i = 0; i < downstreamOutputs.Count; i++)
+                {
+                    int downstreamRuntimeId = downstreamOutputs[i];
+                    if (downstreamRuntimeId < 0)
+                        continue;
+
+                    var downstreamGood = economy.Goods.GetByRuntimeId(downstreamRuntimeId);
+                    if (downstreamGood == null || !SimulationConfig.Economy.IsGoodEnabled(downstreamGood.Id))
+                        continue;
+
+                    if (HasDirectOrDownstreamDemandRecursive(economy, market, downstreamRuntimeId))
+                        return true;
+                }
+
+                return false;
+            }
+            finally
+            {
+                _demandReachabilityVisited.Remove(goodRuntimeId);
+            }
+        }
+
+        private void RebuildDownstreamDemandGraph(EconomyState economy)
+        {
+            _downstreamOutputsByInputRuntimeId.Clear();
+            if (economy?.FacilityDefs == null || economy.Goods == null)
+                return;
+
+            foreach (var facilityDef in economy.FacilityDefs.ProcessingFacilities)
+            {
+                if (facilityDef == null)
+                    continue;
+                if (!SimulationConfig.Economy.IsFacilityEnabled(facilityDef.Id)
+                    || !SimulationConfig.Economy.IsGoodEnabled(facilityDef.OutputGoodId))
+                {
+                    continue;
+                }
+
+                int outputRuntimeId = ResolveRuntimeId(economy.Goods, facilityDef.OutputGoodId);
+                if (outputRuntimeId < 0)
+                    continue;
+
+                var outputGood = economy.Goods.Get(facilityDef.OutputGoodId);
+                foreach (var inputs in EnumerateInputVariants(facilityDef, outputGood))
+                {
+                    if (inputs == null || inputs.Count == 0)
+                        continue;
+
+                    for (int i = 0; i < inputs.Count; i++)
+                    {
+                        int inputRuntimeId = ResolveRuntimeId(economy.Goods, inputs[i].GoodId);
+                        if (inputRuntimeId < 0)
+                            continue;
+
+                        if (!_downstreamOutputsByInputRuntimeId.TryGetValue(inputRuntimeId, out var outputs))
+                        {
+                            outputs = new List<int>();
+                            _downstreamOutputsByInputRuntimeId[inputRuntimeId] = outputs;
+                        }
+
+                        bool exists = false;
+                        for (int j = 0; j < outputs.Count; j++)
+                        {
+                            if (outputs[j] == outputRuntimeId)
+                            {
+                                exists = true;
+                                break;
+                            }
+                        }
+
+                        if (!exists)
+                            outputs.Add(outputRuntimeId);
+                    }
+                }
             }
         }
 
@@ -440,7 +583,7 @@ namespace EconSim.Core.Simulation.Systems
             if (throughput <= 0f)
                 return;
 
-            if (IsMillFacility(def))
+            if (ShouldDemandLimitProcessing(def))
             {
                 var market = economy.GetMarketForCounty(facility.CountyId);
                 if (market != null && market.TryGetGoodState(outputRuntimeId, out var outputState))
@@ -458,6 +601,7 @@ namespace EconSim.Core.Simulation.Systems
             bool useCountyGrainReserve = IsMillFacility(def) && county != null;
             List<GoodInput> selectedInputs = null;
             float possibleBatches = 0f;
+            bool preferVariantOrder = IsMillFacility(def);
             foreach (var candidateInputs in EnumerateInputVariants(def, outputGood))
             {
                 if (candidateInputs == null || candidateInputs.Count == 0)
@@ -489,7 +633,17 @@ namespace EconSim.Core.Simulation.Systems
                         candidateBatches = canMake;
                 }
 
-                if (!valid || candidateBatches <= possibleBatches)
+                if (!valid || candidateBatches <= 0.001f)
+                    continue;
+
+                if (preferVariantOrder)
+                {
+                    selectedInputs = candidateInputs;
+                    possibleBatches = candidateBatches;
+                    break;
+                }
+
+                if (candidateBatches <= possibleBatches)
                     continue;
 
                 selectedInputs = candidateInputs;
@@ -748,6 +902,17 @@ namespace EconSim.Core.Simulation.Systems
                 return false;
 
             return def.Id == "mill" || def.Id == "rye_mill" || def.Id == "barley_mill";
+        }
+
+        private static bool ShouldDemandLimitProcessing(FacilityDef def)
+        {
+            if (def == null)
+                return false;
+
+            if (IsMillFacility(def))
+                return true;
+
+            return def.Id == "bakery" || def.Id == "brewery" || def.Id == "malt_house";
         }
 
         private static bool IsReserveGrainGood(string goodId)

@@ -20,6 +20,7 @@ namespace EconSim.Core.Simulation.Systems
         private const float LuxuryMinDemandScale = 0.00f;
         private const float InterMarketTransferCost = 120f;
         private const float MillInputOrderHorizonDays = 0.25f;
+        private const float ProcessingInputDemandBufferFactor = 1.10f;
 
         private static readonly string[] BreadSubsistenceGoods = { "wheat", "rye", "barley", "rice_grain" };
         private static readonly string[] BeerSubsistenceGoods = { "barley" };
@@ -361,6 +362,18 @@ namespace EconSim.Core.Simulation.Systems
                 if (output == null)
                     continue;
 
+                if (ShouldDemandLimitInputOrders(def)
+                    && output.RuntimeId >= 0
+                    && market.TryGetGoodState(output.RuntimeId, out var outputState))
+                {
+                    float unmetDemand = Math.Max(0f, outputState.Demand - outputState.Supply);
+                    float demandLimitedThroughput = unmetDemand * ProcessingInputDemandBufferFactor;
+                    currentThroughput = Math.Min(currentThroughput, demandLimitedThroughput);
+                }
+
+                if (currentThroughput <= 0.001f)
+                    continue;
+
                 var selectedInputs = SelectBestInputVariantForOrders(
                     state,
                     economy,
@@ -449,6 +462,8 @@ namespace EconSim.Core.Simulation.Systems
         {
             List<GoodInput> bestInputs = null;
             float bestCost = float.MaxValue;
+            List<GoodInput> firstValidMillInputs = null;
+            bool millPreference = IsMillFacility(def);
 
             foreach (var inputs in EnumerateInputVariants(def, output))
             {
@@ -457,6 +472,7 @@ namespace EconSim.Core.Simulation.Systems
 
                 float variantCost = 0f;
                 bool valid = true;
+                bool hasOfferedSupply = true;
                 for (int i = 0; i < inputs.Count; i++)
                 {
                     var input = inputs[i];
@@ -488,6 +504,9 @@ namespace EconSim.Core.Simulation.Systems
                         break;
                     }
 
+                    if (marketGood.Supply <= 0.001f && marketGood.SupplyOffered <= 0.001f)
+                        hasOfferedSupply = false;
+
                     float effectivePrice = marketGood.Price * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
                     if (effectivePrice <= 0f)
                     {
@@ -498,12 +517,29 @@ namespace EconSim.Core.Simulation.Systems
                     variantCost += input.QuantityKg * effectivePrice;
                 }
 
+                if (millPreference)
+                {
+                    if (!valid)
+                        continue;
+
+                    if (firstValidMillInputs == null)
+                        firstValidMillInputs = inputs;
+
+                    if (hasOfferedSupply)
+                        return inputs;
+
+                    continue;
+                }
+
                 if (!valid || variantCost >= bestCost)
                     continue;
 
                 bestCost = variantCost;
                 bestInputs = inputs;
             }
+
+            if (millPreference)
+                return firstValidMillInputs;
 
             return bestInputs;
         }
@@ -565,7 +601,7 @@ namespace EconSim.Core.Simulation.Systems
                 if (covered > 0f)
                 {
                     float requiredRaw = covered / flourPerRawKg;
-                    RemoveProportional(county.Stockpile, breadSubsistenceRuntimeIds, requiredRaw);
+                    RemovePrioritized(county.Stockpile, breadSubsistenceRuntimeIds, requiredRaw);
                     demandByGood[breadRuntimeId] = Math.Max(0f, breadNeed - covered);
                 }
             }
@@ -642,6 +678,31 @@ namespace EconSim.Core.Simulation.Systems
             }
         }
 
+        private static void RemovePrioritized(
+            Stockpile stockpile,
+            int[] runtimeIds,
+            float totalToRemove)
+        {
+            if (stockpile == null || runtimeIds == null || runtimeIds.Length == 0 || totalToRemove <= 0f)
+                return;
+
+            float remaining = totalToRemove;
+            for (int i = 0; i < runtimeIds.Length && remaining > 0f; i++)
+            {
+                int runtimeId = runtimeIds[i];
+                if (runtimeId < 0)
+                    continue;
+
+                float available = stockpile.Get(runtimeId);
+                if (available <= 0f)
+                    continue;
+
+                float take = Math.Min(available, remaining);
+                stockpile.Remove(runtimeId, take);
+                remaining -= take;
+            }
+        }
+
         private static int ResolveRuntimeId(
             GoodRegistry goods,
             Dictionary<string, int> runtimeIdCache,
@@ -667,6 +728,17 @@ namespace EconSim.Core.Simulation.Systems
                 return false;
 
             return def.Id == "mill" || def.Id == "rye_mill" || def.Id == "barley_mill";
+        }
+
+        private static bool ShouldDemandLimitInputOrders(FacilityDef def)
+        {
+            if (def == null)
+                return false;
+
+            if (IsMillFacility(def))
+                return true;
+
+            return def.Id == "bakery" || def.Id == "brewery" || def.Id == "malt_house";
         }
 
         private static bool IsReserveGrainGood(string goodId)
