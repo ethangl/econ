@@ -101,7 +101,7 @@ namespace EconSim.Core.Simulation.Systems
                 _beerSubsistenceRuntimeIds[i] = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, BeerSubsistenceGoods[i]);
             }
 
-            // Apply subsistence cover to staple flour demand (not comfort bread demand).
+            // Apply subsistence cover to staple flour demand (not prepared bread demand).
             _breadRuntimeId = SimulationConfig.Economy.IsGoodEnabled("flour")
                 ? ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, "flour")
                 : -1;
@@ -192,14 +192,7 @@ namespace EconSim.Core.Simulation.Systems
                 demandByGood[good.RuntimeId] = perCapita * population;
             }
 
-            ApplySubsistenceFromStockpile(
-                county,
-                demandByGood,
-                breadSubsistenceRuntimeIds,
-                breadRuntimeId,
-                beerSubsistenceRuntimeIds,
-                beerRuntimeId,
-                goods);
+            // Subsistence is disabled; households post full market demand.
 
             float budget = Math.Max(0f, county.Population.Treasury);
             budget -= PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Basic, budget, countyMarketTransportCostCache);

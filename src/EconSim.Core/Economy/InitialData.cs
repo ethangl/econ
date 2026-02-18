@@ -119,11 +119,11 @@ namespace EconSim.Core.Economy
                 Inputs = new List<GoodInput> { new GoodInput("flour", 1f / 1.4f) }, // 1.4 kg bread per 1 kg flour
                 FacilityType = "bakery",
                 ProcessingTicks = 1,
-                NeedCategory = NeedCategory.Comfort,
-                BaseConsumption = 40f / 365f,  // Market-purchased baked bread on top of staple flour
+                NeedCategory = NeedCategory.Basic,
+                BaseConsumption = 0.25f,  // Target bread consumption: 0.25 kg/person/day
                 DecayRate = 0.25f,  // 25% per day - stale in 3-4 days
                 TheftRisk = 0f,
-                BasePrice = 5.0f   // Comfort-tier prepared food markup over flour
+                BasePrice = 5.0f   // Prepared food markup over flour
             });
 
             // =============================================
@@ -659,7 +659,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "wheat",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 20000f / 365f, // 14.3x baseline: 20,000 kg/year at full staffing
+                BaseThroughput = 9000f / 365f, // 9,000 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Grassland", "Savanna" }
             });
@@ -671,7 +671,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "rye",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 20000f / 365f, // 13.3x baseline: 20,000 kg/year at full staffing
+                BaseThroughput = 3000f / 365f, // 3,000 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Steppe", "Taiga" }
             });
@@ -683,7 +683,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "barley",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 20000f / 365f, // 12.5x baseline: 20,000 kg/year at full staffing
+                BaseThroughput = 6000f / 365f, // 6,000 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Highland", "Steppe" }
             });
@@ -804,7 +804,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "sheep",
                 LaborRequired = 12,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 6f,
+                BaseThroughput = 4f,
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Grassland", "Steppe", "Highland" }
             });
@@ -816,7 +816,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "dye_plants",
                 LaborRequired = 15,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 4f,
+                BaseThroughput = 6f,
                 IsExtraction = true,
                 TerrainRequirements = new List<string> {
                     "Tropical seasonal forest",
@@ -848,7 +848,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "flour",
                 LaborRequired = 1,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 20000f / 365f, // 20,000 kg/year at full staffing
+                BaseThroughput = 24000f / 365f, // 24,000 kg/year at full staffing
                 IsExtraction = false
             });
 
@@ -871,7 +871,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "bread",
                 LaborRequired = 4,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 60000f / 365f, // 60,000 kg/year at full staffing
+                BaseThroughput = 28000f / 365f, // 28,000 kg/year at full staffing
                 IsExtraction = false
             });
 
@@ -1058,7 +1058,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "salt",
                 LaborRequired = 3,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 4f,
+                BaseThroughput = 2f,
                 IsExtraction = false
             });
 
@@ -1069,7 +1069,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "malt",
                 LaborRequired = 4,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 25000f / 365f, // 25,000 kg/year at full staffing
+                BaseThroughput = 6000f / 365f, // 6,000 kg/year at full staffing
                 IsExtraction = false
             });
 
@@ -1080,7 +1080,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "beer",
                 LaborRequired = 5,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 75000f / 365f, // 75,000 kg/year at full staffing
+                BaseThroughput = 42000f / 365f, // 42,000 kg/year at full staffing
                 IsExtraction = false
             });
 
