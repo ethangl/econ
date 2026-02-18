@@ -127,6 +127,12 @@ namespace EconSim.Core.Economy
             snap.TotalProductionByGood = new float[Goods.Count];
             snap.TotalConsumptionByGood = new float[Goods.Count];
             snap.TotalUnmetNeedByGood = new float[Goods.Count];
+            snap.TotalDucalTaxByGood = new float[Goods.Count];
+            snap.TotalDucalReliefByGood = new float[Goods.Count];
+            snap.TotalProvincialStockpileByGood = new float[Goods.Count];
+            snap.TotalRoyalTaxByGood = new float[Goods.Count];
+            snap.TotalRoyalReliefByGood = new float[Goods.Count];
+            snap.TotalRoyalStockpileByGood = new float[Goods.Count];
 
             int countyCount = 0;
 
@@ -145,8 +151,11 @@ namespace EconSim.Core.Economy
                     snap.TotalUnmetNeedByGood[g] += ce.UnmetNeed[g];
                 }
 
-                snap.TotalDucalTax += ce.TaxPaid[Food];
-                snap.TotalDucalRelief += ce.Relief[Food];
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    snap.TotalDucalTaxByGood[g] += ce.TaxPaid[g];
+                    snap.TotalDucalReliefByGood[g] += ce.Relief[g];
+                }
 
                 float foodStock = ce.Stock[Food];
                 if (foodStock < snap.MinStock) snap.MinStock = foodStock;
@@ -179,7 +188,8 @@ namespace EconSim.Core.Economy
                 {
                     var pe = econ.Provinces[i];
                     if (pe == null) continue;
-                    snap.TotalProvincialStockpile += pe.Stockpile[Food];
+                    for (int g = 0; g < Goods.Count; g++)
+                        snap.TotalProvincialStockpileByGood[g] += pe.Stockpile[g];
                 }
             }
 
@@ -190,11 +200,22 @@ namespace EconSim.Core.Economy
                 {
                     var re = econ.Realms[i];
                     if (re == null) continue;
-                    snap.TotalRoyalTax += re.TaxCollected[Food];
-                    snap.TotalRoyalRelief += re.ReliefGiven[Food];
-                    snap.TotalRoyalStockpile += re.Stockpile[Food];
+                    for (int g = 0; g < Goods.Count; g++)
+                    {
+                        snap.TotalRoyalTaxByGood[g] += re.TaxCollected[g];
+                        snap.TotalRoyalReliefByGood[g] += re.ReliefGiven[g];
+                        snap.TotalRoyalStockpileByGood[g] += re.Stockpile[g];
+                    }
                 }
             }
+
+            // Backward-compat scalars = food values
+            snap.TotalDucalTax = snap.TotalDucalTaxByGood[Food];
+            snap.TotalDucalRelief = snap.TotalDucalReliefByGood[Food];
+            snap.TotalProvincialStockpile = snap.TotalProvincialStockpileByGood[Food];
+            snap.TotalRoyalTax = snap.TotalRoyalTaxByGood[Food];
+            snap.TotalRoyalRelief = snap.TotalRoyalReliefByGood[Food];
+            snap.TotalRoyalStockpile = snap.TotalRoyalStockpileByGood[Food];
 
             snap.MedianProductivity = econ.MedianProductivity[Food];
 

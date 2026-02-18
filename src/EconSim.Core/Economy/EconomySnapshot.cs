@@ -26,7 +26,15 @@ namespace EconSim.Core.Economy
         public float MaxStock;
         public float MedianProductivity;
 
-        // Feudal redistribution (Layer 2)
+        // Feudal redistribution — per-good (Layer 3 Phase C)
+        public float[] TotalDucalTaxByGood;
+        public float[] TotalDucalReliefByGood;
+        public float[] TotalProvincialStockpileByGood;
+        public float[] TotalRoyalTaxByGood;
+        public float[] TotalRoyalReliefByGood;
+        public float[] TotalRoyalStockpileByGood;
+
+        // Backward-compat scalars = food values
         public float TotalDucalTax;
         public float TotalDucalRelief;
         public float TotalProvincialStockpile;

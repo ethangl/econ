@@ -1,0 +1,305 @@
+#!/usr/bin/env python3
+"""Analyze econ_debug_output.json and print a summary."""
+
+import json
+import sys
+from pathlib import Path
+
+GOODS = ["food", "timber", "ore"]
+GOOD_IDX = {g: i for i, g in enumerate(GOODS)}
+
+
+def load(path: str | None = None) -> dict:
+    if path is None:
+        path = Path(__file__).resolve().parent.parent / "unity" / "econ_debug_output.json"
+    with open(path) as f:
+        return json.load(f)
+
+
+def fmt(n: float, decimals: int = 1) -> str:
+    if abs(n) >= 1_000_000:
+        return f"{n / 1_000_000:.{decimals}f}M"
+    if abs(n) >= 1_000:
+        return f"{n / 1_000:.{decimals}f}k"
+    return f"{n:.{decimals}f}"
+
+
+def pct(a: float, b: float) -> str:
+    if b == 0:
+        return "n/a"
+    return f"{a / b * 100:.1f}%"
+
+
+def trend(series: list[float], label: str = "") -> str:
+    if len(series) < 2:
+        return ""
+    delta = series[-1] - series[0]
+    direction = "+" if delta >= 0 else ""
+    return f"{direction}{fmt(delta)}"
+
+
+def section(title: str):
+    print(f"\n{'=' * 60}")
+    print(f"  {title}")
+    print(f"{'=' * 60}")
+
+
+def print_header(data: dict):
+    section("SIMULATION SUMMARY")
+    s = data["summary"]
+    print(f"  Date:        Day {data['day']} (Year {data['year']}, Month {data['month']}, Day {data['dayOfMonth']})")
+    print(f"  Ticks:       {data['totalTicks']}")
+    print(f"  Population:  {fmt(s['totalPopulation'], 0)}")
+    print(f"  Counties:    {s['totalCounties']}")
+    print(f"  Provinces:   {s['totalProvinces']}")
+    print(f"  Realms:      {s['totalRealms']}")
+    print(f"  Roads:       {s['roadSegments']} road / {s['pathSegments']} path segments")
+
+
+def print_performance(data: dict):
+    section("PERFORMANCE")
+    p = data["performance"]
+    print(f"  Avg tick:    {p['avgTickMs']:.3f} ms")
+    print(f"  Max tick:    {p['maxTickMs']:.3f} ms")
+    print(f"  Last tick:   {p['lastTickMs']:.3f} ms")
+    print()
+    for name, sys in p["systems"].items():
+        print(f"  [{name}]")
+        print(f"    Invocations: {sys['invocations']}")
+        print(f"    Avg: {sys['avgMs']:.3f} ms  Max: {sys['maxMs']:.3f} ms  Total: {fmt(sys['totalMs'])} ms")
+
+
+def print_economy(data: dict):
+    section("ECONOMY")
+    e = data["economy"]
+    ts = e["timeSeries"]
+    first, last = ts[0], ts[-1]
+
+    print(f"  Counties:    {e['countyCount']}")
+    print(f"  Productivity (food): avg={e['avgProductivity']:.3f}  min={e['minProductivity']:.3f}  max={e['maxProductivity']:.3f}")
+    print()
+
+    # Per-good productivity
+    print("  Productivity by good:")
+    for good, info in e["productivityByGood"].items():
+        print(f"    {good:8s}  avg={info['avg']:.3f}  min={info['min']:.3f}  max={info['max']:.3f}")
+
+    # Production vs consumption balance
+    section("PRODUCTION / CONSUMPTION BALANCE (latest day)")
+    print(f"  {'Good':8s}  {'Production':>12s}  {'Consumption':>12s}  {'Surplus':>12s}  {'Unmet Need':>12s}  {'Cons%':>6s}")
+    print(f"  {'-'*8}  {'-'*12}  {'-'*12}  {'-'*12}  {'-'*12}  {'-'*6}")
+    for i, good in enumerate(GOODS):
+        prod = last["productionByGood"][i]
+        cons = last["consumptionByGood"][i]
+        unmet = last["unmetNeedByGood"][i]
+        surplus = prod - cons
+        print(f"  {good:8s}  {fmt(prod):>12s}  {fmt(cons):>12s}  {fmt(surplus):>12s}  {fmt(unmet):>12s}  {pct(cons, prod):>6s}")
+
+    total_prod = last["totalProduction"]
+    total_cons = last["totalConsumption"]
+    total_unmet = last["totalUnmetNeed"]
+    print(f"  {'TOTAL':8s}  {fmt(total_prod):>12s}  {fmt(total_cons):>12s}  {fmt(total_prod - total_cons):>12s}  {fmt(total_unmet):>12s}  {pct(total_cons, total_prod):>6s}")
+
+
+def print_stocks(data: dict):
+    section("STOCKPILE TRENDS")
+    ts = data["economy"]["timeSeries"]
+    first, last = ts[0], ts[-1]
+
+    print(f"  Total stock: {fmt(first['totalStock'])} -> {fmt(last['totalStock'])}  ({trend([first['totalStock'], last['totalStock']])})")
+    print()
+    print(f"  {'Good':8s}  {'Day 2':>10s}  {'Latest':>10s}  {'Change':>10s}")
+    print(f"  {'-'*8}  {'-'*10}  {'-'*10}  {'-'*10}")
+    for i, good in enumerate(GOODS):
+        s0 = first["stockByGood"][i]
+        s1 = last["stockByGood"][i]
+        print(f"  {good:8s}  {fmt(s0):>10s}  {fmt(s1):>10s}  {trend([s0, s1]):>10s}")
+
+    # County health
+    section("COUNTY HEALTH TRENDS")
+    print(f"  {'Metric':20s}  {'Day 2':>8s}  {'Latest':>8s}  {'Change':>8s}")
+    print(f"  {'-'*20}  {'-'*8}  {'-'*8}  {'-'*8}")
+    for key, label in [
+        ("surplusCounties", "Surplus counties"),
+        ("deficitCounties", "Deficit counties"),
+        ("starvingCounties", "Starving counties"),
+    ]:
+        v0, v1 = first[key], last[key]
+        delta = v1 - v0
+        sign = "+" if delta >= 0 else ""
+        print(f"  {label:20s}  {v0:>8d}  {v1:>8d}  {sign}{delta:>7d}")
+
+    # Find when starvation bottomed out
+    starving = [t["starvingCounties"] for t in ts]
+    min_starving = min(starving)
+    min_day = ts[starving.index(min_starving)]["day"]
+    print(f"\n  Starvation low: {min_starving} counties on day {min_day}")
+
+
+def print_fiscal(data: dict):
+    section("FISCAL SYSTEM (latest day)")
+    ts = data["economy"]["timeSeries"]
+    last = ts[-1]
+
+    print(f"  Ducal tax:       {fmt(last['ducalTax']):>10s}    Relief: {fmt(last['ducalRelief']):>10s}    Provincial stockpile: {fmt(last['provincialStockpile'])}")
+    print(f"  Royal tax:       {fmt(last['royalTax']):>10s}    Relief: {fmt(last['royalRelief']):>10s}    Royal stockpile:      {fmt(last['royalStockpile'])}")
+
+    print()
+    print(f"  {'Good':8s}  {'Ducal Tax':>12s}  {'Ducal Relief':>12s}  {'Royal Tax':>12s}")
+    print(f"  {'-'*8}  {'-'*12}  {'-'*12}  {'-'*12}")
+    for i, good in enumerate(GOODS):
+        dt = last["ducalTaxByGood"][i]
+        dr = last["ducalReliefByGood"][i]
+        rt = last["royalTaxByGood"][i]
+        print(f"  {good:8s}  {fmt(dt):>12s}  {fmt(dr):>12s}  {fmt(rt):>12s}")
+
+    # Fiscal evolution
+    section("FISCAL TRENDS (first 5 days vs last 5 days)")
+    early = ts[4:9]  # days 6-10 (first days with fiscal data)
+    late = ts[-5:]
+    if early and late:
+        avg_early_tax = sum(t["ducalTax"] for t in early) / len(early)
+        avg_late_tax = sum(t["ducalTax"] for t in late) / len(late)
+        avg_early_relief = sum(t["ducalRelief"] for t in early) / len(early)
+        avg_late_relief = sum(t["ducalRelief"] for t in late) / len(late)
+        print(f"  Avg ducal tax:    {fmt(avg_early_tax):>10s} -> {fmt(avg_late_tax):>10s}")
+        print(f"  Avg ducal relief: {fmt(avg_early_relief):>10s} -> {fmt(avg_late_relief):>10s}")
+        surplus_early = avg_early_tax - avg_early_relief
+        surplus_late = avg_late_tax - avg_late_relief
+        print(f"  Net ducal surplus:{fmt(surplus_early):>10s} -> {fmt(surplus_late):>10s}")
+
+
+def print_trade_snapshot(data: dict):
+    section("TRADE / FISCAL SNAPSHOT (end of sim)")
+    t = data["trade"]
+    print(f"  Tax-paying counties:      {t['taxPayingCounties']}")
+    print(f"  Relief-receiving counties: {t['reliefReceivingCounties']}")
+    print()
+    print(f"  {'Good':8s}  {'Ducal Tax':>12s}  {'Ducal Relief':>12s}")
+    print(f"  {'-'*8}  {'-'*12}  {'-'*12}")
+    for good in GOODS:
+        dt = t["ducalTaxByGood"].get(good, 0)
+        dr = t["ducalReliefByGood"].get(good, 0)
+        print(f"  {good:8s}  {fmt(dt):>12s}  {fmt(dr):>12s}")
+
+    # Provincial stockpiles
+    print()
+    print(f"  Total provincial stockpile: {fmt(t['totalProvincialStockpile'])}")
+    for good in GOODS:
+        v = t["provincialStockpileByGood"].get(good, 0)
+        print(f"    {good:8s}: {fmt(v)}")
+
+    # Royal stockpiles
+    print()
+    print(f"  Total royal stockpile: {fmt(t['totalRoyalStockpile'])}")
+    for good in GOODS:
+        v = t["royalStockpileByGood"].get(good, 0)
+        print(f"    {good:8s}: {fmt(v)}")
+
+    # Per-realm breakdown
+    print()
+    print(f"  Realm stockpiles (food):")
+    for r in t["realms"]:
+        food = r["stockpileByGood"].get("food", 0)
+        timber = r["stockpileByGood"].get("timber", 0)
+        ore = r["stockpileByGood"].get("ore", 0)
+        print(f"    Realm {r['id']:2d}: food={fmt(food):>8s}  timber={fmt(timber):>8s}  ore={fmt(ore):>8s}")
+
+
+def print_roads(data: dict):
+    section("ROAD NETWORK")
+    r = data["roads"]
+    print(f"  Total segments: {r['totalSegments']} ({r['roads']} roads + {r['paths']} paths)")
+    print(f"  Total traffic:  {fmt(r['totalTraffic'])}")
+    print()
+    print(f"  Top 5 busiest segments:")
+    seen = set()
+    top = []
+    for seg in r["busiestSegments"]:
+        key = (min(seg["cellA"], seg["cellB"]), max(seg["cellA"], seg["cellB"]))
+        if key not in seen:
+            seen.add(key)
+            top.append(seg)
+        if len(top) >= 5:
+            break
+    for seg in top:
+        print(f"    {seg['cellA']:>6d} <-> {seg['cellB']:>6d}  tier={seg['tier']:4s}  traffic={seg['traffic']:.2f}")
+
+
+def print_convergence(data: dict):
+    section("CONVERGENCE ANALYSIS")
+    ts = data["economy"]["timeSeries"]
+    if len(ts) < 20:
+        print("  Not enough data for convergence analysis")
+        return
+
+    # Check if food unmet need is converging
+    unmet_food = [t["unmetNeedByGood"][0] for t in ts]
+    unmet_total = [t["totalUnmetNeed"] for t in ts]
+    starving = [t["starvingCounties"] for t in ts]
+
+    # Rate of change over last 30 days
+    window = min(30, len(ts))
+    recent = ts[-window:]
+    food_rate = (recent[-1]["unmetNeedByGood"][0] - recent[0]["unmetNeedByGood"][0]) / window
+    starving_rate = (recent[-1]["starvingCounties"] - recent[0]["starvingCounties"]) / window
+    stock_rate = (recent[-1]["totalStock"] - recent[0]["totalStock"]) / window
+
+    print(f"  Last {window} days (daily averages):")
+    print(f"    Food unmet need change:  {food_rate:+.1f}/day")
+    print(f"    Starving counties change:{starving_rate:+.2f}/day")
+    print(f"    Total stock change:      {fmt(stock_rate)}/day")
+
+    # Steady state check: is stock growth slowing?
+    if len(ts) >= 60:
+        mid = len(ts) // 2
+        first_half_rate = (ts[mid]["totalStock"] - ts[0]["totalStock"]) / mid
+        second_half_rate = (ts[-1]["totalStock"] - ts[mid]["totalStock"]) / (len(ts) - mid)
+        print(f"\n  Stock growth rate: first half={fmt(first_half_rate)}/day, second half={fmt(second_half_rate)}/day")
+        if second_half_rate < first_half_rate * 0.5:
+            print("  -> Growth decelerating (approaching equilibrium)")
+        elif second_half_rate < first_half_rate:
+            print("  -> Growth slowing")
+        else:
+            print("  -> Growth not slowing (not yet near equilibrium)")
+
+    # Food specifically
+    total_pop = data["summary"]["totalPopulation"]
+    latest_food_unmet = ts[-1]["unmetNeedByGood"][0]
+    latest_food_prod = ts[-1]["productionByGood"][0]
+    print(f"\n  Food deficit: {fmt(latest_food_unmet)} unmet ({pct(latest_food_unmet, latest_food_prod)} of production)")
+    print(f"  Starving:     {ts[-1]['starvingCounties']}/{data['economy']['countyCount']} counties")
+
+    # Timber status
+    timber_unmet = ts[-1]["unmetNeedByGood"][1]
+    if timber_unmet == 0:
+        # Find when timber unmet hit 0
+        for t in ts:
+            if t["unmetNeedByGood"][1] == 0:
+                print(f"\n  Timber: fully supplied since day {t['day']}")
+                break
+    else:
+        print(f"\n  Timber: {fmt(timber_unmet)} still unmet")
+
+    # Ore status
+    ore_unmet = ts[-1]["unmetNeedByGood"][2]
+    print(f"  Ore:    {fmt(ore_unmet)} unmet ({pct(ore_unmet, ts[-1]['consumptionByGood'][2] + ore_unmet)} of demand)")
+
+
+def main():
+    path = sys.argv[1] if len(sys.argv) > 1 else None
+    data = load(path)
+
+    print_header(data)
+    print_performance(data)
+    print_economy(data)
+    print_stocks(data)
+    print_fiscal(data)
+    print_trade_snapshot(data)
+    print_roads(data)
+    print_convergence(data)
+    print()
+
+
+if __name__ == "__main__":
+    main()

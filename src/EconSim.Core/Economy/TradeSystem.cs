@@ -8,7 +8,7 @@ namespace EconSim.Core.Economy
 {
     /// <summary>
     /// Two-tier feudal redistribution. Runs daily AFTER EconomySystem.
-    /// Phase A: operates on food only. Timber/Ore redistribution deferred to Phase C.
+    /// All goods flow through the hierarchy independently.
     ///
     /// Phase 1: Duke taxes surplus counties → provincial stockpile
     /// Phase 2: King taxes surplus provincial stockpiles → royal stockpile
@@ -22,7 +22,8 @@ namespace EconSim.Core.Economy
         public string Name => "Trade";
         public int TickInterval => SimulationConfig.Intervals.Daily;
 
-        const int F = (int)GoodType.Food;
+        /// <summary>Daily consumption per person, per good. Matches EconomySystem.</summary>
+        static readonly float[] ConsumptionPerPop = { 1.0f, 0.2f, 0.01f };
 
         /// <summary>Fraction of surplus the duke takes from counties.</summary>
         const float DucalTaxRate = 0.20f;
@@ -59,139 +60,144 @@ namespace EconSim.Core.Economy
             // Reset per-tick accumulators
             ResetAccumulators(counties, provinces, realms);
 
-            // Phase 1: Duke taxes surplus counties (food only)
-            for (int p = 0; p < _provinceIds.Length; p++)
+            for (int g = 0; g < Goods.Count; g++)
             {
-                int provId = _provinceIds[p];
-                var pe = provinces[provId];
-                var countyIds = _provinceCounties[provId];
+                float consumeRate = ConsumptionPerPop[g];
 
-                for (int c = 0; c < countyIds.Length; c++)
+                // Phase 1: Duke taxes surplus counties
+                for (int p = 0; p < _provinceIds.Length; p++)
                 {
-                    var ce = counties[countyIds[c]];
-                    float dailyNeed = ce.Population;
-                    float surplus = ce.Stock[F] - dailyNeed;
+                    int provId = _provinceIds[p];
+                    var pe = provinces[provId];
+                    var countyIds = _provinceCounties[provId];
 
-                    if (surplus > 0f)
+                    for (int c = 0; c < countyIds.Length; c++)
                     {
-                        float tax = DucalTaxRate * surplus;
-                        ce.Stock[F] -= tax;
-                        ce.TaxPaid[F] = tax;
-                        pe.Stockpile[F] += tax;
-                        pe.TaxCollected[F] += tax;
+                        var ce = counties[countyIds[c]];
+                        float dailyNeed = ce.Population * consumeRate;
+                        float surplus = ce.Stock[g] - dailyNeed;
+
+                        if (surplus > 0f)
+                        {
+                            float tax = DucalTaxRate * surplus;
+                            ce.Stock[g] -= tax;
+                            ce.TaxPaid[g] += tax;
+                            pe.Stockpile[g] += tax;
+                            pe.TaxCollected[g] += tax;
+                        }
                     }
                 }
-            }
 
-            // Phase 2: King taxes surplus provincial stockpiles (food only)
-            for (int r = 0; r < _realmIds.Length; r++)
-            {
-                int realmId = _realmIds[r];
-                var re = realms[realmId];
-                var provIds = _realmProvinces[realmId];
-
-                for (int p = 0; p < provIds.Length; p++)
+                // Phase 2: King taxes surplus provincial stockpiles
+                for (int r = 0; r < _realmIds.Length; r++)
                 {
-                    var pe = provinces[provIds[p]];
-                    if (pe.Stockpile[F] <= 0f) continue;
+                    int realmId = _realmIds[r];
+                    var re = realms[realmId];
+                    var provIds = _realmProvinces[realmId];
 
-                    float tax = RoyalTaxRate * pe.Stockpile[F];
-                    pe.Stockpile[F] -= tax;
-                    re.Stockpile[F] += tax;
-                    re.TaxCollected[F] += tax;
-                }
-            }
+                    for (int p = 0; p < provIds.Length; p++)
+                    {
+                        var pe = provinces[provIds[p]];
+                        if (pe.Stockpile[g] <= 0f) continue;
 
-            // Phase 3: King distributes to deficit provinces (food only)
-            Span<float> provDeficits = stackalloc float[_maxProvincesPerRealm];
-            for (int r = 0; r < _realmIds.Length; r++)
-            {
-                int realmId = _realmIds[r];
-                var re = realms[realmId];
-                if (re.Stockpile[F] <= 0f) continue;
-
-                var provIds = _realmProvinces[realmId];
-
-                float totalDeficit = 0f;
-                for (int p = 0; p < provIds.Length; p++)
-                {
-                    float d = ComputeProvinceDeficit(
-                        provinces[provIds[p]], counties, _provinceCounties[provIds[p]]);
-                    provDeficits[p] = d;
-                    if (d > 0f)
-                        totalDeficit += d;
+                        float tax = RoyalTaxRate * pe.Stockpile[g];
+                        pe.Stockpile[g] -= tax;
+                        re.Stockpile[g] += tax;
+                        re.TaxCollected[g] += tax;
+                    }
                 }
 
-                if (totalDeficit <= 0f) continue;
-
-                float available = re.Stockpile[F];
-                for (int p = 0; p < provIds.Length; p++)
+                // Phase 3: King distributes to deficit provinces
+                Span<float> provDeficits = stackalloc float[_maxProvincesPerRealm];
+                for (int r = 0; r < _realmIds.Length; r++)
                 {
-                    if (provDeficits[p] <= 0f) continue;
+                    int realmId = _realmIds[r];
+                    var re = realms[realmId];
+                    if (re.Stockpile[g] <= 0f) continue;
 
-                    float share = provDeficits[p] / totalDeficit;
-                    float relief = Math.Min(share * available, provDeficits[p]);
-                    provinces[provIds[p]].Stockpile[F] += relief;
-                    re.Stockpile[F] -= relief;
-                    re.ReliefGiven[F] += relief;
+                    var provIds = _realmProvinces[realmId];
+
+                    float totalDeficit = 0f;
+                    for (int p = 0; p < provIds.Length; p++)
+                    {
+                        float d = ComputeProvinceDeficit(
+                            g, consumeRate, provinces[provIds[p]], counties, _provinceCounties[provIds[p]]);
+                        provDeficits[p] = d;
+                        if (d > 0f)
+                            totalDeficit += d;
+                    }
+
+                    if (totalDeficit <= 0f) continue;
+
+                    float available = re.Stockpile[g];
+                    for (int p = 0; p < provIds.Length; p++)
+                    {
+                        if (provDeficits[p] <= 0f) continue;
+
+                        float share = provDeficits[p] / totalDeficit;
+                        float relief = Math.Min(share * available, provDeficits[p]);
+                        provinces[provIds[p]].Stockpile[g] += relief;
+                        re.Stockpile[g] -= relief;
+                        re.ReliefGiven[g] += relief;
+                    }
                 }
-            }
 
-            // Phase 4: Duke distributes provincial stockpile to deficit counties (food only)
-            for (int p = 0; p < _provinceIds.Length; p++)
-            {
-                int provId = _provinceIds[p];
-                var pe = provinces[provId];
-                if (pe.Stockpile[F] <= 0f) continue;
-
-                var countyIds = _provinceCounties[provId];
-
-                float totalDeficit = 0f;
-                for (int c = 0; c < countyIds.Length; c++)
+                // Phase 4: Duke distributes provincial stockpile to deficit counties
+                for (int p = 0; p < _provinceIds.Length; p++)
                 {
-                    var ce = counties[countyIds[c]];
-                    float deficit = ce.Population - ce.Stock[F];
-                    if (deficit > 0f)
-                        totalDeficit += deficit;
-                }
+                    int provId = _provinceIds[p];
+                    var pe = provinces[provId];
+                    if (pe.Stockpile[g] <= 0f) continue;
 
-                if (totalDeficit <= 0f) continue;
+                    var countyIds = _provinceCounties[provId];
 
-                float available = pe.Stockpile[F];
-                for (int c = 0; c < countyIds.Length; c++)
-                {
-                    var ce = counties[countyIds[c]];
-                    float deficit = ce.Population - ce.Stock[F];
-                    if (deficit <= 0f) continue;
+                    float totalDeficit = 0f;
+                    for (int c = 0; c < countyIds.Length; c++)
+                    {
+                        var ce = counties[countyIds[c]];
+                        float deficit = ce.Population * consumeRate - ce.Stock[g];
+                        if (deficit > 0f)
+                            totalDeficit += deficit;
+                    }
 
-                    float share = deficit / totalDeficit;
-                    float relief = Math.Min(share * available, deficit);
-                    ce.Stock[F] += relief;
-                    ce.Relief[F] = relief;
-                    pe.Stockpile[F] -= relief;
-                    pe.ReliefGiven[F] += relief;
+                    if (totalDeficit <= 0f) continue;
+
+                    float available = pe.Stockpile[g];
+                    for (int c = 0; c < countyIds.Length; c++)
+                    {
+                        var ce = counties[countyIds[c]];
+                        float deficit = ce.Population * consumeRate - ce.Stock[g];
+                        if (deficit <= 0f) continue;
+
+                        float share = deficit / totalDeficit;
+                        float relief = Math.Min(share * available, deficit);
+                        ce.Stock[g] += relief;
+                        ce.Relief[g] += relief;
+                        pe.Stockpile[g] -= relief;
+                        pe.ReliefGiven[g] += relief;
+                    }
                 }
             }
         }
 
         /// <summary>
-        /// Sum of (dailyNeed - stock) across deficit counties in a province (food only).
+        /// Sum of (dailyNeed - stock) across deficit counties in a province for a single good.
         /// Accounts for what the provincial stockpile could cover locally.
         /// </summary>
         static float ComputeProvinceDeficit(
-            ProvinceEconomy pe, CountyEconomy[] counties, int[] countyIds)
+            int g, float consumeRate, ProvinceEconomy pe, CountyEconomy[] counties, int[] countyIds)
         {
             float totalDeficit = 0f;
             for (int c = 0; c < countyIds.Length; c++)
             {
                 var ce = counties[countyIds[c]];
-                float deficit = ce.Population - ce.Stock[F];
+                float deficit = ce.Population * consumeRate - ce.Stock[g];
                 if (deficit > 0f)
                     totalDeficit += deficit;
             }
 
             // Province can cover some of the deficit locally
-            return Math.Max(0f, totalDeficit - pe.Stockpile[F]);
+            return Math.Max(0f, totalDeficit - pe.Stockpile[g]);
         }
 
         void ResetAccumulators(
@@ -201,23 +207,32 @@ namespace EconSim.Core.Economy
             {
                 int provId = _provinceIds[p];
                 var pe = provinces[provId];
-                pe.TaxCollected[F] = 0f;
-                pe.ReliefGiven[F] = 0f;
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    pe.TaxCollected[g] = 0f;
+                    pe.ReliefGiven[g] = 0f;
+                }
 
                 var countyIds = _provinceCounties[provId];
                 for (int c = 0; c < countyIds.Length; c++)
                 {
                     var ce = counties[countyIds[c]];
-                    ce.TaxPaid[F] = 0f;
-                    ce.Relief[F] = 0f;
+                    for (int g = 0; g < Goods.Count; g++)
+                    {
+                        ce.TaxPaid[g] = 0f;
+                        ce.Relief[g] = 0f;
+                    }
                 }
             }
 
             for (int r = 0; r < _realmIds.Length; r++)
             {
                 var re = realms[_realmIds[r]];
-                re.TaxCollected[F] = 0f;
-                re.ReliefGiven[F] = 0f;
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    re.TaxCollected[g] = 0f;
+                    re.ReliefGiven[g] = 0f;
+                }
             }
         }
 

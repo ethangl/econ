@@ -624,6 +624,28 @@ namespace EconSim.Editor
                 j.KV("royalRelief", snap.TotalRoyalRelief);
                 j.KV("royalStockpile", snap.TotalRoyalStockpile);
 
+                if (snap.TotalDucalTaxByGood != null)
+                {
+                    j.Key("ducalTaxByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalDucalTaxByGood.Length; g++)
+                        j.Val(snap.TotalDucalTaxByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalDucalReliefByGood != null)
+                {
+                    j.Key("ducalReliefByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalDucalReliefByGood.Length; g++)
+                        j.Val(snap.TotalDucalReliefByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalRoyalTaxByGood != null)
+                {
+                    j.Key("royalTaxByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalRoyalTaxByGood.Length; g++)
+                        j.Val(snap.TotalRoyalTaxByGood[g]);
+                    j.ArrClose();
+                }
+
                 // Per-good breakdowns
                 if (snap.TotalStockByGood != null)
                 {
@@ -673,11 +695,13 @@ namespace EconSim.Editor
                 return;
             }
 
+            string[] goodNames = { "food", "timber", "ore" };
             const int F = (int)GoodType.Food;
 
-            // County-level stats
+            // County-level stats (per-good)
             int countyCount = 0;
-            float totalTaxPaid = 0f, totalRelief = 0f;
+            float[] totalTaxPaid = new float[Goods.Count];
+            float[] totalRelief = new float[Goods.Count];
             int taxPayingCounties = 0, reliefReceivingCounties = 0;
 
             for (int i = 0; i < econ.Counties.Length; i++)
@@ -685,57 +709,85 @@ namespace EconSim.Editor
                 var ce = econ.Counties[i];
                 if (ce == null) continue;
                 countyCount++;
-                totalTaxPaid += ce.TaxPaid[F];
-                totalRelief += ce.Relief[F];
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    totalTaxPaid[g] += ce.TaxPaid[g];
+                    totalRelief[g] += ce.Relief[g];
+                }
                 if (ce.TaxPaid[F] > 0f) taxPayingCounties++;
                 if (ce.Relief[F] > 0f) reliefReceivingCounties++;
             }
 
             j.KV("countyCount", countyCount);
-            j.KV("totalDucalTax", totalTaxPaid);
-            j.KV("totalDucalRelief", totalRelief);
+            // Backward compat: food-only scalars
+            j.KV("totalDucalTax", totalTaxPaid[F]);
+            j.KV("totalDucalRelief", totalRelief[F]);
             j.KV("taxPayingCounties", taxPayingCounties);
             j.KV("reliefReceivingCounties", reliefReceivingCounties);
 
-            // Per-province summary
+            // Per-good county tax/relief
+            j.Key("ducalTaxByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+                j.KV(goodNames[g], totalTaxPaid[g]);
+            j.ObjClose();
+            j.Key("ducalReliefByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+                j.KV(goodNames[g], totalRelief[g]);
+            j.ObjClose();
+
+            // Per-province summary (per-good stockpiles)
             j.Key("provinces"); j.ArrOpen();
-            float totalProvStockpile = 0f;
+            float[] totalProvStockpile = new float[Goods.Count];
             for (int i = 0; i < econ.Provinces.Length; i++)
             {
                 var pe = econ.Provinces[i];
                 if (pe == null) continue;
-                totalProvStockpile += pe.Stockpile[F];
+                for (int g = 0; g < Goods.Count; g++)
+                    totalProvStockpile[g] += pe.Stockpile[g];
 
                 j.ObjOpen();
                 j.KV("id", i);
                 j.KV("stockpile", pe.Stockpile[F]);
-                j.KV("taxCollected", pe.TaxCollected[F]);
-                j.KV("reliefGiven", pe.ReliefGiven[F]);
+                j.Key("stockpileByGood"); j.ObjOpen();
+                for (int g = 0; g < Goods.Count; g++)
+                    j.KV(goodNames[g], pe.Stockpile[g]);
+                j.ObjClose();
                 j.ObjClose();
             }
             j.ArrClose();
-            j.KV("totalProvincialStockpile", totalProvStockpile);
+            j.KV("totalProvincialStockpile", totalProvStockpile[F]);
+            j.Key("provincialStockpileByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+                j.KV(goodNames[g], totalProvStockpile[g]);
+            j.ObjClose();
 
-            // Per-realm summary
+            // Per-realm summary (per-good stockpiles)
             if (econ.Realms != null)
             {
                 j.Key("realms"); j.ArrOpen();
-                float totalRealmStockpile = 0f;
+                float[] totalRealmStockpile = new float[Goods.Count];
                 for (int i = 0; i < econ.Realms.Length; i++)
                 {
                     var re = econ.Realms[i];
                     if (re == null) continue;
-                    totalRealmStockpile += re.Stockpile[F];
+                    for (int g = 0; g < Goods.Count; g++)
+                        totalRealmStockpile[g] += re.Stockpile[g];
 
                     j.ObjOpen();
                     j.KV("id", i);
                     j.KV("stockpile", re.Stockpile[F]);
-                    j.KV("taxCollected", re.TaxCollected[F]);
-                    j.KV("reliefGiven", re.ReliefGiven[F]);
+                    j.Key("stockpileByGood"); j.ObjOpen();
+                    for (int g = 0; g < Goods.Count; g++)
+                        j.KV(goodNames[g], re.Stockpile[g]);
+                    j.ObjClose();
                     j.ObjClose();
                 }
                 j.ArrClose();
-                j.KV("totalRoyalStockpile", totalRealmStockpile);
+                j.KV("totalRoyalStockpile", totalRealmStockpile[F]);
+                j.Key("royalStockpileByGood"); j.ObjOpen();
+                for (int g = 0; g < Goods.Count; g++)
+                    j.KV(goodNames[g], totalRealmStockpile[g]);
+                j.ObjClose();
             }
 
             j.ObjClose();

@@ -67,7 +67,7 @@ Goods flow county → province → realm → province → county in a single tic
 - `Economy/EconomySnapshot.cs` — adds ducal/royal tax/relief/stockpile aggregates
 - `Economy/TradeSystem.cs` — ITickSystem (daily): builds province/realm mappings at init, 4-phase tick
 
-## Layer 3: Multiple Goods (current)
+## Layer 3: Multiple Goods (complete)
 
 Split "Goods" into distinct types (food, timber, ore). Each biome produces different goods at different rates. Counties now have comparative advantage. Units: **kg** per person per day for all goods.
 
@@ -82,7 +82,7 @@ Per-good production with food-only consumption and redistribution. Timber/Ore ac
 - `BiomeProductivity` → 2D table (biomeId × goodType)
 - Production loop produces all goods; consumption and redistribution operate on food index only
 
-### Phase B: Multi-Good Consumption (current)
+### Phase B: Multi-Good Consumption (complete)
 
 All goods consumed daily. Food is a staple (shortfall = starvation). Timber/Ore are comfort goods (shortfall = unmet need, no starvation).
 
@@ -90,9 +90,9 @@ All goods consumed daily. Food is a staple (shortfall = starvation). Timber/Ore 
 
 **Behavior:** Each good consumed independently from county stock. Unmet need tracked per good type. `StarvingCounties` count still based on food only — comfort shortfall has no gameplay consequence yet (observable data for future welfare mechanics).
 
-### Phase C: Per-Good Feudal Redistribution
+### Phase C: Per-Good Feudal Redistribution (complete)
 
-Tax and relief flows operate per good type. Timber/Ore flow through the feudal hierarchy alongside food.
+Tax and relief flows operate per good type. Timber/Ore flow through the feudal hierarchy alongside food. Same tax rates (20% ducal, 20% royal) and proportional allocation logic per good. Surplus threshold per good = `Population * ConsumptionPerPop[g]`.
 
 ### Biome Productivity Table (kg/person/day)
 
