@@ -36,10 +36,6 @@ namespace EconSim.Core.Simulation.Systems
         private const float V2ProcessingDemandFloorKg = 0.5f;
         private const float GrainReserveTargetDays = 540f; // 1.5 years of staple reserve.
         private const float MillDemandBufferFactor = 1.10f;
-        private const float MaltTargetDaysCover = 14f;
-        private const float MaltDesiredRampUpFractionPerDay = 0.20f;
-        private const float MaltDesiredRampDownFractionPerDay = 0.20f;
-        private const float MaltDesiredMinStepKgPerDay = 10f;
         private static readonly string[] ReserveGrainGoods = { "wheat", "rye", "barley", "rice_grain" };
 
         private readonly Dictionary<string, float> _producedThisTick = new Dictionary<string, float>();
@@ -51,8 +47,6 @@ namespace EconSim.Core.Simulation.Systems
         private readonly Dictionary<int, List<int>> _downstreamOutputsByInputRuntimeId = new Dictionary<int, List<int>>();
         private readonly Dictionary<long, bool> _demandReachabilityMemo = new Dictionary<long, bool>();
         private readonly HashSet<int> _demandReachabilityVisited = new HashSet<int>();
-        private readonly Dictionary<int, float> _maltDesiredByMarket = new Dictionary<int, float>();
-        private readonly Dictionary<int, int> _maltDesiredDayByMarket = new Dictionary<int, int>();
         private readonly Dictionary<int, float> _globalDemandByRuntimeId = new Dictionary<int, float>();
         private readonly Dictionary<int, float> _globalSupplyByRuntimeId = new Dictionary<int, float>();
 
@@ -62,8 +56,6 @@ namespace EconSim.Core.Simulation.Systems
             if (economy == null) return;
 
             _goodRuntimeIdCache.Clear();
-            _maltDesiredByMarket.Clear();
-            _maltDesiredDayByMarket.Clear();
             RebuildDownstreamDemandGraph(economy);
 
             var facilityCounts = new Dictionary<string, int>();
@@ -206,7 +198,7 @@ namespace EconSim.Core.Simulation.Systems
                 || (market != null && outputRuntimeId >= 0 && HasDirectOrDownstreamDemand(economy, market, outputRuntimeId));
             if (!hasDemandPull
                 && outputRuntimeId >= 0
-                && IsGlobalDemandDrivenFacility(def)
+                && ShouldDemandLimitProcessing(def)
                 && HasGlobalDemandPressure(outputRuntimeId))
             {
                 hasDemandPull = true;
@@ -604,27 +596,9 @@ namespace EconSim.Core.Simulation.Systems
 
             if (ShouldDemandLimitProcessing(def))
             {
-                var market = economy.GetMarketForCounty(facility.CountyId);
-                if (market != null && market.TryGetGoodState(outputRuntimeId, out var outputState))
-                {
-                    if (string.Equals(def.Id, "malt_house", StringComparison.OrdinalIgnoreCase))
-                    {
-                        float desiredThroughput = ComputeMaltHouseDerivedDemandThroughput(economy, market, outputState, currentDay);
-                        throughput = Math.Min(throughput, desiredThroughput);
-                    }
-                    else if (string.Equals(def.Id, "brewery", StringComparison.OrdinalIgnoreCase))
-                    {
-                        float unmetDemand = GetGlobalUnmetDemand(outputRuntimeId);
-                        float demandLimitedThroughput = unmetDemand * MillDemandBufferFactor;
-                        throughput = Math.Min(throughput, demandLimitedThroughput);
-                    }
-                    else
-                    {
-                        float unmetDemand = Math.Max(0f, outputState.Demand - outputState.Supply);
-                        float demandLimitedThroughput = unmetDemand * MillDemandBufferFactor;
-                        throughput = Math.Min(throughput, demandLimitedThroughput);
-                    }
-                }
+                float unmetDemand = GetGlobalUnmetDemand(outputRuntimeId);
+                float demandLimitedThroughput = unmetDemand * MillDemandBufferFactor;
+                throughput = Math.Min(throughput, demandLimitedThroughput);
             }
 
             if (throughput <= 0.001f)
@@ -934,7 +908,7 @@ namespace EconSim.Core.Simulation.Systems
             if (def == null)
                 return false;
 
-            return def.Id == "mill" || def.Id == "rye_mill" || def.Id == "barley_mill";
+            return def.Id == "mill";
         }
 
         private static bool ShouldDemandLimitProcessing(FacilityDef def)
@@ -946,14 +920,6 @@ namespace EconSim.Core.Simulation.Systems
                 return true;
 
             return def.Id == "bakery" || def.Id == "brewery" || def.Id == "malt_house";
-        }
-
-        private static bool IsGlobalDemandDrivenFacility(FacilityDef def)
-        {
-            if (def == null)
-                return false;
-
-            return string.Equals(def.Id, "brewery", StringComparison.OrdinalIgnoreCase);
         }
 
         private void RebuildGlobalGoodSignals(EconomyState economy)
@@ -1029,105 +995,6 @@ namespace EconSim.Core.Simulation.Systems
                 return false;
 
             return IsReserveGrainGood(good.Id);
-        }
-
-        private float ComputeMaltHouseDerivedDemandThroughput(
-            EconomyState economy,
-            Market market,
-            MarketGoodState maltState,
-            int currentDay)
-        {
-            if (economy == null || market == null || maltState == null)
-                return 0f;
-
-            if (!economy.Goods.TryGetRuntimeId("beer", out int beerRuntimeId) || beerRuntimeId < 0)
-                return 0f;
-            if (!market.TryGetGoodState(beerRuntimeId, out var beerState) || beerState == null)
-                return 0f;
-
-            float projectedBeerDemandKg = Math.Max(0f, Math.Max(beerState.LastTradeVolume, beerState.Demand));
-            if (projectedBeerDemandKg <= 0.001f)
-                return 0f;
-
-            float beerPerMaltKg = Math.Max(0.001f, SimulationConfig.Economy.BeerKgPerMaltKg);
-            float requiredMaltPerDay = projectedBeerDemandKg / beerPerMaltKg;
-            float targetMaltInventory = requiredMaltPerDay * MaltTargetDaysCover;
-            float currentMaltInventory = Math.Max(0f, maltState.SupplyOffered);
-
-            float totalDesiredForMarket;
-            if (targetMaltInventory > 0f && currentMaltInventory >= targetMaltInventory)
-            {
-                totalDesiredForMarket = 0f;
-            }
-            else
-            {
-                float refillGap = Math.Max(0f, targetMaltInventory - currentMaltInventory);
-                totalDesiredForMarket = requiredMaltPerDay + Math.Min(requiredMaltPerDay, refillGap);
-            }
-
-            totalDesiredForMarket = ApplyMaltDesiredDamping(market.Id, currentDay, totalDesiredForMarket);
-
-            int activeMaltHouses = CountActiveFacilitiesForMarketAndType(economy, market.Id, "malt_house");
-            if (activeMaltHouses <= 0)
-                activeMaltHouses = 1;
-
-            return Math.Max(0f, totalDesiredForMarket / activeMaltHouses);
-        }
-
-        private float ApplyMaltDesiredDamping(int marketId, int currentDay, float desiredTotalForMarket)
-        {
-            desiredTotalForMarket = Math.Max(0f, desiredTotalForMarket);
-
-            if (!_maltDesiredByMarket.TryGetValue(marketId, out float previous))
-            {
-                _maltDesiredByMarket[marketId] = desiredTotalForMarket;
-                _maltDesiredDayByMarket[marketId] = currentDay;
-                return desiredTotalForMarket;
-            }
-
-            if (_maltDesiredDayByMarket.TryGetValue(marketId, out int lastDay) && lastDay == currentDay)
-                return previous;
-
-            float delta = desiredTotalForMarket - previous;
-            float rampFraction = delta >= 0f
-                ? MaltDesiredRampUpFractionPerDay
-                : MaltDesiredRampDownFractionPerDay;
-            float stepCap = Math.Max(MaltDesiredMinStepKgPerDay, Math.Max(previous, desiredTotalForMarket) * rampFraction);
-            float clampedDelta = Math.Max(-stepCap, Math.Min(stepCap, delta));
-            float next = Math.Max(0f, previous + clampedDelta);
-
-            _maltDesiredByMarket[marketId] = next;
-            _maltDesiredDayByMarket[marketId] = currentDay;
-            return next;
-        }
-
-        private static int CountActiveFacilitiesForMarketAndType(
-            EconomyState economy,
-            int marketId,
-            string facilityTypeId)
-        {
-            if (economy == null || marketId <= 0 || string.IsNullOrWhiteSpace(facilityTypeId))
-                return 0;
-
-            var facilities = economy.GetFacilitiesDense();
-            int count = 0;
-            for (int i = 0; i < facilities.Count; i++)
-            {
-                var facility = facilities[i];
-                if (facility == null || !facility.IsActive || facility.AssignedWorkers <= 0)
-                    continue;
-
-                if (!string.Equals(facility.TypeId, facilityTypeId, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                if (!economy.CountyToMarket.TryGetValue(facility.CountyId, out int facilityMarketId))
-                    continue;
-
-                if (facilityMarketId == marketId)
-                    count++;
-            }
-
-            return count;
         }
 
         private static float ComputeCountyGrainReserveTargetKg(EconomyState economy, CountyEconomy county)

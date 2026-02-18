@@ -84,14 +84,14 @@ namespace EconSim.Core.Simulation
             /// <summary>
             /// Share of staple flour demand covered by local subsistence stockpile before
             /// remaining demand is routed to markets.
-            /// 0.99 means 99% subsistence / 1% market.
+            /// 0.00 means no subsistence offset.
             /// </summary>
-            public const float BreadSubsistenceShare = 0.99f;
+            public const float BreadSubsistenceShare = 0.00f;
 
             /// <summary>
             /// Share of beer demand covered by local home brewing from county grain stockpiles
             /// before remaining demand is routed to markets.
-            /// 0.00 means 0% home-brew / 100% market.
+            /// 0.00 means no subsistence offset.
             /// </summary>
             public const float BeerSubsistenceShare = 0.00f;
 
@@ -101,6 +101,26 @@ namespace EconSim.Core.Simulation
             /// Tuned to be microscopic at short distances.
             /// </summary>
             public const float FlatHaulingFeePerKgPerTransportCostUnit = 0.00002f;
+
+            /// <summary>
+            /// Cold-start bootstrap: initial staffing share assigned to each active facility.
+            /// </summary>
+            public const float BootstrapFacilityEmploymentShare = 0.40f;
+
+            /// <summary>
+            /// Cold-start bootstrap: days of input inventory seeded into processing facilities.
+            /// </summary>
+            public const float BootstrapProcessingInputBufferDays = 3f;
+
+            /// <summary>
+            /// Cold-start bootstrap: county grain reserve target in days of staple raw-grain need.
+            /// </summary>
+            public const float BootstrapGrainReserveDays = 90f;
+
+            /// <summary>
+            /// Cold-start bootstrap: county salt reserve per capita in kilograms.
+            /// </summary>
+            public const float BootstrapSaltReserveKgPerCapita = 0.25f;
 
             /// <summary>
             /// Grain-to-flour conversion baseline used across reserve and subsistence logic.
@@ -116,6 +136,21 @@ namespace EconSim.Core.Simulation
             public const float BeerKgPerMaltKg = 3f;
             public const float BeerKgPerRawBarleyKg = MaltKgPerRawBarleyKg * BeerKgPerMaltKg;
             public const float RawBarleyKgPerBeerKg = 1f / BeerKgPerRawBarleyKg;
+
+            private const float DefaultBootstrapMarketInventoryWeeks = 2f;
+            private static readonly Dictionary<string, float> BootstrapMarketInventoryWeeksByGood =
+                new Dictionary<string, float>(System.StringComparer.OrdinalIgnoreCase)
+            {
+                ["wheat"] = 6f,
+                ["rye"] = 2f,
+                ["barley"] = 2f,
+                ["flour"] = 6f,
+                ["bread"] = 3f,
+                ["malt"] = 4f,
+                ["beer"] = 3f,
+                ["raw_salt"] = 0.25f,
+                ["salt"] = 0.10f,
+            };
 
             private static readonly HashSet<string> EnabledGoods = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
             {
@@ -159,6 +194,15 @@ namespace EconSim.Core.Simulation
                 if (string.IsNullOrWhiteSpace(facilityTypeId))
                     return false;
                 return EnabledFacilities.Contains(facilityTypeId);
+            }
+
+            public static float GetBootstrapMarketInventoryWeeks(string goodId)
+            {
+                if (string.IsNullOrWhiteSpace(goodId))
+                    return DefaultBootstrapMarketInventoryWeeks;
+                if (BootstrapMarketInventoryWeeksByGood.TryGetValue(goodId, out float weeks))
+                    return weeks;
+                return DefaultBootstrapMarketInventoryWeeks;
             }
         }
 

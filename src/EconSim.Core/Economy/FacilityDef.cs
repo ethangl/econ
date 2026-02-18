@@ -48,8 +48,7 @@ namespace EconSim.Core.Economy
 
         /// <summary>
         /// Optional: override the output good's default Inputs for this facility.
-        /// Allows multiple facility types to produce the same good from different inputs
-        /// (e.g. rye_mill produces flour from rye instead of grain).
+        /// Allows facility-specific alternate recipes.
         /// </summary>
         public List<GoodInput> InputOverrides;
 

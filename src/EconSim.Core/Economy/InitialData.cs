@@ -100,11 +100,6 @@ namespace EconSim.Core.Economy
                     {
                         Id = "rye_fallback",
                         Inputs = new List<GoodInput> { new GoodInput("rye", 1f / 0.75f) } // 75% yield
-                    },
-                    new GoodInputVariant
-                    {
-                        Id = "barley_last_resort",
-                        Inputs = new List<GoodInput> { new GoodInput("barley", 1f / 0.65f) } // 65% yield
                     }
                 },
                 FacilityType = "mill",
@@ -124,11 +119,11 @@ namespace EconSim.Core.Economy
                 Inputs = new List<GoodInput> { new GoodInput("flour", 1f / 1.4f) }, // 1.4 kg bread per 1 kg flour
                 FacilityType = "bakery",
                 ProcessingTicks = 1,
-                NeedCategory = NeedCategory.Comfort,
-                BaseConsumption = 40f / 365f,  // Market-purchased baked bread on top of staple flour
+                NeedCategory = NeedCategory.Basic,
+                BaseConsumption = 0.25f,  // Target bread consumption: 0.25 kg/person/day
                 DecayRate = 0.25f,  // 25% per day - stale in 3-4 days
                 TheftRisk = 0f,
-                BasePrice = 5.0f   // Comfort-tier prepared food markup over flour
+                BasePrice = 5.0f   // Prepared food markup over flour
             });
 
             // =============================================
@@ -539,8 +534,8 @@ namespace EconSim.Core.Economy
             });
 
             // =============================================
-            // CHAIN 12: Beer (Barley → Malt → Beer)
-            // Competes with barley_mill for barley supply
+            // CHAIN 12: Beer (Barley -> Malt -> Beer)
+            // Barley is isolated to beer production for now.
             // =============================================
 
             registry.Register(new GoodDef
@@ -565,7 +560,7 @@ namespace EconSim.Core.Economy
                 FacilityType = "brewery",
                 ProcessingTicks = 2,
                 NeedCategory = NeedCategory.Basic,
-                BaseConsumption = 0.5f,  // Market-only proxy: halve direct market need to represent prior subsistence share
+                BaseConsumption = 0.75f,  // Daily market demand target: 0.75 kg/person
                 DecayRate = 0.06f,  // 6% per day - beer quality collapses over ~2 weeks
                 TheftRisk = 0.3f,  // Bulky liquid, moderate value
                 BasePrice = 0.04f  // 0.04 Crowns/kg historical proxy pricing
@@ -664,7 +659,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "wheat",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 140000f / 365f, // 100x baseline: 140,000 kg/year at full staffing
+                BaseThroughput = 7000f / 365f, // 7,000 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Grassland", "Savanna" }
             });
@@ -676,7 +671,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "rye",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 150000f / 365f, // 100x baseline: 150,000 kg/year at full staffing
+                BaseThroughput = 500f / 365f, // 500 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Steppe", "Taiga" }
             });
@@ -688,7 +683,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "barley",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 32000f / 365f, // 20x baseline: 32,000 kg/year at full staffing
+                BaseThroughput = 3500f / 365f, // 3,500 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Highland", "Steppe" }
             });
@@ -809,7 +804,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "sheep",
                 LaborRequired = 12,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 6f,
+                BaseThroughput = 4f,
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Grassland", "Steppe", "Highland" }
             });
@@ -821,7 +816,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "dye_plants",
                 LaborRequired = 15,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 4f,
+                BaseThroughput = 6f,
                 IsExtraction = true,
                 TerrainRequirements = new List<string> {
                     "Tropical seasonal forest",
@@ -837,7 +832,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "raw_salt",
                 LaborRequired = 15,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 6f,
+                BaseThroughput = 3f,
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Taiga", "Tundra", "Coastal Marsh" }
             });
@@ -853,32 +848,8 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "flour",
                 LaborRequired = 1,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 20000f / 365f, // 20,000 kg/year at full staffing
+                BaseThroughput = 8000f / 365f, // 8,000 kg/year at full staffing
                 IsExtraction = false
-            });
-
-            registry.Register(new FacilityDef
-            {
-                Id = "rye_mill",
-                Name = "Rye Mill",
-                OutputGoodId = "flour",
-                LaborRequired = 1,
-                LaborType = LaborType.Skilled,
-                BaseThroughput = 20000f / 365f, // 20,000 kg/year at full staffing
-                IsExtraction = false,
-                InputOverrides = new List<GoodInput> { new GoodInput("rye", 1f / 0.75f) } // 75% yield
-            });
-
-            registry.Register(new FacilityDef
-            {
-                Id = "barley_mill",
-                Name = "Barley Mill",
-                OutputGoodId = "flour",
-                LaborRequired = 1,
-                LaborType = LaborType.Skilled,
-                BaseThroughput = 20000f / 365f, // 20,000 kg/year at full staffing
-                IsExtraction = false,
-                InputOverrides = new List<GoodInput> { new GoodInput("barley", 1f / 0.65f) } // 65% yield
             });
 
             registry.Register(new FacilityDef
@@ -900,7 +871,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "bread",
                 LaborRequired = 4,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 60000f / 365f, // 60,000 kg/year at full staffing
+                BaseThroughput = 14000f / 365f, // 14,000 kg/year at full staffing
                 IsExtraction = false
             });
 
@@ -1087,7 +1058,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "salt",
                 LaborRequired = 3,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 4f,
+                BaseThroughput = 0.2f,
                 IsExtraction = false
             });
 
@@ -1098,7 +1069,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "malt",
                 LaborRequired = 4,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 25000f / 365f, // 25,000 kg/year at full staffing
+                BaseThroughput = 2000f / 365f, // 2,000 kg/year at full staffing
                 IsExtraction = false
             });
 
@@ -1109,7 +1080,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "beer",
                 LaborRequired = 5,
                 LaborType = LaborType.Skilled,
-                BaseThroughput = 75000f / 365f, // 75,000 kg/year at full staffing
+                BaseThroughput = 18000f / 365f, // 18,000 kg/year at full staffing
                 IsExtraction = false
             });
 

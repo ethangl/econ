@@ -246,6 +246,41 @@ namespace EconSim.Core.Economy
             CellToMarket.Clear();
             CountyToMarket.Clear();
             CountyToMarketCost.Clear();
+
+            int soleLegitimateMarketId = 0;
+            foreach (var market in Markets.Values)
+            {
+                if (market == null || market.Type != MarketType.Legitimate)
+                    continue;
+
+                if (soleLegitimateMarketId == 0)
+                {
+                    soleLegitimateMarketId = market.Id;
+                }
+                else
+                {
+                    soleLegitimateMarketId = -1;
+                    break;
+                }
+            }
+
+            // Simplified market model: if there is only one legitimate market, every county/cell belongs to it.
+            if (soleLegitimateMarketId > 0)
+            {
+                foreach (var kvp in CellToCounty)
+                {
+                    CellToMarket[kvp.Key] = soleLegitimateMarketId;
+                }
+
+                foreach (var countyEcon in Counties.Values)
+                {
+                    CountyToMarket[countyEcon.CountyId] = soleLegitimateMarketId;
+                    CountyToMarketCost[countyEcon.CountyId] = 0f;
+                }
+
+                return;
+            }
+
             var cellToCost = new Dictionary<int, float>();
             var countyCells = new Dictionary<int, List<int>>();
 
