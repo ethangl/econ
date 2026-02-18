@@ -667,10 +667,9 @@ namespace EconSim.Core.Simulation.Systems
             float clearingPrice,
             Dictionary<int, float> minPriceBySeller)
         {
-            if (minPriceBySeller == null || !minPriceBySeller.TryGetValue(sellerId, out float minPrice))
-                return true;
-
-            return clearingPrice + 0.0001f >= Math.Max(0f, minPrice);
+            // Simplified market model: treat all offered lots as price-eligible.
+            // This avoids floor-lock pathologies while we stabilize core flow behavior.
+            return true;
         }
 
         private static float ComputeMinimumSellerFloor(

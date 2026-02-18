@@ -17,7 +17,7 @@ namespace EconSim.Core.Simulation
     /// </summary>
     public class SimulationRunner : ISimulation
     {
-        private const int BootstrapCacheVersion = 9;
+        private const int BootstrapCacheVersion = 10;
         private const int BootstrapCacheHeaderMagic = unchecked((int)0xEC0A571C);
         private const string BootstrapCacheFileName = "simulation_bootstrap.bin";
         private static readonly int BootstrapCacheSchemaHash = ComputeBootstrapCacheSchemaHash();
@@ -603,43 +603,61 @@ namespace EconSim.Core.Simulation
 
         private void InitializeMarkets()
         {
-            // One market per realm, located at the realm capital.
+            _state.Economy.Markets.Clear();
+
+            // Simplified model: single legitimate market for the whole world.
+            int cellId = -1;
+            string marketName = "World Market";
             for (int i = 0; i < _mapData.Realms.Count; i++)
             {
                 var realm = _mapData.Realms[i];
-                if (realm.Id <= 0) continue;
+                if (realm.Id <= 0)
+                    continue;
 
-                // Find the capital burg's cell; fall back to the realm's center cell.
-                int cellId = -1;
+                int candidateCellId = -1;
                 if (realm.CapitalBurgId > 0)
                 {
                     var capitalBurg = _mapData.Burgs.Find(b => b.Id == realm.CapitalBurgId);
                     if (capitalBurg != null)
-                        cellId = capitalBurg.CellId;
+                        candidateCellId = capitalBurg.CellId;
                 }
-                if (cellId < 0)
-                    cellId = realm.CenterCellId;
-                if (cellId < 0 || !_mapData.CellById.ContainsKey(cellId))
+                if (candidateCellId < 0)
+                    candidateCellId = realm.CenterCellId;
+                if (candidateCellId < 0 || !_mapData.CellById.ContainsKey(candidateCellId))
                     continue;
 
+                cellId = candidateCellId;
                 var cell = _mapData.CellById[cellId];
-                var burg = cell.HasBurg
-                    ? _mapData.Burgs.Find(b => b.Id == cell.BurgId)
-                    : null;
+                var burg = cell.HasBurg ? _mapData.Burgs.Find(b => b.Id == cell.BurgId) : null;
+                marketName = burg?.Name ?? realm.Name;
+                break;
+            }
 
+            if (cellId < 0)
+            {
+                for (int i = 0; i < _mapData.Cells.Count; i++)
+                {
+                    var cell = _mapData.Cells[i];
+                    if (!cell.IsLand)
+                        continue;
+                    cellId = cell.Id;
+                    break;
+                }
+            }
+
+            if (cellId > 0)
+            {
                 var market = new Market
                 {
-                    Id = i + 1,
+                    Id = 1,
                     LocationCellId = cellId,
-                    Name = burg?.Name ?? realm.Name
+                    Name = marketName
                 };
 
                 InitializeMarketGoods(market);
-
                 MarketPlacer.ComputeMarketZone(market, _mapData, _state.Transport, maxTransportCost: _marketZoneMaxTransportCost);
                 _state.Economy.Markets[market.Id] = market;
-
-                SimLog.Log("Market", $"Placed market '{market.Name}' at cell {cellId} in {realm.Name}");
+                SimLog.Log("Market", $"Placed single world market '{market.Name}' at cell {cellId}");
             }
 
             // Place off-map virtual markets at map edges

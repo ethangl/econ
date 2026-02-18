@@ -565,7 +565,7 @@ namespace EconSim.Core.Economy
                 FacilityType = "brewery",
                 ProcessingTicks = 2,
                 NeedCategory = NeedCategory.Basic,
-                BaseConsumption = 0.5f,  // Market-only proxy: halve direct market need to represent prior subsistence share
+                BaseConsumption = 0.6f,  // Daily market demand target: 0.6 kg/person
                 DecayRate = 0.06f,  // 6% per day - beer quality collapses over ~2 weeks
                 TheftRisk = 0.3f,  // Bulky liquid, moderate value
                 BasePrice = 0.04f  // 0.04 Crowns/kg historical proxy pricing
@@ -688,7 +688,7 @@ namespace EconSim.Core.Economy
                 OutputGoodId = "barley",
                 LaborRequired = 8,
                 LaborType = LaborType.Unskilled,
-                BaseThroughput = 32000f / 365f, // 20x baseline: 32,000 kg/year at full staffing
+                BaseThroughput = 16000f / 365f, // 10x baseline: 16,000 kg/year at full staffing
                 IsExtraction = true,
                 TerrainRequirements = new List<string> { "Highland", "Steppe" }
             });
