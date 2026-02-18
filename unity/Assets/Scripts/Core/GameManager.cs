@@ -5,6 +5,7 @@ using UnityEngine;
 using EconSim.Core.Data;
 using EconSim.Core.Common;
 using EconSim.Core.Import;
+using EconSim.Core.Economy;
 using EconSim.Core.Simulation;
 using EconSim.Renderer;
 using EconSim.Camera;
@@ -249,7 +250,9 @@ namespace EconSim.Core
 
             // Initialize simulation
             Profiler.Begin("Simulation Init");
-            _simulation = new SimulationRunner(MapData);
+            var runner = new SimulationRunner(MapData);
+            runner.RegisterSystem(new EconomySystem());
+            _simulation = runner;
             Profiler.End();
             _simulation.IsPaused = true;  // Start paused
 
