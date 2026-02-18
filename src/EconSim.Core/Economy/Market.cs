@@ -889,5 +889,25 @@ namespace EconSim.Core.Economy
         /// Total Crowns paid to sellers during the last clearing pass.
         /// </summary>
         public float Revenue { get; set; }
+
+        /// <summary>
+        /// Unfilled demand quantity caused by insufficient buyer funds during clearing.
+        /// </summary>
+        public float UnfilledNoFunds { get; set; }
+
+        /// <summary>
+        /// Unfilled demand quantity caused by insufficient eligible supply during clearing.
+        /// </summary>
+        public float UnfilledNoStock { get; set; }
+
+        /// <summary>
+        /// Unposted demand quantity caused by inability to resolve a reachable market.
+        /// </summary>
+        public float UnfilledNoRoute { get; set; }
+
+        /// <summary>
+        /// Demand quantity reduced/rejected due to affordability checks at order posting time.
+        /// </summary>
+        public float UnfilledPriceReject { get; set; }
     }
 }

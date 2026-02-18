@@ -27,6 +27,7 @@ namespace EconSim.Editor
     ///   generate_and_run  { seed, cellCount, template, months }
     ///   run_months         { months }
     ///   dump               { scope: all|summary|markets|counties|roads }
+    ///   reset_timeseries   (deletes econ_debug_timeseries.csv)
     ///   status             (writes current sim status)
     ///   cancel             (cancels pending async operation)
     /// </summary>
@@ -40,6 +41,7 @@ namespace EconSim.Editor
         static string OutputPath => Path.Combine(ProjectRoot, "econ_debug_output.json");
         static string StatusPath => Path.Combine(ProjectRoot, "econ_debug_status.json");
         static string PendingPath => Path.Combine(ProjectRoot, "econ_debug_pending.json");
+        static string TimeseriesPath => Path.Combine(ProjectRoot, "econ_debug_timeseries.csv");
 
         // ── State ──────────────────────────────────────────────────
 
@@ -50,6 +52,20 @@ namespace EconSim.Editor
         static int _startDay;
         static bool _needsGenerate;
         static MapGenConfig _pendingConfig;
+        static int _lastTimeseriesDay = -1;
+
+        static readonly string[] TimeseriesGoods =
+        {
+            "wheat",
+            "rye",
+            "barley",
+            "flour",
+            "bread",
+            "malt",
+            "beer",
+            "raw_salt",
+            "salt"
+        };
 
         // ── Domain Reload Survival ─────────────────────────────────
 
@@ -156,6 +172,11 @@ namespace EconSim.Editor
                     if (!EnsureReady()) return;
                     DumpState(string.IsNullOrEmpty(cmd.scope) ? "all" : cmd.scope);
                     WriteStatus("complete", "Dump written");
+                    break;
+
+                case "reset_timeseries":
+                    ResetTimeseries();
+                    WriteStatus("complete", "Timeseries reset");
                     break;
 
                 case "status":
@@ -274,6 +295,8 @@ namespace EconSim.Editor
             _state = BridgeState.Running;
             sim.TimeScale = SimulationConfig.Speed.Hyper;
             sim.IsPaused = false;
+            _lastTimeseriesDay = -1;
+            TryAppendTimeseriesRow(sim.GetState(), sim.GetState().Economy, force: true);
 
             WriteStatus("running", $"Running from day {_startDay} to day {_targetDay}...");
 
@@ -317,7 +340,9 @@ namespace EconSim.Editor
                     }
                     if (!GameManager.IsMapReady) return;
 
-                    int currentDay = GameManager.Instance.Simulation.GetState().CurrentDay;
+                    var simState = GameManager.Instance.Simulation.GetState();
+                    int currentDay = simState.CurrentDay;
+                    TryAppendTimeseriesRow(simState, simState.Economy);
                     if (currentDay >= _targetDay)
                     {
                         GameManager.Instance.Simulation.IsPaused = true;
@@ -417,6 +442,7 @@ namespace EconSim.Editor
             var st = sim.GetState();
             var econ = st.Economy;
             var mapData = GameManager.Instance.MapData;
+            TryAppendTimeseriesRow(st, econ);
 
             var j = new JW();
             j.ObjOpen();
@@ -504,6 +530,7 @@ namespace EconSim.Editor
 
             // Aggregate market stats
             float totalSupplyOffered = 0f, totalClosingSupply = 0f, totalDemand = 0f, totalVolume = 0f;
+            float totalUnfilledNoFunds = 0f, totalUnfilledNoStock = 0f, totalUnfilledNoRoute = 0f, totalUnfilledPriceReject = 0f;
             foreach (var market in econ.Markets.Values)
             {
                 foreach (var gs in market.Goods.Values)
@@ -512,12 +539,20 @@ namespace EconSim.Editor
                     totalClosingSupply += gs.Supply;
                     totalDemand += gs.Demand;
                     totalVolume += gs.LastTradeVolume;
+                    totalUnfilledNoFunds += gs.UnfilledNoFunds;
+                    totalUnfilledNoStock += gs.UnfilledNoStock;
+                    totalUnfilledNoRoute += gs.UnfilledNoRoute;
+                    totalUnfilledPriceReject += gs.UnfilledPriceReject;
                 }
             }
             j.KV("totalMarketSupply", totalSupplyOffered);
             j.KV("totalMarketClosingSupply", totalClosingSupply);
             j.KV("totalMarketDemand", totalDemand);
             j.KV("totalMarketVolume", totalVolume);
+            j.KV("totalUnfilledNoFunds", totalUnfilledNoFunds);
+            j.KV("totalUnfilledNoStock", totalUnfilledNoStock);
+            j.KV("totalUnfilledNoRoute", totalUnfilledNoRoute);
+            j.KV("totalUnfilledPriceReject", totalUnfilledPriceReject);
 
             int totalPendingOrders = 0;
             int totalConsignmentLots = 0;
@@ -621,6 +656,10 @@ namespace EconSim.Editor
                     j.KV("demand", gs.Demand);
                     j.KV("volume", gs.LastTradeVolume);
                     j.KV("revenue", gs.Revenue);
+                    j.KV("unfilledNoFunds", gs.UnfilledNoFunds);
+                    j.KV("unfilledNoStock", gs.UnfilledNoStock);
+                    j.KV("unfilledNoRoute", gs.UnfilledNoRoute);
+                    j.KV("unfilledPriceReject", gs.UnfilledPriceReject);
                     j.ObjClose();
                 }
                 j.ObjClose();
@@ -785,6 +824,114 @@ namespace EconSim.Editor
         }
 
         // ── Helpers ────────────────────────────────────────────────
+
+        struct GoodTsAgg
+        {
+            public float Supply;
+            public float Demand;
+            public float Volume;
+            public float PriceSum;
+            public int PriceCount;
+        }
+
+        static void ResetTimeseries()
+        {
+            _lastTimeseriesDay = -1;
+            if (File.Exists(TimeseriesPath))
+                File.Delete(TimeseriesPath);
+        }
+
+        static void TryAppendTimeseriesRow(SimulationState st, EconomyState econ, bool force = false)
+        {
+            if (st == null || econ == null)
+                return;
+
+            int day = st.CurrentDay;
+            if (!force && day == _lastTimeseriesDay)
+                return;
+
+            var perGood = new Dictionary<string, GoodTsAgg>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < TimeseriesGoods.Length; i++)
+                perGood[TimeseriesGoods[i]] = default;
+
+            float totalSupply = 0f;
+            float totalDemand = 0f;
+            float totalVolume = 0f;
+
+            foreach (var market in econ.Markets.Values)
+            {
+                foreach (var gs in market.Goods.Values)
+                {
+                    totalSupply += gs.SupplyOffered;
+                    totalDemand += gs.Demand;
+                    totalVolume += gs.LastTradeVolume;
+
+                    if (!perGood.TryGetValue(gs.GoodId, out var agg))
+                        continue;
+
+                    agg.Supply += gs.SupplyOffered;
+                    agg.Demand += gs.Demand;
+                    agg.Volume += gs.LastTradeVolume;
+                    agg.PriceSum += gs.Price;
+                    agg.PriceCount += 1;
+                    perGood[gs.GoodId] = agg;
+                }
+            }
+
+            bool writeHeader = !File.Exists(TimeseriesPath);
+            var line = new StringBuilder(2048);
+
+            if (writeHeader)
+            {
+                var header = new StringBuilder(2048);
+                header.Append("timestamp_utc,day,year,month,day_of_month,economy_seed,total_supply,total_demand,total_volume");
+                for (int i = 0; i < TimeseriesGoods.Length; i++)
+                {
+                    string g = TimeseriesGoods[i];
+                    header.Append(',').Append(g).Append("_supply");
+                    header.Append(',').Append(g).Append("_demand");
+                    header.Append(',').Append(g).Append("_volume");
+                    header.Append(',').Append(g).Append("_avg_price");
+                    header.Append(',').Append(g).Append("_fill");
+                    header.Append(',').Append(g).Append("_s_over_d");
+                }
+                header.Append('\n');
+                File.AppendAllText(TimeseriesPath, header.ToString());
+            }
+
+            int year = day / 360 + 1;
+            int month = (day % 360) / 30 + 1;
+            int dayOfMonth = day % 30 + 1;
+
+            line.Append(DateTime.UtcNow.ToString("o"));
+            line.Append(',').Append(day.ToString(CultureInfo.InvariantCulture));
+            line.Append(',').Append(year.ToString(CultureInfo.InvariantCulture));
+            line.Append(',').Append(month.ToString(CultureInfo.InvariantCulture));
+            line.Append(',').Append(dayOfMonth.ToString(CultureInfo.InvariantCulture));
+            line.Append(',').Append(st.EconomySeed.ToString(CultureInfo.InvariantCulture));
+            line.Append(',').Append(totalSupply.ToString("G9", CultureInfo.InvariantCulture));
+            line.Append(',').Append(totalDemand.ToString("G9", CultureInfo.InvariantCulture));
+            line.Append(',').Append(totalVolume.ToString("G9", CultureInfo.InvariantCulture));
+
+            for (int i = 0; i < TimeseriesGoods.Length; i++)
+            {
+                var g = perGood[TimeseriesGoods[i]];
+                float avgPrice = g.PriceCount > 0 ? g.PriceSum / g.PriceCount : 0f;
+                float fill = g.Demand > 0f ? g.Volume / g.Demand : 1f;
+                float sOverD = g.Demand > 0f ? g.Supply / g.Demand : (g.Supply > 0f ? float.PositiveInfinity : 0f);
+
+                line.Append(',').Append(g.Supply.ToString("G9", CultureInfo.InvariantCulture));
+                line.Append(',').Append(g.Demand.ToString("G9", CultureInfo.InvariantCulture));
+                line.Append(',').Append(g.Volume.ToString("G9", CultureInfo.InvariantCulture));
+                line.Append(',').Append(avgPrice.ToString("G9", CultureInfo.InvariantCulture));
+                line.Append(',').Append(fill.ToString("G9", CultureInfo.InvariantCulture));
+                line.Append(',').Append(float.IsPositiveInfinity(sOverD) ? "inf" : sOverD.ToString("G9", CultureInfo.InvariantCulture));
+            }
+
+            line.Append('\n');
+            File.AppendAllText(TimeseriesPath, line.ToString());
+            _lastTimeseriesDay = day;
+        }
 
         static bool EnsureReady()
         {

@@ -88,6 +88,35 @@ namespace EconSim.Core.Simulation
             /// </summary>
             public const float BreadSubsistenceShare = 0.99f;
 
+            /// <summary>
+            /// Share of beer demand covered by local home brewing from county grain stockpiles
+            /// before remaining demand is routed to markets.
+            /// 0.00 means 0% home-brew / 100% market.
+            /// </summary>
+            public const float BeerSubsistenceShare = 0.00f;
+
+            /// <summary>
+            /// Flat hauling fee in Crowns per kilogram per transport-cost unit.
+            /// Applied uniformly across all goods.
+            /// Tuned to be microscopic at short distances.
+            /// </summary>
+            public const float FlatHaulingFeePerKgPerTransportCostUnit = 0.00002f;
+
+            /// <summary>
+            /// Grain-to-flour conversion baseline used across reserve and subsistence logic.
+            /// </summary>
+            public const float RawGrainKgPerFlourKg = 1f / 0.72f;
+            public const float FlourKgPerRawGrainKg = 1f / RawGrainKgPerFlourKg;
+
+            /// <summary>
+            /// Barley/malt/beer conversion baselines used in home-brew subsistence logic.
+            /// </summary>
+            public const float RawBarleyKgPerMaltKg = 1f / 0.8f;
+            public const float MaltKgPerRawBarleyKg = 1f / RawBarleyKgPerMaltKg;
+            public const float BeerKgPerMaltKg = 3f;
+            public const float BeerKgPerRawBarleyKg = MaltKgPerRawBarleyKg * BeerKgPerMaltKg;
+            public const float RawBarleyKgPerBeerKg = 1f / BeerKgPerRawBarleyKg;
+
             private static readonly HashSet<string> EnabledGoods = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
             {
                 "raw_salt",
@@ -96,7 +125,9 @@ namespace EconSim.Core.Simulation
                 "rye",
                 "barley",
                 "flour",
-                "bread"
+                "bread",
+                "malt",
+                "beer"
             };
 
             private static readonly HashSet<string> EnabledFacilities = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
@@ -107,9 +138,9 @@ namespace EconSim.Core.Simulation
                 "rye_farm",
                 "barley_farm",
                 "mill",
-                "rye_mill",
-                "barley_mill",
-                "bakery"
+                "bakery",
+                "malt_house",
+                "brewery"
             };
 
             public static bool IsGoodEnabled(string goodId)

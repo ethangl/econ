@@ -11,23 +11,36 @@ namespace EconSim.Core.Simulation.Systems
     /// </summary>
     public class OrderSystem : ITickSystem
     {
-        private const float BuyerTransportFeeRate = 0.005f;
-        private const float BasicAffordabilityElasticity = 0.75f;
-        private const float ComfortAffordabilityElasticity = 1.00f;
-        private const float LuxuryAffordabilityElasticity = 1.25f;
-        private const float BasicMinDemandScale = 0.15f;
-        private const float ComfortMinDemandScale = 0.02f;
-        private const float LuxuryMinDemandScale = 0.00f;
         private const float InterMarketTransferCost = 120f;
         private const float MillInputOrderHorizonDays = 0.25f;
+        private const float ProcessingInputDemandBufferFactor = 1.10f;
+        private const float BreweryTradeEmaDays = 14f;
+        private const float BreweryDemandEmaDays = 7f;
+        private const float BreweryTradeWeight = 0.70f;
+        private const float BreweryDemandWeight = 0.30f;
+        private const float BreweryStructuralDemandWeight = 0.50f;
+        private const float BreweryObservedDemandWeight = 0.50f;
+        private const float BreweryDemandForecastBufferFactor = 1.10f;
 
         private static readonly string[] BreadSubsistenceGoods = { "wheat", "rye", "barley", "rice_grain" };
+        private static readonly string[] BeerSubsistenceGoods = { "barley" };
         private readonly Dictionary<int, float> _demandByGoodBuffer = new Dictionary<int, float>();
         private readonly List<OrderLine> _tierLinesBuffer = new List<OrderLine>();
         private readonly Dictionary<string, int> _goodRuntimeIdCache = new Dictionary<string, int>();
         private readonly Dictionary<long, float> _countyMarketTransportCostCache = new Dictionary<long, float>();
+        private readonly Dictionary<long, BreweryForecastState> _breweryForecastByMarketGood = new Dictionary<long, BreweryForecastState>();
+        private readonly Dictionary<int, int> _marketPopulationById = new Dictionary<int, int>();
         private int[] _breadSubsistenceRuntimeIds = Array.Empty<int>();
+        private int[] _beerSubsistenceRuntimeIds = Array.Empty<int>();
         private int _breadRuntimeId = -1;
+        private int _beerRuntimeId = -1;
+
+        private struct BreweryForecastState
+        {
+            public float TradeEma;
+            public float DemandEma;
+            public int LastUpdatedDay;
+        }
 
         private struct OrderLine
         {
@@ -64,14 +77,38 @@ namespace EconSim.Core.Simulation.Systems
         public void Initialize(SimulationState state, MapData mapData)
         {
             _goodRuntimeIdCache.Clear();
+            _breweryForecastByMarketGood.Clear();
             _breadSubsistenceRuntimeIds = new int[BreadSubsistenceGoods.Length];
             for (int i = 0; i < BreadSubsistenceGoods.Length; i++)
             {
+                if (!SimulationConfig.Economy.IsGoodEnabled(BreadSubsistenceGoods[i]))
+                {
+                    _breadSubsistenceRuntimeIds[i] = -1;
+                    continue;
+                }
+
                 _breadSubsistenceRuntimeIds[i] = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, BreadSubsistenceGoods[i]);
             }
 
+            _beerSubsistenceRuntimeIds = new int[BeerSubsistenceGoods.Length];
+            for (int i = 0; i < BeerSubsistenceGoods.Length; i++)
+            {
+                if (!SimulationConfig.Economy.IsGoodEnabled(BeerSubsistenceGoods[i]))
+                {
+                    _beerSubsistenceRuntimeIds[i] = -1;
+                    continue;
+                }
+
+                _beerSubsistenceRuntimeIds[i] = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, BeerSubsistenceGoods[i]);
+            }
+
             // Apply subsistence cover to staple flour demand (not comfort bread demand).
-            _breadRuntimeId = ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, "flour");
+            _breadRuntimeId = SimulationConfig.Economy.IsGoodEnabled("flour")
+                ? ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, "flour")
+                : -1;
+            _beerRuntimeId = SimulationConfig.Economy.IsGoodEnabled("beer")
+                ? ResolveRuntimeId(state?.Economy?.Goods, _goodRuntimeIdCache, "beer")
+                : -1;
         }
 
         public void Tick(SimulationState state, MapData mapData)
@@ -81,6 +118,7 @@ namespace EconSim.Core.Simulation.Systems
                 return;
 
             _countyMarketTransportCostCache.Clear();
+            BuildMarketPopulationIndex(economy);
             foreach (var county in economy.Counties.Values)
             {
                 if (!economy.CountyToMarket.TryGetValue(county.CountyId, out int marketId))
@@ -101,8 +139,20 @@ namespace EconSim.Core.Simulation.Systems
                     _tierLinesBuffer,
                     _breadSubsistenceRuntimeIds,
                     _breadRuntimeId,
+                    _beerSubsistenceRuntimeIds,
+                    _beerRuntimeId,
+                    economy.Goods,
                     _countyMarketTransportCostCache);
-                PostFacilityInputOrders(state, economy, county, market, transportCost, _goodRuntimeIdCache, _countyMarketTransportCostCache);
+                PostFacilityInputOrders(
+                    state,
+                    economy,
+                    county,
+                    market,
+                    transportCost,
+                    _goodRuntimeIdCache,
+                    _countyMarketTransportCostCache,
+                    _breweryForecastByMarketGood,
+                    _marketPopulationById);
             }
         }
 
@@ -116,6 +166,9 @@ namespace EconSim.Core.Simulation.Systems
             List<OrderLine> tierLinesBuffer,
             int[] breadSubsistenceRuntimeIds,
             int breadRuntimeId,
+            int[] beerSubsistenceRuntimeIds,
+            int beerRuntimeId,
+            GoodRegistry goods,
             Dictionary<long, float> countyMarketTransportCostCache)
         {
             int population = county.Population.Total;
@@ -140,7 +193,14 @@ namespace EconSim.Core.Simulation.Systems
                 demandByGood[good.RuntimeId] = perCapita * population;
             }
 
-            ApplySubsistenceFromStockpile(county, demandByGood, breadSubsistenceRuntimeIds, breadRuntimeId);
+            ApplySubsistenceFromStockpile(
+                county,
+                demandByGood,
+                breadSubsistenceRuntimeIds,
+                breadRuntimeId,
+                beerSubsistenceRuntimeIds,
+                beerRuntimeId,
+                goods);
 
             float budget = Math.Max(0f, county.Population.Treasury);
             budget -= PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Basic, budget, countyMarketTransportCostCache);
@@ -174,6 +234,7 @@ namespace EconSim.Core.Simulation.Systems
 
                 if (!demandByGood.TryGetValue(good.RuntimeId, out float qty) || qty <= 0.0001f)
                     continue;
+                float requestedQty = qty;
 
                 if (good.NeedCategory != tier)
                     continue;
@@ -192,15 +253,18 @@ namespace EconSim.Core.Simulation.Systems
                     out var targetMarket,
                     out float targetTransportCost,
                     out var marketGood))
+                {
+                    AccumulateUnpostedDemandDiagnostic(market, good.RuntimeId, noRouteQty: requestedQty, priceRejectQty: 0f);
                     continue;
+                }
 
-                float effectivePrice = marketGood.Price * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
+                float effectivePrice = marketGood.Price + Math.Max(0f, targetTransportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                 if (effectivePrice <= 0f)
+                {
+                    AccumulateUnpostedDemandDiagnostic(market, good.RuntimeId, noRouteQty: 0f, priceRejectQty: requestedQty);
                     continue;
+                }
 
-                float baseEffectivePrice = marketGood.BasePrice * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
-                float affordabilityScale = ComputeAffordabilityDemandScale(tier, effectivePrice, baseEffectivePrice);
-                qty *= affordabilityScale;
                 if (qty <= 0.0001f)
                     continue;
 
@@ -260,38 +324,6 @@ namespace EconSim.Core.Simulation.Systems
             return Math.Min(spent, budget);
         }
 
-        private static float ComputeAffordabilityDemandScale(
-            NeedCategory tier,
-            float effectivePrice,
-            float baseEffectivePrice)
-        {
-            if (effectivePrice <= 0f || baseEffectivePrice <= 0f)
-                return 1f;
-
-            float ratio = Clamp(baseEffectivePrice / effectivePrice, 0f, 1f);
-            float elasticity;
-            float minScale;
-            switch (tier)
-            {
-                case NeedCategory.Basic:
-                    elasticity = BasicAffordabilityElasticity;
-                    minScale = BasicMinDemandScale;
-                    break;
-                case NeedCategory.Comfort:
-                    elasticity = ComfortAffordabilityElasticity;
-                    minScale = ComfortMinDemandScale;
-                    break;
-                case NeedCategory.Luxury:
-                default:
-                    elasticity = LuxuryAffordabilityElasticity;
-                    minScale = LuxuryMinDemandScale;
-                    break;
-            }
-
-            float scaled = (float)Math.Pow(ratio, elasticity);
-            return Clamp(scaled, minScale, 1f);
-        }
-
         private static void PostFacilityInputOrders(
             SimulationState state,
             EconomyState economy,
@@ -299,7 +331,9 @@ namespace EconSim.Core.Simulation.Systems
             Market market,
             float transportCost,
             Dictionary<string, int> runtimeIdCache,
-            Dictionary<long, float> countyMarketTransportCostCache)
+            Dictionary<long, float> countyMarketTransportCostCache,
+            Dictionary<long, BreweryForecastState> breweryForecastByMarketGood,
+            Dictionary<int, int> marketPopulationById)
         {
             foreach (int facilityId in county.FacilityIds)
             {
@@ -323,6 +357,35 @@ namespace EconSim.Core.Simulation.Systems
 
                 var output = economy.Goods.Get(def.OutputGoodId);
                 if (output == null)
+                    continue;
+
+                if (ShouldDemandLimitInputOrders(def)
+                    && output.RuntimeId >= 0
+                    && market.TryGetGoodState(output.RuntimeId, out var outputState))
+                {
+                    float demandLimitedThroughput;
+                    if (def.Id == "brewery")
+                    {
+                        float projectedDemand = GetBreweryProjectedDemand(
+                            state.CurrentDay,
+                            market.Id,
+                            marketPopulationById,
+                            output,
+                            output.RuntimeId,
+                            outputState,
+                            breweryForecastByMarketGood);
+                        demandLimitedThroughput = projectedDemand * BreweryDemandForecastBufferFactor;
+                    }
+                    else
+                    {
+                        float unmetDemand = Math.Max(0f, outputState.Demand - outputState.Supply);
+                        demandLimitedThroughput = unmetDemand * ProcessingInputDemandBufferFactor;
+                    }
+
+                    currentThroughput = Math.Min(currentThroughput, demandLimitedThroughput);
+                }
+
+                if (currentThroughput <= 0.001f)
                     continue;
 
                 var selectedInputs = SelectBestInputVariantForOrders(
@@ -374,7 +437,7 @@ namespace EconSim.Core.Simulation.Systems
                     if (toBuy <= 0.0001f)
                         continue;
 
-                    float effectivePrice = marketGood.Price * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
+                    float effectivePrice = marketGood.Price + Math.Max(0f, targetTransportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                     if (effectivePrice <= 0f)
                         continue;
 
@@ -413,6 +476,8 @@ namespace EconSim.Core.Simulation.Systems
         {
             List<GoodInput> bestInputs = null;
             float bestCost = float.MaxValue;
+            List<GoodInput> firstValidMillInputs = null;
+            bool millPreference = IsMillFacility(def);
 
             foreach (var inputs in EnumerateInputVariants(def, output))
             {
@@ -421,6 +486,7 @@ namespace EconSim.Core.Simulation.Systems
 
                 float variantCost = 0f;
                 bool valid = true;
+                bool hasOfferedSupply = true;
                 for (int i = 0; i < inputs.Count; i++)
                 {
                     var input = inputs[i];
@@ -452,7 +518,10 @@ namespace EconSim.Core.Simulation.Systems
                         break;
                     }
 
-                    float effectivePrice = marketGood.Price * (1f + Math.Max(0f, targetTransportCost) * BuyerTransportFeeRate);
+                    if (marketGood.Supply <= 0.001f && marketGood.SupplyOffered <= 0.001f)
+                        hasOfferedSupply = false;
+
+                    float effectivePrice = marketGood.Price + Math.Max(0f, targetTransportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                     if (effectivePrice <= 0f)
                     {
                         valid = false;
@@ -462,12 +531,29 @@ namespace EconSim.Core.Simulation.Systems
                     variantCost += input.QuantityKg * effectivePrice;
                 }
 
+                if (millPreference)
+                {
+                    if (!valid)
+                        continue;
+
+                    if (firstValidMillInputs == null)
+                        firstValidMillInputs = inputs;
+
+                    if (hasOfferedSupply)
+                        return inputs;
+
+                    continue;
+                }
+
                 if (!valid || variantCost >= bestCost)
                     continue;
 
                 bestCost = variantCost;
                 bestInputs = inputs;
             }
+
+            if (millPreference)
+                return firstValidMillInputs;
 
             return bestInputs;
         }
@@ -502,21 +588,26 @@ namespace EconSim.Core.Simulation.Systems
             CountyEconomy county,
             Dictionary<int, float> demandByGood,
             int[] breadSubsistenceRuntimeIds,
-            int breadRuntimeId)
+            int breadRuntimeId,
+            int[] beerSubsistenceRuntimeIds,
+            int beerRuntimeId,
+            GoodRegistry goods)
         {
             if (breadRuntimeId >= 0 && demandByGood.TryGetValue(breadRuntimeId, out float breadNeed) && breadNeed > 0f)
             {
                 float equivalent = 0f;
-                for (int i = 0; i < BreadSubsistenceGoods.Length; i++)
+                float flourPerRawKg = SimulationConfig.Economy.FlourKgPerRawGrainKg;
+                if (flourPerRawKg <= 0f)
+                    return;
+                int count = breadSubsistenceRuntimeIds?.Length ?? 0;
+                for (int i = 0; i < count; i++)
                 {
-                    int runtimeId = (breadSubsistenceRuntimeIds != null && i < breadSubsistenceRuntimeIds.Length)
-                        ? breadSubsistenceRuntimeIds[i]
-                        : -1;
+                    int runtimeId = breadSubsistenceRuntimeIds[i];
                     if (runtimeId < 0)
                         continue;
 
                     float available = county.Stockpile.Get(runtimeId);
-                    equivalent += available * 0.5f;
+                    equivalent += available * flourPerRawKg;
                 }
 
                 float subsistenceShare = Clamp(SimulationConfig.Economy.BreadSubsistenceShare, 0f, 1f);
@@ -524,12 +615,77 @@ namespace EconSim.Core.Simulation.Systems
                 float covered = Math.Min(subsistenceCap, equivalent);
                 if (covered > 0f)
                 {
-                    float requiredRaw = covered / 0.5f;
-                    RemoveProportional(county.Stockpile, breadSubsistenceRuntimeIds, requiredRaw);
+                    float requiredRaw = covered / flourPerRawKg;
+                    RemovePrioritized(county.Stockpile, breadSubsistenceRuntimeIds, requiredRaw);
                     demandByGood[breadRuntimeId] = Math.Max(0f, breadNeed - covered);
                 }
             }
 
+            if (beerRuntimeId >= 0 && demandByGood.TryGetValue(beerRuntimeId, out float beerNeed) && beerNeed > 0f)
+            {
+                float equivalentBeer = 0f;
+                float beerPerRawKg = SimulationConfig.Economy.BeerKgPerRawBarleyKg;
+                if (beerPerRawKg <= 0f)
+                    return;
+
+                int count = beerSubsistenceRuntimeIds?.Length ?? 0;
+                for (int i = 0; i < count; i++)
+                {
+                    int runtimeId = beerSubsistenceRuntimeIds[i];
+                    if (runtimeId < 0)
+                        continue;
+
+                    float available = county.Stockpile.Get(runtimeId);
+                    equivalentBeer += available * beerPerRawKg;
+                }
+
+                float subsistenceShare = Clamp(SimulationConfig.Economy.BeerSubsistenceShare, 0f, 1f);
+                float subsistenceCap = beerNeed * subsistenceShare;
+                float covered = Math.Min(subsistenceCap, equivalentBeer);
+                if (covered > 0f)
+                {
+                    float requiredRaw = covered / beerPerRawKg;
+                    RemoveProportional(county.Stockpile, beerSubsistenceRuntimeIds, requiredRaw);
+                    demandByGood[beerRuntimeId] = Math.Max(0f, beerNeed - covered);
+                }
+            }
+
+            ConsumeStockpiledBasicGoods(county, goods, demandByGood);
+
+        }
+
+        private static void ConsumeStockpiledBasicGoods(
+            CountyEconomy county,
+            GoodRegistry goods,
+            Dictionary<int, float> demandByGood)
+        {
+            if (county?.Stockpile == null || goods == null || demandByGood == null || demandByGood.Count == 0)
+                return;
+
+            var runtimeIds = new List<int>(demandByGood.Keys);
+            for (int i = 0; i < runtimeIds.Count; i++)
+            {
+                int runtimeId = runtimeIds[i];
+                if (runtimeId < 0)
+                    continue;
+                if (!demandByGood.TryGetValue(runtimeId, out float need) || need <= 0f)
+                    continue;
+                if (!goods.TryGetByRuntimeId(runtimeId, out var good) || good == null)
+                    continue;
+                if (good.NeedCategory != NeedCategory.Basic)
+                    continue;
+
+                float available = county.Stockpile.Get(runtimeId);
+                if (available <= 0f)
+                    continue;
+
+                float covered = Math.Min(need, available);
+                if (covered <= 0f)
+                    continue;
+
+                county.Stockpile.Remove(runtimeId, covered);
+                demandByGood[runtimeId] = Math.Max(0f, need - covered);
+            }
         }
 
         private static void RemoveProportional(
@@ -573,6 +729,48 @@ namespace EconSim.Core.Simulation.Systems
             }
         }
 
+        private static void RemovePrioritized(
+            Stockpile stockpile,
+            int[] runtimeIds,
+            float totalToRemove)
+        {
+            if (stockpile == null || runtimeIds == null || runtimeIds.Length == 0 || totalToRemove <= 0f)
+                return;
+
+            float remaining = totalToRemove;
+            for (int i = 0; i < runtimeIds.Length && remaining > 0f; i++)
+            {
+                int runtimeId = runtimeIds[i];
+                if (runtimeId < 0)
+                    continue;
+
+                float available = stockpile.Get(runtimeId);
+                if (available <= 0f)
+                    continue;
+
+                float take = Math.Min(available, remaining);
+                stockpile.Remove(runtimeId, take);
+                remaining -= take;
+            }
+        }
+
+        private static void AccumulateUnpostedDemandDiagnostic(
+            Market market,
+            int goodRuntimeId,
+            float noRouteQty,
+            float priceRejectQty)
+        {
+            if (market == null || goodRuntimeId < 0)
+                return;
+            if (!market.TryGetGoodState(goodRuntimeId, out var goodState) || goodState == null)
+                return;
+
+            if (noRouteQty > 0f)
+                goodState.UnfilledNoRoute += noRouteQty;
+            if (priceRejectQty > 0f)
+                goodState.UnfilledPriceReject += priceRejectQty;
+        }
+
         private static int ResolveRuntimeId(
             GoodRegistry goods,
             Dictionary<string, int> runtimeIdCache,
@@ -592,12 +790,120 @@ namespace EconSim.Core.Simulation.Systems
             return runtimeId;
         }
 
+        private void BuildMarketPopulationIndex(EconomyState economy)
+        {
+            _marketPopulationById.Clear();
+            if (economy?.Counties == null || economy.CountyToMarket == null)
+                return;
+
+            foreach (var county in economy.Counties.Values)
+            {
+                if (county == null || county.Population == null)
+                    continue;
+
+                if (!economy.CountyToMarket.TryGetValue(county.CountyId, out int marketId))
+                    continue;
+
+                int pop = Math.Max(0, county.Population.Total);
+                if (pop <= 0)
+                    continue;
+
+                if (_marketPopulationById.TryGetValue(marketId, out int existing))
+                    _marketPopulationById[marketId] = existing + pop;
+                else
+                    _marketPopulationById[marketId] = pop;
+            }
+        }
+
+        private static float GetBreweryProjectedDemand(
+            int currentDay,
+            int marketId,
+            Dictionary<int, int> marketPopulationById,
+            GoodDef outputDef,
+            int outputRuntimeId,
+            MarketGoodState outputState,
+            Dictionary<long, BreweryForecastState> breweryForecastByMarketGood)
+        {
+            if (outputState == null)
+                return 0f;
+
+            float observedTrade = Math.Max(0f, outputState.LastTradeVolume);
+            float observedDemand = Math.Max(0f, outputState.Demand);
+            if (breweryForecastByMarketGood == null)
+                return observedTrade * BreweryTradeWeight + observedDemand * BreweryDemandWeight;
+
+            long key = MakeMarketGoodKey(marketId, outputRuntimeId);
+            if (!breweryForecastByMarketGood.TryGetValue(key, out var forecastState))
+            {
+                forecastState = new BreweryForecastState
+                {
+                    TradeEma = observedTrade,
+                    DemandEma = observedDemand,
+                    LastUpdatedDay = currentDay
+                };
+            }
+            else if (forecastState.LastUpdatedDay != currentDay)
+            {
+                float tradeAlpha = ComputeEmaAlpha(BreweryTradeEmaDays);
+                float demandAlpha = ComputeEmaAlpha(BreweryDemandEmaDays);
+                forecastState.TradeEma += (observedTrade - forecastState.TradeEma) * tradeAlpha;
+                forecastState.DemandEma += (observedDemand - forecastState.DemandEma) * demandAlpha;
+                forecastState.LastUpdatedDay = currentDay;
+            }
+
+            breweryForecastByMarketGood[key] = forecastState;
+
+            float observedProjectedDemand = forecastState.TradeEma * BreweryTradeWeight
+                + forecastState.DemandEma * BreweryDemandWeight;
+            if (float.IsNaN(observedProjectedDemand) || float.IsInfinity(observedProjectedDemand))
+                return 0f;
+
+            int marketPopulation = 0;
+            if (marketPopulationById != null)
+                marketPopulationById.TryGetValue(marketId, out marketPopulation);
+
+            float baseBeerDemandPerCapita = Math.Max(0f, outputDef?.BaseConsumptionKgPerCapitaPerDay ?? 0f);
+            float homeBrewShare = Clamp(SimulationConfig.Economy.BeerSubsistenceShare, 0f, 1f);
+            float structuralMarketDemand = marketPopulation * baseBeerDemandPerCapita * (1f - homeBrewShare);
+
+            float projectedDemand = structuralMarketDemand * BreweryStructuralDemandWeight
+                + observedProjectedDemand * BreweryObservedDemandWeight;
+            if (float.IsNaN(projectedDemand) || float.IsInfinity(projectedDemand))
+                return 0f;
+
+            return Math.Max(0f, projectedDemand);
+        }
+
+        private static long MakeMarketGoodKey(int marketId, int runtimeId)
+        {
+            return ((long)marketId << 32) ^ (uint)runtimeId;
+        }
+
+        private static float ComputeEmaAlpha(float windowDays)
+        {
+            if (windowDays <= 0f)
+                return 1f;
+
+            return Clamp(2f / (windowDays + 1f), 0f, 1f);
+        }
+
         private static bool IsMillFacility(FacilityDef def)
         {
             if (def == null)
                 return false;
 
             return def.Id == "mill" || def.Id == "rye_mill" || def.Id == "barley_mill";
+        }
+
+        private static bool ShouldDemandLimitInputOrders(FacilityDef def)
+        {
+            if (def == null)
+                return false;
+
+            if (IsMillFacility(def))
+                return true;
+
+            return def.Id == "bakery" || def.Id == "brewery" || def.Id == "malt_house";
         }
 
         private static bool IsReserveGrainGood(string goodId)
@@ -641,7 +947,7 @@ namespace EconSim.Core.Simulation.Systems
                 && localMarket.TryGetGoodState(goodRuntimeId, out var localGoodState))
             {
                 float localCost = Math.Max(0f, localTransportCost);
-                float effectivePrice = localGoodState.Price * (1f + localCost * BuyerTransportFeeRate);
+                float effectivePrice = localGoodState.Price + localCost * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                 if (effectivePrice > 0f)
                 {
                     bestEffectivePrice = effectivePrice;
@@ -673,7 +979,7 @@ namespace EconSim.Core.Simulation.Systems
                     continue;
                 }
 
-                float effectivePrice = marketGoodState.Price * (1f + Math.Max(0f, transportCost) * BuyerTransportFeeRate);
+                float effectivePrice = marketGoodState.Price + Math.Max(0f, transportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                 if (effectivePrice <= 0f)
                     continue;
 
@@ -693,7 +999,7 @@ namespace EconSim.Core.Simulation.Systems
             if (TryResolveOffMapMarket(economy, countyId, goodId, out var offMapMarket, out float offMapTransportCost)
                 && offMapMarket.TryGetGoodState(goodRuntimeId, out var offMapGoodState))
             {
-                float effectivePrice = offMapGoodState.Price * (1f + Math.Max(0f, offMapTransportCost) * BuyerTransportFeeRate);
+                float effectivePrice = offMapGoodState.Price + Math.Max(0f, offMapTransportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                 if (effectivePrice > 0f)
                 {
                     bool cheaper = effectivePrice < bestEffectivePrice - 0.0001f;

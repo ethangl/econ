@@ -13,6 +13,10 @@ class GoodMetrics:
     supply: float = 0.0
     demand: float = 0.0
     volume: float = 0.0
+    unfilled_no_funds: float = 0.0
+    unfilled_no_stock: float = 0.0
+    unfilled_no_route: float = 0.0
+    unfilled_price_reject: float = 0.0
     prices: List[float] = field(default_factory=list)
     active_markets: int = 0
     short_markets: int = 0
@@ -115,7 +119,7 @@ CHAIN_DEFS: List[ChainDef] = [
         name="Beer",
         stages=[
             ChainStage("Barley", ["barley"], ["barley_farm"]),
-            ChainStage("Malt", ["malt"], ["malthouse"]),
+            ChainStage("Malt", ["malt"], ["malt_house"]),
             ChainStage("Beer", ["beer"], ["brewery"]),
         ],
     ),
@@ -287,6 +291,10 @@ def aggregate_goods(markets: Sequence[dict]) -> Dict[str, GoodMetrics]:
             gm.supply += supply
             gm.demand += demand
             gm.volume += volume
+            gm.unfilled_no_funds += safe_float(payload.get("unfilledNoFunds", 0.0))
+            gm.unfilled_no_stock += safe_float(payload.get("unfilledNoStock", 0.0))
+            gm.unfilled_no_route += safe_float(payload.get("unfilledNoRoute", 0.0))
+            gm.unfilled_price_reject += safe_float(payload.get("unfilledPriceReject", 0.0))
             gm.prices.append(price)
 
             if supply > 0 or demand > 0:
@@ -424,6 +432,15 @@ def print_global_section(summary: dict, goods: Dict[str, GoodMetrics]) -> None:
     total_volume = safe_float(summary.get("totalMarketVolume", 0.0))
     pending = safe_float(summary.get("totalPendingOrders", 0.0))
     lots = safe_float(summary.get("totalConsignmentLots", 0.0))
+    no_funds = safe_float(summary.get("totalUnfilledNoFunds", 0.0))
+    no_stock = safe_float(summary.get("totalUnfilledNoStock", 0.0))
+    no_route = safe_float(summary.get("totalUnfilledNoRoute", 0.0))
+    price_reject = safe_float(summary.get("totalUnfilledPriceReject", 0.0))
+    if no_funds <= 0 and no_stock <= 0 and no_route <= 0 and price_reject <= 0:
+        no_funds = sum(gm.unfilled_no_funds for gm in goods.values())
+        no_stock = sum(gm.unfilled_no_stock for gm in goods.values())
+        no_route = sum(gm.unfilled_no_route for gm in goods.values())
+        price_reject = sum(gm.unfilled_price_reject for gm in goods.values())
 
     fill = (total_volume / total_demand) if total_demand > 0 else 1.0
     demand_over_supply = (total_demand / total_supply) if total_supply > 0 else math.inf
@@ -438,6 +455,14 @@ def print_global_section(summary: dict, goods: Dict[str, GoodMetrics]) -> None:
             fmt_ratio(demand_over_supply),
             int(pending),
             int(lots),
+        )
+    )
+    print(
+        "unfilled_no_funds={:.1f} unfilled_no_stock={:.1f} unfilled_no_route={:.1f} unfilled_price_reject={:.1f}".format(
+            no_funds,
+            no_stock,
+            no_route,
+            price_reject,
         )
     )
     print()
@@ -543,6 +568,20 @@ def print_chain_section(goods: Dict[str, GoodMetrics], facilities: Dict[str, Fac
         final = goods.get(chain.final_good, GoodMetrics())
         print(f"- {chain.name}: {chain_class}")
         print(f"  final={chain.final_good} demand={final.demand:.1f} supply={final.supply:.1f} fill={final.fill_ratio:.2f}")
+        if (
+            final.unfilled_no_funds > 0
+            or final.unfilled_no_stock > 0
+            or final.unfilled_no_route > 0
+            or final.unfilled_price_reject > 0
+        ):
+            print(
+                "  unfilled=no_funds:{:.1f} no_stock:{:.1f} no_route:{:.1f} price_reject:{:.1f}".format(
+                    final.unfilled_no_funds,
+                    final.unfilled_no_stock,
+                    final.unfilled_no_route,
+                    final.unfilled_price_reject,
+                )
+            )
         for stage in chain.stages:
             supply, demand, volume = stage_totals(goods, stage.goods)
             facility_active, facility_fill, facility_count = weighted_facility_health(facilities, stage.facilities)

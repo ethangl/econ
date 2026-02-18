@@ -11,7 +11,6 @@ namespace EconSim.Core.Simulation.Systems
     /// </summary>
     public class MarketSystem : ITickSystem
     {
-        private const float BuyerTransportFeeRate = 0.005f;
         private const float LotCullThreshold = 0.01f;
         private const float ReserveTargetDays = 30f;
         private const float ReserveRefillSharePerDay = 0.04f;
@@ -20,7 +19,6 @@ namespace EconSim.Core.Simulation.Systems
         private const float ReserveActivationDemandFloorKg = 0.5f;
         private const float CountyRetainedDaysForGrain = 540f;
         private const float CountyRetainedDaysForSalt = 180f;
-        private const float GrainKgPerFlourKg = 1f / 0.72f;
         private const float FallbackDailyGrainNeedPerCapitaKg = 0.60f;
         private static readonly string[] ReserveGoodIds = { "wheat", "rye", "barley", "rice_grain", "salt" };
         private static readonly string[] ReserveGrainGoodIds = { "wheat", "rye", "barley", "rice_grain" };
@@ -137,28 +135,48 @@ namespace EconSim.Core.Simulation.Systems
                 goodState.Demand = demand;
                 goodState.LastTradeVolume = 0f;
                 goodState.Revenue = 0f;
+                goodState.UnfilledNoFunds = 0f;
+                goodState.UnfilledNoStock = 0f;
+                goodState.UnfilledNoRoute = 0f;
+                goodState.UnfilledPriceReject = 0f;
             }
 
             foreach (var demandEntry in _eligibleDemandByGood)
             {
                 int goodRuntimeId = demandEntry.Key;
-                if (!market.TryGetTradableInventory(goodRuntimeId, out var sellers) || sellers.Count == 0)
-                    continue;
-                if (!market.TryGetTradableOrders(goodRuntimeId, out var orders) || orders.Count == 0)
-                    continue;
                 if (!_goodStateByRuntimeId.TryGetValue(goodRuntimeId, out var goodState))
                     continue;
 
                 float totalDemand = demandEntry.Value;
+                if (totalDemand <= LotCullThreshold)
+                    continue;
+
                 if (!_eligibleSupplyByGood.TryGetValue(goodRuntimeId, out float totalSupply))
+                    totalSupply = 0f;
+                if (totalSupply <= LotCullThreshold)
+                {
+                    goodState.UnfilledNoStock += totalDemand;
+                    continue;
+                }
+                if (!market.TryGetTradableInventory(goodRuntimeId, out var sellers) || sellers == null || sellers.Count == 0)
+                {
+                    goodState.UnfilledNoStock += totalDemand;
+                    continue;
+                }
+                if (!market.TryGetTradableOrders(goodRuntimeId, out var orders) || orders == null || orders.Count == 0)
                     continue;
 
                 float plannedTraded = Math.Min(totalDemand, totalSupply);
                 if (plannedTraded <= 0f)
+                {
+                    goodState.UnfilledNoStock += totalDemand;
                     continue;
+                }
 
                 float buyerFillRatio = totalDemand > 0f ? plannedTraded / totalDemand : 0f;
                 float actualDemandFilled = 0f;
+                float unmetNoFundsQty = 0f;
+                goodState.UnfilledNoStock += Math.Max(0f, totalDemand - plannedTraded);
 
                 foreach (var orderEntry in orders)
                 {
@@ -169,28 +187,46 @@ namespace EconSim.Core.Simulation.Systems
                     float desiredQty = order.Quantity * buyerFillRatio;
                     if (desiredQty <= LotCullThreshold)
                         continue;
+                    float requestedQty = desiredQty;
 
                     if (!TryResolveBuyer(economy, order, out var facilityBuyer, out var buyerCountyId, out float treasury))
+                    {
+                        unmetNoFundsQty += requestedQty;
                         continue;
+                    }
 
                     float unitPrice = goodState.Price;
                     float baseCost = desiredQty * unitPrice;
-                    float fee = baseCost * Math.Max(0f, order.TransportCost) * BuyerTransportFeeRate;
+                    float fee = desiredQty * Math.Max(0f, order.TransportCost) * SimulationConfig.Economy.FlatHaulingFeePerKgPerTransportCostUnit;
                     float gross = baseCost + fee;
                     if (gross <= 0f)
-                        continue;
-
-                    if (treasury < gross)
                     {
-                        float scale = treasury / gross;
+                        unmetNoFundsQty += requestedQty;
+                        continue;
+                    }
+
+                    float spendCap = Math.Min(Math.Max(0f, treasury), Math.Max(0f, order.MaxSpend));
+                    if (spendCap <= 0f)
+                    {
+                        unmetNoFundsQty += requestedQty;
+                        continue;
+                    }
+
+                    if (gross > spendCap)
+                    {
+                        float scale = spendCap / gross;
                         desiredQty *= scale;
                         baseCost *= scale;
                         fee *= scale;
-                        gross = treasury;
+                        gross = spendCap;
                     }
 
                     if (desiredQty <= LotCullThreshold || gross <= 0f)
+                    {
+                        unmetNoFundsQty += requestedQty;
                         continue;
+                    }
+                    unmetNoFundsQty += Math.Max(0f, requestedQty - desiredQty);
 
                     // Debit buyer.
                     if (facilityBuyer != null)
@@ -213,6 +249,7 @@ namespace EconSim.Core.Simulation.Systems
                     actualDemandFilled += desiredQty;
                 }
 
+                goodState.UnfilledNoFunds += unmetNoFundsQty;
                 if (actualDemandFilled <= 0f)
                     continue;
 
@@ -237,7 +274,10 @@ namespace EconSim.Core.Simulation.Systems
                     _sellerIdsBuffer.Add(sellerId);
                 }
                 if (_sellerIdsBuffer.Count == 0)
+                {
+                    goodState.UnfilledNoStock += actualDemandFilled;
                     continue;
+                }
 
                 for (int i = 0; i < _sellerIdsBuffer.Count; i++)
                 {
@@ -270,6 +310,7 @@ namespace EconSim.Core.Simulation.Systems
                 }
 
                 float traded = Math.Max(0f, soldTarget - remainingSold);
+                goodState.UnfilledNoStock += Math.Max(0f, actualDemandFilled - traded);
                 goodState.Supply = Math.Max(0f, goodState.Supply - traded);
                 goodState.LastTradeVolume = traded;
                 goodState.Revenue = sellerRevenue;
@@ -310,6 +351,8 @@ namespace EconSim.Core.Simulation.Systems
             for (int i = 0; i < ReserveGoodIds.Length; i++)
             {
                 string goodId = ReserveGoodIds[i];
+                if (!SimulationConfig.Economy.IsGoodEnabled(goodId))
+                    continue;
                 if (!economy.Goods.TryGetRuntimeId(goodId, out int runtimeId) || runtimeId < 0)
                     continue;
 
@@ -550,7 +593,7 @@ namespace EconSim.Core.Simulation.Systems
             {
                 var flour = economy.Goods.GetByRuntimeId(flourRuntimeId);
                 if (flour != null && flour.BaseConsumption > 0f)
-                    return flour.BaseConsumption * GrainKgPerFlourKg;
+                    return flour.BaseConsumption * SimulationConfig.Economy.RawGrainKgPerFlourKg;
             }
 
             return FallbackDailyGrainNeedPerCapitaKg;
@@ -559,6 +602,8 @@ namespace EconSim.Core.Simulation.Systems
         private static bool IsReserveGrain(string goodId)
         {
             if (string.IsNullOrWhiteSpace(goodId))
+                return false;
+            if (!SimulationConfig.Economy.IsGoodEnabled(goodId))
                 return false;
 
             for (int i = 0; i < ReserveGrainGoodIds.Length; i++)

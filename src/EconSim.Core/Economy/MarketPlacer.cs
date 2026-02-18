@@ -12,7 +12,7 @@ namespace EconSim.Core.Economy
     /// </summary>
     public static class MarketPlacer
     {
-        private const float LegacyDefaultMarketZoneMaxCost = 100f;
+        private const float LegacyDefaultMarketZoneMaxCost = 200f;
         private const float MinMarketZoneMaxCost = 50f;
 
         /// <summary>
