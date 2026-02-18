@@ -934,7 +934,7 @@ namespace EconSim.Core.Simulation.Systems
             if (def == null)
                 return false;
 
-            return def.Id == "mill" || def.Id == "rye_mill" || def.Id == "barley_mill";
+            return def.Id == "mill";
         }
 
         private static bool ShouldDemandLimitProcessing(FacilityDef def)

@@ -91,9 +91,9 @@ namespace EconSim.Core.Simulation
             /// <summary>
             /// Share of beer demand covered by local home brewing from county grain stockpiles
             /// before remaining demand is routed to markets.
-            /// 0.00 means 0% home-brew / 100% market.
+            /// 0.75 means 75% home-brew / 25% market.
             /// </summary>
-            public const float BeerSubsistenceShare = 0.00f;
+            public const float BeerSubsistenceShare = 0.75f;
 
             /// <summary>
             /// Flat hauling fee in Crowns per kilogram per transport-cost unit.

@@ -22,7 +22,7 @@ namespace EconSim.Core.Simulation.Systems
         private const float BreweryObservedDemandWeight = 0.50f;
         private const float BreweryDemandForecastBufferFactor = 1.10f;
 
-        private static readonly string[] BreadSubsistenceGoods = { "wheat", "rye", "barley", "rice_grain" };
+        private static readonly string[] BreadSubsistenceGoods = { "wheat", "rye", "rice_grain" };
         private static readonly string[] BeerSubsistenceGoods = { "barley" };
         private readonly Dictionary<int, float> _demandByGoodBuffer = new Dictionary<int, float>();
         private readonly List<OrderLine> _tierLinesBuffer = new List<OrderLine>();
@@ -892,7 +892,7 @@ namespace EconSim.Core.Simulation.Systems
             if (def == null)
                 return false;
 
-            return def.Id == "mill" || def.Id == "rye_mill" || def.Id == "barley_mill";
+            return def.Id == "mill";
         }
 
         private static bool ShouldDemandLimitInputOrders(FacilityDef def)
