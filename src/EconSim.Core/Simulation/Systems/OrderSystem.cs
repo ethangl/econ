@@ -148,6 +148,7 @@ namespace EconSim.Core.Simulation.Systems
                     _breadRuntimeId,
                     _beerSubsistenceRuntimeIds,
                     _beerRuntimeId,
+                    economy.Goods,
                     _countyMarketTransportCostCache);
                 PostFacilityInputOrders(
                     state,
@@ -174,6 +175,7 @@ namespace EconSim.Core.Simulation.Systems
             int breadRuntimeId,
             int[] beerSubsistenceRuntimeIds,
             int beerRuntimeId,
+            GoodRegistry goods,
             Dictionary<long, float> countyMarketTransportCostCache)
         {
             int population = county.Population.Total;
@@ -204,7 +206,8 @@ namespace EconSim.Core.Simulation.Systems
                 breadSubsistenceRuntimeIds,
                 breadRuntimeId,
                 beerSubsistenceRuntimeIds,
-                beerRuntimeId);
+                beerRuntimeId,
+                goods);
 
             float budget = Math.Max(0f, county.Population.Treasury);
             budget -= PostTierOrders(state, economy, county, market, transportCost, demandByGood, tierLinesBuffer, NeedCategory.Basic, budget, countyMarketTransportCostCache);
@@ -646,7 +649,8 @@ namespace EconSim.Core.Simulation.Systems
             int[] breadSubsistenceRuntimeIds,
             int breadRuntimeId,
             int[] beerSubsistenceRuntimeIds,
-            int beerRuntimeId)
+            int beerRuntimeId,
+            GoodRegistry goods)
         {
             if (breadRuntimeId >= 0 && demandByGood.TryGetValue(breadRuntimeId, out float breadNeed) && breadNeed > 0f)
             {
@@ -709,6 +713,42 @@ namespace EconSim.Core.Simulation.Systems
                 }
             }
 
+            ConsumeStockpiledBasicGoods(county, goods, demandByGood);
+
+        }
+
+        private static void ConsumeStockpiledBasicGoods(
+            CountyEconomy county,
+            GoodRegistry goods,
+            Dictionary<int, float> demandByGood)
+        {
+            if (county?.Stockpile == null || goods == null || demandByGood == null || demandByGood.Count == 0)
+                return;
+
+            var runtimeIds = new List<int>(demandByGood.Keys);
+            for (int i = 0; i < runtimeIds.Count; i++)
+            {
+                int runtimeId = runtimeIds[i];
+                if (runtimeId < 0)
+                    continue;
+                if (!demandByGood.TryGetValue(runtimeId, out float need) || need <= 0f)
+                    continue;
+                if (!goods.TryGetByRuntimeId(runtimeId, out var good) || good == null)
+                    continue;
+                if (good.NeedCategory != NeedCategory.Basic)
+                    continue;
+
+                float available = county.Stockpile.Get(runtimeId);
+                if (available <= 0f)
+                    continue;
+
+                float covered = Math.Min(need, available);
+                if (covered <= 0f)
+                    continue;
+
+                county.Stockpile.Remove(runtimeId, covered);
+                demandByGood[runtimeId] = Math.Max(0f, need - covered);
+            }
         }
 
         private static void RemoveProportional(
