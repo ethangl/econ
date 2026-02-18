@@ -53,6 +53,8 @@ namespace EconSim.Core.Simulation.Systems
         private readonly HashSet<int> _demandReachabilityVisited = new HashSet<int>();
         private readonly Dictionary<int, float> _maltDesiredByMarket = new Dictionary<int, float>();
         private readonly Dictionary<int, int> _maltDesiredDayByMarket = new Dictionary<int, int>();
+        private readonly Dictionary<int, float> _globalDemandByRuntimeId = new Dictionary<int, float>();
+        private readonly Dictionary<int, float> _globalSupplyByRuntimeId = new Dictionary<int, float>();
 
         public void Initialize(SimulationState state, MapData mapData)
         {
@@ -98,6 +100,7 @@ namespace EconSim.Core.Simulation.Systems
 
             _producedThisTick.Clear();
             _demandReachabilityMemo.Clear();
+            RebuildGlobalGoodSignals(economy);
             BuildAvailableWorkerCaches(economy);
             ApplyFacilitySubsidiesV2(state, economy);
 
@@ -201,6 +204,13 @@ namespace EconSim.Core.Simulation.Systems
             int outputRuntimeId = ResolveRuntimeId(economy.Goods, def.OutputGoodId);
             bool hasDemandPull = def.IsExtraction
                 || (market != null && outputRuntimeId >= 0 && HasDirectOrDownstreamDemand(economy, market, outputRuntimeId));
+            if (!hasDemandPull
+                && outputRuntimeId >= 0
+                && IsGlobalDemandDrivenFacility(def)
+                && HasGlobalDemandPressure(outputRuntimeId))
+            {
+                hasDemandPull = true;
+            }
 
             if (facility.IsActive)
             {
@@ -602,6 +612,12 @@ namespace EconSim.Core.Simulation.Systems
                         float desiredThroughput = ComputeMaltHouseDerivedDemandThroughput(economy, market, outputState, currentDay);
                         throughput = Math.Min(throughput, desiredThroughput);
                     }
+                    else if (string.Equals(def.Id, "brewery", StringComparison.OrdinalIgnoreCase))
+                    {
+                        float unmetDemand = GetGlobalUnmetDemand(outputRuntimeId);
+                        float demandLimitedThroughput = unmetDemand * MillDemandBufferFactor;
+                        throughput = Math.Min(throughput, demandLimitedThroughput);
+                    }
                     else
                     {
                         float unmetDemand = Math.Max(0f, outputState.Demand - outputState.Supply);
@@ -930,6 +946,65 @@ namespace EconSim.Core.Simulation.Systems
                 return true;
 
             return def.Id == "bakery" || def.Id == "brewery" || def.Id == "malt_house";
+        }
+
+        private static bool IsGlobalDemandDrivenFacility(FacilityDef def)
+        {
+            if (def == null)
+                return false;
+
+            return string.Equals(def.Id, "brewery", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void RebuildGlobalGoodSignals(EconomyState economy)
+        {
+            _globalDemandByRuntimeId.Clear();
+            _globalSupplyByRuntimeId.Clear();
+            if (economy?.Markets == null)
+                return;
+
+            foreach (var market in economy.Markets.Values)
+            {
+                if (market == null || market.Type != MarketType.Legitimate)
+                    continue;
+                if (market.Goods == null)
+                    continue;
+
+                foreach (var goodState in market.Goods.Values)
+                {
+                    if (goodState == null || goodState.RuntimeId < 0)
+                        continue;
+
+                    _globalDemandByRuntimeId.TryGetValue(goodState.RuntimeId, out float demand);
+                    _globalDemandByRuntimeId[goodState.RuntimeId] = demand + Math.Max(0f, goodState.Demand);
+
+                    _globalSupplyByRuntimeId.TryGetValue(goodState.RuntimeId, out float supply);
+                    _globalSupplyByRuntimeId[goodState.RuntimeId] = supply + Math.Max(0f, goodState.Supply);
+                }
+            }
+        }
+
+        private bool HasGlobalDemandPressure(int runtimeId)
+        {
+            if (runtimeId < 0)
+                return false;
+
+            _globalDemandByRuntimeId.TryGetValue(runtimeId, out float demand);
+            _globalSupplyByRuntimeId.TryGetValue(runtimeId, out float supply);
+            if (demand <= V2ProcessingDemandFloorKg)
+                return false;
+
+            return demand > supply * V2DemandPressureRatio;
+        }
+
+        private float GetGlobalUnmetDemand(int runtimeId)
+        {
+            if (runtimeId < 0)
+                return 0f;
+
+            _globalDemandByRuntimeId.TryGetValue(runtimeId, out float demand);
+            _globalSupplyByRuntimeId.TryGetValue(runtimeId, out float supply);
+            return Math.Max(0f, demand - supply);
         }
 
         private static bool IsReserveGrainGood(string goodId)
