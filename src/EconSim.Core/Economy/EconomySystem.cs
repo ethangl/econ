@@ -86,11 +86,6 @@ namespace EconSim.Core.Economy
                 ce.Consumption[Food] = consumed;
                 ce.UnmetNeed[Food] = needed - consumed;
 
-                // Timber/Ore: no consumption yet (Phase B)
-                ce.Consumption[(int)GoodType.Timber] = 0f;
-                ce.Consumption[(int)GoodType.Ore] = 0f;
-                ce.UnmetNeed[(int)GoodType.Timber] = 0f;
-                ce.UnmetNeed[(int)GoodType.Ore] = 0f;
             }
 
             // Record snapshot

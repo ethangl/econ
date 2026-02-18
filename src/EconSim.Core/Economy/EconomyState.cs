@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using EconSim.Core.Common;
 
 namespace EconSim.Core.Economy
 {
@@ -7,6 +7,9 @@ namespace EconSim.Core.Economy
     /// </summary>
     public class EconomyState
     {
+        /// <summary>10 years of daily snapshots.</summary>
+        const int TimeSeriesCapacity = 3650;
+
         /// <summary>Per-county economy, indexed by county ID.</summary>
         public CountyEconomy[] Counties;
 
@@ -19,7 +22,7 @@ namespace EconSim.Core.Economy
         /// <summary>Median productivity across all counties, per good type (computed once at init).</summary>
         public float[] MedianProductivity;
 
-        /// <summary>Recorded each tick for analysis.</summary>
-        public List<EconomySnapshot> TimeSeries = new List<EconomySnapshot>();
+        /// <summary>Recorded each tick for analysis. Ring buffer — oldest entries dropped when full.</summary>
+        public RingBuffer<EconomySnapshot> TimeSeries = new RingBuffer<EconomySnapshot>(TimeSeriesCapacity);
     }
 }
