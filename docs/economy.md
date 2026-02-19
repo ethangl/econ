@@ -15,7 +15,16 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 
 ## To Do
 
-### Layer 5: Production Chains
+### Layer 5: Population Dynamics
+
+Static population → dynamic. Growth from food surplus, decline from starvation, migration toward prosperity. Monthly tick evaluates conditions over ~30 daily economic cycles.
+
+- Growth/decline driven by sustained food satisfaction (not single-day spikes)
+- Migration toward counties with better conditions
+- Monthly update reads back over daily TimeSeries for averaging
+- Observable: growing vs shrinking counties, migration flows, carrying capacity emergence
+
+### Layer 6: Production Chains
 
 Raw goods → refined goods → finished goods. Facilities transform inputs to outputs.
 
@@ -26,7 +35,6 @@ Raw goods → refined goods → finished goods. Facilities transform inputs to o
 
 ### Future Layers (unordered)
 
-- **Population dynamics** — growth from surplus food, decline from starvation, migration toward prosperity
 - **Labor specialization** — unskilled vs craftsman, skill acquisition from employment
 - **Decay/spoilage** — perishable goods lose value over time
 - **Road emergence** — traffic volume builds paths → roads, reducing transport cost

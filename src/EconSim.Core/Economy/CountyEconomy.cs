@@ -28,5 +28,17 @@ namespace EconSim.Core.Economy
 
         /// <summary>Relief received from provincial stockpile this tick, per good type.</summary>
         public float[] Relief = new float[Goods.Count];
+
+        /// <summary>Exponential moving average of daily food satisfaction (0=starving, 1=fully fed). ~30-day window.</summary>
+        public float FoodSatisfaction = 1f;
+
+        /// <summary>Births this month (reset monthly by PopulationSystem).</summary>
+        public float BirthsThisMonth;
+
+        /// <summary>Deaths this month (reset monthly by PopulationSystem).</summary>
+        public float DeathsThisMonth;
+
+        /// <summary>Net migration this month (reset monthly by PopulationSystem). Positive = inflow.</summary>
+        public float NetMigrationThisMonth;
     }
 }

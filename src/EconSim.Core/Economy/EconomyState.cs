@@ -27,5 +27,8 @@ namespace EconSim.Core.Economy
 
         /// <summary>Current inter-realm market prices (Crowns/kg), indexed by GoodType. Set by InterRealmTradeSystem.</summary>
         public float[] MarketPrices = new float[Goods.Count];
+
+        /// <summary>County adjacency graph. countyId → array of adjacent county IDs. Built once at init.</summary>
+        public int[][] CountyAdjacency;
     }
 }

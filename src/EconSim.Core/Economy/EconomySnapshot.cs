@@ -48,6 +48,15 @@ namespace EconSim.Core.Economy
         public float TotalTradeSpending;
         public float TotalTradeRevenue;
 
+        // Population dynamics (Layer 5)
+        public float TotalPopulation;
+        public float TotalBirths;
+        public float TotalDeaths;
+        public float AvgFoodSatisfaction;   // population-weighted
+        public float MinFoodSatisfaction;
+        public float MaxFoodSatisfaction;
+        public int CountiesInDistress;      // satisfaction < 0.5
+
         // Backward-compat scalars = food values
         public float TotalDucalTax;
         public float TotalDucalRelief;

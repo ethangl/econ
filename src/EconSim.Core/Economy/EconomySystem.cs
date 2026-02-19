@@ -57,7 +57,46 @@ namespace EconSim.Core.Economy
                 }
             }
 
+            // Build county adjacency graph
+            econ.CountyAdjacency = BuildCountyAdjacency(mapData, maxCountyId);
+
             state.Economy = econ;
+        }
+
+        static int[][] BuildCountyAdjacency(MapData mapData, int maxCountyId)
+        {
+            var adj = new int[maxCountyId + 1][];
+            var sets = new HashSet<int>[maxCountyId + 1];
+
+            foreach (var county in mapData.Counties)
+            {
+                sets[county.Id] = new HashSet<int>();
+            }
+
+            foreach (var cell in mapData.Cells)
+            {
+                int cid = cell.CountyId;
+                if (cid <= 0 || sets[cid] == null) continue;
+
+                foreach (int nid in cell.NeighborIds)
+                {
+                    var neighbor = mapData.CellById[nid];
+                    int ncid = neighbor.CountyId;
+                    if (ncid > 0 && ncid != cid && sets[ncid] != null)
+                        sets[cid].Add(ncid);
+                }
+            }
+
+            for (int i = 0; i <= maxCountyId; i++)
+            {
+                if (sets[i] != null)
+                {
+                    adj[i] = new int[sets[i].Count];
+                    sets[i].CopyTo(adj[i]);
+                }
+            }
+
+            return adj;
         }
 
         public void Tick(SimulationState state, MapData mapData)
@@ -89,6 +128,11 @@ namespace EconSim.Core.Economy
                     ce.Consumption[g] = consumed;
                     ce.UnmetNeed[g] = needed - consumed;
                 }
+
+                // Food satisfaction EMA (alpha ≈ 2/(30+1) ≈ 0.065, ~30-day smoothing)
+                float foodNeeded = pop * ConsumptionPerPop[Food];
+                float daily = foodNeeded > 0f ? Math.Min(1f, ce.Consumption[Food] / foodNeeded) : 1f;
+                ce.FoodSatisfaction += 0.065f * (daily - ce.FoodSatisfaction);
             }
 
             // Record snapshot
@@ -135,6 +179,9 @@ namespace EconSim.Core.Economy
             snap.TotalRoyalStockpileByGood = new float[Goods.Count];
 
             int countyCount = 0;
+            snap.MinFoodSatisfaction = float.MaxValue;
+            snap.MaxFoodSatisfaction = float.MinValue;
+            float weightedSatisfaction = 0f;
 
             for (int i = 0; i < econ.Counties.Length; i++)
             {
@@ -167,6 +214,15 @@ namespace EconSim.Core.Economy
                     snap.DeficitCounties++;
                 else
                     snap.SurplusCounties++;
+
+                // Population dynamics aggregates
+                snap.TotalPopulation += ce.Population;
+                snap.TotalBirths += ce.BirthsThisMonth;
+                snap.TotalDeaths += ce.DeathsThisMonth;
+                weightedSatisfaction += ce.Population * ce.FoodSatisfaction;
+                if (ce.FoodSatisfaction < snap.MinFoodSatisfaction) snap.MinFoodSatisfaction = ce.FoodSatisfaction;
+                if (ce.FoodSatisfaction > snap.MaxFoodSatisfaction) snap.MaxFoodSatisfaction = ce.FoodSatisfaction;
+                if (ce.FoodSatisfaction < 0.5f) snap.CountiesInDistress++;
             }
 
             // Backward-compat scalars = food values
@@ -179,7 +235,13 @@ namespace EconSim.Core.Economy
             {
                 snap.MinStock = 0;
                 snap.MaxStock = 0;
+                snap.MinFoodSatisfaction = 0;
+                snap.MaxFoodSatisfaction = 0;
             }
+
+            snap.AvgFoodSatisfaction = snap.TotalPopulation > 0f
+                ? weightedSatisfaction / snap.TotalPopulation
+                : 0f;
 
             // Provincial stockpile stats
             if (econ.Provinces != null)

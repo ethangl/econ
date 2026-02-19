@@ -342,6 +342,74 @@ def print_roads(data: dict):
         print(f"    {seg['cellA']:>6d} <-> {seg['cellB']:>6d}  tier={seg['tier']:4s}  traffic={seg['traffic']:.2f}")
 
 
+def print_population(data: dict):
+    section("POPULATION DYNAMICS")
+    ts = data["economy"]["timeSeries"]
+    if not ts:
+        print("  No time series data")
+        return
+
+    first, last = ts[0], ts[-1]
+    pop_first = first.get("totalPopulation", 0)
+    pop_last = last.get("totalPopulation", 0)
+
+    if pop_first == 0 and pop_last == 0:
+        print("  No population data in time series (run longer or update bridge)")
+        return
+
+    days = last["day"] - first["day"]
+    growth = pop_last - pop_first
+    growth_pct = (growth / pop_first * 100) if pop_first > 0 else 0
+
+    print(f"  Population:  {fmt(pop_first, 0)} -> {fmt(pop_last, 0)}  ({'+' if growth >= 0 else ''}{fmt(growth, 0)}, {'+' if growth_pct >= 0 else ''}{growth_pct:.2f}%)")
+    if days > 0:
+        annual_rate = (pop_last / pop_first) ** (365 / days) - 1 if pop_first > 0 else 0
+        print(f"  Annualized:  {'+' if annual_rate >= 0 else ''}{annual_rate * 100:.2f}%/yr over {days} days")
+
+    # Latest satisfaction
+    avg_sat = last.get("avgFoodSatisfaction", 0)
+    min_sat = last.get("minFoodSatisfaction", 0)
+    max_sat = last.get("maxFoodSatisfaction", 0)
+    distress = last.get("countiesInDistress", 0)
+    print(f"\n  Food Satisfaction (latest):")
+    print(f"    Average:   {avg_sat:.3f}")
+    print(f"    Min:       {min_sat:.3f}")
+    print(f"    Max:       {max_sat:.3f}")
+    print(f"    Distressed counties (<0.5): {distress}")
+
+    # Births / deaths from latest snapshot
+    births = last.get("totalBirths", 0)
+    deaths = last.get("totalDeaths", 0)
+    print(f"\n  Monthly Vitals (latest):")
+    print(f"    Births:    {fmt(births, 0)}")
+    print(f"    Deaths:    {fmt(deaths, 0)}")
+    print(f"    Natural:   {'+' if births - deaths >= 0 else ''}{fmt(births - deaths, 0)}")
+
+    # Satisfaction trend (sample 5 points)
+    if len(ts) >= 10:
+        print(f"\n  Satisfaction over time:")
+        indices = [0, len(ts)//4, len(ts)//2, 3*len(ts)//4, len(ts)-1]
+        for idx in indices:
+            snap = ts[idx]
+            pop = snap.get("totalPopulation", 0)
+            sat = snap.get("avgFoodSatisfaction", 0)
+            dist = snap.get("countiesInDistress", 0)
+            print(f"    Day {snap['day']:>4d}: pop={fmt(pop, 0):>8s}  sat={sat:.3f}  distress={dist}")
+
+    # Population trend (first vs last 30 days)
+    if len(ts) >= 60:
+        early_pops = [t.get("totalPopulation", 0) for t in ts[:30] if t.get("totalPopulation", 0) > 0]
+        late_pops = [t.get("totalPopulation", 0) for t in ts[-30:] if t.get("totalPopulation", 0) > 0]
+        if early_pops and late_pops:
+            avg_early = sum(early_pops) / len(early_pops)
+            avg_late = sum(late_pops) / len(late_pops)
+            pop_change = avg_late - avg_early
+            print(f"\n  Population trend:")
+            print(f"    First 30d avg: {fmt(avg_early, 0)}")
+            print(f"    Last 30d avg:  {fmt(avg_late, 0)}")
+            print(f"    Change:        {'+' if pop_change >= 0 else ''}{fmt(pop_change, 0)}")
+
+
 def print_convergence(data: dict):
     section("CONVERGENCE ANALYSIS")
     ts = data["economy"]["timeSeries"]
@@ -417,6 +485,7 @@ def main():
     print_treasury(data)
     print_inter_realm_trade(data)
     print_roads(data)
+    print_population(data)
     print_convergence(data)
     print()
 

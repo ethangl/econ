@@ -254,6 +254,7 @@ namespace EconSim.Core
             runner.RegisterSystem(new EconomySystem());
             runner.RegisterSystem(new TradeSystem());
             runner.RegisterSystem(new InterRealmTradeSystem());
+            runner.RegisterSystem(new PopulationSystem());
             _simulation = runner;
             Profiler.End();
             _simulation.IsPaused = true;  // Start paused

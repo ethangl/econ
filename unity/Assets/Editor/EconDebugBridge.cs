@@ -448,11 +448,17 @@ namespace EconSim.Editor
         {
             j.Key("summary"); j.ObjOpen();
 
-            int totalPop = 0;
-            if (mapData?.Cells != null)
+            // Use dynamic population from economy state (reflects births/deaths/migration)
+            float totalPop = 0;
+            if (st.Economy?.Counties != null)
+            {
+                foreach (var ce in st.Economy.Counties)
+                    if (ce != null) totalPop += ce.Population;
+            }
+            else if (mapData?.Cells != null)
             {
                 foreach (var cell in mapData.Cells)
-                    totalPop += (int)cell.Population;
+                    totalPop += cell.Population;
             }
 
             j.KV("totalPopulation", totalPop);
@@ -629,6 +635,15 @@ namespace EconSim.Editor
                 j.KV("crownsMinted", snap.TotalCrownsMinted);
                 j.KV("tradeSpending", snap.TotalTradeSpending);
                 j.KV("tradeRevenue", snap.TotalTradeRevenue);
+
+                // Population dynamics
+                j.KV("totalPopulation", snap.TotalPopulation);
+                j.KV("totalBirths", snap.TotalBirths);
+                j.KV("totalDeaths", snap.TotalDeaths);
+                j.KV("avgFoodSatisfaction", snap.AvgFoodSatisfaction);
+                j.KV("minFoodSatisfaction", snap.MinFoodSatisfaction);
+                j.KV("maxFoodSatisfaction", snap.MaxFoodSatisfaction);
+                j.KV("countiesInDistress", snap.CountiesInDistress);
 
                 if (snap.MarketPrices != null)
                 {
