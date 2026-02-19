@@ -9,8 +9,8 @@ namespace EconSim.Core.Economy
     /// Monthly population dynamics: birth, death, and intra-realm migration.
     /// Runs every 30 days after all other systems.
     ///
-    /// Birth rate scales with food satisfaction (well-fed counties grow faster).
-    /// Death rate spikes exponentially with starvation.
+    /// Birth rate scales with basic-needs satisfaction (well-supplied counties grow faster).
+    /// Death rate spikes exponentially with deprivation.
     /// Migration flows from low-satisfaction to high-satisfaction within same realm.
     /// </summary>
     public class PopulationSystem : ITickSystem
@@ -68,7 +68,7 @@ namespace EconSim.Core.Economy
                 int cid = _countyIds[i];
                 var ce = counties[cid];
                 float pop = ce.Population;
-                float sat = ce.FoodSatisfaction;
+                float sat = ce.BasicSatisfaction;
 
                 // Birth rate: BaseBirth * lerp(0.5, 1.5, satisfaction)
                 float birthMul = 0.5f + sat; // lerp(0.5, 1.5, sat) when sat in [0,1]
@@ -113,7 +113,7 @@ namespace EconSim.Core.Economy
                     continue;
 
                 int realmId = _countyRealmIds[i];
-                float sat = ce.FoodSatisfaction;
+                float sat = ce.BasicSatisfaction;
 
                 // Find best adjacent same-realm neighbor with satisfaction gap > threshold
                 int bestNeighborIdx = -1;
@@ -131,7 +131,7 @@ namespace EconSim.Core.Economy
                     // Same realm only
                     if (_countyRealmIds[nIdx] != realmId) continue;
 
-                    float nSat = counties[nid].FoodSatisfaction;
+                    float nSat = counties[nid].BasicSatisfaction;
                     float gap = nSat - sat;
                     if (gap > bestGap)
                     {

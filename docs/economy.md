@@ -12,31 +12,23 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 2. Feudal Tax Redistribution
 3. Multiple Goods
 4. Inter-Realm Trade
+5. Population Dynamics
+6. Good Spoilage / Decay
 
 ## To Do
 
-### Layer 5: Population Dynamics
-
-Static population → dynamic. Growth from food surplus, decline from starvation, migration toward prosperity. Monthly tick evaluates conditions over ~30 daily economic cycles.
-
-- Growth/decline driven by sustained food satisfaction (not single-day spikes)
-- Migration toward counties with better conditions
-- Monthly update reads back over daily TimeSeries for averaging
-- Observable: growing vs shrinking counties, migration flows, carrying capacity emergence
-
-### Layer 6: Production Chains
+### Layer 7: Production Chains
 
 Raw goods → refined goods → finished goods. Facilities transform inputs to outputs.
 
 - Facilities placed by geography (sawmill near forest, smelter near ore)
 - Labor requirements from county population
 - Processing takes time (input consumed, output buffered)
-- Refactor goods from enum + parallel arrays to `GoodDef` registry — each good needs metadata (inputs, outputs, processing time, facility type, category, tradeability)
+- `GoodDef` registry additions (inputs, outputs, processing time, facility type, category, tradeability)
 
 ### Future Layers (unordered)
 
 - **Labor specialization** — unskilled vs craftsman, skill acquisition from employment
-- **Decay/spoilage** — perishable goods lose value over time
 - **Road emergence** — traffic volume builds paths → roads, reducing transport cost
 - **Political effects** — tariffs at realm borders, trade agreements
 - **Black markets** — theft, smuggling, informal economy

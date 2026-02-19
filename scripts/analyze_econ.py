@@ -5,8 +5,34 @@ import json
 import sys
 from pathlib import Path
 
-GOODS = ["food", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone"]
-GOOD_IDX = {g: i for i, g in enumerate(GOODS)}
+_FALLBACK_GOODS = ["food", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone"]
+_FALLBACK_BASE_PRICES = [1.0, 0.5, 5.0, 0.0, 0.0, 3.0, 2.0, 0.3]
+_FALLBACK_TRADEABLE = {"food", "timber", "ironOre", "salt", "wool", "stone"}
+
+# Module-level references set by init_goods()
+GOODS: list[str] = []
+GOOD_IDX: dict[str, int] = {}
+BASE_PRICES: list[float] = []
+TRADEABLE: set[str] = set()
+
+
+def init_goods(data: dict):
+    """Initialize goods metadata from dump or fallback to hardcoded values."""
+    global GOODS, GOOD_IDX, BASE_PRICES, TRADEABLE
+
+    goods_meta = data.get("goods")
+    if goods_meta:
+        # Sort by index to ensure correct ordering
+        goods_meta = sorted(goods_meta, key=lambda g: g["index"])
+        GOODS = [g["name"] for g in goods_meta]
+        GOOD_IDX = {g: i for i, g in enumerate(GOODS)}
+        BASE_PRICES = [g["basePrice"] for g in goods_meta]
+        TRADEABLE = {g["name"] for g in goods_meta if g["isTradeable"]}
+    else:
+        GOODS = list(_FALLBACK_GOODS)
+        GOOD_IDX = {g: i for i, g in enumerate(GOODS)}
+        BASE_PRICES = list(_FALLBACK_BASE_PRICES)
+        TRADEABLE = set(_FALLBACK_TRADEABLE)
 
 
 def load(path: str | None = None) -> dict:
@@ -253,16 +279,15 @@ def print_inter_realm_trade(data: dict):
         print("  No inter-realm trade data (marketPrices missing)")
         return
 
-    TRADEABLE = ["food", "timber", "ironOre", "salt", "wool", "stone"]
-    TRADEABLE_IDX = [GOOD_IDX[g] for g in TRADEABLE]
+    tradeable_names = [g for g in GOODS if g in TRADEABLE]
+    TRADEABLE_IDX = [GOOD_IDX[g] for g in tradeable_names]
 
     print("  Market Prices (Crowns/kg):")
     print(f"    {'Good':8s}  {'Price':>10s}  {'Base':>8s}  {'Ratio':>8s}")
     print(f"    {'-'*8}  {'-'*10}  {'-'*8}  {'-'*8}")
-    base_prices = [1.0, 0.5, 5.0, 0.0, 0.0, 3.0, 2.0, 0.3]
     for g in TRADEABLE_IDX:
         p = prices[g]
-        bp = base_prices[g]
+        bp = BASE_PRICES[g]
         ratio = f"{p/bp:.2f}x" if bp > 0 else "n/a"
         print(f"    {GOODS[g]:8s}  {fmt(p, 2):>10s}  {fmt(bp, 2):>8s}  {ratio:>8s}")
 
@@ -367,11 +392,11 @@ def print_population(data: dict):
         print(f"  Annualized:  {'+' if annual_rate >= 0 else ''}{annual_rate * 100:.2f}%/yr over {days} days")
 
     # Latest satisfaction
-    avg_sat = last.get("avgFoodSatisfaction", 0)
-    min_sat = last.get("minFoodSatisfaction", 0)
-    max_sat = last.get("maxFoodSatisfaction", 0)
+    avg_sat = last.get("avgBasicSatisfaction", last.get("avgFoodSatisfaction", 0))
+    min_sat = last.get("minBasicSatisfaction", last.get("minFoodSatisfaction", 0))
+    max_sat = last.get("maxBasicSatisfaction", last.get("maxFoodSatisfaction", 0))
     distress = last.get("countiesInDistress", 0)
-    print(f"\n  Food Satisfaction (latest):")
+    print(f"\n  Basic Satisfaction (latest):")
     print(f"    Average:   {avg_sat:.3f}")
     print(f"    Min:       {min_sat:.3f}")
     print(f"    Max:       {max_sat:.3f}")
@@ -392,7 +417,7 @@ def print_population(data: dict):
         for idx in indices:
             snap = ts[idx]
             pop = snap.get("totalPopulation", 0)
-            sat = snap.get("avgFoodSatisfaction", 0)
+            sat = snap.get("avgBasicSatisfaction", snap.get("avgFoodSatisfaction", 0))
             dist = snap.get("countiesInDistress", 0)
             print(f"    Day {snap['day']:>4d}: pop={fmt(pop, 0):>8s}  sat={sat:.3f}  distress={dist}")
 
@@ -475,6 +500,7 @@ def print_convergence(data: dict):
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else None
     data = load(path)
+    init_goods(data)
 
     print_header(data)
     print_performance(data)

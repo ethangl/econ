@@ -52,9 +52,9 @@ namespace EconSim.Core.Economy
         public float TotalPopulation;
         public float TotalBirths;
         public float TotalDeaths;
-        public float AvgFoodSatisfaction;   // population-weighted
-        public float MinFoodSatisfaction;
-        public float MaxFoodSatisfaction;
+        public float AvgBasicSatisfaction;   // population-weighted
+        public float MinBasicSatisfaction;
+        public float MaxBasicSatisfaction;
         public int CountiesInDistress;      // satisfaction < 0.5
 
         // Backward-compat scalars = food values

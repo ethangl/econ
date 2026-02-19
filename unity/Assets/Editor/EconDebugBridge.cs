@@ -428,6 +428,8 @@ namespace EconSim.Editor
             j.KV("totalTicks", st.TotalTicksProcessed);
             j.KV("timestamp", DateTime.UtcNow.ToString("o"));
 
+            WriteGoodsMetadata(j);
+
             if (scope == "all" || scope == "summary")
             {
                 WriteSummary(j, st, mapData);
@@ -442,6 +444,27 @@ namespace EconSim.Editor
 
             j.ObjClose();
             File.WriteAllText(OutputPath, j.ToString());
+        }
+
+        static void WriteGoodsMetadata(JW j)
+        {
+            j.Key("goods"); j.ArrOpen();
+            for (int i = 0; i < Goods.Count; i++)
+            {
+                var d = Goods.Defs[i];
+                j.ObjOpen();
+                j.KV("index", i);
+                j.KV("name", d.Name);
+                j.KV("category", d.Category.ToString());
+                j.KV("need", d.Need.ToString());
+                j.KV("consumptionPerPop", d.ConsumptionPerPop);
+                j.KV("basePrice", d.BasePrice);
+                j.KV("isTradeable", d.IsTradeable);
+                j.KV("isPreciousMetal", d.IsPreciousMetal);
+                j.KV("spoilageRate", d.SpoilageRate);
+                j.ObjClose();
+            }
+            j.ArrClose();
         }
 
         static void WriteSummary(JW j, SimulationState st, MapData mapData)
@@ -640,9 +663,9 @@ namespace EconSim.Editor
                 j.KV("totalPopulation", snap.TotalPopulation);
                 j.KV("totalBirths", snap.TotalBirths);
                 j.KV("totalDeaths", snap.TotalDeaths);
-                j.KV("avgFoodSatisfaction", snap.AvgFoodSatisfaction);
-                j.KV("minFoodSatisfaction", snap.MinFoodSatisfaction);
-                j.KV("maxFoodSatisfaction", snap.MaxFoodSatisfaction);
+                j.KV("avgBasicSatisfaction", snap.AvgBasicSatisfaction);
+                j.KV("minBasicSatisfaction", snap.MinBasicSatisfaction);
+                j.KV("maxBasicSatisfaction", snap.MaxBasicSatisfaction);
                 j.KV("countiesInDistress", snap.CountiesInDistress);
 
                 if (snap.MarketPrices != null)

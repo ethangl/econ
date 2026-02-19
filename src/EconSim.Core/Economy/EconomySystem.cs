@@ -20,6 +20,39 @@ namespace EconSim.Core.Economy
         static readonly float[] ConsumptionPerPop = Goods.ConsumptionPerPop;
         const int Food = (int)GoodType.Food;
 
+        // Basic-needs satisfaction: precomputed indices and weights
+        static readonly int[] BasicGoods;
+        static readonly float[] BasicWeights;  // ConsumptionPerPop[g] / totalBasicConsumption
+        static readonly float TotalBasicConsumption;
+
+        static EconomySystem()
+        {
+            int count = 0;
+            float total = 0f;
+            for (int g = 0; g < Goods.Count; g++)
+            {
+                if (Goods.Defs[g].Need == NeedCategory.Basic)
+                {
+                    count++;
+                    total += ConsumptionPerPop[g];
+                }
+            }
+
+            BasicGoods = new int[count];
+            BasicWeights = new float[count];
+            TotalBasicConsumption = total;
+            int idx = 0;
+            for (int g = 0; g < Goods.Count; g++)
+            {
+                if (Goods.Defs[g].Need == NeedCategory.Basic)
+                {
+                    BasicGoods[idx] = g;
+                    BasicWeights[idx] = total > 0f ? ConsumptionPerPop[g] / total : 0f;
+                    idx++;
+                }
+            }
+        }
+
         public void Initialize(SimulationState state, MapData mapData)
         {
             int maxCountyId = 0;
@@ -129,10 +162,17 @@ namespace EconSim.Core.Economy
                     ce.UnmetNeed[g] = needed - consumed;
                 }
 
-                // Food satisfaction EMA (alpha ≈ 2/(30+1) ≈ 0.065, ~30-day smoothing)
-                float foodNeeded = pop * ConsumptionPerPop[Food];
-                float daily = foodNeeded > 0f ? Math.Min(1f, ce.Consumption[Food] / foodNeeded) : 1f;
-                ce.FoodSatisfaction += 0.065f * (daily - ce.FoodSatisfaction);
+                // Basic-needs satisfaction EMA (alpha ≈ 2/(30+1) ≈ 0.065, ~30-day smoothing)
+                // Weighted average of per-good fulfillment across all Basic needs
+                float daily = 0f;
+                for (int b = 0; b < BasicGoods.Length; b++)
+                {
+                    int g = BasicGoods[b];
+                    float needed = pop * ConsumptionPerPop[g];
+                    float ratio = needed > 0f ? Math.Min(1f, ce.Consumption[g] / needed) : 1f;
+                    daily += BasicWeights[b] * ratio;
+                }
+                ce.BasicSatisfaction += 0.065f * (daily - ce.BasicSatisfaction);
             }
 
             // Record snapshot
@@ -179,8 +219,8 @@ namespace EconSim.Core.Economy
             snap.TotalRoyalStockpileByGood = new float[Goods.Count];
 
             int countyCount = 0;
-            snap.MinFoodSatisfaction = float.MaxValue;
-            snap.MaxFoodSatisfaction = float.MinValue;
+            snap.MinBasicSatisfaction = float.MaxValue;
+            snap.MaxBasicSatisfaction = float.MinValue;
             float weightedSatisfaction = 0f;
 
             for (int i = 0; i < econ.Counties.Length; i++)
@@ -219,10 +259,10 @@ namespace EconSim.Core.Economy
                 snap.TotalPopulation += ce.Population;
                 snap.TotalBirths += ce.BirthsThisMonth;
                 snap.TotalDeaths += ce.DeathsThisMonth;
-                weightedSatisfaction += ce.Population * ce.FoodSatisfaction;
-                if (ce.FoodSatisfaction < snap.MinFoodSatisfaction) snap.MinFoodSatisfaction = ce.FoodSatisfaction;
-                if (ce.FoodSatisfaction > snap.MaxFoodSatisfaction) snap.MaxFoodSatisfaction = ce.FoodSatisfaction;
-                if (ce.FoodSatisfaction < 0.5f) snap.CountiesInDistress++;
+                weightedSatisfaction += ce.Population * ce.BasicSatisfaction;
+                if (ce.BasicSatisfaction < snap.MinBasicSatisfaction) snap.MinBasicSatisfaction = ce.BasicSatisfaction;
+                if (ce.BasicSatisfaction > snap.MaxBasicSatisfaction) snap.MaxBasicSatisfaction = ce.BasicSatisfaction;
+                if (ce.BasicSatisfaction < 0.5f) snap.CountiesInDistress++;
             }
 
             // Backward-compat scalars = food values
@@ -235,11 +275,11 @@ namespace EconSim.Core.Economy
             {
                 snap.MinStock = 0;
                 snap.MaxStock = 0;
-                snap.MinFoodSatisfaction = 0;
-                snap.MaxFoodSatisfaction = 0;
+                snap.MinBasicSatisfaction = 0;
+                snap.MaxBasicSatisfaction = 0;
             }
 
-            snap.AvgFoodSatisfaction = snap.TotalPopulation > 0f
+            snap.AvgBasicSatisfaction = snap.TotalPopulation > 0f
                 ? weightedSatisfaction / snap.TotalPopulation
                 : 0f;
 

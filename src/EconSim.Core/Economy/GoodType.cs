@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace EconSim.Core.Economy
 {
     public enum GoodType
@@ -10,30 +13,62 @@ namespace EconSim.Core.Economy
         Salt = 5,
         Wool = 6,
         Stone = 7,
+        Ale = 8,
     }
 
     public static class Goods
     {
-        public const int Count = 8;
+        /// <summary>Single source of truth for all per-good data.</summary>
+        public static readonly GoodDef[] Defs;
+
+        /// <summary>Number of goods. Identical to Defs.Length.</summary>
+        public static readonly int Count;
+
+        // ── Flat arrays extracted from Defs for hot-path performance ──
 
         /// <summary>Daily consumption per person (kg/day), indexed by GoodType.</summary>
-        public static readonly float[] ConsumptionPerPop =
-        {
-            1.0f,   // Food (staple)
-            0.2f,   // Timber
-            0.005f, // IronOre
-            0.0f,   // GoldOre (not consumed, minted)
-            0.0f,   // SilverOre (not consumed, minted)
-            0.05f,  // Salt
-            0.1f,   // Wool
-            0.0f,   // Stone (admin only, not consumed by pops)
-        };
+        public static readonly float[] ConsumptionPerPop;
 
         /// <summary>Serialization names, indexed by GoodType.</summary>
-        public static readonly string[] Names =
+        public static readonly string[] Names;
+
+        /// <summary>Anchor price in Crowns per kg, indexed by GoodType. Gold/Silver = 0 (not traded).</summary>
+        public static readonly float[] BasePrice;
+
+        /// <summary>Minimum price (10% of base) — price floor.</summary>
+        public static readonly float[] MinPrice;
+
+        /// <summary>Maximum price (10x base) — price cap.</summary>
+        public static readonly float[] MaxPrice;
+
+        /// <summary>County administrative consumption per capita per day (building upkeep).</summary>
+        public static readonly float[] CountyAdminPerPop;
+
+        /// <summary>Provincial administrative consumption per capita per day (infrastructure).</summary>
+        public static readonly float[] ProvinceAdminPerPop;
+
+        /// <summary>Realm administrative consumption per capita per day (military upkeep).</summary>
+        public static readonly float[] RealmAdminPerPop;
+
+        /// <summary>Monthly retention factor pow(1 - spoilageRate, 30), indexed by GoodType.</summary>
+        public static readonly float[] MonthlyRetention;
+
+        /// <summary>Goods that can be traded on the inter-realm market.</summary>
+        public static readonly int[] TradeableGoods;
+
+        /// <summary>Buy priority order — staples first, stone last (infrastructure can wait).</summary>
+        public static readonly int[] BuyPriority =
         {
-            "food", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone",
+            (int)GoodType.Food,
+            (int)GoodType.Ale,
+            (int)GoodType.IronOre,
+            (int)GoodType.Salt,
+            (int)GoodType.Wool,
+            (int)GoodType.Timber,
+            (int)GoodType.Stone,
         };
+
+        // ── Minting constants (process parameters, not per-good data) ──
 
         /// <summary>Fraction of pure metal per kg of ore (smelting yield).</summary>
         public const float GoldSmeltingYield = 0.01f;   // 1% — rich medieval deposits
@@ -46,67 +81,59 @@ namespace EconSim.Core.Economy
         /// <summary>Precious metals — 100% tax rate (regal right), minted into currency.</summary>
         public static bool IsPreciousMetal(int goodIndex)
         {
-            return goodIndex == (int)GoodType.GoldOre || goodIndex == (int)GoodType.SilverOre;
+            return Defs[goodIndex].IsPreciousMetal;
         }
 
-        /// <summary>County administrative consumption per capita per day (building upkeep).</summary>
-        public static readonly float[] CountyAdminPerPop =
-        {   //  Food  Timber  Iron   Gold   Silver Salt   Wool   Stone
-            0.0f, 0.02f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.005f,
-        };
-
-        /// <summary>Provincial administrative consumption per capita per day (infrastructure).</summary>
-        public static readonly float[] ProvinceAdminPerPop =
-        {   //  Food  Timber  Iron   Gold   Silver Salt   Wool   Stone
-            0.0f, 0.01f, 0.001f, 0.0f, 0.0f, 0.0f, 0.0f, 0.008f,
-        };
-
-        /// <summary>Realm administrative consumption per capita per day (military upkeep).</summary>
-        public static readonly float[] RealmAdminPerPop =
-        {   //  Food   Timber  Iron    Gold   Silver Salt   Wool   Stone
-            0.02f, 0.01f, 0.003f, 0.0f, 0.0f, 0.0f, 0.005f, 0.012f,
-        };
-
-        // ── Inter-realm trade constants ────────────────────────────
-
-        /// <summary>Goods that can be traded on the inter-realm market.</summary>
-        public static readonly int[] TradeableGoods =
+        static Goods()
         {
-            (int)GoodType.Food,
-            (int)GoodType.Timber,
-            (int)GoodType.IronOre,
-            (int)GoodType.Salt,
-            (int)GoodType.Wool,
-            (int)GoodType.Stone,
-        };
+            //                            Type                Name        Category            Need             Cons    CAdmin  PAdmin  RAdmin  Base   Min    Max    Trade  Prec
+            Defs = new[]
+            {
+                //                                                                                                                                              spoilage
+                new GoodDef(GoodType.Food,      "food",      GoodCategory.Raw, NeedCategory.Basic,   1.0f,   0.0f,   0.0f,   0.02f,  1.0f,  0.1f,  10.0f, true,  false, 0.03f),
+                new GoodDef(GoodType.Timber,     "timber",    GoodCategory.Raw, NeedCategory.Comfort, 0.2f,   0.02f,  0.01f,  0.01f,  0.5f,  0.05f, 5.0f,  true,  false, 0.001f),
+                new GoodDef(GoodType.IronOre,    "ironOre",   GoodCategory.Raw, NeedCategory.Comfort, 0.005f, 0.0f,   0.001f, 0.003f, 5.0f,  0.5f,  50.0f, true,  false),
+                new GoodDef(GoodType.GoldOre,    "goldOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
+                new GoodDef(GoodType.SilverOre,  "silverOre", GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
+                new GoodDef(GoodType.Salt,       "salt",      GoodCategory.Raw, NeedCategory.Basic,   0.05f,  0.0f,   0.0f,   0.0f,   3.0f,  0.3f,  30.0f, true,  false),
+                new GoodDef(GoodType.Wool,       "wool",      GoodCategory.Raw, NeedCategory.Comfort, 0.1f,   0.0f,   0.0f,   0.005f, 2.0f,  0.2f,  20.0f, true,  false, 0.001f),
+                new GoodDef(GoodType.Stone,      "stone",     GoodCategory.Raw, NeedCategory.None,    0.0f,   0.005f, 0.008f, 0.012f, 0.3f,  0.03f, 3.0f,  true,  false),
+                new GoodDef(GoodType.Ale,        "ale",       GoodCategory.Raw, NeedCategory.Basic,   0.5f,   0.0f,   0.0f,   0.0f,   0.8f,  0.08f, 8.0f,  true,  false, 0.05f),
+            };
 
-        /// <summary>Buy priority order — staples first, stone last (infrastructure can wait).</summary>
-        public static readonly int[] BuyPriority =
-        {
-            (int)GoodType.Food,
-            (int)GoodType.IronOre,
-            (int)GoodType.Salt,
-            (int)GoodType.Wool,
-            (int)GoodType.Timber,
-            (int)GoodType.Stone,
-        };
+            Count = Defs.Length;
 
-        /// <summary>Anchor price in Crowns per kg, indexed by GoodType. Gold/Silver = 0 (not traded).</summary>
-        public static readonly float[] BasePrice =
-        {   //  Food   Timber  Iron   Gold   Silver Salt   Wool   Stone
-            1.0f, 0.5f, 5.0f, 0.0f, 0.0f, 3.0f, 2.0f, 0.3f,
-        };
+            // Extract flat arrays for hot-path access
+            ConsumptionPerPop   = new float[Count];
+            Names               = new string[Count];
+            BasePrice           = new float[Count];
+            MinPrice            = new float[Count];
+            MaxPrice            = new float[Count];
+            CountyAdminPerPop   = new float[Count];
+            ProvinceAdminPerPop = new float[Count];
+            RealmAdminPerPop    = new float[Count];
+            MonthlyRetention    = new float[Count];
 
-        /// <summary>Minimum price (10% of base) — price floor.</summary>
-        public static readonly float[] MinPrice =
-        {
-            0.1f, 0.05f, 0.5f, 0.0f, 0.0f, 0.3f, 0.2f, 0.03f,
-        };
+            var tradeable = new List<int>();
 
-        /// <summary>Maximum price (10x base) — price cap.</summary>
-        public static readonly float[] MaxPrice =
-        {
-            10.0f, 5.0f, 50.0f, 0.0f, 0.0f, 30.0f, 20.0f, 3.0f,
-        };
+            for (int i = 0; i < Count; i++)
+            {
+                var d = Defs[i];
+                ConsumptionPerPop[i]   = d.ConsumptionPerPop;
+                Names[i]               = d.Name;
+                BasePrice[i]           = d.BasePrice;
+                MinPrice[i]            = d.MinPrice;
+                MaxPrice[i]            = d.MaxPrice;
+                CountyAdminPerPop[i]   = d.CountyAdminPerPop;
+                ProvinceAdminPerPop[i] = d.ProvinceAdminPerPop;
+                RealmAdminPerPop[i]    = d.RealmAdminPerPop;
+                MonthlyRetention[i]    = (float)Math.Pow(1.0 - d.SpoilageRate, 30);
+
+                if (d.IsTradeable)
+                    tradeable.Add(i);
+            }
+
+            TradeableGoods = tradeable.ToArray();
+        }
     }
 }

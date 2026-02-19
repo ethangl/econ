@@ -175,3 +175,69 @@ One market at a realm capital. Realms sell surplus goods for coin and buy defici
 
 - Realms bring surplus to market, buy deficit goods with coin
 - Market clears orders, prices emerge from supply/demand
+
+## Layer 5: Population Dynamics
+
+Static population → dynamic. Growth from food surplus, decline from starvation, migration toward prosperity. Monthly tick evaluates conditions over ~30 daily economic cycles.
+
+- Growth/decline driven by sustained food satisfaction (not single-day spikes)
+- Migration toward counties with better conditions
+- Monthly update reads back over daily TimeSeries for averaging
+- Observable: growing vs shrinking counties, migration flows, carrying capacity emergence
+
+## Layer 6: Mature Goods Model + Spoilage
+
+Centralize per-good metadata into a single `GoodDef` struct. Add Stone and Ale. Introduce spoilage to constrain stockpile hoarding.
+
+### GoodDef Refactor
+
+All per-good data lives in `GoodDef` readonly struct. `Goods.Defs[]` is the single source of truth; flat arrays (`ConsumptionPerPop`, `BasePrice`, `MonthlyRetention`, etc.) are extracted once in the static constructor for hot-path access.
+
+**GoodDef fields:** Type, Name, Category, NeedCategory, ConsumptionPerPop, CountyAdminPerPop, ProvinceAdminPerPop, RealmAdminPerPop, BasePrice, MinPrice, MaxPrice, IsTradeable, IsPreciousMetal, SpoilageRate.
+
+**GoodType (9 goods):** Food, Timber, IronOre, GoldOre, SilverOre, Salt, Wool, Stone, Ale.
+
+**Stone:** Admin-only good — not consumed by population, only by feudal tiers (county 0.005, province 0.008, realm 0.012 kg/capita/day). Represents construction materials for buildings, roads, fortifications. Traded on the inter-realm market.
+
+**Ale:** Second staple (Basic need). 0.5 kg/person/day — represents the grain-equivalent of a daily ale ration. Medieval ale was unhopped, brewed frequently in small batches because it spoiled within days. Produced in grain-growing biomes (floodplain, grassland, savanna, woodland, temperate forest). Highly perishable (5%/day). Not yet wired into FoodSatisfaction — ale shortfall is tracked as unmet need but doesn't affect birth/death/migration.
+
+**Need categories:** Basic (food, ale, salt — shortfall is a staple deprivation), Comfort (timber, iron, wool — shortfall tracked but no death), None (gold, silver, stone — no pop consumption).
+
+**Price bands (Crowns/kg):**
+
+| Good    | Base | Min  | Max  |
+| ------- | ---- | ---- | ---- |
+| Food    | 1.0  | 0.1  | 10.0 |
+| Timber  | 0.5  | 0.05 | 5.0  |
+| IronOre | 5.0  | 0.5  | 50.0 |
+| Salt    | 3.0  | 0.3  | 30.0 |
+| Wool    | 2.0  | 0.2  | 20.0 |
+| Stone   | 0.3  | 0.03 | 3.0  |
+| Ale     | 0.8  | 0.08 | 8.0  |
+
+Gold/Silver: not traded (price = 0), minted into Crowns.
+
+**Buy priority:** Food > Ale > Iron > Salt > Wool > Timber > Stone. Staples first, infrastructure last.
+
+### Spoilage
+
+Perishable goods decay monthly. `SpoilageRate` is the daily fractional loss. Monthly retention is precomputed as `pow(1 - spoilageRate, 30)` and stored in `Goods.MonthlyRetention[]`.
+
+| Good   | Daily Rate | Monthly Retention | Character                    |
+| ------ | ---------- | ----------------- | ---------------------------- |
+| Ale    | 5.0%       | ~21%              | Highly perishable (unhopped) |
+| Food   | 3.0%       | ~40%              | Perishable                   |
+| Timber | 0.1%       | ~97%              | Slow rot/weathering          |
+| Wool   | 0.1%       | ~97%              | Moth damage, mildew          |
+| Others | 0%         | 100%              | Inert (metal, stone, salt)   |
+
+**SpoilageSystem** (`ITickSystem`, monthly): iterates counties, provinces, and realms. For each perishable good, multiplies `Stock` / `Stockpile` by `MonthlyRetention[g]`.
+
+**Effect:** Ale and food cannot hoard up the feudal chain — royal and provincial stockpiles decay to zero because monthly spoilage exceeds inflow at those tiers. Ale is the most aggressive (~79% monthly loss), creating constant brewing pressure. Counties maintain small working buffers. Timber and wool experience mild decay (~3%/month), enough to prevent infinite accumulation but not enough to destabilize supply. Inert goods (iron, stone, salt, precious metals) are unaffected.
+
+### Files
+
+- `Economy/GoodDef.cs` — readonly struct with all per-good metadata
+- `Economy/GoodType.cs` — enum + `Goods` static class (Defs[], extracted arrays, minting constants)
+- `Economy/SpoilageSystem.cs` — ITickSystem (monthly): multiplicative decay on all stockpile tiers
+- `Economy/BiomeProductivity.cs` — column count validated against `Goods.Count` at static init
