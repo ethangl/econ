@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-GOODS = ["food", "timber", "ironOre", "goldOre", "salt", "wool"]
+GOODS = ["food", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool"]
 GOOD_IDX = {g: i for i, g in enumerate(GOODS)}
 
 
