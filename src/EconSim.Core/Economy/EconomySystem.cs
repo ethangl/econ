@@ -17,7 +17,7 @@ namespace EconSim.Core.Economy
         public string Name => "Economy";
         public int TickInterval => SimulationConfig.Intervals.Daily;
 
-        static readonly float[] ConsumptionPerPop = { 1.0f, 0.2f, 0.01f }; // Food, Timber, Ore
+        static readonly float[] ConsumptionPerPop = Goods.ConsumptionPerPop;
         const int Food = (int)GoodType.Food;
 
         public void Initialize(SimulationState state, MapData mapData)

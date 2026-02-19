@@ -345,7 +345,7 @@ namespace EconSim.Core
             RenderSettings.ambientIntensity = 0f;
 
             // Check if a directional light already exists
-            foreach (var existing in FindObjectsOfType<Light>())
+            foreach (var existing in FindObjectsByType<Light>(FindObjectsSortMode.None))
             {
                 if (existing.type == LightType.Directional)
                 {

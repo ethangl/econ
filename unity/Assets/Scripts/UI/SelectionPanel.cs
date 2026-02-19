@@ -69,7 +69,7 @@ namespace EconSim.UI
             // Find MapView if not assigned
             if (_mapView == null)
             {
-                _mapView = FindObjectOfType<MapView>();
+                _mapView = FindAnyObjectByType<MapView>();
             }
 
             // Subscribe to selection changes (fires after MapView updates its selection state)

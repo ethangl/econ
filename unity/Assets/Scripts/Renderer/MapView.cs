@@ -623,7 +623,7 @@ namespace EconSim.Renderer
             Vector2 mousePos = Input.mousePosition;
 
             // Check all UIDocuments in the scene
-            var docs = FindObjectsOfType<UIDocument>();
+            var docs = FindObjectsByType<UIDocument>(FindObjectsSortMode.None);
             foreach (var doc in docs)
             {
                 var root = doc.rootVisualElement;
@@ -1670,7 +1670,6 @@ namespace EconSim.Renderer
 
             colors.Clear();
 
-            int vertexIndex = 0;
             foreach (var cell in mapData.Cells)
             {
                 if (renderLandOnly && !cell.IsLand)

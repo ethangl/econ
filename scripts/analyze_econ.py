@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-GOODS = ["food", "timber", "ore"]
+GOODS = ["food", "timber", "ironOre", "goldOre", "salt", "wool"]
 GOOD_IDX = {g: i for i, g in enumerate(GOODS)}
 
 
@@ -198,12 +198,13 @@ def print_trade_snapshot(data: dict):
 
     # Per-realm breakdown
     print()
-    print(f"  Realm stockpiles (food):")
+    print(f"  Realm stockpiles:")
     for r in t["realms"]:
-        food = r["stockpileByGood"].get("food", 0)
-        timber = r["stockpileByGood"].get("timber", 0)
-        ore = r["stockpileByGood"].get("ore", 0)
-        print(f"    Realm {r['id']:2d}: food={fmt(food):>8s}  timber={fmt(timber):>8s}  ore={fmt(ore):>8s}")
+        parts = []
+        for good in GOODS:
+            v = r["stockpileByGood"].get(good, 0)
+            parts.append(f"{good}={fmt(v):>8s}")
+        print(f"    Realm {r['id']:2d}: {'  '.join(parts)}")
 
 
 def print_roads(data: dict):
@@ -270,20 +271,22 @@ def print_convergence(data: dict):
     print(f"\n  Food deficit: {fmt(latest_food_unmet)} unmet ({pct(latest_food_unmet, latest_food_prod)} of production)")
     print(f"  Starving:     {ts[-1]['starvingCounties']}/{data['economy']['countyCount']} counties")
 
-    # Timber status
-    timber_unmet = ts[-1]["unmetNeedByGood"][1]
-    if timber_unmet == 0:
-        # Find when timber unmet hit 0
-        for t in ts:
-            if t["unmetNeedByGood"][1] == 0:
-                print(f"\n  Timber: fully supplied since day {t['day']}")
-                break
-    else:
-        print(f"\n  Timber: {fmt(timber_unmet)} still unmet")
-
-    # Ore status
-    ore_unmet = ts[-1]["unmetNeedByGood"][2]
-    print(f"  Ore:    {fmt(ore_unmet)} unmet ({pct(ore_unmet, ts[-1]['consumptionByGood'][2] + ore_unmet)} of demand)")
+    # Per-good status (skip food, already reported above)
+    for i, good in enumerate(GOODS):
+        if i == 0:
+            continue  # food already reported
+        unmet = ts[-1]["unmetNeedByGood"][i]
+        cons = ts[-1]["consumptionByGood"][i]
+        demand = cons + unmet
+        if demand == 0:
+            print(f"\n  {good:8s}: no consumption")
+        elif unmet == 0:
+            for t in ts:
+                if t["unmetNeedByGood"][i] == 0:
+                    print(f"\n  {good:8s}: fully supplied since day {t['day']}")
+                    break
+        else:
+            print(f"\n  {good:8s}: {fmt(unmet)} unmet ({pct(unmet, demand)} of demand)")
 
 
 def main():

@@ -117,7 +117,7 @@ namespace EconSim.UI
             var newMapButton = root.Q<Button>("new-map-button");
             newMapButton?.RegisterCallback<ClickEvent>(evt =>
             {
-                var startup = FindObjectOfType<StartupScreenPanel>();
+                var startup = FindAnyObjectByType<StartupScreenPanel>();
                 if (startup != null) startup.Show();
             });
 

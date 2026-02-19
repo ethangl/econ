@@ -6,29 +6,29 @@ namespace EconSim.Core.Economy
     /// </summary>
     public static class BiomeProductivity
     {
-        // [biomeId, goodType] — Food=0, Timber=1, Ore=2
+        // [biomeId, goodType] — Food=0, Timber=1, IronOre=2, GoldOre=3, Salt=4, Wool=5
         static readonly float[,] Values =
         {
-            //                     Food  Timber  Ore
-            /* 0  Glacier         */ { 0.0f, 0.0f, 0.0f },
-            /* 1  Tundra          */ { 0.25f, 0.0f, 0.0f },
-            /* 2  Salt Flat       */ { 0.12f, 0.0f, 0.1f },
-            /* 3  Coastal Marsh   */ { 0.85f, 0.0f, 0.0f },
-            /* 4  Alpine Barren   */ { 0.25f, 0.0f, 0.4f },
-            /* 5  Mountain Shrub  */ { 0.5f, 0.1f, 0.3f },
-            /* 6  Floodplain      */ { 1.7f, 0.0f, 0.0f },
-            /* 7  Wetland         */ { 0.85f, 0.1f, 0.0f },
-            /* 8  Hot Desert      */ { 0.35f, 0.0f, 0.2f },
-            /* 9  Cold Desert     */ { 0.35f, 0.0f, 0.2f },
-            /* 10 Scrubland       */ { 0.6f, 0.1f, 0.1f },
-            /* 11 Tropical Rainf  */ { 1.0f, 0.5f, 0.0f },
-            /* 12 Tropical Dry F  */ { 1.1f, 0.4f, 0.0f },
-            /* 13 Savanna         */ { 1.3f, 0.1f, 0.0f },
-            /* 14 Boreal Forest   */ { 0.7f, 0.5f, 0.0f },
-            /* 15 Temperate Fore  */ { 1.1f, 0.5f, 0.0f },
-            /* 16 Grassland       */ { 1.55f, 0.0f, 0.0f },
-            /* 17 Woodland        */ { 1.2f, 0.3f, 0.0f },
-            /* 18 Lake            */ { 0.0f, 0.0f, 0.0f },
+            //                     Food  Timber  Iron   Gold   Salt   Wool
+            /* 0  Glacier         */ { 0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f  },
+            /* 1  Tundra          */ { 0.2f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f  },
+            /* 2  Salt Flat       */ { 0.1f,  0.0f,  0.0f,  0.0f,  0.4f,  0.0f  },
+            /* 3  Coastal Marsh   */ { 0.7f,  0.0f,  0.0f,  0.0f,  0.3f,  0.0f  },
+            /* 4  Alpine Barren   */ { 0.2f,  0.0f,  0.3f,  0.02f, 0.0f,  0.0f  },
+            /* 5  Mountain Shrub  */ { 0.4f,  0.1f,  0.2f,  0.01f, 0.0f,  0.0f  },
+            /* 6  Floodplain      */ { 1.4f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f  },
+            /* 7  Wetland         */ { 0.7f,  0.1f,  0.0f,  0.0f,  0.05f, 0.0f  },
+            /* 8  Hot Desert      */ { 0.3f,  0.0f,  0.2f,  0.0f,  0.0f,  0.0f  },
+            /* 9  Cold Desert     */ { 0.3f,  0.0f,  0.2f,  0.0f,  0.0f,  0.0f  },
+            /* 10 Scrubland       */ { 0.5f,  0.1f,  0.1f,  0.0f,  0.0f,  0.1f  },
+            /* 11 Tropical Rainf  */ { 0.8f,  0.5f,  0.0f,  0.0f,  0.0f,  0.0f  },
+            /* 12 Tropical Dry F  */ { 0.9f,  0.4f,  0.0f,  0.0f,  0.0f,  0.0f  },
+            /* 13 Savanna         */ { 1.1f,  0.1f,  0.0f,  0.0f,  0.0f,  0.2f  },
+            /* 14 Boreal Forest   */ { 0.6f,  0.5f,  0.0f,  0.0f,  0.0f,  0.0f  },
+            /* 15 Temperate Fore  */ { 0.9f,  0.5f,  0.0f,  0.0f,  0.0f,  0.0f  },
+            /* 16 Grassland       */ { 1.3f,  0.0f,  0.0f,  0.0f,  0.0f,  0.3f  },
+            /* 17 Woodland        */ { 1.0f,  0.3f,  0.0f,  0.0f,  0.0f,  0.05f },
+            /* 18 Lake            */ { 0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f  },
         };
 
         static readonly int BiomeCount = Values.GetLength(0);

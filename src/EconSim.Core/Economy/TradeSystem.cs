@@ -22,14 +22,16 @@ namespace EconSim.Core.Economy
         public string Name => "Trade";
         public int TickInterval => SimulationConfig.Intervals.Daily;
 
-        /// <summary>Daily consumption per person, per good. Matches EconomySystem.</summary>
-        static readonly float[] ConsumptionPerPop = { 1.0f, 0.2f, 0.01f };
+        static readonly float[] ConsumptionPerPop = Goods.ConsumptionPerPop;
 
         /// <summary>Fraction of surplus the duke takes from counties.</summary>
         const float DucalTaxRate = 0.20f;
 
         /// <summary>Fraction of provincial stockpile the king takes.</summary>
         const float RoyalTaxRate = 0.20f;
+
+        /// <summary>Gold ore is crown property — 100% tax rate (regal right).</summary>
+        const float GoldOreTaxRate = 1.0f;
 
         /// <summary>Province ID → array of county IDs.</summary>
         int[][] _provinceCounties;
@@ -65,6 +67,7 @@ namespace EconSim.Core.Economy
                 float consumeRate = ConsumptionPerPop[g];
 
                 // Phase 1: Duke taxes surplus counties
+                float taxRate = g == (int)GoodType.GoldOre ? GoldOreTaxRate : DucalTaxRate;
                 for (int p = 0; p < _provinceIds.Length; p++)
                 {
                     int provId = _provinceIds[p];
@@ -79,7 +82,7 @@ namespace EconSim.Core.Economy
 
                         if (surplus > 0f)
                         {
-                            float tax = DucalTaxRate * surplus;
+                            float tax = taxRate * surplus;
                             ce.Stock[g] -= tax;
                             ce.TaxPaid[g] += tax;
                             pe.Stockpile[g] += tax;
@@ -89,6 +92,7 @@ namespace EconSim.Core.Economy
                 }
 
                 // Phase 2: King taxes surplus provincial stockpiles
+                float royalRate = g == (int)GoodType.GoldOre ? GoldOreTaxRate : RoyalTaxRate;
                 for (int r = 0; r < _realmIds.Length; r++)
                 {
                     int realmId = _realmIds[r];
@@ -100,7 +104,7 @@ namespace EconSim.Core.Economy
                         var pe = provinces[provIds[p]];
                         if (pe.Stockpile[g] <= 0f) continue;
 
-                        float tax = RoyalTaxRate * pe.Stockpile[g];
+                        float tax = royalRate * pe.Stockpile[g];
                         pe.Stockpile[g] -= tax;
                         re.Stockpile[g] += tax;
                         re.TaxCollected[g] += tax;

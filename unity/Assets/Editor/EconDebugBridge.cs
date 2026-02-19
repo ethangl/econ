@@ -589,7 +589,7 @@ namespace EconSim.Editor
             j.KV("maxProductivity", countyCount > 0 ? maxProd[0] : 0f);
 
             // Per-good productivity
-            string[] goodNames = { "food", "timber", "ore" };
+            string[] goodNames = Goods.Names;
             j.Key("productivityByGood"); j.ObjOpen();
             for (int g = 0; g < Goods.Count; g++)
             {
@@ -695,7 +695,7 @@ namespace EconSim.Editor
                 return;
             }
 
-            string[] goodNames = { "food", "timber", "ore" };
+            string[] goodNames = Goods.Names;
             const int F = (int)GoodType.Food;
 
             // County-level stats (per-good)
