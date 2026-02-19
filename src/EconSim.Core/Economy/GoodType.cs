@@ -33,6 +33,14 @@ namespace EconSim.Core.Economy
             "food", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool",
         };
 
+        /// <summary>Fraction of pure metal per kg of ore (smelting yield).</summary>
+        public const float GoldSmeltingYield = 0.01f;   // 1% — rich medieval deposits
+        public const float SilverSmeltingYield = 0.05f;  // 5% — silver ores are richer
+
+        /// <summary>Crowns minted per kg of pure metal.</summary>
+        public const float CrownsPerKgGold = 1000f;
+        public const float CrownsPerKgSilver = 100f;
+
         /// <summary>Precious metals — 100% tax rate (regal right), minted into currency.</summary>
         public static bool IsPreciousMetal(int goodIndex)
         {

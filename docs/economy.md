@@ -56,12 +56,15 @@ Split ore into iron, gold, and silver. Add salt and wool. Create geographic reso
 | 17  | Woodland            | 1.0  | 0.3    | 0.0  | 0.0  | 0.0    | 0.0  | 0.05 |
 | 18  | Lake                | 0.0  | 0.0    | 0.0  | 0.0  | 0.0    | 0.0  | 0.0  |
 
-### Phase B: Minting + Single Market, Inter-Realm Trade
-
-Realms mint precious metals into coins (treasury). One market at a realm capital. Realms sell surplus goods for coin and buy deficit goods with coin. Market sets prices from supply and demand. Use Phase A data to calibrate minting ratio before building the market.
+### Phase B: Minting
 
 - Treasury tracked on RealmEconomy
 - Realm mints gold and silver ore into coins (ore consumed, different conversion rates)
+
+### Phase C: Single Market, Inter-Realm Trade
+
+One market at a realm capital. Realms sell surplus goods for coin and buy deficit goods with coin. Market sets prices from supply and demand. Use Phase A data to calibrate minting ratio before building the market.
+
 - Realms bring surplus to market, buy deficit goods with coin
 - Market clears orders, prices emerge from supply/demand
 

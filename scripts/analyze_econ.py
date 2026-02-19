@@ -207,6 +207,41 @@ def print_trade_snapshot(data: dict):
         print(f"    Realm {r['id']:2d}: {'  '.join(parts)}")
 
 
+def print_treasury(data: dict):
+    section("TREASURY")
+    ts = data["economy"]["timeSeries"]
+    last = ts[-1]
+    first = ts[0]
+
+    print(f"  Total treasury (latest):  {fmt(last.get('treasury', 0))} Crowns")
+    print(f"  Treasury trend:           {fmt(first.get('treasury', 0))} -> {fmt(last.get('treasury', 0))}  ({trend([first.get('treasury', 0), last.get('treasury', 0)])})")
+    print()
+    print(f"  Daily minting (latest):")
+    print(f"    Gold minted:   {fmt(last.get('goldMinted', 0))} kg")
+    print(f"    Silver minted: {fmt(last.get('silverMinted', 0))} kg")
+    print(f"    Crowns minted: {fmt(last.get('crownsMinted', 0))} Crowns")
+
+    # Per-realm treasury breakdown
+    t = data.get("trade", {})
+    realms = t.get("realms", [])
+    if realms:
+        print()
+        print(f"  Per-realm treasury:")
+        print(f"    {'Realm':>6s}  {'Treasury':>12s}  {'Gold/day':>10s}  {'Silver/day':>10s}  {'Crowns/day':>12s}")
+        print(f"    {'-'*6}  {'-'*12}  {'-'*10}  {'-'*10}  {'-'*12}")
+        for r in sorted(realms, key=lambda x: x.get("treasury", 0), reverse=True):
+            print(f"    {r['id']:>6d}  {fmt(r.get('treasury', 0)):>12s}  {fmt(r.get('goldMinted', 0)):>10s}  {fmt(r.get('silverMinted', 0)):>10s}  {fmt(r.get('crownsMinted', 0)):>12s}")
+
+    # Treasury time series trend (sample 5 points)
+    if len(ts) >= 10:
+        print()
+        print(f"  Treasury over time:")
+        indices = [0, len(ts)//4, len(ts)//2, 3*len(ts)//4, len(ts)-1]
+        for idx in indices:
+            snap = ts[idx]
+            print(f"    Day {snap['day']:>4d}: {fmt(snap.get('treasury', 0)):>12s} Crowns")
+
+
 def print_roads(data: dict):
     section("ROAD NETWORK")
     r = data["roads"]
@@ -299,6 +334,7 @@ def main():
     print_stocks(data)
     print_fiscal(data)
     print_trade_snapshot(data)
+    print_treasury(data)
     print_roads(data)
     print_convergence(data)
     print()

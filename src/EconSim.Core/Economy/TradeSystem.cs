@@ -15,6 +15,7 @@ namespace EconSim.Core.Economy
     /// Phase 3: Provincial admin consumption (infrastructure)
     /// Phase 4: King taxes surplus provinces → royal stockpile
     /// Phase 5: Royal admin consumption (military upkeep)
+    /// Phase 5b: Mint precious metals into Crowns (realm treasury)
     /// Phase 6: King distributes remainder → deficit provinces
     /// Phase 7: Duke distributes provincial stockpile → deficit counties
     ///
@@ -234,6 +235,26 @@ namespace EconSim.Core.Economy
                     }
                 }
             }
+
+            // Phase 5b: Mint precious metals into Crowns (realm treasury)
+            // Runs after all per-good phases so gold/silver have been fully taxed up.
+            for (int r = 0; r < _realmIds.Length; r++)
+            {
+                int realmId = _realmIds[r];
+                var re = realms[realmId];
+
+                float gold = re.Stockpile[(int)GoodType.GoldOre];
+                float silver = re.Stockpile[(int)GoodType.SilverOre];
+                re.Stockpile[(int)GoodType.GoldOre] = 0f;
+                re.Stockpile[(int)GoodType.SilverOre] = 0f;
+
+                float crowns = gold * Goods.GoldSmeltingYield * Goods.CrownsPerKgGold
+                             + silver * Goods.SilverSmeltingYield * Goods.CrownsPerKgSilver;
+                re.Treasury += crowns;
+                re.GoldMinted = gold;
+                re.SilverMinted = silver;
+                re.CrownsMinted = crowns;
+            }
         }
 
         /// <summary>
@@ -289,6 +310,9 @@ namespace EconSim.Core.Economy
                     re.TaxCollected[g] = 0f;
                     re.ReliefGiven[g] = 0f;
                 }
+                re.GoldMinted = 0f;
+                re.SilverMinted = 0f;
+                re.CrownsMinted = 0f;
             }
         }
 

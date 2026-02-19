@@ -34,6 +34,12 @@ namespace EconSim.Core.Economy
         public float[] TotalRoyalReliefByGood;
         public float[] TotalRoyalStockpileByGood;
 
+        // Treasury / minting (Layer 4 Phase B)
+        public float TotalTreasury;
+        public float TotalGoldMinted;
+        public float TotalSilverMinted;
+        public float TotalCrownsMinted;
+
         // Backward-compat scalars = food values
         public float TotalDucalTax;
         public float TotalDucalRelief;

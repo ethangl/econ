@@ -623,6 +623,10 @@ namespace EconSim.Editor
                 j.KV("royalTax", snap.TotalRoyalTax);
                 j.KV("royalRelief", snap.TotalRoyalRelief);
                 j.KV("royalStockpile", snap.TotalRoyalStockpile);
+                j.KV("treasury", snap.TotalTreasury);
+                j.KV("goldMinted", snap.TotalGoldMinted);
+                j.KV("silverMinted", snap.TotalSilverMinted);
+                j.KV("crownsMinted", snap.TotalCrownsMinted);
 
                 if (snap.TotalDucalTaxByGood != null)
                 {
@@ -766,12 +770,14 @@ namespace EconSim.Editor
             {
                 j.Key("realms"); j.ArrOpen();
                 float[] totalRealmStockpile = new float[Goods.Count];
+                float totalTreasury = 0f;
                 for (int i = 0; i < econ.Realms.Length; i++)
                 {
                     var re = econ.Realms[i];
                     if (re == null) continue;
                     for (int g = 0; g < Goods.Count; g++)
                         totalRealmStockpile[g] += re.Stockpile[g];
+                    totalTreasury += re.Treasury;
 
                     j.ObjOpen();
                     j.KV("id", i);
@@ -780,6 +786,10 @@ namespace EconSim.Editor
                     for (int g = 0; g < Goods.Count; g++)
                         j.KV(goodNames[g], re.Stockpile[g]);
                     j.ObjClose();
+                    j.KV("treasury", re.Treasury);
+                    j.KV("goldMinted", re.GoldMinted);
+                    j.KV("silverMinted", re.SilverMinted);
+                    j.KV("crownsMinted", re.CrownsMinted);
                     j.ObjClose();
                 }
                 j.ArrClose();
@@ -788,6 +798,7 @@ namespace EconSim.Editor
                 for (int g = 0; g < Goods.Count; g++)
                     j.KV(goodNames[g], totalRealmStockpile[g]);
                 j.ObjClose();
+                j.KV("totalTreasury", totalTreasury);
             }
 
             j.ObjClose();

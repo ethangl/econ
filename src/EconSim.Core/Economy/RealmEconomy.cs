@@ -14,5 +14,17 @@ namespace EconSim.Core.Economy
 
         /// <summary>Relief distributed to deficit provinces this tick, per good type.</summary>
         public float[] ReliefGiven = new float[Goods.Count];
+
+        /// <summary>Crowns held by the realm (minted from precious metals).</summary>
+        public float Treasury;
+
+        /// <summary>Kg of gold ore minted this tick (reset daily).</summary>
+        public float GoldMinted;
+
+        /// <summary>Kg of silver ore minted this tick (reset daily).</summary>
+        public float SilverMinted;
+
+        /// <summary>Crowns generated this tick (reset daily).</summary>
+        public float CrownsMinted;
     }
 }

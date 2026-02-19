@@ -193,7 +193,7 @@ namespace EconSim.Core.Economy
                 }
             }
 
-            // Royal stockpile stats
+            // Royal stockpile stats + treasury
             if (econ.Realms != null)
             {
                 for (int i = 0; i < econ.Realms.Length; i++)
@@ -206,6 +206,10 @@ namespace EconSim.Core.Economy
                         snap.TotalRoyalReliefByGood[g] += re.ReliefGiven[g];
                         snap.TotalRoyalStockpileByGood[g] += re.Stockpile[g];
                     }
+                    snap.TotalTreasury += re.Treasury;
+                    snap.TotalGoldMinted += re.GoldMinted;
+                    snap.TotalSilverMinted += re.SilverMinted;
+                    snap.TotalCrownsMinted += re.CrownsMinted;
                 }
             }
 
