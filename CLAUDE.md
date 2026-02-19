@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.md` for full design document.
+Real-time economic simulator with EU4-style map visualization.
 
-**Stack:** Unity + C# + R3 + UI Toolkit
+**Stack:** Unity + C# + UI Toolkit
 
 ## Dumps / Dump Analysis
 
@@ -49,7 +49,6 @@ The user runs economy simulations via the EconDebugBridge in Unity, which writes
 
 | What           | Where                   |
 | -------------- | ----------------------- |
-| Design doc     | `docs/DESIGN.md`        |
 | Core library   | `src/EconSim.Core/`     |
 | Unity frontend | `unity/Assets/Scripts/` |
 
@@ -85,12 +84,10 @@ The user runs economy simulations via the EconDebugBridge in Unity, which writes
 - `CoreExtensions` - Bridge (Vec2↔Vector2, etc.)
 - `TimeControlPanel` - UI Toolkit: day display, pause/play, speed controls
 - `SelectionPanel` - UI Toolkit: mode-aware political inspector (realm/province/county)
-- `MarketInspectorPanel` - UI Toolkit: market inspection (hub, zone, goods table)
-- `EconomyPanel` - UI Toolkit: global economy (E key, tabbed: overview/production/trade)
 
 **UI Toolkit** (`Assets/UI/`):
 
-- `Documents/MainHUD.uxml` - Main UI layout (selection panel, market panel, time controls)
+- `Documents/MainHUD.uxml` - Main UI layout (selection panel, time controls)
 - `Styles/Main.uss` - Stylesheet
 
 ## Setup

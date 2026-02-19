@@ -14,6 +14,8 @@ namespace EconSim.Core.Economy
         Wool = 6,
         Stone = 7,
         Ale = 8,
+        Clay = 9,
+        Pottery = 10,
     }
 
     public static class Goods
@@ -64,8 +66,10 @@ namespace EconSim.Core.Economy
             (int)GoodType.IronOre,
             (int)GoodType.Salt,
             (int)GoodType.Wool,
+            (int)GoodType.Pottery,
             (int)GoodType.Timber,
             (int)GoodType.Stone,
+            (int)GoodType.Clay,
         };
 
         // ── Minting constants (process parameters, not per-good data) ──
@@ -99,6 +103,8 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.Wool,       "wool",      GoodCategory.Raw, NeedCategory.Comfort, 0.1f,   0.0f,   0.0f,   0.005f, 2.0f,  0.2f,  20.0f, true,  false, 0.001f),
                 new GoodDef(GoodType.Stone,      "stone",     GoodCategory.Raw, NeedCategory.None,    0.0f,   0.005f, 0.008f, 0.012f, 0.3f,  0.03f, 3.0f,  true,  false),
                 new GoodDef(GoodType.Ale,        "ale",       GoodCategory.Raw, NeedCategory.Basic,   0.5f,   0.0f,   0.0f,   0.0f,   0.8f,  0.08f, 8.0f,  true,  false, 0.05f),
+                new GoodDef(GoodType.Clay,       "clay",      GoodCategory.Raw,     NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.2f,  0.02f, 2.0f,  true,  false),
+                new GoodDef(GoodType.Pottery,    "pottery",   GoodCategory.Refined, NeedCategory.Comfort, 0.01f,  0.002f, 0.001f, 0.001f, 2.0f,  0.2f,  20.0f, true,  false),
             };
 
             Count = Defs.Length;
