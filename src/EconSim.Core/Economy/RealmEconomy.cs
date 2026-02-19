@@ -26,5 +26,22 @@ namespace EconSim.Core.Economy
 
         /// <summary>Crowns generated this tick (reset daily).</summary>
         public float CrownsMinted;
+
+        // ── Inter-realm trade fields (reset daily) ──────────────
+
+        /// <summary>Total unmet demand per good (set by TradeSystem deficit ledger).</summary>
+        public float[] Deficit = new float[Goods.Count];
+
+        /// <summary>Quantities imported from the inter-realm market this tick, per good.</summary>
+        public float[] TradeImports = new float[Goods.Count];
+
+        /// <summary>Quantities exported to the inter-realm market this tick, per good.</summary>
+        public float[] TradeExports = new float[Goods.Count];
+
+        /// <summary>Crowns spent on market purchases this tick.</summary>
+        public float TradeSpending;
+
+        /// <summary>Crowns earned from market sales this tick.</summary>
+        public float TradeRevenue;
     }
 }

@@ -59,6 +59,12 @@ namespace EconSim.Core.Economy
         /// <summary>Population per realm (cached at init).</summary>
         float[] _realmPop;
 
+        /// <summary>County ID → Realm ID (for deficit ledger).</summary>
+        int[] _countyToRealm;
+
+        /// <summary>Province ID → Realm ID (for deficit ledger).</summary>
+        int[] _provinceToRealm;
+
         public void Initialize(SimulationState state, MapData mapData)
         {
             BuildMappings(state, mapData);
@@ -88,6 +94,8 @@ namespace EconSim.Core.Economy
                         float need = ce.Population * countyAdmin;
                         float consumed = Math.Min(ce.Stock[g], need);
                         ce.Stock[g] -= consumed;
+                        if (consumed < need)
+                            realms[_countyToRealm[i]].Deficit[g] += need - consumed;
                     }
                 }
 
@@ -127,6 +135,8 @@ namespace EconSim.Core.Economy
                         float need = _provincePop[provId] * provAdmin;
                         float consumed = Math.Min(pe.Stockpile[g], need);
                         pe.Stockpile[g] -= consumed;
+                        if (consumed < need)
+                            realms[_provinceToRealm[provId]].Deficit[g] += need - consumed;
                     }
                 }
 
@@ -161,6 +171,8 @@ namespace EconSim.Core.Economy
                         float need = _realmPop[realmId] * realmAdmin;
                         float consumed = Math.Min(re.Stockpile[g], need);
                         re.Stockpile[g] -= consumed;
+                        if (consumed < need)
+                            re.Deficit[g] += need - consumed;
                     }
                 }
 
@@ -233,6 +245,22 @@ namespace EconSim.Core.Economy
                         pe.Stockpile[g] -= relief;
                         pe.ReliefGiven[g] += relief;
                     }
+                }
+            }
+
+            // Phase 8: Post-relief county deficit scan — record remaining unmet pop consumption per realm
+            for (int g = 0; g < Goods.Count; g++)
+            {
+                float consumeRate = ConsumptionPerPop[g];
+                if (consumeRate <= 0f) continue;
+
+                for (int i = 0; i < counties.Length; i++)
+                {
+                    var ce = counties[i];
+                    if (ce == null) continue;
+                    float shortfall = ce.Population * consumeRate - ce.Stock[g];
+                    if (shortfall > 0f)
+                        realms[_countyToRealm[i]].Deficit[g] += shortfall;
                 }
             }
 
@@ -313,6 +341,14 @@ namespace EconSim.Core.Economy
                 re.GoldMinted = 0f;
                 re.SilverMinted = 0f;
                 re.CrownsMinted = 0f;
+                re.TradeSpending = 0f;
+                re.TradeRevenue = 0f;
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    re.Deficit[g] = 0f;
+                    re.TradeImports[g] = 0f;
+                    re.TradeExports[g] = 0f;
+                }
             }
         }
 
@@ -381,6 +417,24 @@ namespace EconSim.Core.Economy
                     _maxProvincesPerRealm = arr.Length;
             }
             _realmIds = realmIdList.ToArray();
+
+            // County → realm and Province → realm lookups
+            _provinceToRealm = new int[maxProvId + 1];
+            foreach (var prov in mapData.Provinces)
+                _provinceToRealm[prov.Id] = prov.RealmId;
+
+            int maxCountyId = 0;
+            foreach (var county in mapData.Counties)
+                if (county.Id > maxCountyId) maxCountyId = county.Id;
+
+            _countyToRealm = new int[maxCountyId + 1];
+            foreach (var county in mapData.Counties)
+            {
+                int provId = county.ProvinceId;
+                _countyToRealm[county.Id] = provId >= 0 && provId < _provinceToRealm.Length
+                    ? _provinceToRealm[provId]
+                    : 0;
+            }
 
             // Initialize economy arrays
             var econ = state.Economy;

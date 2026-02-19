@@ -627,6 +627,37 @@ namespace EconSim.Editor
                 j.KV("goldMinted", snap.TotalGoldMinted);
                 j.KV("silverMinted", snap.TotalSilverMinted);
                 j.KV("crownsMinted", snap.TotalCrownsMinted);
+                j.KV("tradeSpending", snap.TotalTradeSpending);
+                j.KV("tradeRevenue", snap.TotalTradeRevenue);
+
+                if (snap.MarketPrices != null)
+                {
+                    j.Key("marketPrices"); j.ArrOpen();
+                    for (int g = 0; g < snap.MarketPrices.Length; g++)
+                        j.Val(snap.MarketPrices[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalTradeImportsByGood != null)
+                {
+                    j.Key("tradeImportsByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalTradeImportsByGood.Length; g++)
+                        j.Val(snap.TotalTradeImportsByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalTradeExportsByGood != null)
+                {
+                    j.Key("tradeExportsByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalTradeExportsByGood.Length; g++)
+                        j.Val(snap.TotalTradeExportsByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalRealmDeficitByGood != null)
+                {
+                    j.Key("realmDeficitByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalRealmDeficitByGood.Length; g++)
+                        j.Val(snap.TotalRealmDeficitByGood[g]);
+                    j.ArrClose();
+                }
 
                 if (snap.TotalDucalTaxByGood != null)
                 {
@@ -790,6 +821,20 @@ namespace EconSim.Editor
                     j.KV("goldMinted", re.GoldMinted);
                     j.KV("silverMinted", re.SilverMinted);
                     j.KV("crownsMinted", re.CrownsMinted);
+                    j.KV("tradeSpending", re.TradeSpending);
+                    j.KV("tradeRevenue", re.TradeRevenue);
+                    j.Key("tradeImportsByGood"); j.ObjOpen();
+                    for (int g = 0; g < Goods.Count; g++)
+                        j.KV(goodNames[g], re.TradeImports[g]);
+                    j.ObjClose();
+                    j.Key("tradeExportsByGood"); j.ObjOpen();
+                    for (int g = 0; g < Goods.Count; g++)
+                        j.KV(goodNames[g], re.TradeExports[g]);
+                    j.ObjClose();
+                    j.Key("deficitByGood"); j.ObjOpen();
+                    for (int g = 0; g < Goods.Count; g++)
+                        j.KV(goodNames[g], re.Deficit[g]);
+                    j.ObjClose();
                     j.ObjClose();
                 }
                 j.ArrClose();

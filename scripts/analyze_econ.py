@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-GOODS = ["food", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool"]
+GOODS = ["food", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone"]
 GOOD_IDX = {g: i for i, g in enumerate(GOODS)}
 
 
@@ -242,6 +242,86 @@ def print_treasury(data: dict):
             print(f"    Day {snap['day']:>4d}: {fmt(snap.get('treasury', 0)):>12s} Crowns")
 
 
+def print_inter_realm_trade(data: dict):
+    section("INTER-REALM TRADE")
+    ts = data["economy"]["timeSeries"]
+    last = ts[-1]
+
+    # Market prices
+    prices = last.get("marketPrices")
+    if not prices:
+        print("  No inter-realm trade data (marketPrices missing)")
+        return
+
+    TRADEABLE = ["food", "timber", "ironOre", "salt", "wool", "stone"]
+    TRADEABLE_IDX = [GOOD_IDX[g] for g in TRADEABLE]
+
+    print("  Market Prices (Crowns/kg):")
+    print(f"    {'Good':8s}  {'Price':>10s}  {'Base':>8s}  {'Ratio':>8s}")
+    print(f"    {'-'*8}  {'-'*10}  {'-'*8}  {'-'*8}")
+    base_prices = [1.0, 0.5, 5.0, 0.0, 0.0, 3.0, 2.0, 0.3]
+    for g in TRADEABLE_IDX:
+        p = prices[g]
+        bp = base_prices[g]
+        ratio = f"{p/bp:.2f}x" if bp > 0 else "n/a"
+        print(f"    {GOODS[g]:8s}  {fmt(p, 2):>10s}  {fmt(bp, 2):>8s}  {ratio:>8s}")
+
+    # Trade volumes
+    n = len(GOODS)
+    imports = last.get("tradeImportsByGood", [0]*n)
+    exports = last.get("tradeExportsByGood", [0]*n)
+    deficits = last.get("realmDeficitByGood", [0]*n)
+
+    print()
+    print("  Trade Volumes (latest day):")
+    print(f"    {'Good':8s}  {'Imports':>10s}  {'Exports':>10s}  {'Deficit':>10s}  {'Fill%':>8s}")
+    print(f"    {'-'*8}  {'-'*10}  {'-'*10}  {'-'*10}  {'-'*8}")
+    for g in TRADEABLE_IDX:
+        imp = imports[g]
+        exp = exports[g]
+        deficit = deficits[g]
+        fill = pct(imp, deficit) if deficit > 0 else "n/a"
+        print(f"    {GOODS[g]:8s}  {fmt(imp):>10s}  {fmt(exp):>10s}  {fmt(deficit):>10s}  {fill:>8s}")
+
+    # Total trade spending/revenue
+    spending = last.get("tradeSpending", 0)
+    revenue = last.get("tradeRevenue", 0)
+    print()
+    print(f"  Total trade spending: {fmt(spending)} Crowns")
+    print(f"  Total trade revenue:  {fmt(revenue)} Crowns")
+
+    # Per-realm trade activity
+    t = data.get("trade", {})
+    realms = t.get("realms", [])
+    if realms:
+        print()
+        print("  Per-Realm Trade Activity:")
+        print(f"    {'Realm':>6s}  {'Treasury':>10s}  {'Spending':>10s}  {'Revenue':>10s}  {'Net':>10s}")
+        print(f"    {'-'*6}  {'-'*10}  {'-'*10}  {'-'*10}  {'-'*10}")
+        for r in sorted(realms, key=lambda x: x.get("tradeSpending", 0), reverse=True):
+            treas = r.get("treasury", 0)
+            sp = r.get("tradeSpending", 0)
+            rev = r.get("tradeRevenue", 0)
+            net = rev - sp
+            print(f"    {r['id']:>6d}  {fmt(treas):>10s}  {fmt(sp):>10s}  {fmt(rev):>10s}  {fmt(net):>10s}")
+
+    # Price trends (early vs late)
+    if len(ts) >= 20:
+        early_snaps = [t for t in ts[4:14] if t.get("marketPrices")]
+        late_snaps = [t for t in ts[-10:] if t.get("marketPrices")]
+        if early_snaps and late_snaps:
+            print()
+            print("  Price Trends (early vs late):")
+            print(f"    {'Good':8s}  {'Early':>10s}  {'Late':>10s}  {'Change':>10s}")
+            print(f"    {'-'*8}  {'-'*10}  {'-'*10}  {'-'*10}")
+            for g in TRADEABLE_IDX:
+                early_p = sum(s["marketPrices"][g] for s in early_snaps) / len(early_snaps)
+                late_p = sum(s["marketPrices"][g] for s in late_snaps) / len(late_snaps)
+                delta = late_p - early_p
+                sign = "+" if delta >= 0 else ""
+                print(f"    {GOODS[g]:8s}  {fmt(early_p, 2):>10s}  {fmt(late_p, 2):>10s}  {sign}{fmt(delta, 2):>9s}")
+
+
 def print_roads(data: dict):
     section("ROAD NETWORK")
     r = data["roads"]
@@ -335,6 +415,7 @@ def main():
     print_fiscal(data)
     print_trade_snapshot(data)
     print_treasury(data)
+    print_inter_realm_trade(data)
     print_roads(data)
     print_convergence(data)
     print()

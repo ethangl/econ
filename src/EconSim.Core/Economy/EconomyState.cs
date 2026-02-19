@@ -24,5 +24,8 @@ namespace EconSim.Core.Economy
 
         /// <summary>Recorded each tick for analysis. Ring buffer — oldest entries dropped when full.</summary>
         public RingBuffer<EconomySnapshot> TimeSeries = new RingBuffer<EconomySnapshot>(TimeSeriesCapacity);
+
+        /// <summary>Current inter-realm market prices (Crowns/kg), indexed by GoodType. Set by InterRealmTradeSystem.</summary>
+        public float[] MarketPrices = new float[Goods.Count];
     }
 }

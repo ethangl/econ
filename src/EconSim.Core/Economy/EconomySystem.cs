@@ -193,7 +193,11 @@ namespace EconSim.Core.Economy
                 }
             }
 
-            // Royal stockpile stats + treasury
+            // Royal stockpile stats + treasury + trade
+            snap.TotalTradeImportsByGood = new float[Goods.Count];
+            snap.TotalTradeExportsByGood = new float[Goods.Count];
+            snap.TotalRealmDeficitByGood = new float[Goods.Count];
+
             if (econ.Realms != null)
             {
                 for (int i = 0; i < econ.Realms.Length; i++)
@@ -205,12 +209,24 @@ namespace EconSim.Core.Economy
                         snap.TotalRoyalTaxByGood[g] += re.TaxCollected[g];
                         snap.TotalRoyalReliefByGood[g] += re.ReliefGiven[g];
                         snap.TotalRoyalStockpileByGood[g] += re.Stockpile[g];
+                        snap.TotalTradeImportsByGood[g] += re.TradeImports[g];
+                        snap.TotalTradeExportsByGood[g] += re.TradeExports[g];
+                        snap.TotalRealmDeficitByGood[g] += re.Deficit[g];
                     }
                     snap.TotalTreasury += re.Treasury;
                     snap.TotalGoldMinted += re.GoldMinted;
                     snap.TotalSilverMinted += re.SilverMinted;
                     snap.TotalCrownsMinted += re.CrownsMinted;
+                    snap.TotalTradeSpending += re.TradeSpending;
+                    snap.TotalTradeRevenue += re.TradeRevenue;
                 }
+            }
+
+            // Market prices snapshot
+            if (econ.MarketPrices != null)
+            {
+                snap.MarketPrices = new float[Goods.Count];
+                Array.Copy(econ.MarketPrices, snap.MarketPrices, Goods.Count);
             }
 
             // Backward-compat scalars = food values

@@ -40,6 +40,14 @@ namespace EconSim.Core.Economy
         public float TotalSilverMinted;
         public float TotalCrownsMinted;
 
+        // Inter-realm trade (Layer 4 Phase C)
+        public float[] MarketPrices;
+        public float[] TotalTradeImportsByGood;
+        public float[] TotalTradeExportsByGood;
+        public float[] TotalRealmDeficitByGood;
+        public float TotalTradeSpending;
+        public float TotalTradeRevenue;
+
         // Backward-compat scalars = food values
         public float TotalDucalTax;
         public float TotalDucalRelief;

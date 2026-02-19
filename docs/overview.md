@@ -127,7 +127,7 @@ This means:
 
 ### Derivation from River Constraints
 
-Rivers flow along cell edges (see [rivers.md](./rivers.md)). River width as a percentage of cell width determines visibility:
+Rivers flow along cell edges. River width as a percentage of cell width determines visibility:
 
 | River Width   | % of Cell (2.5 km) | Appearance                 |
 | ------------- | ------------------ | -------------------------- |
