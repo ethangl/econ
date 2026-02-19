@@ -448,11 +448,14 @@ def print_facilities(data: dict):
         # Detect format: old (int count) vs new (object with details)
         first_val = next(iter(by_type.values()))
         if isinstance(first_val, dict):
-            print(f"  {'Type':12s}  {'Count':>6s}  {'Recipe':30s}  {'Labor':>6s}  {'Max Output':>10s}")
-            print(f"  {'-'*12}  {'-'*6}  {'-'*30}  {'-'*6}  {'-'*10}")
+            print(f"  {'Type':12s}  {'Count':>6s}  {'Recipe':30s}  {'Labor':>6s}  {'Throughput':>12s}  {'Workers':>10s}")
+            print(f"  {'-'*12}  {'-'*6}  {'-'*30}  {'-'*6}  {'-'*12}  {'-'*10}")
             for name, info in by_type.items():
                 recipe = f"{info['inputAmount']:.0f} {info['inputGood']} -> {info['outputAmount']:.0f} {info['outputGood']}"
-                print(f"  {name:12s}  {info['count']:>6d}  {recipe:30s}  {info['laborPerUnit']:>6d}  {fmt(info['expectedThroughput']):>10s}")
+                actual_tp = info.get('actualThroughput', 0)
+                actual_wk = info.get('actualWorkers', 0)
+                tp_str = f"{fmt(actual_tp)}/{fmt(info['expectedThroughput'])}"
+                print(f"  {name:12s}  {info['count']:>6d}  {recipe:30s}  {info['laborPerUnit']:>6d}  {tp_str:>12s}  {fmt(actual_wk):>10s}")
         else:
             print(f"  By type:")
             for name, count in by_type.items():
@@ -467,13 +470,15 @@ def print_production_chains(data: dict):
         return
 
     # Collect refined goods from facility output
-    refined = {}  # goodName -> {facilityName, count, expectedThroughput}
+    refined = {}  # goodName -> {facilityName, count, expectedThroughput, actualThroughput, actualWorkers}
     for name, info in by_type.items():
         out = info["outputGood"]
         refined[out] = {
             "facility": name,
             "count": info["count"],
             "throughput": info["expectedThroughput"],
+            "actualThroughput": info.get("actualThroughput", 0),
+            "actualWorkers": info.get("actualWorkers", 0),
             "inputGood": info["inputGood"],
         }
 
@@ -503,9 +508,13 @@ def print_production_chains(data: dict):
         input_prod = last["productionByGood"][ig] if ig is not None else 0
         input_stock = last["stockByGood"][ig] if ig is not None else 0
 
+        actual_tp = chain.get("actualThroughput", 0)
+        actual_wk = chain.get("actualWorkers", 0)
+
         print(f"\n  {good_name.upper()} (from {chain['facility']} x{chain['count']})")
         print(f"    Input ({input_name}):  production={fmt(input_prod)}/day  stock={fmt(input_stock)}")
-        print(f"    Output:           production={fmt(prod)}/day  max_throughput={fmt(chain['throughput'])}/day")
+        print(f"    Output:           production={fmt(prod)}/day  throughput={fmt(actual_tp)}/day (max={fmt(chain['throughput'])}/day)")
+        print(f"    Workers:          {fmt(actual_wk)} actual")
         print(f"    Demand:           consumption={fmt(cons)}/day  unmet={fmt(unmet)}/day  total={fmt(demand)}/day")
         print(f"    Coverage:         {coverage:.1f}%")
 

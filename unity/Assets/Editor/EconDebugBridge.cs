@@ -904,14 +904,20 @@ namespace EconSim.Editor
             j.KV("totalCount", econ.Facilities.Length);
 
             // Aggregate by type
-            int totalWorkers = 0;
+            float totalWorkers = 0f;
             var countByType = new Dictionary<int, int>();
+            var throughputByType = new Dictionary<int, float>();
+            var workersByType = new Dictionary<int, float>();
             foreach (var fac in econ.Facilities)
             {
                 totalWorkers += fac.Workforce;
                 int t = (int)fac.Type;
                 countByType.TryGetValue(t, out int c);
                 countByType[t] = c + 1;
+                throughputByType.TryGetValue(t, out float tp);
+                throughputByType[t] = tp + fac.Throughput;
+                workersByType.TryGetValue(t, out float w);
+                workersByType[t] = w + fac.Workforce;
             }
 
             j.KV("totalWorkers", totalWorkers);
@@ -926,7 +932,12 @@ namespace EconSim.Editor
                 j.KV("outputGood", Goods.Names[(int)def.OutputGood]);
                 j.KV("outputAmount", def.OutputAmount);
                 j.KV("laborPerUnit", def.LaborPerUnit);
+                j.KV("maxLaborFraction", def.MaxLaborFraction);
                 j.KV("expectedThroughput", kv.Value * def.OutputAmount);
+                throughputByType.TryGetValue(kv.Key, out float actualTp);
+                workersByType.TryGetValue(kv.Key, out float actualWk);
+                j.KV("actualThroughput", actualTp);
+                j.KV("actualWorkers", actualWk);
                 j.ObjClose();
             }
             j.ObjClose();

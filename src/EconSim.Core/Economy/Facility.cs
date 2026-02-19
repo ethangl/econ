@@ -10,7 +10,10 @@ namespace EconSim.Core.Economy
         public readonly int CellId;
 
         /// <summary>Current number of workers assigned to this facility.</summary>
-        public int Workforce;
+        public float Workforce;
+
+        /// <summary>Actual daily output produced last tick.</summary>
+        public float Throughput;
 
         public Facility(FacilityType type, int countyId, int cellId)
         {

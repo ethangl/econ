@@ -148,16 +148,27 @@ namespace EconSim.Core.Economy
                 // Production — all goods (extraction workforce reduced by facility labor)
                 for (int g = 0; g < Goods.Count; g++)
                 {
-                    float produced = pop * ce.Productivity[g] * wf;
+                    float produced;
+                    if (!Goods.HasDirectDemand[g] && !Goods.IsPreciousMetal(g))
+                    {
+                        // Facility-input-only: extract only what local facilities need
+                        float inputDemand = ComputeFacilityInputDemand(ce, econ, i, g);
+                        produced = Math.Min(inputDemand, pop * ce.Productivity[g]);
+                    }
+                    else
+                    {
+                        produced = pop * ce.Productivity[g] * wf;
+                    }
                     ce.Stock[g] += produced;
                     ce.Production[g] = produced;
                 }
 
-                // Facility processing — consume input, produce output (same-day availability)
+                // Facility processing — demand-driven, realm-quota-aware
                 var facIndices = econ.CountyFacilityIndices;
                 if (facIndices != null && i < facIndices.Length && facIndices[i] != null)
                 {
                     var indices = facIndices[i];
+                    float totalFacWorkers = 0f;
                     for (int fi = 0; fi < indices.Count; fi++)
                     {
                         var fac = econ.Facilities[indices[fi]];
@@ -165,15 +176,37 @@ namespace EconSim.Core.Economy
                         int input = (int)def.InputGood;
                         int output = (int)def.OutputGood;
 
-                        float available = ce.Stock[input];
-                        float needed = def.InputAmount;
-                        float ratio = Math.Min(1f, available / needed);
+                        // Target: realm quota (includes local + admin + redistribution needs)
+                        // Falls back to baseline on first tick when quota is 0
+                        float target = Math.Max(def.BaselineOutput, ce.FacilityQuota[output]);
 
-                        ce.Stock[input] -= needed * ratio;
-                        float produced = def.OutputAmount * ratio;
-                        ce.Stock[output] += produced;
-                        ce.Production[output] += produced;
+                        // Material constraint
+                        float maxByInput = def.InputAmount > 0f
+                            ? ce.Stock[input] / def.InputAmount * def.OutputAmount
+                            : float.MaxValue;
+
+                        // Labor constraint
+                        float maxByLabor = def.LaborPerUnit > 0
+                            ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
+                            : float.MaxValue;
+
+                        float throughput = Math.Min(target, Math.Min(maxByInput, maxByLabor));
+                        if (throughput < 0f) throughput = 0f;
+
+                        float inputUsed = def.OutputAmount > 0f
+                            ? throughput / def.OutputAmount * def.InputAmount
+                            : 0f;
+                        ce.Stock[input] -= inputUsed;
+                        ce.Stock[output] += throughput;
+                        ce.Production[output] += throughput;
+
+                        fac.Throughput = throughput;
+                        fac.Workforce = def.OutputAmount > 0f
+                            ? throughput / def.OutputAmount * def.LaborPerUnit
+                            : 0f;
+                        totalFacWorkers += fac.Workforce;
                     }
+                    ce.FacilityWorkers = totalFacWorkers;
                 }
 
                 // Consumption — all goods
@@ -201,6 +234,27 @@ namespace EconSim.Core.Economy
 
             // Record snapshot
             econ.TimeSeries.Add(BuildSnapshot(state.CurrentDay, econ));
+        }
+
+        static float ComputeFacilityInputDemand(
+            CountyEconomy ce, EconomyState econ, int countyIdx, int goodIdx)
+        {
+            var facIndices = econ.CountyFacilityIndices;
+            if (facIndices == null || countyIdx >= facIndices.Length
+                || facIndices[countyIdx] == null)
+                return 0f;
+
+            float demand = 0f;
+            var indices = facIndices[countyIdx];
+            for (int fi = 0; fi < indices.Count; fi++)
+            {
+                var def = econ.Facilities[indices[fi]].Def;
+                if ((int)def.InputGood != goodIdx || def.OutputAmount <= 0f) continue;
+                // Match the facility production target (same formula as facility processing)
+                float target = Math.Max(def.BaselineOutput, ce.FacilityQuota[(int)def.OutputGood]);
+                demand += target * def.InputAmount / def.OutputAmount;
+            }
+            return demand;
         }
 
         static void ComputeCountyProductivity(County county, MapData mapData, float[] output)

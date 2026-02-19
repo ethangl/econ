@@ -40,10 +40,8 @@ namespace EconSim.Core.Economy
                     {
                         int idx = facilities.Count;
                         var facility = new Facility(def.Type, county.Id, county.SeatCellId);
-                        facility.Workforce = def.LaborPerUnit;
                         facilities.Add(facility);
                         countyIndices[county.Id].Add(idx);
-                        ce.FacilityWorkers += def.LaborPerUnit;
                     }
                 }
             }

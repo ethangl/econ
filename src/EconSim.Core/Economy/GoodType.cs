@@ -55,6 +55,9 @@ namespace EconSim.Core.Economy
         /// <summary>Monthly retention factor pow(1 - spoilageRate, 30), indexed by GoodType.</summary>
         public static readonly float[] MonthlyRetention;
 
+        /// <summary>True if good has population consumption or administrative demand.</summary>
+        public static readonly bool[] HasDirectDemand;
+
         /// <summary>Goods that can be traded on the inter-realm market.</summary>
         public static readonly int[] TradeableGoods;
 
@@ -119,6 +122,7 @@ namespace EconSim.Core.Economy
             ProvinceAdminPerPop = new float[Count];
             RealmAdminPerPop    = new float[Count];
             MonthlyRetention    = new float[Count];
+            HasDirectDemand     = new bool[Count];
 
             var tradeable = new List<int>();
 
@@ -134,6 +138,10 @@ namespace EconSim.Core.Economy
                 ProvinceAdminPerPop[i] = d.ProvinceAdminPerPop;
                 RealmAdminPerPop[i]    = d.RealmAdminPerPop;
                 MonthlyRetention[i]    = (float)Math.Pow(1.0 - d.SpoilageRate, 30);
+                HasDirectDemand[i]     = d.ConsumptionPerPop > 0f
+                                       || d.CountyAdminPerPop > 0f
+                                       || d.ProvinceAdminPerPop > 0f
+                                       || d.RealmAdminPerPop > 0f;
 
                 if (d.IsTradeable)
                     tradeable.Add(i);

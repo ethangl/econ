@@ -279,3 +279,28 @@ Raw goods → refined goods via facilities. Proved with Clay → Pottery chain.
 - `Economy/EconomySystem.cs` — inline facility processing between extraction and consumption
 - `Economy/GoodType.cs` — Clay and Pottery added to GoodType enum and Goods.Defs[]
 - `Economy/BiomeProductivity.cs` — Clay column added
+
+### Phase D: Demand-Driven Extraction + Tax Exemption + Two-Tier Quotas
+
+Pure facility inputs — goods with no population consumption and no administrative demand (currently just Clay) — are exempt from feudal taxation and extracted on-demand rather than at full capacity.
+
+**`Goods.HasDirectDemand[]`:** Static boolean array. True if a good has `ConsumptionPerPop > 0` or any admin rate > 0. Goods where `!HasDirectDemand && !IsPreciousMetal` are pure facility inputs.
+
+| Good                                   | HasDirectDemand | IsPreciousMetal | Effect                           |
+| -------------------------------------- | --------------- | --------------- | -------------------------------- |
+| Food, Timber, IronOre, Salt, Wool, Ale | true            | false           | Normal extraction + tax          |
+| Stone                                  | true            | false           | Normal (has admin demand)        |
+| Pottery                                | true            | false           | Normal (has consumption + admin) |
+| Clay                                   | false           | false           | Demand-driven extraction, no tax |
+| Gold/Silver                            | false           | true            | Normal extraction, 100% mint tax |
+
+**Tax exemption:** Phases 2 (ducal tax) and 4 (royal tax) skip goods where `!HasDirectDemand && !IsPreciousMetal`. Other phases already no-op for these goods (zero admin rates, zero consumption, zero deficit).
+
+**Demand-driven extraction:** Counties extract pure facility inputs only to match local facility demand. `ComputeFacilityInputDemand()` sums the input needed by each local facility based on its production target (quota or baseline). Counties without relevant facilities extract zero. Capped by `pop * productivity` as usual.
+
+**Two-tier facility quotas:** Phase 9 split into provincial and realm tiers:
+
+- **Phase 9a (Provincial):** Duke computes province need (`consumption + countyAdmin + provinceAdmin`) and distributes quotas to producing counties within the province. Provinces with facilities are self-sufficient for local demand.
+- **Phase 9b (Realm):** King computes realm-specific needs — realm admin consumption plus the full need of provinces that lack local facilities for that good. Distributed to producing counties across the realm, additive to provincial quotas.
+
+Both tiers independently drive production. A kiln county receives its provincial quota share plus any realm quota share. Demand-driven extraction scales automatically via the combined quota.

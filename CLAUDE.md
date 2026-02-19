@@ -28,6 +28,8 @@ The user runs economy simulations via the EconDebugBridge in Unity, which writes
 
 ### Unity Gotchas
 
+No standalone csproj — this is a Unity project with assembly definitions.
+
 **Namespace conflicts:** The `EconSim.Renderer` namespace conflicts with Unity types. Use fully qualified names:
 
 - `UnityEngine.Camera` not `Camera`

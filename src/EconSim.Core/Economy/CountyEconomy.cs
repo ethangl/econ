@@ -42,7 +42,10 @@ namespace EconSim.Core.Economy
         /// <summary>Net migration this month (reset monthly by PopulationSystem). Positive = inflow.</summary>
         public float NetMigrationThisMonth;
 
-        /// <summary>Total workers assigned to facilities in this county. Set once at init by FacilityProductionSystem.</summary>
-        public int FacilityWorkers;
+        /// <summary>Total workers assigned to facilities in this county. Updated each tick by EconomySystem.</summary>
+        public float FacilityWorkers;
+
+        /// <summary>Realm-distributed production target per good, indexed by GoodType. Set by TradeSystem Phase 9.</summary>
+        public float[] FacilityQuota = new float[Goods.Count];
     }
 }
