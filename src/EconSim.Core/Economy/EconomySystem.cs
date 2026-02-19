@@ -245,6 +245,7 @@ namespace EconSim.Core.Economy
                 return 0f;
 
             float demand = 0f;
+            float pop = ce.Population;
             var indices = facIndices[countyIdx];
             for (int fi = 0; fi < indices.Count; fi++)
             {
@@ -252,6 +253,11 @@ namespace EconSim.Core.Economy
                 if ((int)def.InputGood != goodIdx || def.OutputAmount <= 0f) continue;
                 // Match the facility production target (same formula as facility processing)
                 float target = Math.Max(def.BaselineOutput, ce.FacilityQuota[(int)def.OutputGood]);
+                // Apply labor cap — don't extract more than the facility can process
+                float maxByLabor = def.LaborPerUnit > 0
+                    ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
+                    : float.MaxValue;
+                target = Math.Min(target, maxByLabor);
                 demand += target * def.InputAmount / def.OutputAmount;
             }
             return demand;

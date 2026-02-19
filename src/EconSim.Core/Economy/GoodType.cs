@@ -16,6 +16,7 @@ namespace EconSim.Core.Economy
         Ale = 8,
         Clay = 9,
         Pottery = 10,
+        Lumber = 11,
     }
 
     public static class Goods
@@ -70,8 +71,9 @@ namespace EconSim.Core.Economy
             (int)GoodType.Salt,
             (int)GoodType.Wool,
             (int)GoodType.Pottery,
-            (int)GoodType.Timber,
+            (int)GoodType.Lumber,
             (int)GoodType.Stone,
+            (int)GoodType.Timber,
             (int)GoodType.Clay,
         };
 
@@ -98,7 +100,7 @@ namespace EconSim.Core.Economy
             {
                 //                                                                                                                                              spoilage
                 new GoodDef(GoodType.Food,      "food",      GoodCategory.Raw, NeedCategory.Basic,   1.0f,   0.0f,   0.0f,   0.02f,  1.0f,  0.1f,  10.0f, true,  false, 0.03f),
-                new GoodDef(GoodType.Timber,     "timber",    GoodCategory.Raw, NeedCategory.Comfort, 0.2f,   0.02f,  0.01f,  0.01f,  0.5f,  0.05f, 5.0f,  true,  false, 0.001f),
+                new GoodDef(GoodType.Timber,     "timber",    GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.5f,  0.05f, 5.0f,  true,  false, 0.001f),
                 new GoodDef(GoodType.IronOre,    "ironOre",   GoodCategory.Raw, NeedCategory.Comfort, 0.005f, 0.0f,   0.001f, 0.003f, 5.0f,  0.5f,  50.0f, true,  false),
                 new GoodDef(GoodType.GoldOre,    "goldOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
                 new GoodDef(GoodType.SilverOre,  "silverOre", GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
@@ -108,6 +110,7 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.Ale,        "ale",       GoodCategory.Raw, NeedCategory.Basic,   0.5f,   0.0f,   0.0f,   0.0f,   0.8f,  0.08f, 8.0f,  true,  false, 0.05f),
                 new GoodDef(GoodType.Clay,       "clay",      GoodCategory.Raw,     NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.2f,  0.02f, 2.0f,  true,  false),
                 new GoodDef(GoodType.Pottery,    "pottery",   GoodCategory.Refined, NeedCategory.Comfort, 0.01f,  0.002f, 0.001f, 0.001f, 2.0f,  0.2f,  20.0f, true,  false),
+                new GoodDef(GoodType.Lumber,     "lumber",    GoodCategory.Refined, NeedCategory.Comfort, 0.2f,   0.02f,  0.01f,  0.01f,  1.0f,  0.1f,  10.0f, true,  false, 0.001f),
             };
 
             Count = Defs.Length;

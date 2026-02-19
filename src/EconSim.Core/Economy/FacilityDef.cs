@@ -3,6 +3,7 @@ namespace EconSim.Core.Economy
     public enum FacilityType
     {
         Kiln = 0,
+        Sawmill = 1,
     }
 
     /// <summary>
@@ -65,6 +66,7 @@ namespace EconSim.Core.Economy
             Defs = new[]
             {
                 new FacilityDef(FacilityType.Kiln, "kiln", GoodType.Clay, 2.0f, GoodType.Pottery, 1.0f, 3, 0.05f, 0.05f, 1.0f),
+                new FacilityDef(FacilityType.Sawmill, "sawmill", GoodType.Timber, 3.0f, GoodType.Lumber, 2.0f, 1, 0.2f, 0.10f, 5.0f),
             };
 
             Count = Defs.Length;
