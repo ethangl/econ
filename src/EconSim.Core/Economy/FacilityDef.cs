@@ -4,6 +4,8 @@ namespace EconSim.Core.Economy
     {
         Kiln = 0,
         Sawmill = 1,
+        Smelter = 2,
+        Smithy = 3,
     }
 
     /// <summary>
@@ -24,7 +26,10 @@ namespace EconSim.Core.Economy
         /// <summary>Workers needed to produce OutputAmount per day at full capacity.</summary>
         public readonly int LaborPerUnit;
 
-        /// <summary>Minimum biome productivity of InputGood required for placement.</summary>
+        /// <summary>Good whose biome productivity determines placement. Defaults to InputGood.</summary>
+        public readonly GoodType PlacementGood;
+
+        /// <summary>Minimum biome productivity of PlacementGood required for placement.</summary>
         public readonly float PlacementMinProductivity;
 
         /// <summary>Max fraction of county pop that can work in this industry.</summary>
@@ -40,7 +45,8 @@ namespace EconSim.Core.Economy
             int laborPerUnit,
             float placementMinProductivity,
             float maxLaborFraction,
-            float baselineOutput)
+            float baselineOutput,
+            GoodType? placementGood = null)
         {
             Type = type;
             Name = name;
@@ -49,6 +55,7 @@ namespace EconSim.Core.Economy
             OutputGood = outputGood;
             OutputAmount = outputAmount;
             LaborPerUnit = laborPerUnit;
+            PlacementGood = placementGood ?? inputGood;
             PlacementMinProductivity = placementMinProductivity;
             MaxLaborFraction = maxLaborFraction;
             BaselineOutput = baselineOutput;
@@ -62,11 +69,13 @@ namespace EconSim.Core.Economy
 
         static Facilities()
         {
-            //                         Type              Name    Input          InAmt  Output            OutAmt Labor  MinProd MaxLabor Baseline
+            //                         Type              Name      Input            InAmt  Output            OutAmt Labor  MinProd MaxLabor Baseline [PlacementGood]
             Defs = new[]
             {
-                new FacilityDef(FacilityType.Kiln, "kiln", GoodType.Clay, 2.0f, GoodType.Pottery, 1.0f, 3, 0.05f, 0.05f, 1.0f),
-                new FacilityDef(FacilityType.Sawmill, "sawmill", GoodType.Timber, 3.0f, GoodType.Lumber, 2.0f, 1, 0.2f, 0.10f, 5.0f),
+                new FacilityDef(FacilityType.Kiln,     "kiln",    GoodType.Clay,    2.0f, GoodType.Pottery, 1.0f, 3, 0.05f, 0.05f, 1.0f),
+                new FacilityDef(FacilityType.Sawmill,  "sawmill", GoodType.Timber,  3.0f, GoodType.Lumber,  2.0f, 1, 0.2f,  0.10f, 5.0f),
+                new FacilityDef(FacilityType.Smelter,  "smelter", GoodType.IronOre, 3.0f, GoodType.Iron,    2.0f, 1, 0.0f,  0.05f, 1.0f),
+                new FacilityDef(FacilityType.Smithy,   "smithy",  GoodType.Iron,    2.0f, GoodType.Tools,   1.0f, 1, 0.0f,  0.05f, 1.0f, GoodType.IronOre),
             };
 
             Count = Defs.Length;

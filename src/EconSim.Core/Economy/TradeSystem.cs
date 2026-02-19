@@ -80,6 +80,9 @@ namespace EconSim.Core.Economy
         /// <summary>Per-province, per-output-good → total pop of producing counties.</summary>
         float[][] _provinceFacilityPop;
 
+        /// <summary>True if this good is produced as output by any facility type.</summary>
+        bool[] _isFacilityOutput;
+
         public void Initialize(SimulationState state, MapData mapData)
         {
             BuildMappings(state, mapData);
@@ -395,6 +398,33 @@ namespace EconSim.Core.Economy
                     }
                 }
             }
+
+            // Phase 9c: Upstream quota propagation
+            // If a facility's input is itself a facility output, propagate demand backward.
+            // e.g. Smithy quota for Tools → Iron demand → FacilityQuota[Iron] → drives Smelter
+            if (_isFacilityOutput != null && state.Economy.Facilities != null)
+            {
+                var facIndices = state.Economy.CountyFacilityIndices;
+                var facilities = state.Economy.Facilities;
+                for (int i = 0; i < counties.Length; i++)
+                {
+                    var ce = counties[i];
+                    if (ce == null) continue;
+                    if (i >= facIndices.Length || facIndices[i] == null || facIndices[i].Count == 0) continue;
+
+                    var indices = facIndices[i];
+                    for (int fi = 0; fi < indices.Count; fi++)
+                    {
+                        var def = facilities[indices[fi]].Def;
+                        int inputGood = (int)def.InputGood;
+                        if (!_isFacilityOutput[inputGood]) continue;
+
+                        int outputGood = (int)def.OutputGood;
+                        float inputNeeded = ce.FacilityQuota[outputGood] * def.InputAmount / def.OutputAmount;
+                        ce.FacilityQuota[inputGood] += inputNeeded;
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -587,6 +617,11 @@ namespace EconSim.Core.Economy
 
         void BuildFacilityMappings(EconomyState econ, int maxRealmId, int maxProvId)
         {
+            // Precompute which goods are facility outputs (for Phase 9c upstream propagation)
+            _isFacilityOutput = new bool[Goods.Count];
+            for (int f = 0; f < Facilities.Count; f++)
+                _isFacilityOutput[(int)Facilities.Defs[f].OutputGood] = true;
+
             var facIndices = econ.CountyFacilityIndices;
             if (facIndices == null || econ.Facilities == null)
             {

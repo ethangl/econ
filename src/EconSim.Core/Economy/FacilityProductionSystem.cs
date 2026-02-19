@@ -34,9 +34,10 @@ namespace EconSim.Core.Economy
                 for (int f = 0; f < Facilities.Count; f++)
                 {
                     var def = Facilities.Defs[f];
-                    int inputGood = (int)def.InputGood;
+                    int placementGood = (int)def.PlacementGood;
 
-                    if (ce.Productivity[inputGood] >= def.PlacementMinProductivity)
+                    if (ce.Productivity[placementGood] > 0f
+                        && ce.Productivity[placementGood] >= def.PlacementMinProductivity)
                     {
                         int idx = facilities.Count;
                         var facility = new Facility(def.Type, county.Id, county.SeatCellId);

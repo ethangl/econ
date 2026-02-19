@@ -17,6 +17,8 @@ namespace EconSim.Core.Economy
         Clay = 9,
         Pottery = 10,
         Lumber = 11,
+        Iron = 12,
+        Tools = 13,
     }
 
     public static class Goods
@@ -67,7 +69,7 @@ namespace EconSim.Core.Economy
         {
             (int)GoodType.Food,
             (int)GoodType.Ale,
-            (int)GoodType.IronOre,
+            (int)GoodType.Tools,
             (int)GoodType.Salt,
             (int)GoodType.Wool,
             (int)GoodType.Pottery,
@@ -75,6 +77,8 @@ namespace EconSim.Core.Economy
             (int)GoodType.Stone,
             (int)GoodType.Timber,
             (int)GoodType.Clay,
+            (int)GoodType.IronOre,
+            (int)GoodType.Iron,
         };
 
         // ── Minting constants (process parameters, not per-good data) ──
@@ -101,7 +105,7 @@ namespace EconSim.Core.Economy
                 //                                                                                                                                              spoilage
                 new GoodDef(GoodType.Food,      "food",      GoodCategory.Raw, NeedCategory.Basic,   1.0f,   0.0f,   0.0f,   0.02f,  1.0f,  0.1f,  10.0f, true,  false, 0.03f),
                 new GoodDef(GoodType.Timber,     "timber",    GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.5f,  0.05f, 5.0f,  true,  false, 0.001f),
-                new GoodDef(GoodType.IronOre,    "ironOre",   GoodCategory.Raw, NeedCategory.Comfort, 0.005f, 0.0f,   0.001f, 0.003f, 5.0f,  0.5f,  50.0f, true,  false),
+                new GoodDef(GoodType.IronOre,    "ironOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   5.0f,  0.5f,  50.0f, true,  false),
                 new GoodDef(GoodType.GoldOre,    "goldOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
                 new GoodDef(GoodType.SilverOre,  "silverOre", GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
                 new GoodDef(GoodType.Salt,       "salt",      GoodCategory.Raw, NeedCategory.Basic,   0.05f,  0.0f,   0.0f,   0.0f,   3.0f,  0.3f,  30.0f, true,  false),
@@ -111,6 +115,8 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.Clay,       "clay",      GoodCategory.Raw,     NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.2f,  0.02f, 2.0f,  true,  false),
                 new GoodDef(GoodType.Pottery,    "pottery",   GoodCategory.Refined, NeedCategory.Comfort, 0.01f,  0.002f, 0.001f, 0.001f, 2.0f,  0.2f,  20.0f, true,  false),
                 new GoodDef(GoodType.Lumber,     "lumber",    GoodCategory.Refined, NeedCategory.Comfort, 0.2f,   0.02f,  0.01f,  0.01f,  1.0f,  0.1f,  10.0f, true,  false, 0.001f),
+                new GoodDef(GoodType.Iron,       "iron",      GoodCategory.Refined, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   10.0f, 1.0f,  100.0f,true,  false),
+                new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.005f, 0.001f, 0.001f, 0.002f, 15.0f, 1.5f,  150.0f,true,  false, 0.001f),
             };
 
             Count = Defs.Length;
