@@ -30,5 +30,11 @@ namespace EconSim.Core.Economy
 
         /// <summary>County adjacency graph. countyId → array of adjacent county IDs. Built once at init.</summary>
         public int[][] CountyAdjacency;
+
+        /// <summary>All facility instances, set by FacilityProductionSystem.</summary>
+        public Facility[] Facilities;
+
+        /// <summary>Per-county list of facility indices into Facilities[]. Indexed by county ID.</summary>
+        public System.Collections.Generic.List<int>[] CountyFacilityIndices;
     }
 }

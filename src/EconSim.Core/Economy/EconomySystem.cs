@@ -143,13 +143,37 @@ namespace EconSim.Core.Economy
                 if (ce == null) continue;
 
                 float pop = ce.Population;
+                float wf = pop > 0 ? (pop - ce.FacilityWorkers) / pop : 1f;
 
-                // Production — all goods
+                // Production — all goods (extraction workforce reduced by facility labor)
                 for (int g = 0; g < Goods.Count; g++)
                 {
-                    float produced = pop * ce.Productivity[g];
+                    float produced = pop * ce.Productivity[g] * wf;
                     ce.Stock[g] += produced;
                     ce.Production[g] = produced;
+                }
+
+                // Facility processing — consume input, produce output (same-day availability)
+                var facIndices = econ.CountyFacilityIndices;
+                if (facIndices != null && i < facIndices.Length && facIndices[i] != null)
+                {
+                    var indices = facIndices[i];
+                    for (int fi = 0; fi < indices.Count; fi++)
+                    {
+                        var fac = econ.Facilities[indices[fi]];
+                        var def = fac.Def;
+                        int input = (int)def.InputGood;
+                        int output = (int)def.OutputGood;
+
+                        float available = ce.Stock[input];
+                        float needed = def.InputAmount;
+                        float ratio = Math.Min(1f, available / needed);
+
+                        ce.Stock[input] -= needed * ratio;
+                        float produced = def.OutputAmount * ratio;
+                        ce.Stock[output] += produced;
+                        ce.Production[output] += produced;
+                    }
                 }
 
                 // Consumption — all goods

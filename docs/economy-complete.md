@@ -241,3 +241,41 @@ Perishable goods decay monthly. `SpoilageRate` is the daily fractional loss. Mon
 - `Economy/GoodType.cs` — enum + `Goods` static class (Defs[], extracted arrays, minting constants)
 - `Economy/SpoilageSystem.cs` — ITickSystem (monthly): multiplicative decay on all stockpile tiers
 - `Economy/BiomeProductivity.cs` — column count validated against `Goods.Count` at static init
+
+## Layer 7: Production Chains (Phases A–C)
+
+Raw goods → refined goods via facilities. Proved with Clay → Pottery chain.
+
+### Phase A: Data Model
+
+- `FacilityDef` readonly struct: Type, Name, input/output good + amount, LaborPerUnit, PlacementMinProductivity
+- `FacilityType` enum + `Facilities.Defs[]` registry
+- `Facility` runtime class: Type, CountyId, CellId, Workforce
+- New goods: Clay (raw, extracted from biome, comfort, inert) and Pottery (refined, facility-only, comfort, inert)
+- Kiln facility: 2 Clay → 1 Pottery, 3 workers, placed in counties with Clay productivity ≥ 0.05
+
+### Phase B: Placement + Processing
+
+- `FacilityProductionSystem.Initialize()` scans counties, places kilns where Clay productivity meets threshold
+- `EconomyState.Facilities[]` + `CountyFacilityIndices` (per-county facility lookup)
+- Labor allocation: facility workers subtracted from extraction workforce (proportional reduction)
+
+### Phase C: Economic Integration
+
+- Facility processing inlined into `EconomySystem.Tick()` between extraction and consumption
+  - Fixes production tracking (ce.Production[Pottery] populated)
+  - Fixes consumption timing (Pottery available same-day)
+- `FacilityProductionSystem.Tick()` emptied (placement logic retained in Initialize)
+- Full economic loop: Clay extraction → kiln processing → Pottery consumption/trade/tax/spoilage
+- All existing systems (TradeSystem, InterRealmTradeSystem, SpoilageSystem) process Pottery generically
+- EconDebugBridge facility dump expanded with recipe details and throughput
+- `analyze_econ.py` production chain reporting section
+
+### Files
+
+- `Economy/FacilityDef.cs` — FacilityType enum, FacilityDef struct, Facilities registry
+- `Economy/Facility.cs` — runtime facility instance
+- `Economy/FacilityProductionSystem.cs` — ITickSystem: placement at init, processing moved to EconomySystem
+- `Economy/EconomySystem.cs` — inline facility processing between extraction and consumption
+- `Economy/GoodType.cs` — Clay and Pottery added to GoodType enum and Goods.Defs[]
+- `Economy/BiomeProductivity.cs` — Clay column added

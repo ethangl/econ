@@ -252,6 +252,7 @@ namespace EconSim.Core
             Profiler.Begin("Simulation Init");
             var runner = new SimulationRunner(MapData);
             runner.RegisterSystem(new EconomySystem());
+            runner.RegisterSystem(new FacilityProductionSystem());
             runner.RegisterSystem(new TradeSystem());
             runner.RegisterSystem(new InterRealmTradeSystem());
             runner.RegisterSystem(new PopulationSystem());

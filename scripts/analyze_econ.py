@@ -435,6 +435,91 @@ def print_population(data: dict):
             print(f"    Change:        {'+' if pop_change >= 0 else ''}{fmt(pop_change, 0)}")
 
 
+def print_facilities(data: dict):
+    fac = data.get("facilities")
+    if not fac or fac.get("totalCount", 0) == 0:
+        return
+    section("FACILITIES")
+    print(f"  Total facilities: {fac['totalCount']}")
+    print(f"  Total workers:    {fac['totalWorkers']}")
+    by_type = fac.get("byType", {})
+    if by_type:
+        print()
+        # Detect format: old (int count) vs new (object with details)
+        first_val = next(iter(by_type.values()))
+        if isinstance(first_val, dict):
+            print(f"  {'Type':12s}  {'Count':>6s}  {'Recipe':30s}  {'Labor':>6s}  {'Max Output':>10s}")
+            print(f"  {'-'*12}  {'-'*6}  {'-'*30}  {'-'*6}  {'-'*10}")
+            for name, info in by_type.items():
+                recipe = f"{info['inputAmount']:.0f} {info['inputGood']} -> {info['outputAmount']:.0f} {info['outputGood']}"
+                print(f"  {name:12s}  {info['count']:>6d}  {recipe:30s}  {info['laborPerUnit']:>6d}  {fmt(info['expectedThroughput']):>10s}")
+        else:
+            print(f"  By type:")
+            for name, count in by_type.items():
+                print(f"    {name:12s}: {count}")
+
+
+def print_production_chains(data: dict):
+    """Show supply/demand analysis for refined goods (produced by facilities)."""
+    fac = data.get("facilities", {})
+    by_type = fac.get("byType", {})
+    if not by_type or not isinstance(next(iter(by_type.values()), None), dict):
+        return
+
+    # Collect refined goods from facility output
+    refined = {}  # goodName -> {facilityName, count, expectedThroughput}
+    for name, info in by_type.items():
+        out = info["outputGood"]
+        refined[out] = {
+            "facility": name,
+            "count": info["count"],
+            "throughput": info["expectedThroughput"],
+            "inputGood": info["inputGood"],
+        }
+
+    if not refined:
+        return
+
+    ts = data["economy"]["timeSeries"]
+    if len(ts) < 2:
+        return
+
+    section("PRODUCTION CHAINS")
+
+    last = ts[-1]
+    for good_name, chain in refined.items():
+        if good_name not in GOOD_IDX:
+            continue
+        g = GOOD_IDX[good_name]
+
+        prod = last["productionByGood"][g]
+        cons = last["consumptionByGood"][g]
+        unmet = last["unmetNeedByGood"][g]
+        demand = cons + unmet
+        coverage = (cons / demand * 100) if demand > 0 else 0
+
+        input_name = chain["inputGood"]
+        ig = GOOD_IDX.get(input_name)
+        input_prod = last["productionByGood"][ig] if ig is not None else 0
+        input_stock = last["stockByGood"][ig] if ig is not None else 0
+
+        print(f"\n  {good_name.upper()} (from {chain['facility']} x{chain['count']})")
+        print(f"    Input ({input_name}):  production={fmt(input_prod)}/day  stock={fmt(input_stock)}")
+        print(f"    Output:           production={fmt(prod)}/day  max_throughput={fmt(chain['throughput'])}/day")
+        print(f"    Demand:           consumption={fmt(cons)}/day  unmet={fmt(unmet)}/day  total={fmt(demand)}/day")
+        print(f"    Coverage:         {coverage:.1f}%")
+
+        # Early vs late trend
+        if len(ts) >= 20:
+            early = ts[4:14]
+            late = ts[-10:]
+            early_prod = sum(t["productionByGood"][g] for t in early) / len(early)
+            late_prod = sum(t["productionByGood"][g] for t in late) / len(late)
+            early_unmet = sum(t["unmetNeedByGood"][g] for t in early) / len(early)
+            late_unmet = sum(t["unmetNeedByGood"][g] for t in late) / len(late)
+            print(f"    Trend:            prod {fmt(early_prod)} -> {fmt(late_prod)}  unmet {fmt(early_unmet)} -> {fmt(late_unmet)}")
+
+
 def print_convergence(data: dict):
     section("CONVERGENCE ANALYSIS")
     ts = data["economy"]["timeSeries"]
@@ -511,6 +596,8 @@ def main():
     print_treasury(data)
     print_inter_realm_trade(data)
     print_roads(data)
+    print_facilities(data)
+    print_production_chains(data)
     print_population(data)
     print_convergence(data)
     print()

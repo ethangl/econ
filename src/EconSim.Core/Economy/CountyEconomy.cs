@@ -41,5 +41,8 @@ namespace EconSim.Core.Economy
 
         /// <summary>Net migration this month (reset monthly by PopulationSystem). Positive = inflow.</summary>
         public float NetMigrationThisMonth;
+
+        /// <summary>Total workers assigned to facilities in this county. Set once at init by FacilityProductionSystem.</summary>
+        public int FacilityWorkers;
     }
 }

@@ -441,6 +441,8 @@ namespace EconSim.Editor
                 WriteEconomy(j, st);
             if (scope == "all" || scope == "trade")
                 WriteTrade(j, st);
+            if (scope == "all" || scope == "facilities")
+                WriteFacilities(j, st);
 
             j.ObjClose();
             File.WriteAllText(OutputPath, j.ToString());
@@ -883,6 +885,51 @@ namespace EconSim.Editor
                 j.ObjClose();
                 j.KV("totalTreasury", totalTreasury);
             }
+
+            j.ObjClose();
+        }
+
+        static void WriteFacilities(JW j, SimulationState st)
+        {
+            j.Key("facilities"); j.ObjOpen();
+
+            var econ = st.Economy;
+            if (econ?.Facilities == null || econ.Facilities.Length == 0)
+            {
+                j.KV("totalCount", 0);
+                j.ObjClose();
+                return;
+            }
+
+            j.KV("totalCount", econ.Facilities.Length);
+
+            // Aggregate by type
+            int totalWorkers = 0;
+            var countByType = new Dictionary<int, int>();
+            foreach (var fac in econ.Facilities)
+            {
+                totalWorkers += fac.Workforce;
+                int t = (int)fac.Type;
+                countByType.TryGetValue(t, out int c);
+                countByType[t] = c + 1;
+            }
+
+            j.KV("totalWorkers", totalWorkers);
+            j.Key("byType"); j.ObjOpen();
+            foreach (var kv in countByType)
+            {
+                var def = Facilities.Defs[kv.Key];
+                j.Key(def.Name); j.ObjOpen();
+                j.KV("count", kv.Value);
+                j.KV("inputGood", Goods.Names[(int)def.InputGood]);
+                j.KV("inputAmount", def.InputAmount);
+                j.KV("outputGood", Goods.Names[(int)def.OutputGood]);
+                j.KV("outputAmount", def.OutputAmount);
+                j.KV("laborPerUnit", def.LaborPerUnit);
+                j.KV("expectedThroughput", kv.Value * def.OutputAmount);
+                j.ObjClose();
+            }
+            j.ObjClose();
 
             j.ObjClose();
         }
