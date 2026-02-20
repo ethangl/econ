@@ -771,7 +771,7 @@ namespace EconSim.Editor
             }
 
             string[] goodNames = Goods.Names;
-            const int F = (int)GoodType.Food;
+            const int F = (int)GoodType.Bread;
 
             // County-level stats (per-good)
             int countyCount = 0;

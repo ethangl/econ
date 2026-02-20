@@ -8,6 +8,9 @@ namespace EconSim.Core.Economy
         Smithy = 3,
         CharcoalBurner = 4,
         Weaver = 5,
+        Butcher = 6,
+        Smokehouse = 7,
+        Cheesemaker = 8,
     }
 
     public readonly struct RecipeInput
@@ -96,6 +99,15 @@ namespace EconSim.Core.Economy
                 new FacilityDef(FacilityType.Weaver, "weaver",
                     new[] { new RecipeInput(GoodType.Wool, 3.0f) },
                     GoodType.Clothes, 2.0f, 2, 0.05f, 0.10f, 2.0f),
+                new FacilityDef(FacilityType.Butcher, "butcher",
+                    new[] { new RecipeInput(GoodType.Pork, 1.0f), new RecipeInput(GoodType.Salt, 0.2f) },
+                    GoodType.Sausage, 3.0f, 2, 0.05f, 0.10f, 3.0f, GoodType.Pork),
+                new FacilityDef(FacilityType.Smokehouse, "smokehouse",
+                    new[] { new RecipeInput(GoodType.Pork, 2.0f), new RecipeInput(GoodType.Timber, 1.0f) },
+                    GoodType.Bacon, 2.0f, 1, 0.05f, 0.10f, 2.0f, GoodType.Pork),
+                new FacilityDef(FacilityType.Cheesemaker, "cheesemaker",
+                    new[] { new RecipeInput(GoodType.Milk, 3.0f), new RecipeInput(GoodType.Salt, 0.3f) },
+                    GoodType.Cheese, 1.0f, 1, 0.05f, 0.10f, 1.0f, GoodType.Milk),
             };
 
             Count = Defs.Length;

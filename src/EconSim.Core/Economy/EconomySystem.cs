@@ -18,7 +18,7 @@ namespace EconSim.Core.Economy
         public int TickInterval => SimulationConfig.Intervals.Daily;
 
         static readonly float[] ConsumptionPerPop = Goods.ConsumptionPerPop;
-        const int Food = (int)GoodType.Food;
+        const int Food = (int)GoodType.Bread;
 
         // Basic-needs satisfaction: precomputed indices and weights
         static readonly int[] BasicGoods;

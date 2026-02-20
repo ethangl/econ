@@ -5,7 +5,7 @@ namespace EconSim.Core.Economy
 {
     public enum GoodType
     {
-        Food = 0,
+        Bread = 0,
         Timber = 1,
         IronOre = 2,
         GoldOre = 3,
@@ -21,6 +21,11 @@ namespace EconSim.Core.Economy
         Tools = 13,
         Charcoal = 14,
         Clothes = 15,
+        Pork = 16,
+        Sausage = 17,
+        Bacon = 18,
+        Milk = 19,
+        Cheese = 20,
     }
 
     public static class Goods
@@ -72,12 +77,15 @@ namespace EconSim.Core.Economy
         /// <summary>Buy priority order — staples first, stone last (infrastructure can wait).</summary>
         public static readonly int[] BuyPriority =
         {
-            (int)GoodType.Food,
+            (int)GoodType.Bread,
             (int)GoodType.Ale,
+            (int)GoodType.Sausage,
             (int)GoodType.Tools,
             (int)GoodType.Salt,
             (int)GoodType.Clothes,
             (int)GoodType.Timber,
+            (int)GoodType.Cheese,
+            (int)GoodType.Bacon,
             (int)GoodType.Pottery,
             (int)GoodType.Furniture,
             (int)GoodType.Stone,
@@ -109,7 +117,7 @@ namespace EconSim.Core.Economy
             Defs = new[]
             {
                 //                                                                                                                                              spoilage
-                new GoodDef(GoodType.Food,      "food",      GoodCategory.Raw, NeedCategory.Basic,   1.0f,   0.0f,   0.0f,   0.02f,  1.0f,  0.1f,  10.0f, true,  false, 0.03f),
+                new GoodDef(GoodType.Bread,     "bread",     GoodCategory.Raw, NeedCategory.Basic,   0.7f,   0.0f,   0.0f,   0.02f,  1.0f,  0.1f,  10.0f, true,  false, 0.03f),
                 new GoodDef(GoodType.Timber,     "timber",    GoodCategory.Raw, NeedCategory.Comfort, 0.2f,   0.0f,   0.0f,   0.0f,   0.5f,  0.05f, 5.0f,  true,  false, 0.001f),
                 new GoodDef(GoodType.IronOre,    "ironOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   5.0f,  0.5f,  50.0f, true,  false),
                 new GoodDef(GoodType.GoldOre,    "goldOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
@@ -125,6 +133,11 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.0f,   0.001f, 0.001f, 0.002f, 15.0f, 1.5f,  150.0f,true,  false, 0.001f, 2.0f),
                 new GoodDef(GoodType.Charcoal,   "charcoal",  GoodCategory.Refined, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   2.0f,  0.2f,  20.0f, true,  false),
                 new GoodDef(GoodType.Clothes,    "clothes",   GoodCategory.Finished,NeedCategory.Comfort, 0.0f,   0.001f, 0.0f,   0.005f, 3.0f,  0.3f,  30.0f, true,  false, 0.002f, 2.0f),
+                new GoodDef(GoodType.Pork,      "pork",      GoodCategory.Raw,      NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   2.0f,  0.2f,  20.0f, true,  false, 0.02f),
+                new GoodDef(GoodType.Sausage,   "sausage",   GoodCategory.Finished, NeedCategory.Basic,   0.3f,   0.0f,   0.0f,   0.0f,   4.0f,  0.4f,  40.0f, true,  false, 0.002f),
+                new GoodDef(GoodType.Bacon,     "bacon",     GoodCategory.Finished, NeedCategory.Comfort, 0.1f,   0.0f,   0.0f,   0.0f,   5.0f,  0.5f,  50.0f, true,  false, 0.02f),
+                new GoodDef(GoodType.Milk,     "milk",      GoodCategory.Raw,      NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   1.5f,  0.15f, 15.0f, true,  false, 0.05f),
+                new GoodDef(GoodType.Cheese,   "cheese",    GoodCategory.Finished, NeedCategory.Basic,   0.1f,   0.0f,   0.0f,   0.0f,   6.0f,  0.6f,  60.0f, true,  false, 0.003f),
             };
 
             Count = Defs.Length;

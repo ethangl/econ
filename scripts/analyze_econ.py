@@ -5,9 +5,9 @@ import json
 import sys
 from pathlib import Path
 
-_FALLBACK_GOODS = ["food", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone", "ale", "clay", "pottery", "lumber", "iron", "tools", "charcoal"]
-_FALLBACK_BASE_PRICES = [1.0, 0.5, 5.0, 0.0, 0.0, 3.0, 2.0, 0.3, 0.8, 0.2, 2.0, 1.0, 10.0, 15.0, 2.0]
-_FALLBACK_TRADEABLE = {"food", "timber", "ironOre", "salt", "wool", "stone", "ale", "clay", "pottery", "lumber", "iron", "tools", "charcoal"}
+_FALLBACK_GOODS = ["bread", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone", "ale", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese"]
+_FALLBACK_BASE_PRICES = [1.0, 0.5, 5.0, 0.0, 0.0, 3.0, 2.0, 0.3, 0.8, 0.2, 2.0, 5.0, 10.0, 15.0, 2.0, 3.0, 2.0, 4.0, 5.0, 1.5, 6.0]
+_FALLBACK_TRADEABLE = {"bread", "timber", "ironOre", "salt", "wool", "stone", "ale", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese"}
 
 # Module-level references set by init_goods()
 GOODS: list[str] = []
@@ -102,7 +102,7 @@ def print_economy(data: dict):
     first, last = ts[0], ts[-1]
 
     print(f"  Counties:    {e['countyCount']}")
-    print(f"  Productivity (food): avg={e['avgProductivity']:.3f}  min={e['minProductivity']:.3f}  max={e['maxProductivity']:.3f}")
+    print(f"  Productivity (bread): avg={e['avgProductivity']:.3f}  min={e['minProductivity']:.3f}  max={e['maxProductivity']:.3f}")
     print()
 
     # Per-good productivity
@@ -541,7 +541,7 @@ def print_convergence(data: dict):
         print("  Not enough data for convergence analysis")
         return
 
-    # Check if food unmet need is converging
+    # Check if bread unmet need is converging
     unmet_food = [t["unmetNeedByGood"][0] for t in ts]
     unmet_total = [t["totalUnmetNeed"] for t in ts]
     starving = [t["starvingCounties"] for t in ts]
@@ -554,7 +554,7 @@ def print_convergence(data: dict):
     stock_rate = (recent[-1]["totalStock"] - recent[0]["totalStock"]) / window
 
     print(f"  Last {window} days (daily averages):")
-    print(f"    Food unmet need change:  {food_rate:+.1f}/day")
+    print(f"    Bread unmet need change: {food_rate:+.1f}/day")
     print(f"    Starving counties change:{starving_rate:+.2f}/day")
     print(f"    Total stock change:      {fmt(stock_rate)}/day")
 
@@ -571,17 +571,17 @@ def print_convergence(data: dict):
         else:
             print("  -> Growth not slowing (not yet near equilibrium)")
 
-    # Food specifically
+    # Bread specifically
     total_pop = data["summary"]["totalPopulation"]
     latest_food_unmet = ts[-1]["unmetNeedByGood"][0]
     latest_food_prod = ts[-1]["productionByGood"][0]
-    print(f"\n  Food deficit: {fmt(latest_food_unmet)} unmet ({pct(latest_food_unmet, latest_food_prod)} of production)")
+    print(f"\n  Bread deficit: {fmt(latest_food_unmet)} unmet ({pct(latest_food_unmet, latest_food_prod)} of production)")
     print(f"  Starving:     {ts[-1]['starvingCounties']}/{data['economy']['countyCount']} counties")
 
-    # Per-good status (skip food, already reported above)
+    # Per-good status (skip bread, already reported above)
     for i, good in enumerate(GOODS):
         if i == 0:
-            continue  # food already reported
+            continue  # bread already reported
         unmet = ts[-1]["unmetNeedByGood"][i]
         cons = ts[-1]["consumptionByGood"][i]
         demand = cons + unmet
