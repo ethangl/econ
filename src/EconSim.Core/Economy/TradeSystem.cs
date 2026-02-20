@@ -98,9 +98,13 @@ namespace EconSim.Core.Economy
         /// <summary>Per-good stock presence across county/province/realm stores for this tick.</summary>
         bool[] _hasStockByGood;
 
+        /// <summary>Simulation day when _provincePop/_realmPop were last refreshed.</summary>
+        int _lastPopulationCacheRefreshDay;
+
         public void Initialize(SimulationState state, MapData mapData)
         {
             BuildMappings(state, mapData);
+            _lastPopulationCacheRefreshDay = state.CurrentDay;
         }
 
         public void Tick(SimulationState state, MapData mapData)
@@ -108,6 +112,10 @@ namespace EconSim.Core.Economy
             var counties = state.Economy.Counties;
             var provinces = state.Economy.Provinces;
             var realms = state.Economy.Realms;
+
+            // Population changes monthly in PopulationSystem (runs after TradeSystem),
+            // so refresh on day N*30+1 to use the latest post-update totals.
+            RefreshPopulationCachesIfNeeded(state, counties);
 
             // Precompute effective demand per pop for durable goods
             if (_effectiveDemandPerPop == null)
@@ -689,25 +697,52 @@ namespace EconSim.Core.Economy
             // Cache population per province and realm for admin consumption
             _provincePop = new float[maxProvId + 1];
             _realmPop = new float[maxRealmId + 1];
+            RecomputePopulationCaches(econ.Counties);
 
-            foreach (var county in mapData.Counties)
+            // Pre-compute per-realm and per-province facility county lists for quota distribution
+            BuildFacilityMappings(econ, maxRealmId, maxProvId);
+        }
+
+        void RefreshPopulationCachesIfNeeded(SimulationState state, CountyEconomy[] counties)
+        {
+            if (state.CurrentDay % SimulationConfig.Intervals.Monthly != 1)
+                return;
+            if (_lastPopulationCacheRefreshDay == state.CurrentDay)
+                return;
+
+            RecomputePopulationCaches(counties);
+            _lastPopulationCacheRefreshDay = state.CurrentDay;
+        }
+
+        void RecomputePopulationCaches(CountyEconomy[] counties)
+        {
+            if (_provincePop == null || _realmPop == null)
+                return;
+
+            Array.Clear(_provincePop, 0, _provincePop.Length);
+            Array.Clear(_realmPop, 0, _realmPop.Length);
+
+            for (int i = 0; i < counties.Length; i++)
             {
-                var ce = econ.Counties[county.Id];
-                if (ce == null) continue;
-                int provId = county.ProvinceId;
+                var ce = counties[i];
+                if (ce == null || i >= _countyToProvince.Length)
+                    continue;
+
+                int provId = _countyToProvince[i];
                 if (provId >= 0 && provId < _provincePop.Length)
                     _provincePop[provId] += ce.Population;
             }
 
-            foreach (var prov in mapData.Provinces)
+            for (int p = 0; p < _provinceIds.Length; p++)
             {
-                int realmId = prov.RealmId;
-                if (realmId >= 0 && realmId < _realmPop.Length)
-                    _realmPop[realmId] += _provincePop[prov.Id];
-            }
+                int provId = _provinceIds[p];
+                if (provId < 0 || provId >= _provinceToRealm.Length)
+                    continue;
 
-            // Pre-compute per-realm and per-province facility county lists for quota distribution
-            BuildFacilityMappings(econ, maxRealmId, maxProvId);
+                int realmId = _provinceToRealm[provId];
+                if (realmId >= 0 && realmId < _realmPop.Length)
+                    _realmPop[realmId] += _provincePop[provId];
+            }
         }
 
         void BuildFacilityMappings(EconomyState econ, int maxRealmId, int maxProvId)

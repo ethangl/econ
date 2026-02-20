@@ -40,6 +40,7 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 
 ### Future Layers (unordered)
 
+- **Weather/Seasonality**
 - **Money circulation + market tolls** — Domestic money flow and market-driven production.
   - Counties and provinces hold coin balances (treasury at every tier)
   - Feudal tax phases pay for goods taken: realm pays province, duke pays county, at administered prices from treasury
