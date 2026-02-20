@@ -329,3 +329,5 @@ With the mechanism proven, add more production chains. Each is a data-driven add
 **Fish productivity:** Coast-proximity-based extraction (not purely biome). Coastal cells +0.30, distance 1 +0.15, distance 2 +0.05, plus biome values for freshwater biomes (floodplain 0.10, coastal marsh 0.08, wetland 0.05).
 
 **Raw inputs not directly consumed:** Pork, milk, fish, clay, wool, charcoal, iron — extracted on-demand by local facilities or at full capacity if tradeable with direct demand. Tax-exempt when purely facility inputs.
+
+## Layer 8: Domestic Cash Flow

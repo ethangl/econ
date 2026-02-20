@@ -15,43 +15,27 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 5. Population Dynamics
 6. Good Spoilage / Decay
 7. Production Chains
+8. Domestic cash flow
 
-**Planned chains:**
+### Layer 9 (next): County Market Access
 
-- **Ale → brewery** (Food → Ale). Remove Ale from biome extraction table. Ale now only comes from breweries in grain-producing counties.
-- **Timber → Lumber** (sawmill). Lumber replaces Timber in construction/admin consumption.
-- **IronOre → IronIngots** (smelter). IronIngots replace IronOre in admin/military consumption.
-- **Wool → Cloth** (weaver). Cloth replaces Wool in population comfort consumption.
-- **Finished goods** (multi-input): Tools (IronIngots + Lumber → smithy). Deferred until single-input chains are stable.
+Currently the king intermediates all trade (inter-realm only) and counties receive goods solely through feudal relief. This layer makes counties the trading agents, opening markets progressively with tolls replacing in-kind taxation at each political boundary.
 
-**Per-chain migration checklist:**
+Feudal redistribution (FiscalSystem) continues to run — taxes and relief still flow through the hierarchy. County trade is an additional channel that lets counties buy/sell surplus directly, bypassing the feudal pipeline for goods they can afford.
 
-1. **Add output good** to `GoodType` enum and `Goods.Defs[]` (consumption, admin rates, price band, need category, spoilage)
-2. **Add facility** to `FacilityType` enum and `Facilities.Defs[]` (input/output good + amounts, labor, placement threshold)
-3. **Update `BiomeProductivity`** — add column for new good (if raw) or zero column (if refined-only)
-4. **Reclassify input good** if it becomes a pure facility input:
-   - Zero out its `ConsumptionPerPop` and admin rates in `Goods.Defs[]` (so `HasDirectDemand` becomes false)
-   - Move its old consumption/admin rates to the new output good
-   - It will automatically become demand-driven extraction + tax-exempt via Phase D logic
-5. **Update `BuyPriority`** in `Goods` — insert new good at appropriate priority
-6. **Update `analyze_econ.py`** — production chain reporting picks up new facilities automatically
-7. **Update `EconDebugBridge`** — facility dump picks up new facilities automatically
-8. **Test** — run `generate_and_run`, verify: output covers old consumption, input extraction matches facility demand, tax/trade/relief flows correct for new good
+**Phase A: Intra-Province Trade** (Complete)
+Counties within the same province trade directly at market prices. Untaxed (or negligible flat fee). The duke's province is a free-trade zone — counties with surplus sell to neighbors with deficit, routed via transport graph. Runs after ducal tax but before relief — trade resolves deficits first, relief covers what's left.
+
+**Phase B: Cross-Province / Intra-Realm Trade**
+Counties trade across province boundaries within the same realm. The receiving duke collects a toll on goods entering the province. Creates incentive for provincial self-sufficiency while allowing inter-provincial specialization.
+
+**Phase C: Cross-Realm Trade**
+Counties trade across realm borders. The receiving king collects a tariff on imports (on top of any ducal toll). Replaces realm-level InterRealmTradeSystem with county-level actors. Kings set tariff rates rather than personally trading.
 
 ### Future Layers (unordered)
 
 - **Weather/Seasonality**
-- **Money circulation + market tolls** — Domestic money flow and market-driven production.
-  - Counties and provinces hold coin balances (treasury at every tier)
-  - Feudal tax phases pay for goods taken: realm pays province, duke pays county, at administered prices from treasury
-  - Counties respond to high market prices by producing above quota (price signal = demand signal)
-  - Feudal hierarchy can't tax goods that counties sell directly at market — shifts from in-kind taxation to transaction tolls:
-    1. **Market toll** — host county collects a fee on every transaction (funds market town growth)
-    2. **Ducal toll** — duke of the selling county takes a cut of coin revenue
-    3. **Royal toll** — king takes a cut above that
-  - Creates circular money flow: mint → royal treasury → provinces/counties (paying for taxed goods) → market (selling surplus) → tolls back up the hierarchy
-  - Market towns accumulate coin from tolls → grow in population → attract more trade (feedback loop)
-  - Solves pottery export problem: currently low trade volume because no incentive to overproduce; with coin incentive, kiln counties produce above quota and sell at market price
+- **Money circulation + market tolls** — Market towns accumulate coin from tolls → grow in population → attract more trade (feedback loop). Counties respond to high market prices by producing above quota (price signal = demand signal).
 - **Labor specialization** — unskilled vs craftsman, skill acquisition from employment
 - **Road emergence** — traffic volume builds paths → roads, reducing transport cost
 - **Political effects** — tariffs at realm borders, trade agreements

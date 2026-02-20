@@ -492,6 +492,8 @@ namespace EconSim.Core.Economy
             snap.TotalRoyalTaxByGood = new float[Goods.Count];
             snap.TotalRoyalReliefByGood = new float[Goods.Count];
             snap.TotalRoyalStockpileByGood = new float[Goods.Count];
+            snap.TotalIntraProvTradeBoughtByGood = new float[Goods.Count];
+            snap.TotalIntraProvTradeSoldByGood = new float[Goods.Count];
 
             int countyCount = 0;
             snap.MinBasicSatisfaction = float.MaxValue;
@@ -517,7 +519,11 @@ namespace EconSim.Core.Economy
                 {
                     snap.TotalDucalTaxByGood[g] += ce.TaxPaid[g];
                     snap.TotalDucalReliefByGood[g] += ce.Relief[g];
+                    snap.TotalIntraProvTradeBoughtByGood[g] += ce.TradeBought[g];
+                    snap.TotalIntraProvTradeSoldByGood[g] += ce.TradeSold[g];
                 }
+                snap.TotalIntraProvTradeSpending += ce.TradeCrownsSpent;
+                snap.TotalIntraProvTradeRevenue += ce.TradeCrownsEarned;
 
                 float foodStock = ce.Stock[Food];
                 if (foodStock < snap.MinStock) snap.MinStock = foodStock;

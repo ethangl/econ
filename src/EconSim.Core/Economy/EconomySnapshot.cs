@@ -47,6 +47,12 @@ namespace EconSim.Core.Economy
         public float TotalSilverMinted;
         public float TotalCrownsMinted;
 
+        // Intra-province trade (Layer 9 Phase A)
+        public float[] TotalIntraProvTradeBoughtByGood;
+        public float[] TotalIntraProvTradeSoldByGood;
+        public float TotalIntraProvTradeSpending;
+        public float TotalIntraProvTradeRevenue;
+
         // Inter-realm trade (Layer 4 Phase C)
         public float[] MarketPrices;
         public float[] TotalTradeImportsByGood;
