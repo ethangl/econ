@@ -19,6 +19,7 @@ namespace EconSim.Core.Economy
         Lumber = 11,
         Iron = 12,
         Tools = 13,
+        Charcoal = 14,
     }
 
     public static class Goods
@@ -79,6 +80,7 @@ namespace EconSim.Core.Economy
             (int)GoodType.Clay,
             (int)GoodType.IronOre,
             (int)GoodType.Iron,
+            (int)GoodType.Charcoal,
         };
 
         // ── Minting constants (process parameters, not per-good data) ──
@@ -117,6 +119,7 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.Lumber,     "lumber",    GoodCategory.Refined, NeedCategory.Comfort, 0.2f,   0.02f,  0.01f,  0.01f,  1.0f,  0.1f,  10.0f, true,  false, 0.001f),
                 new GoodDef(GoodType.Iron,       "iron",      GoodCategory.Refined, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   10.0f, 1.0f,  100.0f,true,  false),
                 new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.005f, 0.001f, 0.001f, 0.002f, 15.0f, 1.5f,  150.0f,true,  false, 0.001f),
+                new GoodDef(GoodType.Charcoal,   "charcoal",  GoodCategory.Refined, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   2.0f,  0.2f,  20.0f, true,  false),
             };
 
             Count = Defs.Length;

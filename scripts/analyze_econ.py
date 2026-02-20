@@ -5,9 +5,9 @@ import json
 import sys
 from pathlib import Path
 
-_FALLBACK_GOODS = ["food", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone", "ale", "clay", "pottery", "lumber", "iron", "tools"]
-_FALLBACK_BASE_PRICES = [1.0, 0.5, 5.0, 0.0, 0.0, 3.0, 2.0, 0.3, 0.8, 0.2, 2.0, 1.0, 10.0, 15.0]
-_FALLBACK_TRADEABLE = {"food", "timber", "ironOre", "salt", "wool", "stone", "ale", "clay", "pottery", "lumber", "iron", "tools"}
+_FALLBACK_GOODS = ["food", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone", "ale", "clay", "pottery", "lumber", "iron", "tools", "charcoal"]
+_FALLBACK_BASE_PRICES = [1.0, 0.5, 5.0, 0.0, 0.0, 3.0, 2.0, 0.3, 0.8, 0.2, 2.0, 1.0, 10.0, 15.0, 2.0]
+_FALLBACK_TRADEABLE = {"food", "timber", "ironOre", "salt", "wool", "stone", "ale", "clay", "pottery", "lumber", "iron", "tools", "charcoal"}
 
 # Module-level references set by init_goods()
 GOODS: list[str] = []

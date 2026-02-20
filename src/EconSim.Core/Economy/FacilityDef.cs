@@ -6,6 +6,7 @@ namespace EconSim.Core.Economy
         Sawmill = 1,
         Smelter = 2,
         Smithy = 3,
+        CharcoalBurner = 4,
     }
 
     public readonly struct RecipeInput
@@ -83,11 +84,14 @@ namespace EconSim.Core.Economy
                     new[] { new RecipeInput(GoodType.Timber, 3.0f) },
                     GoodType.Lumber, 2.0f, 1, 0.2f, 0.10f, 5.0f),
                 new FacilityDef(FacilityType.Smelter, "smelter",
-                    new[] { new RecipeInput(GoodType.IronOre, 3.0f), new RecipeInput(GoodType.Timber, 2.0f) },
+                    new[] { new RecipeInput(GoodType.IronOre, 3.0f), new RecipeInput(GoodType.Charcoal, 0.4f) },
                     GoodType.Iron, 2.0f, 1, 0.0f, 0.05f, 1.0f),
                 new FacilityDef(FacilityType.Smithy,  "smithy",
-                    new[] { new RecipeInput(GoodType.Iron, 2.0f), new RecipeInput(GoodType.Timber, 1.0f) },
+                    new[] { new RecipeInput(GoodType.Iron, 2.0f), new RecipeInput(GoodType.Charcoal, 0.2f) },
                     GoodType.Tools, 1.0f, 1, 0.0f, 0.05f, 1.0f, GoodType.IronOre),
+                new FacilityDef(FacilityType.CharcoalBurner, "charcoalBurner",
+                    new[] { new RecipeInput(GoodType.Timber, 5.0f) },
+                    GoodType.Charcoal, 1.0f, 1, 0.1f, 0.10f, 2.0f),
             };
 
             Count = Defs.Length;
