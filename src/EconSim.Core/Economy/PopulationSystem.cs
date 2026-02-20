@@ -35,15 +35,28 @@ namespace EconSim.Core.Economy
 
         int[] _countyIds;
         int[] _countyRealmIds;
+        int[] _countyProvinceIds;
+        int[] _provinceIds;
+        int[] _provinceRealmIds;
 
         public void Initialize(SimulationState state, MapData mapData)
         {
             _countyIds = new int[mapData.Counties.Count];
             _countyRealmIds = new int[mapData.Counties.Count];
+            _countyProvinceIds = new int[mapData.Counties.Count];
             for (int i = 0; i < mapData.Counties.Count; i++)
             {
                 _countyIds[i] = mapData.Counties[i].Id;
                 _countyRealmIds[i] = mapData.Counties[i].RealmId;
+                _countyProvinceIds[i] = mapData.Counties[i].ProvinceId;
+            }
+
+            _provinceIds = new int[mapData.Provinces.Count];
+            _provinceRealmIds = new int[mapData.Provinces.Count];
+            for (int i = 0; i < mapData.Provinces.Count; i++)
+            {
+                _provinceIds[i] = mapData.Provinces[i].Id;
+                _provinceRealmIds[i] = mapData.Provinces[i].RealmId;
             }
         }
 
@@ -169,6 +182,36 @@ namespace EconSim.Core.Economy
                 // Enforce floor after migration
                 if (ce.Population < PopulationFloor)
                     ce.Population = PopulationFloor;
+            }
+
+            // Refresh shared population caches after all demographic changes
+            RefreshPopulationCaches(econ, counties);
+        }
+
+        void RefreshPopulationCaches(EconomyState econ, CountyEconomy[] counties)
+        {
+            var provincePop = econ.ProvincePop;
+            var realmPop = econ.RealmPop;
+            if (provincePop == null || realmPop == null) return;
+
+            Array.Clear(provincePop, 0, provincePop.Length);
+            Array.Clear(realmPop, 0, realmPop.Length);
+
+            for (int i = 0; i < _countyIds.Length; i++)
+            {
+                int cid = _countyIds[i];
+                var ce = counties[cid];
+                int provId = _countyProvinceIds[i];
+                if (provId >= 0 && provId < provincePop.Length)
+                    provincePop[provId] += ce.Population;
+            }
+
+            for (int i = 0; i < _provinceIds.Length; i++)
+            {
+                int provId = _provinceIds[i];
+                int realmId = _provinceRealmIds[i];
+                if (realmId >= 0 && realmId < realmPop.Length)
+                    realmPop[realmId] += provincePop[provId];
             }
         }
     }
