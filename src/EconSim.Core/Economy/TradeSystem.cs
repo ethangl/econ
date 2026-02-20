@@ -486,6 +486,9 @@ namespace EconSim.Core.Economy
             // Phase 9c: Upstream quota propagation
             // If a facility's input is itself a facility output, propagate demand backward.
             // e.g. Smithy quota for Tools → Iron demand → FacilityQuota[Iron] → drives Smelter
+            // IMPORTANT: iterate in reverse facility order so downstream consumers (smithy)
+            // propagate before midstream producers (smelter). This ensures the smelter sees
+            // the iron quota set by the smithy when computing its own charcoal demand.
             if (_isFacilityOutput != null && state.Economy.Facilities != null)
             {
                 var facIndices = state.Economy.CountyFacilityIndices;
@@ -497,7 +500,7 @@ namespace EconSim.Core.Economy
                     if (i >= facIndices.Length || facIndices[i] == null || facIndices[i].Count == 0) continue;
 
                     var indices = facIndices[i];
-                    for (int fi = 0; fi < indices.Count; fi++)
+                    for (int fi = indices.Count - 1; fi >= 0; fi--)
                     {
                         var def = facilities[indices[fi]].Def;
                         int outputGood = (int)def.OutputGood;
