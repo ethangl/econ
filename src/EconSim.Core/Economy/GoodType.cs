@@ -86,8 +86,10 @@ namespace EconSim.Core.Economy
         /// <summary>Normalized ideal share of the staple budget per good (indexed by GoodType). Zero for non-staples.</summary>
         public static readonly float[] StapleIdealPerPop;
 
-        /// <summary>Buy priority order — staples first, stone last (infrastructure can wait).</summary>
-        public static readonly int[] BuyPriority =
+        /// <summary>
+        /// Preferred buy-priority prefix. Any remaining tradeable goods are appended automatically.
+        /// </summary>
+        static readonly int[] PreferredBuyPriority =
         {
             (int)GoodType.Bread,
             (int)GoodType.Ale,
@@ -108,6 +110,9 @@ namespace EconSim.Core.Economy
             (int)GoodType.Iron,
             (int)GoodType.Charcoal,
         };
+
+        /// <summary>Buy priority order used by inter-realm trade. Always contains all tradeable goods.</summary>
+        public static readonly int[] BuyPriority;
 
         // ── Minting constants (process parameters, not per-good data) ──
 
@@ -198,6 +203,7 @@ namespace EconSim.Core.Economy
             }
 
             TradeableGoods = tradeable.ToArray();
+            BuyPriority = BuildBuyPriority();
 
             // Compute staple pool arrays
             var staples = new List<int>();
@@ -220,6 +226,35 @@ namespace EconSim.Core.Economy
                     StapleIdealPerPop[g] = ConsumptionPerPop[g] / totalStapleWeight * StapleBudgetPerPop;
                 }
             }
+        }
+
+        static int[] BuildBuyPriority()
+        {
+            var ordered = new List<int>(TradeableGoods.Length);
+            var added = new bool[Count];
+
+            // Add preferred goods in order when they are currently tradeable.
+            for (int i = 0; i < PreferredBuyPriority.Length; i++)
+            {
+                int g = PreferredBuyPriority[i];
+                if (g < 0 || g >= Count) continue;
+                if (!Defs[g].IsTradeable) continue;
+                if (added[g]) continue;
+                ordered.Add(g);
+                added[g] = true;
+            }
+
+            // Append any remaining tradeable goods to guarantee market coverage.
+            for (int i = 0; i < TradeableGoods.Length; i++)
+            {
+                int g = TradeableGoods[i];
+                if (g < 0 || g >= Count) continue;
+                if (added[g]) continue;
+                ordered.Add(g);
+                added[g] = true;
+            }
+
+            return ordered.ToArray();
         }
     }
 }

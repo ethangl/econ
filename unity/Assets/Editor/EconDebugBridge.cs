@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
+using EconSim.Core.Common;
 using EconSim.Core;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
@@ -272,6 +273,7 @@ namespace EconSim.Editor
         static void StartRun()
         {
             var sim = GameManager.Instance.Simulation;
+            SetSnapshotCapture(enabled: true, resetSeries: true);
             _state = BridgeState.Running;
             sim.TimeScale = SimulationConfig.Speed.Hyper;
             sim.IsPaused = false;
@@ -339,6 +341,7 @@ namespace EconSim.Editor
 
         static void CleanupAll()
         {
+            SetSnapshotCapture(enabled: false, resetSeries: false);
             _state = BridgeState.Idle;
             _needsGenerate = false;
             _pendingConfig = null;
@@ -356,6 +359,7 @@ namespace EconSim.Editor
             var sim = GameManager.Instance.Simulation;
             sim.IsPaused = true;
             sim.TimeScale = SimulationConfig.Speed.Normal;
+            SetSnapshotCapture(enabled: false, resetSeries: false);
         }
 
         // ── Status ─────────────────────────────────────────────────
@@ -967,6 +971,20 @@ namespace EconSim.Editor
                 return false;
             }
             return true;
+        }
+
+        static void SetSnapshotCapture(bool enabled, bool resetSeries)
+        {
+            if (!EditorApplication.isPlaying || GameManager.Instance?.Simulation == null)
+                return;
+
+            var economy = GameManager.Instance.Simulation.GetState()?.Economy;
+            if (economy == null)
+                return;
+
+            economy.CaptureSnapshots = enabled;
+            if (enabled && resetSeries)
+                economy.TimeSeries = new RingBuffer<EconomySnapshot>(economy.TimeSeries.Capacity);
         }
 
         static void FormatDate(JW j, int day)

@@ -86,9 +86,25 @@ namespace EconSim.Core.Economy
         /// <summary>Effective demand per pop per day — ConsumptionPerPop for consumables, aggregate demand/pop for durables.</summary>
         float[] _effectiveDemandPerPop;
 
+        /// <summary>Per-county retain deficit scratch for the current good. Indexed by county ID.</summary>
+        float[] _countyRetainDeficit;
+
+        /// <summary>Per-province total retain deficit scratch for the current good. Indexed by province ID.</summary>
+        float[] _provinceRetainDeficit;
+
+        /// <summary>Per-county retain target scratch for the current good. Indexed by county ID.</summary>
+        float[] _countyRetainTarget;
+
+        /// <summary>Per-good stock presence across county/province/realm stores for this tick.</summary>
+        bool[] _hasStockByGood;
+
+        /// <summary>Simulation day when _provincePop/_realmPop were last refreshed.</summary>
+        int _lastPopulationCacheRefreshDay;
+
         public void Initialize(SimulationState state, MapData mapData)
         {
             BuildMappings(state, mapData);
+            _lastPopulationCacheRefreshDay = state.CurrentDay;
         }
 
         public void Tick(SimulationState state, MapData mapData)
@@ -96,6 +112,10 @@ namespace EconSim.Core.Economy
             var counties = state.Economy.Counties;
             var provinces = state.Economy.Provinces;
             var realms = state.Economy.Realms;
+
+            // Population changes monthly in PopulationSystem (runs after TradeSystem),
+            // so refresh on day N*30+1 to use the latest post-update totals.
+            RefreshPopulationCachesIfNeeded(state, counties);
 
             // Precompute effective demand per pop for durable goods
             if (_effectiveDemandPerPop == null)
@@ -126,6 +146,7 @@ namespace EconSim.Core.Economy
 
             // Reset per-tick accumulators
             ResetAccumulators(counties, provinces, realms);
+            BuildHasStockByGood(counties, provinces, realms);
 
             for (int g = 0; g < Goods.Count; g++)
             {
@@ -135,9 +156,17 @@ namespace EconSim.Core.Economy
                     : Goods.Defs[g].Need == NeedCategory.Staple
                         ? Goods.StapleIdealPerPop[g]
                         : ConsumptionPerPop[g];
+                float countyAdmin = Goods.CountyAdminPerPop[g];
+                float provAdmin = Goods.ProvinceAdminPerPop[g];
+                float realmAdmin = Goods.RealmAdminPerPop[g];
+
+                // Skip inert goods: no stock anywhere and no demand drivers this tick.
+                // This avoids full phase passes for dormant intermediate goods.
+                if (!_hasStockByGood[g] && retainPerPop <= 0f
+                    && countyAdmin <= 0f && provAdmin <= 0f && realmAdmin <= 0f)
+                    continue;
 
                 // Phase 1: County administrative consumption (building upkeep)
-                float countyAdmin = Goods.CountyAdminPerPop[g];
                 if (countyAdmin > 0f)
                 {
                     for (int i = 0; i < counties.Length; i++)
@@ -166,8 +195,10 @@ namespace EconSim.Core.Economy
 
                         for (int c = 0; c < countyIds.Length; c++)
                         {
-                            var ce = counties[countyIds[c]];
+                            int countyId = countyIds[c];
+                            var ce = counties[countyId];
                             float retain = ce.Population * retainPerPop;
+                            _countyRetainTarget[countyId] = retain;
                             float surplus = ce.Stock[g] - retain;
 
                             if (surplus > 0f)
@@ -183,7 +214,6 @@ namespace EconSim.Core.Economy
                 }
 
                 // Phase 3: Provincial administrative consumption (infrastructure)
-                float provAdmin = Goods.ProvinceAdminPerPop[g];
                 if (provAdmin > 0f)
                 {
                     for (int p = 0; p < _provinceIds.Length; p++)
@@ -222,7 +252,6 @@ namespace EconSim.Core.Economy
                 }
 
                 // Phase 5: Royal administrative consumption (military upkeep)
-                float realmAdmin = Goods.RealmAdminPerPop[g];
                 if (realmAdmin > 0f)
                 {
                     for (int r = 0; r < _realmIds.Length; r++)
@@ -237,6 +266,9 @@ namespace EconSim.Core.Economy
                     }
                 }
 
+                // Precompute county/province retain deficits once per good (used by Phases 6 and 7).
+                BuildRetainDeficitsForGood(g, retainPerPop, counties, taxable);
+
                 // Phase 6: King distributes remainder to deficit provinces
                 Span<float> provDeficits = stackalloc float[_maxProvincesPerRealm];
                 for (int r = 0; r < _realmIds.Length; r++)
@@ -250,8 +282,9 @@ namespace EconSim.Core.Economy
                     float totalDeficit = 0f;
                     for (int p = 0; p < provIds.Length; p++)
                     {
-                        float d = ComputeProvinceDeficit(
-                            g, retainPerPop, provinces[provIds[p]], counties, _provinceCounties[provIds[p]]);
+                        int provId = provIds[p];
+                        float d = _provinceRetainDeficit[provId] - provinces[provId].Stockpile[g];
+                        if (d < 0f) d = 0f;
                         provDeficits[p] = d;
                         if (d > 0f)
                             totalDeficit += d;
@@ -280,24 +313,18 @@ namespace EconSim.Core.Economy
                     if (pe.Stockpile[g] <= 0f) continue;
 
                     var countyIds = _provinceCounties[provId];
-
-                    float totalDeficit = 0f;
-                    for (int c = 0; c < countyIds.Length; c++)
-                    {
-                        var ce = counties[countyIds[c]];
-                        float deficit = ce.Population * retainPerPop - ce.Stock[g];
-                        if (deficit > 0f)
-                            totalDeficit += deficit;
-                    }
+                    float totalDeficit = _provinceRetainDeficit[provId];
 
                     if (totalDeficit <= 0f) continue;
 
                     float available = pe.Stockpile[g];
                     for (int c = 0; c < countyIds.Length; c++)
                     {
-                        var ce = counties[countyIds[c]];
-                        float deficit = ce.Population * retainPerPop - ce.Stock[g];
+                        int countyId = countyIds[c];
+                        float deficit = _countyRetainDeficit[countyId];
                         if (deficit <= 0f) continue;
+                        var ce = counties[countyId];
+                        if (ce == null) continue;
 
                         float share = deficit / totalDeficit;
                         float relief = Math.Min(share * available, deficit);
@@ -466,24 +493,70 @@ namespace EconSim.Core.Economy
             }
         }
 
-        /// <summary>
-        /// Sum of (retainTarget - stock) across deficit counties in a province for a single good.
-        /// Accounts for what the provincial stockpile could cover locally.
-        /// </summary>
-        static float ComputeProvinceDeficit(
-            int g, float retainPerPop, ProvinceEconomy pe, CountyEconomy[] counties, int[] countyIds)
+        void BuildHasStockByGood(
+            CountyEconomy[] counties, ProvinceEconomy[] provinces, RealmEconomy[] realms)
         {
-            float totalDeficit = 0f;
-            for (int c = 0; c < countyIds.Length; c++)
+            if (_hasStockByGood == null || _hasStockByGood.Length != Goods.Count)
+                _hasStockByGood = new bool[Goods.Count];
+            else
+                Array.Clear(_hasStockByGood, 0, _hasStockByGood.Length);
+
+            for (int i = 0; i < counties.Length; i++)
             {
-                var ce = counties[countyIds[c]];
-                float deficit = ce.Population * retainPerPop - ce.Stock[g];
-                if (deficit > 0f)
-                    totalDeficit += deficit;
+                var ce = counties[i];
+                if (ce == null) continue;
+                for (int g = 0; g < Goods.Count; g++)
+                    if (ce.Stock[g] > 0f) _hasStockByGood[g] = true;
             }
 
-            // Province can cover some of the deficit locally
-            return Math.Max(0f, totalDeficit - pe.Stockpile[g]);
+            for (int p = 0; p < _provinceIds.Length; p++)
+            {
+                var pe = provinces[_provinceIds[p]];
+                for (int g = 0; g < Goods.Count; g++)
+                    if (pe.Stockpile[g] > 0f) _hasStockByGood[g] = true;
+            }
+
+            for (int r = 0; r < _realmIds.Length; r++)
+            {
+                var re = realms[_realmIds[r]];
+                for (int g = 0; g < Goods.Count; g++)
+                    if (re.Stockpile[g] > 0f) _hasStockByGood[g] = true;
+            }
+        }
+
+        void BuildRetainDeficitsForGood(
+            int goodIdx, float retainPerPop, CountyEconomy[] counties, bool retainTargetsReady)
+        {
+            for (int p = 0; p < _provinceIds.Length; p++)
+            {
+                int provId = _provinceIds[p];
+                var countyIds = _provinceCounties[provId];
+                float totalDeficit = 0f;
+
+                for (int c = 0; c < countyIds.Length; c++)
+                {
+                    int countyId = countyIds[c];
+                    var ce = counties[countyId];
+                    float retain = _countyRetainTarget[countyId];
+                    float deficit = 0f;
+                    if (ce != null)
+                    {
+                        if (!retainTargetsReady)
+                        {
+                            retain = ce.Population * retainPerPop;
+                            _countyRetainTarget[countyId] = retain;
+                        }
+
+                        deficit = retain - ce.Stock[goodIdx];
+                        if (deficit < 0f) deficit = 0f;
+                    }
+
+                    _countyRetainDeficit[countyId] = deficit;
+                    totalDeficit += deficit;
+                }
+
+                _provinceRetainDeficit[provId] = totalDeficit;
+            }
         }
 
         void ResetAccumulators(
@@ -493,44 +566,32 @@ namespace EconSim.Core.Economy
             {
                 int provId = _provinceIds[p];
                 var pe = provinces[provId];
-                for (int g = 0; g < Goods.Count; g++)
-                {
-                    pe.TaxCollected[g] = 0f;
-                    pe.ReliefGiven[g] = 0f;
-                }
+                Array.Clear(pe.TaxCollected, 0, pe.TaxCollected.Length);
+                Array.Clear(pe.ReliefGiven, 0, pe.ReliefGiven.Length);
 
                 var countyIds = _provinceCounties[provId];
                 for (int c = 0; c < countyIds.Length; c++)
                 {
                     var ce = counties[countyIds[c]];
-                    for (int g = 0; g < Goods.Count; g++)
-                    {
-                        ce.TaxPaid[g] = 0f;
-                        ce.Relief[g] = 0f;
-                        ce.FacilityQuota[g] = 0f;
-                    }
+                    Array.Clear(ce.TaxPaid, 0, ce.TaxPaid.Length);
+                    Array.Clear(ce.Relief, 0, ce.Relief.Length);
+                    Array.Clear(ce.FacilityQuota, 0, ce.FacilityQuota.Length);
                 }
             }
 
             for (int r = 0; r < _realmIds.Length; r++)
             {
                 var re = realms[_realmIds[r]];
-                for (int g = 0; g < Goods.Count; g++)
-                {
-                    re.TaxCollected[g] = 0f;
-                    re.ReliefGiven[g] = 0f;
-                }
+                Array.Clear(re.TaxCollected, 0, re.TaxCollected.Length);
+                Array.Clear(re.ReliefGiven, 0, re.ReliefGiven.Length);
                 re.GoldMinted = 0f;
                 re.SilverMinted = 0f;
                 re.CrownsMinted = 0f;
                 re.TradeSpending = 0f;
                 re.TradeRevenue = 0f;
-                for (int g = 0; g < Goods.Count; g++)
-                {
-                    re.Deficit[g] = 0f;
-                    re.TradeImports[g] = 0f;
-                    re.TradeExports[g] = 0f;
-                }
+                Array.Clear(re.Deficit, 0, re.Deficit.Length);
+                Array.Clear(re.TradeImports, 0, re.TradeImports.Length);
+                Array.Clear(re.TradeExports, 0, re.TradeExports.Length);
             }
         }
 
@@ -611,6 +672,9 @@ namespace EconSim.Core.Economy
 
             _countyToRealm = new int[maxCountyId + 1];
             _countyToProvince = new int[maxCountyId + 1];
+            _countyRetainDeficit = new float[maxCountyId + 1];
+            _countyRetainTarget = new float[maxCountyId + 1];
+            _provinceRetainDeficit = new float[maxProvId + 1];
             foreach (var county in mapData.Counties)
             {
                 int provId = county.ProvinceId;
@@ -633,25 +697,116 @@ namespace EconSim.Core.Economy
             // Cache population per province and realm for admin consumption
             _provincePop = new float[maxProvId + 1];
             _realmPop = new float[maxRealmId + 1];
+            RecomputePopulationCaches(econ.Counties);
 
-            foreach (var county in mapData.Counties)
+            // Pre-compute per-realm and per-province facility county lists for quota distribution
+            BuildFacilityMappings(econ, maxRealmId, maxProvId);
+        }
+
+        void RefreshPopulationCachesIfNeeded(SimulationState state, CountyEconomy[] counties)
+        {
+            if (state.CurrentDay % SimulationConfig.Intervals.Monthly != 1)
+                return;
+            if (_lastPopulationCacheRefreshDay == state.CurrentDay)
+                return;
+
+            RecomputePopulationCaches(counties);
+            RecomputeFacilityPopulationCaches(counties);
+            _lastPopulationCacheRefreshDay = state.CurrentDay;
+        }
+
+        void RecomputePopulationCaches(CountyEconomy[] counties)
+        {
+            if (_provincePop == null || _realmPop == null)
+                return;
+
+            Array.Clear(_provincePop, 0, _provincePop.Length);
+            Array.Clear(_realmPop, 0, _realmPop.Length);
+
+            for (int i = 0; i < counties.Length; i++)
             {
-                var ce = econ.Counties[county.Id];
-                if (ce == null) continue;
-                int provId = county.ProvinceId;
+                var ce = counties[i];
+                if (ce == null || i >= _countyToProvince.Length)
+                    continue;
+
+                int provId = _countyToProvince[i];
                 if (provId >= 0 && provId < _provincePop.Length)
                     _provincePop[provId] += ce.Population;
             }
 
-            foreach (var prov in mapData.Provinces)
+            for (int p = 0; p < _provinceIds.Length; p++)
             {
-                int realmId = prov.RealmId;
+                int provId = _provinceIds[p];
+                if (provId < 0 || provId >= _provinceToRealm.Length)
+                    continue;
+
+                int realmId = _provinceToRealm[provId];
                 if (realmId >= 0 && realmId < _realmPop.Length)
-                    _realmPop[realmId] += _provincePop[prov.Id];
+                    _realmPop[realmId] += _provincePop[provId];
+            }
+        }
+
+        void RecomputeFacilityPopulationCaches(CountyEconomy[] counties)
+        {
+            if (_realmFacilityCounties == null || _realmFacilityPop == null
+                || _provinceFacilityCounties == null || _provinceFacilityPop == null)
+                return;
+
+            for (int r = 0; r < _realmIds.Length; r++)
+            {
+                int realmId = _realmIds[r];
+                if (realmId < 0 || realmId >= _realmFacilityPop.Length || _realmFacilityPop[realmId] == null)
+                    continue;
+                Array.Clear(_realmFacilityPop[realmId], 0, _realmFacilityPop[realmId].Length);
+
+                if (realmId >= _realmFacilityCounties.Length || _realmFacilityCounties[realmId] == null)
+                    continue;
+
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    var producingCounties = _realmFacilityCounties[realmId][g];
+                    if (producingCounties == null || producingCounties.Length == 0) continue;
+
+                    float total = 0f;
+                    for (int i = 0; i < producingCounties.Length; i++)
+                    {
+                        int countyId = producingCounties[i];
+                        if (countyId < 0 || countyId >= counties.Length) continue;
+                        var ce = counties[countyId];
+                        if (ce == null) continue;
+                        total += ce.Population;
+                    }
+                    _realmFacilityPop[realmId][g] = total;
+                }
             }
 
-            // Pre-compute per-realm and per-province facility county lists for quota distribution
-            BuildFacilityMappings(econ, maxRealmId, maxProvId);
+            for (int p = 0; p < _provinceIds.Length; p++)
+            {
+                int provId = _provinceIds[p];
+                if (provId < 0 || provId >= _provinceFacilityPop.Length || _provinceFacilityPop[provId] == null)
+                    continue;
+                Array.Clear(_provinceFacilityPop[provId], 0, _provinceFacilityPop[provId].Length);
+
+                if (provId >= _provinceFacilityCounties.Length || _provinceFacilityCounties[provId] == null)
+                    continue;
+
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    var producingCounties = _provinceFacilityCounties[provId][g];
+                    if (producingCounties == null || producingCounties.Length == 0) continue;
+
+                    float total = 0f;
+                    for (int i = 0; i < producingCounties.Length; i++)
+                    {
+                        int countyId = producingCounties[i];
+                        if (countyId < 0 || countyId >= counties.Length) continue;
+                        var ce = counties[countyId];
+                        if (ce == null) continue;
+                        total += ce.Population;
+                    }
+                    _provinceFacilityPop[provId][g] = total;
+                }
+            }
         }
 
         void BuildFacilityMappings(EconomyState econ, int maxRealmId, int maxProvId)
@@ -744,6 +899,8 @@ namespace EconSim.Core.Economy
                 for (int g = 0; g < Goods.Count; g++)
                     _provinceFacilityCounties[p][g] = provLists[p][g]?.ToArray();
             }
+
+            RecomputeFacilityPopulationCaches(econ.Counties);
         }
     }
 }
