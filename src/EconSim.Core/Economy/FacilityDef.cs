@@ -94,7 +94,7 @@ namespace EconSim.Core.Economy
                     GoodType.Iron, 2.0f, 1, 0.0f, 0.05f, 1.0f),
                 new FacilityDef(FacilityType.Smithy,  "smithy",
                     new[] { new RecipeInput(GoodType.Iron, 2.0f), new RecipeInput(GoodType.Charcoal, 0.2f) },
-                    GoodType.Tools, 1.0f, 1, 0.0f, 0.05f, 1.0f, GoodType.IronOre),
+                    GoodType.Tools, 4.0f, 1, 0.0f, 0.05f, 1.0f, GoodType.IronOre),
                 new FacilityDef(FacilityType.CharcoalBurner, "charcoalBurner",
                     new[] { new RecipeInput(GoodType.Timber, 5.0f) },
                     GoodType.Charcoal, 1.0f, 1, 0.1f, 0.10f, 2.0f),

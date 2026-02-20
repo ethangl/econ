@@ -258,11 +258,12 @@ namespace EconSim.Core.Economy
                     {
                         // Durable: only wear removes stock; deficit is a demand signal
                         float targetStock = pop * tgt;
-                        float deficit = Math.Max(0f, targetStock - ce.Stock[g]);
                         float replacement = ce.Stock[g] * Goods.Defs[g].SpoilageRate;
                         float wear = Math.Min(ce.Stock[g], replacement);
                         ce.Stock[g] -= wear;
                         ce.Consumption[g] = wear;
+                        // Measure gap post-wear (consistent with TradeSystem Phase 8)
+                        float deficit = Math.Max(0f, targetStock - ce.Stock[g]);
                         ce.UnmetNeed[g] = deficit * Goods.DurableCatchUpRate[g];
                     }
                     else

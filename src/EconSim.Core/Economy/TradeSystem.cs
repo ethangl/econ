@@ -150,9 +150,9 @@ namespace EconSim.Core.Economy
 
             for (int g = 0; g < Goods.Count; g++)
             {
-                // For durables, retain target stock level; for staples, retain ideal share; for others, retain one day's consumption
-                float retainPerPop = Goods.TargetStockPerPop[g] > 0f
-                    ? Goods.TargetStockPerPop[g]
+                // For durables, retain 1 day's need (maintenance + catch-up); for staples, retain ideal share; for others, retain one day's consumption
+                float retainPerPop = Goods.DurableRetainPerPop[g] > 0f
+                    ? Goods.DurableRetainPerPop[g]
                     : Goods.Defs[g].Need == NeedCategory.Staple
                         ? Goods.StapleIdealPerPop[g]
                         : ConsumptionPerPop[g];
@@ -267,7 +267,12 @@ namespace EconSim.Core.Economy
                 }
 
                 // Precompute county/province retain deficits once per good (used by Phases 6 and 7).
-                BuildRetainDeficitsForGood(g, retainPerPop, counties, taxable);
+                // For durables, relief uses the full target (not the low tax threshold) so
+                // deficit counties request enough goods to actually reach their stock target.
+                float reliefRetainPerPop = Goods.DurableRetainPerPop[g] > 0f
+                    ? Goods.TargetStockPerPop[g]
+                    : retainPerPop;
+                BuildRetainDeficitsForGood(g, reliefRetainPerPop, counties, retainTargetsReady: false);
 
                 // Phase 6: King distributes remainder to deficit provinces
                 Span<float> provDeficits = stackalloc float[_maxProvincesPerRealm];
