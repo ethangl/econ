@@ -711,6 +711,7 @@ namespace EconSim.Core.Economy
                 return;
 
             RecomputePopulationCaches(counties);
+            RecomputeFacilityPopulationCaches(counties);
             _lastPopulationCacheRefreshDay = state.CurrentDay;
         }
 
@@ -742,6 +743,69 @@ namespace EconSim.Core.Economy
                 int realmId = _provinceToRealm[provId];
                 if (realmId >= 0 && realmId < _realmPop.Length)
                     _realmPop[realmId] += _provincePop[provId];
+            }
+        }
+
+        void RecomputeFacilityPopulationCaches(CountyEconomy[] counties)
+        {
+            if (_realmFacilityCounties == null || _realmFacilityPop == null
+                || _provinceFacilityCounties == null || _provinceFacilityPop == null)
+                return;
+
+            for (int r = 0; r < _realmIds.Length; r++)
+            {
+                int realmId = _realmIds[r];
+                if (realmId < 0 || realmId >= _realmFacilityPop.Length || _realmFacilityPop[realmId] == null)
+                    continue;
+                Array.Clear(_realmFacilityPop[realmId], 0, _realmFacilityPop[realmId].Length);
+
+                if (realmId >= _realmFacilityCounties.Length || _realmFacilityCounties[realmId] == null)
+                    continue;
+
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    var producingCounties = _realmFacilityCounties[realmId][g];
+                    if (producingCounties == null || producingCounties.Length == 0) continue;
+
+                    float total = 0f;
+                    for (int i = 0; i < producingCounties.Length; i++)
+                    {
+                        int countyId = producingCounties[i];
+                        if (countyId < 0 || countyId >= counties.Length) continue;
+                        var ce = counties[countyId];
+                        if (ce == null) continue;
+                        total += ce.Population;
+                    }
+                    _realmFacilityPop[realmId][g] = total;
+                }
+            }
+
+            for (int p = 0; p < _provinceIds.Length; p++)
+            {
+                int provId = _provinceIds[p];
+                if (provId < 0 || provId >= _provinceFacilityPop.Length || _provinceFacilityPop[provId] == null)
+                    continue;
+                Array.Clear(_provinceFacilityPop[provId], 0, _provinceFacilityPop[provId].Length);
+
+                if (provId >= _provinceFacilityCounties.Length || _provinceFacilityCounties[provId] == null)
+                    continue;
+
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    var producingCounties = _provinceFacilityCounties[provId][g];
+                    if (producingCounties == null || producingCounties.Length == 0) continue;
+
+                    float total = 0f;
+                    for (int i = 0; i < producingCounties.Length; i++)
+                    {
+                        int countyId = producingCounties[i];
+                        if (countyId < 0 || countyId >= counties.Length) continue;
+                        var ce = counties[countyId];
+                        if (ce == null) continue;
+                        total += ce.Population;
+                    }
+                    _provinceFacilityPop[provId][g] = total;
+                }
             }
         }
 
@@ -835,6 +899,8 @@ namespace EconSim.Core.Economy
                 for (int g = 0; g < Goods.Count; g++)
                     _provinceFacilityCounties[p][g] = provLists[p][g]?.ToArray();
             }
+
+            RecomputeFacilityPopulationCaches(econ.Counties);
         }
     }
 }
