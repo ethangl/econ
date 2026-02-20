@@ -17,10 +17,10 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 7. Production Chains
 8. Domestic cash flow
 9. County Market Access
+10. Market Location + Market Fee
 
 ### Future Layers (unordered)
 
-- **Market Location** - the market should be assigned to a county and generate tax revenue of its own
 - **Weather/Seasonality**
 - **Money circulation + market tolls** — Market towns accumulate coin from tolls → grow in population → attract more trade (feedback loop). Counties respond to high market prices by producing above quota (price signal = demand signal).
 - **Labor specialization** — unskilled vs craftsman, skill acquisition from employment

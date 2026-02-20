@@ -346,3 +346,27 @@ Counties trade across province boundaries within the same realm. The buying coun
 
 **Phase C: Cross-Realm Trade**
 Counties trade across realm borders. Buyers pay 5% ducal toll + 10% royal tariff (price × 1.15). Global county pool — all counties participate regardless of realm. Sequential pass ordering ensures Phase C only handles residual surplus/deficit not cleared within a realm by Phase A+B. InterRealmTradeSystem retains deficit scan and price discovery (no trade execution).
+
+## Layer 10: Market Location + Market Fee
+
+The market is assigned to a physical county and generates fee revenue from all trade transactions.
+
+**Market county resolution:** At economy init time, the first realm's capital burg is looked up → its cell → its county. This county becomes `EconomyState.MarketCountyId`. Fallback: county with highest population.
+
+**Market fee (2%):** All three trade passes (intra-province, cross-province, cross-realm) charge buyers a 2% market fee on goods cost (`bought * price * 0.02`). The fee is paid to the market county's treasury and tracked in `CountyEconomy.MarketFeesReceived`.
+
+**Buyer total cost per pass:**
+- Intra-province: `price × (1 + 0.02)` = 1.02×
+- Cross-province: `price × (1 + 0.05 + 0.02)` = 1.07×
+- Cross-realm: `price × (1 + 0.05 + 0.10 + 0.02)` = 1.17×
+
+**Tracking:**
+- `CountyEconomy.MarketFeesReceived` — daily accumulator (reset each tick), only nonzero for market county
+- `EconomySnapshot.TotalMarketFeesCollected` — aggregate of all market fees in snapshot
+
+### Files
+- `Economy/EconomyState.cs` — `int MarketCountyId`
+- `Economy/CountyEconomy.cs` — `float MarketFeesReceived`
+- `Economy/EconomySnapshot.cs` — `float TotalMarketFeesCollected`
+- `Economy/EconomySystem.cs` — `ResolveMarketCounty()` at init, aggregate into snapshot
+- `Economy/FiscalSystem.cs` — `MarketFeeRate` const, fee logic in 3 trade passes, accumulator reset

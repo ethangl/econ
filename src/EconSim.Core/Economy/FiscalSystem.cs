@@ -48,6 +48,9 @@ namespace EconSim.Core.Economy
         /// <summary>Buyers pay 10% tariff on cross-realm trade (paid to own realm treasury).</summary>
         const float CrossRealmTariffRate = 0.10f;
 
+        /// <summary>Buyers pay 2% market fee on all trade (paid to market county treasury).</summary>
+        const float MarketFeeRate = 0.02f;
+
 
         /// <summary>Province ID → array of county IDs.</summary>
         int[][] _provinceCounties;
@@ -84,6 +87,9 @@ namespace EconSim.Core.Economy
 
         /// <summary>County ID → Realm ID (for deficit ledger).</summary>
         int[] _countyToRealm;
+
+        /// <summary>County ID hosting the market (receives market fees).</summary>
+        int _marketCountyId = -1;
 
         /// <summary>Province ID → Realm ID (for deficit ledger).</summary>
         int[] _provinceToRealm;
@@ -390,6 +396,8 @@ namespace EconSim.Core.Economy
                     float totalSupply = 0f;
                     float totalDemand = 0f;
 
+                    float intraCostPerUnit = price * (1f + MarketFeeRate);
+
                     for (int c = 0; c < countyIds.Length; c++)
                     {
                         var ce = counties[countyIds[c]];
@@ -400,7 +408,7 @@ namespace EconSim.Core.Economy
                         else if (surplus < 0f)
                         {
                             float rawDemand = -surplus;
-                            float affordable = ce.Treasury / price;
+                            float affordable = ce.Treasury / intraCostPerUnit;
                             float demand = Math.Min(rawDemand, affordable);
                             surpluses[c] = -demand;
                             totalDemand += demand;
@@ -431,9 +439,15 @@ namespace EconSim.Core.Economy
                             float bought = (-s) * fillRatio;
                             ce.Stock[g] += bought;
                             ce.TradeBought[g] += bought;
-                            float spent = bought * price;
-                            ce.Treasury -= spent;
-                            ce.TradeCrownsSpent += spent;
+                            float goodsCost = bought * price;
+                            float marketFee = bought * price * MarketFeeRate;
+                            ce.Treasury -= goodsCost + marketFee;
+                            ce.TradeCrownsSpent += goodsCost;
+                            if (_marketCountyId >= 0)
+                            {
+                                counties[_marketCountyId].Treasury += marketFee;
+                                counties[_marketCountyId].MarketFeesReceived += marketFee;
+                            }
                         }
                     }
                 }
@@ -441,7 +455,7 @@ namespace EconSim.Core.Economy
 
             // ── CROSS-PROVINCE TRADE PASS ──────────────────────────────
             // Counties across different provinces within the same realm trade
-            // at market price + 5% toll (paid by buyer to own province treasury).
+            // at market price + 5% toll + 2% market fee.
             Span<float> realmSurpluses = stackalloc float[_maxCountiesPerRealm];
 
             for (int bp = 0; bp < buyPriority.Length; bp++)
@@ -456,7 +470,7 @@ namespace EconSim.Core.Economy
                         ? Goods.StapleIdealPerPop[g]
                         : ConsumptionPerPop[g];
 
-                float costPerUnit = price * (1f + CrossProvTollRate);
+                float costPerUnit = price * (1f + CrossProvTollRate + MarketFeeRate);
 
                 for (int r = 0; r < _realmIds.Length; r++)
                 {
@@ -511,18 +525,24 @@ namespace EconSim.Core.Economy
                             ce.CrossProvTradeBought[g] += bought;
                             float goodsCost = bought * price;
                             float toll = bought * price * CrossProvTollRate;
-                            ce.Treasury -= goodsCost + toll;
+                            float marketFee = bought * price * MarketFeeRate;
+                            ce.Treasury -= goodsCost + toll + marketFee;
                             ce.CrossProvTradeCrownsSpent += goodsCost;
                             ce.TradeTollsPaid += toll;
                             provinces[_countyToProvince[countyId]].TradeTollsCollected += toll;
                             provinces[_countyToProvince[countyId]].Treasury += toll;
+                            if (_marketCountyId >= 0)
+                            {
+                                counties[_marketCountyId].Treasury += marketFee;
+                                counties[_marketCountyId].MarketFeesReceived += marketFee;
+                            }
                         }
                     }
                 }
             }
 
             // ── CROSS-REALM TRADE PASS ────────────────────────────────
-            // Counties across different realms trade at market price + 5% toll + 10% tariff.
+            // Counties across different realms trade at market price + 5% toll + 10% tariff + 2% market fee.
             // Only runs if there are multiple realms; single-realm maps skip.
             if (_realmIds.Length > 1)
             {
@@ -541,7 +561,7 @@ namespace EconSim.Core.Economy
                             ? Goods.StapleIdealPerPop[g]
                             : ConsumptionPerPop[g];
 
-                    float costPerUnit = price * (1f + CrossProvTollRate + CrossRealmTariffRate);
+                    float costPerUnit = price * (1f + CrossProvTollRate + CrossRealmTariffRate + MarketFeeRate);
 
                     float totalSupply = 0f;
                     float totalDemand = 0f;
@@ -594,7 +614,8 @@ namespace EconSim.Core.Economy
                             float goodsCost = bought * price;
                             float toll = bought * price * CrossProvTollRate;
                             float tariff = bought * price * CrossRealmTariffRate;
-                            ce.Treasury -= goodsCost + toll + tariff;
+                            float marketFee = bought * price * MarketFeeRate;
+                            ce.Treasury -= goodsCost + toll + tariff + marketFee;
                             ce.CrossRealmTradeCrownsSpent += goodsCost;
                             ce.CrossRealmTollsPaid += toll;
                             ce.CrossRealmTariffsPaid += tariff;
@@ -606,6 +627,11 @@ namespace EconSim.Core.Economy
                             realms[realmId].Treasury += tariff;
                             realms[realmId].TradeImports[g] += bought;
                             realms[realmId].TradeSpending += goodsCost;
+                            if (_marketCountyId >= 0)
+                            {
+                                counties[_marketCountyId].Treasury += marketFee;
+                                counties[_marketCountyId].MarketFeesReceived += marketFee;
+                            }
                         }
                     }
                 }
@@ -720,6 +746,7 @@ namespace EconSim.Core.Economy
                     ce.CrossRealmTradeCrownsEarned = 0f;
                     ce.CrossRealmTollsPaid = 0f;
                     ce.CrossRealmTariffsPaid = 0f;
+                    ce.MarketFeesReceived = 0f;
                     // FacilityQuota clearing owned by FacilityQuotaSystem
                 }
             }
@@ -863,6 +890,8 @@ namespace EconSim.Core.Economy
                 allCountyList.Add(county.Id);
             _allCountyIds = allCountyList.ToArray();
             _totalCountyCount = _allCountyIds.Length;
+
+            _marketCountyId = state.Economy.MarketCountyId;
 
             // Facility mappings moved to FacilityQuotaSystem.
         }

@@ -223,6 +223,12 @@ def print_trade_snapshot(data: dict):
         v = t["royalStockpileByGood"].get(good, 0)
         print(f"    {good:8s}: {fmt(v)}")
 
+    # Market fees
+    market_fees = t.get("marketFeesCollected", 0)
+    market_county = t.get("marketCountyId", -1)
+    print()
+    print(f"  Market fees collected: {fmt(market_fees)} (county {market_county})")
+
     # Per-realm breakdown
     print()
     print(f"  Realm stockpiles:")
@@ -326,9 +332,8 @@ def print_intra_province_trade(data: dict):
 
     print()
     print(f"  Crown flows (latest day):")
-    print(f"    Spending (buyers):  {fmt(spending)} Crowns")
+    print(f"    Spending (buyers):  {fmt(spending)} Crowns  (+ 2% market fee)")
     print(f"    Revenue (sellers):  {fmt(revenue)} Crowns")
-    print(f"    Net (should be ~0): {fmt(revenue - spending)} Crowns")
 
     # Trend over time
     if len(ts) >= 20:
@@ -392,12 +397,10 @@ def print_cross_province_trade(data: dict):
 
     print()
     print(f"  Crown flows (latest day):")
-    print(f"    Spending (buyers→sellers):  {fmt(spending)} Crowns")
+    print(f"    Spending (buyers→sellers):  {fmt(spending)} Crowns  (+ 5% toll + 2% market fee)")
     print(f"    Revenue (sellers):           {fmt(revenue)} Crowns")
     print(f"    Tolls paid (buyers→prov):    {fmt(tolls_paid)} Crowns")
     print(f"    Tolls collected (provinces): {fmt(tolls_collected)} Crowns")
-    balance = (spending + tolls_paid) - (revenue + tolls_collected)
-    print(f"    Balance check (should be ~0): {fmt(balance)} Crowns")
 
     # Trend over time
     if len(ts) >= 20:
@@ -466,14 +469,11 @@ def print_cross_realm_trade(data: dict):
 
     print()
     print(f"  Crown flows (latest day):")
-    print(f"    Spending (buyers→sellers):     {fmt(spending)} Crowns")
+    print(f"    Spending (buyers→sellers):     {fmt(spending)} Crowns  (+ 5% toll + 10% tariff + 2% market fee)")
     print(f"    Revenue (sellers):              {fmt(revenue)} Crowns")
     print(f"    Tolls paid (buyers→prov):       {fmt(tolls_paid)} Crowns")
     print(f"    Tariffs paid (buyers→realm):    {fmt(tariffs_paid)} Crowns")
     print(f"    Tariffs collected (realms):     {fmt(tariffs_collected)} Crowns")
-    balance = (spending + tolls_paid + tariffs_paid) - (revenue + tariffs_collected)
-    # Note: tolls go to provinces (not checked here vs tollsCollected since provinces
-    # also collect cross-prov tolls in same field). Tariff balance is the key check.
     print(f"    Tariff balance (paid-collected): {fmt(tariffs_paid - tariffs_collected)} Crowns")
 
     # Trend over time
@@ -487,6 +487,31 @@ def print_cross_realm_trade(data: dict):
         print()
         print(f"  Trade spending trend:  {fmt(early_sp)}/day -> {fmt(late_sp)}/day")
         print(f"  Tariff revenue trend:  {fmt(early_tar)}/day -> {fmt(late_tar)}/day")
+
+
+def print_market_fees(data: dict):
+    section("MARKET FEES")
+    ts = data["economy"]["timeSeries"]
+    last = ts[-1]
+
+    fees = last.get("marketFeesCollected", 0)
+    market_county = data.get("trade", {}).get("marketCountyId",
+                     data.get("summary", {}).get("marketCountyId", -1))
+
+    print(f"  Market county ID:     {market_county}")
+    print(f"  Daily fees (latest):  {fmt(fees)} Crowns")
+
+    # Trend over time
+    if len(ts) >= 20:
+        early = ts[4:14]
+        late = ts[-10:]
+        early_fees = sum(t.get("marketFeesCollected", 0) for t in early) / len(early)
+        late_fees = sum(t.get("marketFeesCollected", 0) for t in late) / len(late)
+        print(f"  Fee trend:            {fmt(early_fees)}/day -> {fmt(late_fees)}/day")
+
+    # Cumulative estimate
+    total_fees = sum(t.get("marketFeesCollected", 0) for t in ts)
+    print(f"  Cumulative (approx):  {fmt(total_fees)} Crowns")
 
 
 def print_inter_realm_trade(data: dict):
@@ -837,6 +862,7 @@ def main():
     print_intra_province_trade(data)
     print_cross_province_trade(data)
     print_cross_realm_trade(data)
+    print_market_fees(data)
     print_inter_realm_trade(data)
     print_roads(data)
     print_facilities(data)
