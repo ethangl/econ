@@ -21,8 +21,9 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 
 ### Future Layers (unordered)
 
+- **Market Dynamics** - Counties respond to high market prices by producing above quota (price signal = demand signal).
 - **Weather/Seasonality**
-- **Money circulation + market tolls** — Market towns accumulate coin from tolls → grow in population → attract more trade (feedback loop). Counties respond to high market prices by producing above quota (price signal = demand signal).
+- **Money circulation + market tolls** — Market towns accumulate coin from tolls → grow in population → attract more trade (feedback loop)
 - **Labor specialization** — unskilled vs craftsman, skill acquisition from employment
 - **Road emergence** — traffic volume builds paths → roads, reducing transport cost
 - **Political effects** — ~~tariffs at realm borders~~, trade agreements

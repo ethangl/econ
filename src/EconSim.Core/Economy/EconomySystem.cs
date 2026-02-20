@@ -235,6 +235,17 @@ namespace EconSim.Core.Economy
             var countyFacilityIndices = econ.CountyFacilityIndices;
             int goodsCount = Goods.Count;
 
+            // Compute extraction capacity per good (for intermediate price discovery)
+            var extractionCap = econ.ExtractionCapacity;
+            Array.Clear(extractionCap, 0, goodsCount);
+            for (int i = 0; i < counties.Length; i++)
+            {
+                var ce = counties[i];
+                if (ce == null) continue;
+                for (int g = 0; g < goodsCount; g++)
+                    extractionCap[g] += ce.Population * ce.Productivity[g];
+            }
+
             for (int i = 0; i < counties.Length; i++)
             {
                 var ce = counties[i];
@@ -246,8 +257,8 @@ namespace EconSim.Core.Economy
                     ? countyFacilityIndices[i]
                     : null;
 
-                // Compute all local facility input demand once; pure-input extraction reuses this per good.
-                Span<float> facilityInputDemand = stackalloc float[Goods.Count];
+                // Compute facility input demand for trade retain signal
+                Array.Clear(ce.FacilityInputNeed, 0, goodsCount);
                 if (indices != null && indices.Count > 0)
                 {
                     for (int fi = 0; fi < indices.Count; fi++)
@@ -263,23 +274,22 @@ namespace EconSim.Core.Economy
 
                         float scale = target / def.OutputAmount;
                         for (int ii = 0; ii < def.Inputs.Length; ii++)
-                            facilityInputDemand[(int)def.Inputs[ii].Good] += scale * def.Inputs[ii].Amount;
+                            ce.FacilityInputNeed[(int)def.Inputs[ii].Good] += scale * def.Inputs[ii].Amount;
                     }
                 }
 
                 // Production — all goods (extraction workforce reduced by facility labor)
                 for (int g = 0; g < goodsCount; g++)
                 {
-                    float produced;
-                    if (!Goods.HasDirectDemand[g] && !Goods.IsPreciousMetal(g))
+                    float produced = pop * ce.Productivity[g] * wf;
+
+                    // Price-based extraction throttle for intermediate goods
+                    if (!Goods.HasDirectDemand[g] && Goods.BasePrice[g] > 0f)
                     {
-                        // Facility-input-only: extract only what local facilities need.
-                        produced = Math.Min(facilityInputDemand[g], pop * ce.Productivity[g]);
+                        float priceRatio = econ.MarketPrices[g] / Goods.BasePrice[g];
+                        if (priceRatio < 1f) produced *= priceRatio;
                     }
-                    else
-                    {
-                        produced = pop * ce.Productivity[g] * wf;
-                    }
+
                     ce.Stock[g] += produced;
                     ce.Production[g] = produced;
                 }
