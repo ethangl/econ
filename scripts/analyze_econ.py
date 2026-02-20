@@ -451,7 +451,12 @@ def print_facilities(data: dict):
             print(f"  {'Type':12s}  {'Count':>6s}  {'Recipe':30s}  {'Labor':>6s}  {'Throughput':>12s}  {'Workers':>10s}")
             print(f"  {'-'*12}  {'-'*6}  {'-'*30}  {'-'*6}  {'-'*12}  {'-'*10}")
             for name, info in by_type.items():
-                recipe = f"{info['inputAmount']:.0f} {info['inputGood']} -> {info['outputAmount']:.0f} {info['outputGood']}"
+                inputs = info.get('inputs')
+                if inputs:
+                    in_parts = " + ".join(f"{inp['amount']:g} {inp['good']}" for inp in inputs)
+                    recipe = f"{in_parts} -> {info['outputAmount']:.0f} {info['outputGood']}"
+                else:
+                    recipe = f"? -> {info['outputAmount']:.0f} {info['outputGood']}"
                 actual_tp = info.get('actualThroughput', 0)
                 actual_wk = info.get('actualWorkers', 0)
                 tp_str = f"{fmt(actual_tp)}/{fmt(info['expectedThroughput'])}"
@@ -479,7 +484,7 @@ def print_production_chains(data: dict):
             "throughput": info["expectedThroughput"],
             "actualThroughput": info.get("actualThroughput", 0),
             "actualWorkers": info.get("actualWorkers", 0),
-            "inputGood": info["inputGood"],
+            "inputs": info.get("inputs", []),
         }
 
     if not refined:
@@ -503,16 +508,16 @@ def print_production_chains(data: dict):
         demand = cons + unmet
         coverage = (cons / demand * 100) if demand > 0 else 0
 
-        input_name = chain["inputGood"]
-        ig = GOOD_IDX.get(input_name)
-        input_prod = last["productionByGood"][ig] if ig is not None else 0
-        input_stock = last["stockByGood"][ig] if ig is not None else 0
-
         actual_tp = chain.get("actualThroughput", 0)
         actual_wk = chain.get("actualWorkers", 0)
 
         print(f"\n  {good_name.upper()} (from {chain['facility']} x{chain['count']})")
-        print(f"    Input ({input_name}):  production={fmt(input_prod)}/day  stock={fmt(input_stock)}")
+        for inp in chain.get("inputs", []):
+            input_name = inp["good"]
+            ig = GOOD_IDX.get(input_name)
+            input_prod = last["productionByGood"][ig] if ig is not None else 0
+            input_stock = last["stockByGood"][ig] if ig is not None else 0
+            print(f"    Input ({input_name}):  production={fmt(input_prod)}/day  stock={fmt(input_stock)}")
         print(f"    Output:           production={fmt(prod)}/day  throughput={fmt(actual_tp)}/day (max={fmt(chain['throughput'])}/day)")
         print(f"    Workers:          {fmt(actual_wk)} actual")
         print(f"    Demand:           consumption={fmt(cons)}/day  unmet={fmt(unmet)}/day  total={fmt(demand)}/day")

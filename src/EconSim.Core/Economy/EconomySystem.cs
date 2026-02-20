@@ -173,17 +173,19 @@ namespace EconSim.Core.Economy
                     {
                         var fac = econ.Facilities[indices[fi]];
                         var def = fac.Def;
-                        int input = (int)def.InputGood;
                         int output = (int)def.OutputGood;
 
                         // Target: realm quota (includes local + admin + redistribution needs)
                         // Falls back to baseline on first tick when quota is 0
                         float target = Math.Max(def.BaselineOutput, ce.FacilityQuota[output]);
 
-                        // Material constraint
-                        float maxByInput = def.InputAmount > 0f
-                            ? ce.Stock[input] / def.InputAmount * def.OutputAmount
-                            : float.MaxValue;
+                        // Material constraint: min across all inputs
+                        float maxByInput = float.MaxValue;
+                        for (int ii = 0; ii < def.Inputs.Length; ii++)
+                        {
+                            float avail = ce.Stock[(int)def.Inputs[ii].Good] / def.Inputs[ii].Amount * def.OutputAmount;
+                            if (avail < maxByInput) maxByInput = avail;
+                        }
 
                         // Labor constraint
                         float maxByLabor = def.LaborPerUnit > 0
@@ -193,10 +195,14 @@ namespace EconSim.Core.Economy
                         float throughput = Math.Min(target, Math.Min(maxByInput, maxByLabor));
                         if (throughput < 0f) throughput = 0f;
 
-                        float inputUsed = def.OutputAmount > 0f
-                            ? throughput / def.OutputAmount * def.InputAmount
-                            : 0f;
-                        ce.Stock[input] -= inputUsed;
+                        // Consume all inputs proportionally
+                        for (int ii = 0; ii < def.Inputs.Length; ii++)
+                        {
+                            float used = def.OutputAmount > 0f
+                                ? throughput / def.OutputAmount * def.Inputs[ii].Amount
+                                : 0f;
+                            ce.Stock[(int)def.Inputs[ii].Good] -= used;
+                        }
                         ce.Stock[output] += throughput;
                         ce.Production[output] += throughput;
 
@@ -250,15 +256,19 @@ namespace EconSim.Core.Economy
             for (int fi = 0; fi < indices.Count; fi++)
             {
                 var def = econ.Facilities[indices[fi]].Def;
-                if ((int)def.InputGood != goodIdx || def.OutputAmount <= 0f) continue;
-                // Match the facility production target (same formula as facility processing)
-                float target = Math.Max(def.BaselineOutput, ce.FacilityQuota[(int)def.OutputGood]);
-                // Apply labor cap — don't extract more than the facility can process
-                float maxByLabor = def.LaborPerUnit > 0
-                    ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
-                    : float.MaxValue;
-                target = Math.Min(target, maxByLabor);
-                demand += target * def.InputAmount / def.OutputAmount;
+                if (def.OutputAmount <= 0f) continue;
+                for (int ii = 0; ii < def.Inputs.Length; ii++)
+                {
+                    if ((int)def.Inputs[ii].Good != goodIdx) continue;
+                    // Match the facility production target (same formula as facility processing)
+                    float target = Math.Max(def.BaselineOutput, ce.FacilityQuota[(int)def.OutputGood]);
+                    // Apply labor cap — don't extract more than the facility can process
+                    float maxByLabor = def.LaborPerUnit > 0
+                        ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
+                        : float.MaxValue;
+                    target = Math.Min(target, maxByLabor);
+                    demand += target * def.Inputs[ii].Amount / def.OutputAmount;
+                }
             }
             return demand;
         }

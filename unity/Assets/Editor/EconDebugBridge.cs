@@ -927,8 +927,15 @@ namespace EconSim.Editor
                 var def = Facilities.Defs[kv.Key];
                 j.Key(def.Name); j.ObjOpen();
                 j.KV("count", kv.Value);
-                j.KV("inputGood", Goods.Names[(int)def.InputGood]);
-                j.KV("inputAmount", def.InputAmount);
+                j.Key("inputs"); j.ArrOpen();
+                for (int ii = 0; ii < def.Inputs.Length; ii++)
+                {
+                    j.ObjOpen();
+                    j.KV("good", Goods.Names[(int)def.Inputs[ii].Good]);
+                    j.KV("amount", def.Inputs[ii].Amount);
+                    j.ObjClose();
+                }
+                j.ArrClose();
                 j.KV("outputGood", Goods.Names[(int)def.OutputGood]);
                 j.KV("outputAmount", def.OutputAmount);
                 j.KV("laborPerUnit", def.LaborPerUnit);

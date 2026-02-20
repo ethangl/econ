@@ -8,6 +8,13 @@ namespace EconSim.Core.Economy
         Smithy = 3,
     }
 
+    public readonly struct RecipeInput
+    {
+        public readonly GoodType Good;
+        public readonly float Amount;
+        public RecipeInput(GoodType good, float amount) { Good = good; Amount = amount; }
+    }
+
     /// <summary>
     /// Static definition for a facility type. Describes the production recipe,
     /// labor requirements, and placement rules.
@@ -17,16 +24,15 @@ namespace EconSim.Core.Economy
         public readonly FacilityType Type;
         public readonly string Name;
 
-        // Recipe: input good + amount → output good + amount (per labor-day)
-        public readonly GoodType InputGood;
-        public readonly float InputAmount;
+        // Recipe: input goods + amounts → output good + amount (per labor-day)
+        public readonly RecipeInput[] Inputs;
         public readonly GoodType OutputGood;
         public readonly float OutputAmount;
 
         /// <summary>Workers needed to produce OutputAmount per day at full capacity.</summary>
         public readonly int LaborPerUnit;
 
-        /// <summary>Good whose biome productivity determines placement. Defaults to InputGood.</summary>
+        /// <summary>Good whose biome productivity determines placement. Defaults to Inputs[0].Good.</summary>
         public readonly GoodType PlacementGood;
 
         /// <summary>Minimum biome productivity of PlacementGood required for placement.</summary>
@@ -40,7 +46,7 @@ namespace EconSim.Core.Economy
 
         public FacilityDef(
             FacilityType type, string name,
-            GoodType inputGood, float inputAmount,
+            RecipeInput[] inputs,
             GoodType outputGood, float outputAmount,
             int laborPerUnit,
             float placementMinProductivity,
@@ -50,12 +56,11 @@ namespace EconSim.Core.Economy
         {
             Type = type;
             Name = name;
-            InputGood = inputGood;
-            InputAmount = inputAmount;
+            Inputs = inputs;
             OutputGood = outputGood;
             OutputAmount = outputAmount;
             LaborPerUnit = laborPerUnit;
-            PlacementGood = placementGood ?? inputGood;
+            PlacementGood = placementGood ?? inputs[0].Good;
             PlacementMinProductivity = placementMinProductivity;
             MaxLaborFraction = maxLaborFraction;
             BaselineOutput = baselineOutput;
@@ -69,13 +74,20 @@ namespace EconSim.Core.Economy
 
         static Facilities()
         {
-            //                         Type              Name      Input            InAmt  Output            OutAmt Labor  MinProd MaxLabor Baseline [PlacementGood]
             Defs = new[]
             {
-                new FacilityDef(FacilityType.Kiln,     "kiln",    GoodType.Clay,    2.0f, GoodType.Pottery, 1.0f, 3, 0.05f, 0.05f, 1.0f),
-                new FacilityDef(FacilityType.Sawmill,  "sawmill", GoodType.Timber,  3.0f, GoodType.Lumber,  2.0f, 1, 0.2f,  0.10f, 5.0f),
-                new FacilityDef(FacilityType.Smelter,  "smelter", GoodType.IronOre, 3.0f, GoodType.Iron,    2.0f, 1, 0.0f,  0.05f, 1.0f),
-                new FacilityDef(FacilityType.Smithy,   "smithy",  GoodType.Iron,    2.0f, GoodType.Tools,   1.0f, 1, 0.0f,  0.05f, 1.0f, GoodType.IronOre),
+                new FacilityDef(FacilityType.Kiln,    "kiln",
+                    new[] { new RecipeInput(GoodType.Clay, 2.0f), new RecipeInput(GoodType.Timber, 0.5f) },
+                    GoodType.Pottery, 1.0f, 3, 0.05f, 0.05f, 1.0f),
+                new FacilityDef(FacilityType.Sawmill, "sawmill",
+                    new[] { new RecipeInput(GoodType.Timber, 3.0f) },
+                    GoodType.Lumber, 2.0f, 1, 0.2f, 0.10f, 5.0f),
+                new FacilityDef(FacilityType.Smelter, "smelter",
+                    new[] { new RecipeInput(GoodType.IronOre, 3.0f), new RecipeInput(GoodType.Timber, 2.0f) },
+                    GoodType.Iron, 2.0f, 1, 0.0f, 0.05f, 1.0f),
+                new FacilityDef(FacilityType.Smithy,  "smithy",
+                    new[] { new RecipeInput(GoodType.Iron, 2.0f), new RecipeInput(GoodType.Timber, 1.0f) },
+                    GoodType.Tools, 1.0f, 1, 0.0f, 0.05f, 1.0f, GoodType.IronOre),
             };
 
             Count = Defs.Length;

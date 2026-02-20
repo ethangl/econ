@@ -416,12 +416,14 @@ namespace EconSim.Core.Economy
                     for (int fi = 0; fi < indices.Count; fi++)
                     {
                         var def = facilities[indices[fi]].Def;
-                        int inputGood = (int)def.InputGood;
-                        if (!_isFacilityOutput[inputGood]) continue;
-
                         int outputGood = (int)def.OutputGood;
-                        float inputNeeded = ce.FacilityQuota[outputGood] * def.InputAmount / def.OutputAmount;
-                        ce.FacilityQuota[inputGood] += inputNeeded;
+                        for (int ii = 0; ii < def.Inputs.Length; ii++)
+                        {
+                            int inputGood = (int)def.Inputs[ii].Good;
+                            if (!_isFacilityOutput[inputGood]) continue;
+                            float inputNeeded = ce.FacilityQuota[outputGood] * def.Inputs[ii].Amount / def.OutputAmount;
+                            ce.FacilityQuota[inputGood] += inputNeeded;
+                        }
                     }
                 }
             }
