@@ -328,8 +328,9 @@ namespace EconSim.Core.Economy
                 ce.BasicSatisfaction += 0.065f * (daily - ce.BasicSatisfaction);
             }
 
-            // Record snapshot
-            econ.TimeSeries.Add(BuildSnapshot(state.CurrentDay, econ));
+            // Record snapshot only when explicitly enabled (EconDebugBridge runs).
+            if (econ.CaptureSnapshots)
+                econ.TimeSeries.Add(BuildSnapshot(state.CurrentDay, econ));
         }
 
         static void ComputeCountyProductivity(County county, MapData mapData, float[] output)
