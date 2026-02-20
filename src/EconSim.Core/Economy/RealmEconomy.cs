@@ -43,5 +43,11 @@ namespace EconSim.Core.Economy
 
         /// <summary>Crowns earned from market sales this tick.</summary>
         public float TradeRevenue;
+
+        /// <summary>Crowns paid to provinces for royal tax this tick (reset daily).</summary>
+        public float TaxCrownsPaid;
+
+        /// <summary>Crowns received from provinces for relief this tick (reset daily).</summary>
+        public float ReliefCrownsReceived;
     }
 }

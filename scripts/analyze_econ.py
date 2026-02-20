@@ -240,8 +240,17 @@ def print_treasury(data: dict):
     last = ts[-1]
     first = ts[0]
 
-    print(f"  Total treasury (latest):  {fmt(last.get('treasury', 0))} Crowns")
-    print(f"  Treasury trend:           {fmt(first.get('treasury', 0))} -> {fmt(last.get('treasury', 0))}  ({trend([first.get('treasury', 0), last.get('treasury', 0)])})")
+    print(f"  Realm treasury (latest):    {fmt(last.get('treasury', 0))} Crowns")
+    print(f"  County treasury (latest):   {fmt(last.get('countyTreasury', 0))} Crowns")
+    print(f"  Province treasury (latest): {fmt(last.get('provinceTreasury', 0))} Crowns")
+    print(f"  Domestic total (latest):    {fmt(last.get('domesticTreasury', 0))} Crowns")
+    print(f"  Treasury trend:             {fmt(first.get('treasury', 0))} -> {fmt(last.get('treasury', 0))}  ({trend([first.get('treasury', 0), last.get('treasury', 0)])})")
+    print()
+    print(f"  Daily crown flows (latest):")
+    print(f"    Ducal tax crowns (prov→county):  {fmt(last.get('ducalTaxCrowns', 0))}")
+    print(f"    Royal tax crowns (realm→prov):    {fmt(last.get('royalTaxCrowns', 0))}")
+    print(f"    Ducal relief crowns (county→prov): {fmt(last.get('ducalReliefCrowns', 0))}")
+    print(f"    Royal relief crowns (prov→realm):  {fmt(last.get('royalReliefCrowns', 0))}")
     print()
     print(f"  Daily minting (latest):")
     print(f"    Gold minted:   {fmt(last.get('goldMinted', 0))} kg")
@@ -262,11 +271,11 @@ def print_treasury(data: dict):
     # Treasury time series trend (sample 5 points)
     if len(ts) >= 10:
         print()
-        print(f"  Treasury over time:")
+        print(f"  Treasury over time (realm / county / province / domestic total):")
         indices = [0, len(ts)//4, len(ts)//2, 3*len(ts)//4, len(ts)-1]
         for idx in indices:
             snap = ts[idx]
-            print(f"    Day {snap['day']:>4d}: {fmt(snap.get('treasury', 0)):>12s} Crowns")
+            print(f"    Day {snap['day']:>4d}: realm={fmt(snap.get('treasury', 0)):>10s}  county={fmt(snap.get('countyTreasury', 0)):>10s}  prov={fmt(snap.get('provinceTreasury', 0)):>10s}  total={fmt(snap.get('domesticTreasury', 0)):>10s}")
 
 
 def print_inter_realm_trade(data: dict):

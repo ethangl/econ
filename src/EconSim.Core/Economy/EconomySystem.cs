@@ -157,6 +157,10 @@ namespace EconSim.Core.Economy
             // Demand signal array (populated each tick)
             econ.EffectiveDemandPerPop = new float[Goods.Count];
 
+            // Seed market prices from base prices so crown payments are non-zero on day 1
+            // (InterRealmTradeSystem updates these later, but runs after FiscalSystem)
+            Array.Copy(Goods.BasePrice, econ.MarketPrices, Goods.Count);
+
             state.Economy = econ;
         }
 
@@ -545,6 +549,10 @@ namespace EconSim.Core.Economy
                 if (ce.BasicSatisfaction < snap.MinBasicSatisfaction) snap.MinBasicSatisfaction = ce.BasicSatisfaction;
                 if (ce.BasicSatisfaction > snap.MaxBasicSatisfaction) snap.MaxBasicSatisfaction = ce.BasicSatisfaction;
                 if (ce.BasicSatisfaction < 0.5f) snap.CountiesInDistress++;
+
+                snap.TotalCountyTreasury += ce.Treasury;
+                snap.TotalDucalTaxCrowns += ce.TaxCrownsReceived;
+                snap.TotalDucalReliefCrowns += ce.ReliefCrownsPaid;
             }
 
             // Backward-compat scalars = food values
@@ -574,6 +582,9 @@ namespace EconSim.Core.Economy
                     if (pe == null) continue;
                     for (int g = 0; g < Goods.Count; g++)
                         snap.TotalProvincialStockpileByGood[g] += pe.Stockpile[g];
+                    snap.TotalProvinceTreasury += pe.Treasury;
+                    snap.TotalRoyalTaxCrowns += pe.RoyalTaxCrownsReceived;
+                    snap.TotalRoyalReliefCrowns += pe.RoyalReliefCrownsPaid;
                 }
             }
 
@@ -605,6 +616,9 @@ namespace EconSim.Core.Economy
                     snap.TotalTradeRevenue += re.TradeRevenue;
                 }
             }
+
+            snap.TotalDomesticTreasury = snap.TotalCountyTreasury
+                + snap.TotalProvinceTreasury + snap.TotalTreasury;
 
             // Market prices snapshot
             if (econ.MarketPrices != null)
