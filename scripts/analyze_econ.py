@@ -340,6 +340,78 @@ def print_intra_province_trade(data: dict):
         print(f"  Trade spending trend: {fmt(early_sp)}/day -> {fmt(late_sp)}/day")
 
 
+def print_cross_province_trade(data: dict):
+    section("CROSS-PROVINCE TRADE")
+    ts = data["economy"]["timeSeries"]
+    last = ts[-1]
+
+    # Time series data
+    bought = last.get("crossProvTradeBoughtByGood")
+    sold = last.get("crossProvTradeSoldByGood")
+    spending = last.get("crossProvTradeSpending", 0)
+    revenue = last.get("crossProvTradeRevenue", 0)
+    tolls_paid = last.get("tradeTollsPaid", 0)
+    tolls_collected = last.get("tradeTollsCollected", 0)
+
+    if not bought and not sold:
+        # Try trade section (end-of-sim snapshot)
+        t = data.get("trade", {})
+        bought_map = t.get("crossProvTradeBoughtByGood", {})
+        sold_map = t.get("crossProvTradeSoldByGood", {})
+        spending = t.get("crossProvTradeSpending", 0)
+        revenue = t.get("crossProvTradeRevenue", 0)
+        tolls_paid = t.get("tradeTollsPaid", 0)
+        tolls_collected = t.get("tradeTollsCollected", 0)
+
+        if not bought_map and not sold_map:
+            print("  No cross-province trade data")
+            return
+
+        print(f"  {'Good':12s}  {'Bought':>10s}  {'Sold':>10s}")
+        print(f"  {'-'*12}  {'-'*10}  {'-'*10}")
+        for good in GOODS:
+            b = bought_map.get(good, 0)
+            s = sold_map.get(good, 0)
+            if b > 0 or s > 0:
+                print(f"  {good:12s}  {fmt(b):>10s}  {fmt(s):>10s}")
+    else:
+        n = len(GOODS)
+        if not bought:
+            bought = [0] * n
+        if not sold:
+            sold = [0] * n
+
+        print(f"  Daily Volumes (latest day):")
+        print(f"  {'Good':12s}  {'Bought':>10s}  {'Sold':>10s}")
+        print(f"  {'-'*12}  {'-'*10}  {'-'*10}")
+        for i, good in enumerate(GOODS):
+            b = bought[i] if i < len(bought) else 0
+            s = sold[i] if i < len(sold) else 0
+            if b > 0 or s > 0:
+                print(f"  {good:12s}  {fmt(b):>10s}  {fmt(s):>10s}")
+
+    print()
+    print(f"  Crown flows (latest day):")
+    print(f"    Spending (buyers→sellers):  {fmt(spending)} Crowns")
+    print(f"    Revenue (sellers):           {fmt(revenue)} Crowns")
+    print(f"    Tolls paid (buyers→prov):    {fmt(tolls_paid)} Crowns")
+    print(f"    Tolls collected (provinces): {fmt(tolls_collected)} Crowns")
+    balance = (spending + tolls_paid) - (revenue + tolls_collected)
+    print(f"    Balance check (should be ~0): {fmt(balance)} Crowns")
+
+    # Trend over time
+    if len(ts) >= 20:
+        early = ts[4:14]
+        late = ts[-10:]
+        early_sp = sum(t.get("crossProvTradeSpending", 0) for t in early) / len(early)
+        late_sp = sum(t.get("crossProvTradeSpending", 0) for t in late) / len(late)
+        early_toll = sum(t.get("tradeTollsPaid", 0) for t in early) / len(early)
+        late_toll = sum(t.get("tradeTollsPaid", 0) for t in late) / len(late)
+        print()
+        print(f"  Trade spending trend: {fmt(early_sp)}/day -> {fmt(late_sp)}/day")
+        print(f"  Toll revenue trend:   {fmt(early_toll)}/day -> {fmt(late_toll)}/day")
+
+
 def print_inter_realm_trade(data: dict):
     section("INTER-REALM TRADE")
     ts = data["economy"]["timeSeries"]
@@ -686,6 +758,7 @@ def main():
     print_trade_snapshot(data)
     print_treasury(data)
     print_intra_province_trade(data)
+    print_cross_province_trade(data)
     print_inter_realm_trade(data)
     print_roads(data)
     print_facilities(data)

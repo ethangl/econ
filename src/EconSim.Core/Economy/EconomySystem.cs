@@ -494,6 +494,8 @@ namespace EconSim.Core.Economy
             snap.TotalRoyalStockpileByGood = new float[Goods.Count];
             snap.TotalIntraProvTradeBoughtByGood = new float[Goods.Count];
             snap.TotalIntraProvTradeSoldByGood = new float[Goods.Count];
+            snap.TotalCrossProvTradeBoughtByGood = new float[Goods.Count];
+            snap.TotalCrossProvTradeSoldByGood = new float[Goods.Count];
 
             int countyCount = 0;
             snap.MinBasicSatisfaction = float.MaxValue;
@@ -521,9 +523,14 @@ namespace EconSim.Core.Economy
                     snap.TotalDucalReliefByGood[g] += ce.Relief[g];
                     snap.TotalIntraProvTradeBoughtByGood[g] += ce.TradeBought[g];
                     snap.TotalIntraProvTradeSoldByGood[g] += ce.TradeSold[g];
+                    snap.TotalCrossProvTradeBoughtByGood[g] += ce.CrossProvTradeBought[g];
+                    snap.TotalCrossProvTradeSoldByGood[g] += ce.CrossProvTradeSold[g];
                 }
                 snap.TotalIntraProvTradeSpending += ce.TradeCrownsSpent;
                 snap.TotalIntraProvTradeRevenue += ce.TradeCrownsEarned;
+                snap.TotalCrossProvTradeSpending += ce.CrossProvTradeCrownsSpent;
+                snap.TotalCrossProvTradeRevenue += ce.CrossProvTradeCrownsEarned;
+                snap.TotalTradeTollsPaid += ce.TradeTollsPaid;
 
                 float foodStock = ce.Stock[Food];
                 if (foodStock < snap.MinStock) snap.MinStock = foodStock;
@@ -591,6 +598,7 @@ namespace EconSim.Core.Economy
                     snap.TotalProvinceTreasury += pe.Treasury;
                     snap.TotalRoyalTaxCrowns += pe.RoyalTaxCrownsReceived;
                     snap.TotalRoyalReliefCrowns += pe.RoyalReliefCrownsPaid;
+                    snap.TotalTradeTollsCollected += pe.TradeTollsCollected;
                 }
             }
 
