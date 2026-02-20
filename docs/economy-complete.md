@@ -304,3 +304,28 @@ Pure facility inputs — goods with no population consumption and no administrat
 - **Phase 9b (Realm):** King computes realm-specific needs — realm admin consumption plus the full need of provinces that lack local facilities for that good. Distributed to producing counties across the realm, additive to provincial quotas.
 
 Both tiers independently drive production. A kiln county receives its provincial quota share plus any realm quota share. Demand-driven extraction scales automatically via the combined quota.
+
+### Phase E: Chain Migration
+
+With the mechanism proven, add more production chains. Each is a data-driven addition using the same FacilityDef/FacilityProductionSystem infrastructure.
+
+**Completed chains (24 goods, 11 facility types):**
+
+- **Furniture** (Carpenter): 3 timber → 2 furniture. Durable comfort good.
+- **Iron** (Smelter): 3 ironOre + 0.4 charcoal → 2 iron. Intermediate for tools.
+- **Tools** (Smithy): 2 iron + 0.2 charcoal → 1 tools. Durable comfort good. Placed near iron ore.
+- **Charcoal** (CharcoalBurner): 5 timber → 1 charcoal. Fuel for smelters and smithies.
+- **Clothes** (Weaver): 3 wool → 2 clothes. Durable comfort good.
+- **Sausage** (Butcher): 1 pork + 0.2 salt → 3 sausage. Staple (preserved meat).
+- **Bacon** (Smokehouse): 2 pork + 1 timber → 2 bacon. Comfort good (smoked meat).
+- **Cheese** (Cheesemaker): 3 milk + 0.3 salt → 1 cheese. Staple (preserved dairy).
+- **SaltedFish** (Salter): 1 fish + 0.5 salt → 2 saltedFish. Staple (premium preserved fish).
+- **Stockfish** (DryingRack): 2 fish → 2 stockfish. Staple (cheap air-dried fish, no salt needed).
+
+**Staple pooling:** People eat 1.0 kg/day from any combination of staples (bread, sausage, cheese, saltedFish, stockfish). Preference weights: bread 0.50, sausage 0.21, saltedFish 0.14, stockfish 0.08, cheese 0.07. Shortfall across the pool = starvation.
+
+**Durable goods:** Pottery, furniture, tools, clothes have target stock per capita. Wear (spoilage) creates replacement demand rather than daily consumption. Deficit is a trade signal.
+
+**Fish productivity:** Coast-proximity-based extraction (not purely biome). Coastal cells +0.30, distance 1 +0.15, distance 2 +0.05, plus biome values for freshwater biomes (floodplain 0.10, coastal marsh 0.08, wetland 0.05).
+
+**Raw inputs not directly consumed:** Pork, milk, fish, clay, wool, charcoal, iron — extracted on-demand by local facilities or at full capacity if tradeable with direct demand. Tax-exempt when purely facility inputs.

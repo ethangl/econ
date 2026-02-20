@@ -118,7 +118,9 @@ namespace EconSim.Core.Economy
                 }
                 else
                 {
-                    _effectiveDemandPerPop[g] = ConsumptionPerPop[g];
+                    _effectiveDemandPerPop[g] = Goods.Defs[g].Need == NeedCategory.Staple
+                        ? Goods.StapleIdealPerPop[g]
+                        : ConsumptionPerPop[g];
                 }
             }
 
@@ -127,11 +129,12 @@ namespace EconSim.Core.Economy
 
             for (int g = 0; g < Goods.Count; g++)
             {
-                float consumeRate = ConsumptionPerPop[g];
-                // For durables, retain target stock level; for consumables, retain one day's consumption
+                // For durables, retain target stock level; for staples, retain ideal share; for others, retain one day's consumption
                 float retainPerPop = Goods.TargetStockPerPop[g] > 0f
                     ? Goods.TargetStockPerPop[g]
-                    : consumeRate;
+                    : Goods.Defs[g].Need == NeedCategory.Staple
+                        ? Goods.StapleIdealPerPop[g]
+                        : ConsumptionPerPop[g];
 
                 // Phase 1: County administrative consumption (building upkeep)
                 float countyAdmin = Goods.CountyAdminPerPop[g];

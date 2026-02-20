@@ -14,13 +14,7 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 4. Inter-Realm Trade
 5. Population Dynamics
 6. Good Spoilage / Decay
-7. Production Chains (Phases A–D)
-
-## To Do
-
-### Layer 7: Production Chains — Phase E: Chain Migration
-
-With the mechanism proven, add more production chains. Each is a data-driven addition using the same FacilityDef/FacilityProductionSystem infrastructure.
+7. Production Chains
 
 **Planned chains:**
 

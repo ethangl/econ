@@ -1,7 +1,7 @@
 namespace EconSim.Core.Economy
 {
     public enum GoodCategory { Raw, Refined, Finished }
-    public enum NeedCategory { None, Basic, Comfort, Luxury }
+    public enum NeedCategory { None, Staple, Basic, Comfort, Luxury }
 
     public readonly struct GoodDef
     {

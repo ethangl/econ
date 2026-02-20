@@ -26,6 +26,9 @@ namespace EconSim.Core.Economy
         Bacon = 18,
         Milk = 19,
         Cheese = 20,
+        Fish = 21,
+        SaltedFish = 22,
+        Stockfish = 23,
     }
 
     public static class Goods
@@ -74,12 +77,23 @@ namespace EconSim.Core.Economy
         /// <summary>Goods that can be traded on the inter-realm market.</summary>
         public static readonly int[] TradeableGoods;
 
+        /// <summary>Total kg/day pooled staple target per person.</summary>
+        public const float StapleBudgetPerPop = 1.0f;
+
+        /// <summary>Indices of goods with NeedCategory.Staple.</summary>
+        public static readonly int[] StapleGoods;
+
+        /// <summary>Normalized ideal share of the staple budget per good (indexed by GoodType). Zero for non-staples.</summary>
+        public static readonly float[] StapleIdealPerPop;
+
         /// <summary>Buy priority order — staples first, stone last (infrastructure can wait).</summary>
         public static readonly int[] BuyPriority =
         {
             (int)GoodType.Bread,
             (int)GoodType.Ale,
             (int)GoodType.Sausage,
+            (int)GoodType.SaltedFish,
+            (int)GoodType.Stockfish,
             (int)GoodType.Tools,
             (int)GoodType.Salt,
             (int)GoodType.Clothes,
@@ -117,7 +131,7 @@ namespace EconSim.Core.Economy
             Defs = new[]
             {
                 //                                                                                                                                              spoilage
-                new GoodDef(GoodType.Bread,     "bread",     GoodCategory.Raw, NeedCategory.Basic,   0.7f,   0.0f,   0.0f,   0.02f,  1.0f,  0.1f,  10.0f, true,  false, 0.03f),
+                new GoodDef(GoodType.Bread,     "bread",     GoodCategory.Raw, NeedCategory.Staple,  0.50f,  0.0f,   0.0f,   0.02f,  1.0f,  0.1f,  10.0f, true,  false, 0.03f),
                 new GoodDef(GoodType.Timber,     "timber",    GoodCategory.Raw, NeedCategory.Comfort, 0.2f,   0.0f,   0.0f,   0.0f,   0.5f,  0.05f, 5.0f,  true,  false, 0.001f),
                 new GoodDef(GoodType.IronOre,    "ironOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   5.0f,  0.5f,  50.0f, true,  false),
                 new GoodDef(GoodType.GoldOre,    "goldOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
@@ -134,10 +148,13 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.Charcoal,   "charcoal",  GoodCategory.Refined, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   2.0f,  0.2f,  20.0f, true,  false),
                 new GoodDef(GoodType.Clothes,    "clothes",   GoodCategory.Finished,NeedCategory.Comfort, 0.0f,   0.001f, 0.0f,   0.005f, 3.0f,  0.3f,  30.0f, true,  false, 0.002f, 2.0f),
                 new GoodDef(GoodType.Pork,      "pork",      GoodCategory.Raw,      NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   2.0f,  0.2f,  20.0f, true,  false, 0.02f),
-                new GoodDef(GoodType.Sausage,   "sausage",   GoodCategory.Finished, NeedCategory.Basic,   0.3f,   0.0f,   0.0f,   0.0f,   4.0f,  0.4f,  40.0f, true,  false, 0.002f),
+                new GoodDef(GoodType.Sausage,   "sausage",   GoodCategory.Finished, NeedCategory.Staple,  0.21f,  0.0f,   0.0f,   0.0f,   4.0f,  0.4f,  40.0f, true,  false, 0.002f),
                 new GoodDef(GoodType.Bacon,     "bacon",     GoodCategory.Finished, NeedCategory.Comfort, 0.1f,   0.0f,   0.0f,   0.0f,   5.0f,  0.5f,  50.0f, true,  false, 0.02f),
                 new GoodDef(GoodType.Milk,     "milk",      GoodCategory.Raw,      NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   1.5f,  0.15f, 15.0f, true,  false, 0.05f),
-                new GoodDef(GoodType.Cheese,   "cheese",    GoodCategory.Finished, NeedCategory.Basic,   0.1f,   0.0f,   0.0f,   0.0f,   6.0f,  0.6f,  60.0f, true,  false, 0.003f),
+                new GoodDef(GoodType.Cheese,   "cheese",    GoodCategory.Finished, NeedCategory.Staple,  0.07f,  0.0f,   0.0f,   0.0f,   6.0f,  0.6f,  60.0f, true,  false, 0.003f),
+                new GoodDef(GoodType.Fish,       "fish",      GoodCategory.Raw,      NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   1.5f,  0.15f, 15.0f, true,  false, 0.10f),
+                new GoodDef(GoodType.SaltedFish,  "saltedFish",GoodCategory.Finished, NeedCategory.Staple,  0.14f,  0.0f,   0.0f,   0.0f,   3.0f,  0.3f,  30.0f, true,  false, 0.003f),
+                new GoodDef(GoodType.Stockfish,   "stockfish", GoodCategory.Finished, NeedCategory.Staple,  0.08f,  0.0f,   0.0f,   0.0f,   2.5f,  0.25f, 25.0f, true,  false, 0.001f),
             };
 
             Count = Defs.Length;
@@ -181,6 +198,28 @@ namespace EconSim.Core.Economy
             }
 
             TradeableGoods = tradeable.ToArray();
+
+            // Compute staple pool arrays
+            var staples = new List<int>();
+            float totalStapleWeight = 0f;
+            for (int i = 0; i < Count; i++)
+            {
+                if (Defs[i].Need == NeedCategory.Staple)
+                {
+                    staples.Add(i);
+                    totalStapleWeight += Defs[i].ConsumptionPerPop;
+                }
+            }
+            StapleGoods = staples.ToArray();
+            StapleIdealPerPop = new float[Count];
+            if (totalStapleWeight > 0f)
+            {
+                for (int s = 0; s < StapleGoods.Length; s++)
+                {
+                    int g = StapleGoods[s];
+                    StapleIdealPerPop[g] = ConsumptionPerPop[g] / totalStapleWeight * StapleBudgetPerPop;
+                }
+            }
         }
     }
 }

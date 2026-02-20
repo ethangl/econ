@@ -20,34 +20,37 @@ namespace EconSim.Core.Economy
         static readonly float[] ConsumptionPerPop = Goods.ConsumptionPerPop;
         const int Food = (int)GoodType.Bread;
 
-        // Basic-needs satisfaction: precomputed indices and weights
-        static readonly int[] BasicGoods;
-        static readonly float[] BasicWeights;  // ConsumptionPerPop[g] / totalBasicConsumption
-        static readonly float TotalBasicConsumption;
+        // Satisfaction weights: staple pool + individual basics
+        // Total = StapleBudgetPerPop + sum(Basic ConsumptionPerPop)
+        static readonly int[] IndividualBasicGoods;   // Non-staple Basic goods (salt, ale)
+        static readonly float[] IndividualBasicWeights; // ConsumptionPerPop[g] / TotalSatisfactionDenom
+        static readonly float StapleSatisfactionWeight; // StapleBudgetPerPop / TotalSatisfactionDenom
 
         static EconomySystem()
         {
+            float totalIndividualBasic = 0f;
             int count = 0;
-            float total = 0f;
             for (int g = 0; g < Goods.Count; g++)
             {
                 if (Goods.Defs[g].Need == NeedCategory.Basic)
                 {
                     count++;
-                    total += ConsumptionPerPop[g];
+                    totalIndividualBasic += ConsumptionPerPop[g];
                 }
             }
 
-            BasicGoods = new int[count];
-            BasicWeights = new float[count];
-            TotalBasicConsumption = total;
+            float totalDenom = Goods.StapleBudgetPerPop + totalIndividualBasic;
+            StapleSatisfactionWeight = totalDenom > 0f ? Goods.StapleBudgetPerPop / totalDenom : 0f;
+
+            IndividualBasicGoods = new int[count];
+            IndividualBasicWeights = new float[count];
             int idx = 0;
             for (int g = 0; g < Goods.Count; g++)
             {
                 if (Goods.Defs[g].Need == NeedCategory.Basic)
                 {
-                    BasicGoods[idx] = g;
-                    BasicWeights[idx] = total > 0f ? ConsumptionPerPop[g] / total : 0f;
+                    IndividualBasicGoods[idx] = g;
+                    IndividualBasicWeights[idx] = totalDenom > 0f ? ConsumptionPerPop[g] / totalDenom : 0f;
                     idx++;
                 }
             }
@@ -221,9 +224,12 @@ namespace EconSim.Core.Economy
                     ce.FacilityWorkers = totalFacWorkers;
                 }
 
-                // Consumption — all goods
+                // Consumption — non-staple goods (durables and individual basics)
                 for (int g = 0; g < Goods.Count; g++)
                 {
+                    if (Goods.Defs[g].Need == NeedCategory.Staple)
+                        continue; // handled in pooled pass below
+
                     float tgt = Goods.TargetStockPerPop[g];
                     if (tgt > 0f)
                     {
@@ -246,15 +252,55 @@ namespace EconSim.Core.Economy
                     }
                 }
 
-                // Basic-needs satisfaction EMA (alpha ≈ 2/(30+1) ≈ 0.065, ~30-day smoothing)
-                // Weighted average of per-good fulfillment across all Basic needs
-                float daily = 0f;
-                for (int b = 0; b < BasicGoods.Length; b++)
+                // Pooled staple consumption — people eat 1 kg/day of any combination
+                float stapleBudget = pop * Goods.StapleBudgetPerPop;
+                float totalStapleAvail = 0f;
+                for (int s = 0; s < Goods.StapleGoods.Length; s++)
+                    totalStapleAvail += ce.Stock[Goods.StapleGoods[s]];
+
+                float totalStapleConsumed = 0f;
+                if (totalStapleAvail >= stapleBudget)
                 {
-                    int g = BasicGoods[b];
+                    // Plenty: consume proportional to availability
+                    for (int s = 0; s < Goods.StapleGoods.Length; s++)
+                    {
+                        int g = Goods.StapleGoods[s];
+                        float consumed = ce.Stock[g] / totalStapleAvail * stapleBudget;
+                        ce.Stock[g] -= consumed;
+                        ce.Consumption[g] = consumed;
+                        totalStapleConsumed += consumed;
+                    }
+                }
+                else
+                {
+                    // Scarce: eat everything
+                    for (int s = 0; s < Goods.StapleGoods.Length; s++)
+                    {
+                        int g = Goods.StapleGoods[s];
+                        ce.Consumption[g] = ce.Stock[g];
+                        totalStapleConsumed += ce.Stock[g];
+                        ce.Stock[g] = 0f;
+                    }
+                }
+
+                // Trade demand signals: shortfall against ideal share
+                for (int s = 0; s < Goods.StapleGoods.Length; s++)
+                {
+                    int g = Goods.StapleGoods[s];
+                    ce.UnmetNeed[g] = Math.Max(0f, pop * Goods.StapleIdealPerPop[g] - ce.Consumption[g]);
+                }
+
+                // Basic-needs satisfaction EMA (alpha ≈ 2/(30+1) ≈ 0.065, ~30-day smoothing)
+                // Staple pool fulfillment + individual basic fulfillment
+                float stapleFulfillment = stapleBudget > 0f
+                    ? Math.Min(1f, totalStapleConsumed / stapleBudget) : 1f;
+                float daily = StapleSatisfactionWeight * stapleFulfillment;
+                for (int b = 0; b < IndividualBasicGoods.Length; b++)
+                {
+                    int g = IndividualBasicGoods[b];
                     float needed = pop * ConsumptionPerPop[g];
                     float ratio = needed > 0f ? Math.Min(1f, ce.Consumption[g] / needed) : 1f;
-                    daily += BasicWeights[b] * ratio;
+                    daily += IndividualBasicWeights[b] * ratio;
                 }
                 ce.BasicSatisfaction += 0.065f * (daily - ce.BasicSatisfaction);
             }
@@ -300,6 +346,8 @@ namespace EconSim.Core.Economy
             for (int g = 0; g < Goods.Count; g++)
                 output[g] = 0f;
 
+            const int FishIdx = (int)GoodType.Fish;
+
             foreach (int cellId in county.CellIds)
             {
                 var cell = mapData.CellById[cellId];
@@ -307,6 +355,14 @@ namespace EconSim.Core.Economy
                 landCells++;
                 for (int g = 0; g < Goods.Count; g++)
                     output[g] += BiomeProductivity.Get(cell.BiomeId, (GoodType)g);
+
+                // Coast-proximity fishing bonus
+                switch (cell.CoastDistance)
+                {
+                    case 0: output[FishIdx] += 0.30f; break;
+                    case 1: output[FishIdx] += 0.15f; break;
+                    case 2: output[FishIdx] += 0.05f; break;
+                }
             }
 
             if (landCells > 0)
@@ -363,9 +419,20 @@ namespace EconSim.Core.Economy
                 if (foodStock < snap.MinStock) snap.MinStock = foodStock;
                 if (foodStock > snap.MaxStock) snap.MaxStock = foodStock;
 
-                if (ce.UnmetNeed[Food] > 0)
+                // Staple-pooled starvation check: actual pool shortfall, not ideal-share unmet
+                float totalStapleProd = 0f;
+                float totalStapleCons = 0f;
+                for (int s = 0; s < Goods.StapleGoods.Length; s++)
+                {
+                    int sg = Goods.StapleGoods[s];
+                    totalStapleProd += ce.Production[sg];
+                    totalStapleCons += ce.Consumption[sg];
+                }
+                float stapleBudget = ce.Population * Goods.StapleBudgetPerPop;
+
+                if (totalStapleCons < stapleBudget * 0.999f)
                     snap.StarvingCounties++;
-                else if (ce.Production[Food] < ce.Consumption[Food])
+                else if (totalStapleProd < totalStapleCons)
                     snap.DeficitCounties++;
                 else
                     snap.SurplusCounties++;

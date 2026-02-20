@@ -11,6 +11,8 @@ namespace EconSim.Core.Economy
         Butcher = 6,
         Smokehouse = 7,
         Cheesemaker = 8,
+        Salter = 9,
+        DryingRack = 10,
     }
 
     public readonly struct RecipeInput
@@ -108,6 +110,12 @@ namespace EconSim.Core.Economy
                 new FacilityDef(FacilityType.Cheesemaker, "cheesemaker",
                     new[] { new RecipeInput(GoodType.Milk, 3.0f), new RecipeInput(GoodType.Salt, 0.3f) },
                     GoodType.Cheese, 1.0f, 1, 0.05f, 0.10f, 1.0f, GoodType.Milk),
+                new FacilityDef(FacilityType.Salter, "salter",
+                    new[] { new RecipeInput(GoodType.Fish, 1.0f), new RecipeInput(GoodType.Salt, 0.5f) },
+                    GoodType.SaltedFish, 2.0f, 1, 0.05f, 0.10f, 2.0f, GoodType.Fish),
+                new FacilityDef(FacilityType.DryingRack, "dryingRack",
+                    new[] { new RecipeInput(GoodType.Fish, 2.0f) },
+                    GoodType.Stockfish, 1.5f, 1, 0.05f, 0.10f, 1.5f, GoodType.Fish),
             };
 
             Count = Defs.Length;

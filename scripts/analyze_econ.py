@@ -5,9 +5,10 @@ import json
 import sys
 from pathlib import Path
 
-_FALLBACK_GOODS = ["bread", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone", "ale", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese"]
-_FALLBACK_BASE_PRICES = [1.0, 0.5, 5.0, 0.0, 0.0, 3.0, 2.0, 0.3, 0.8, 0.2, 2.0, 5.0, 10.0, 15.0, 2.0, 3.0, 2.0, 4.0, 5.0, 1.5, 6.0]
-_FALLBACK_TRADEABLE = {"bread", "timber", "ironOre", "salt", "wool", "stone", "ale", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese"}
+_FALLBACK_GOODS = ["bread", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone", "ale", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish"]
+_STAPLE_GOODS = {"bread", "sausage", "cheese", "saltedFish", "stockfish"}
+_FALLBACK_BASE_PRICES = [1.0, 0.5, 5.0, 0.0, 0.0, 3.0, 2.0, 0.3, 0.8, 0.2, 2.0, 5.0, 10.0, 15.0, 2.0, 3.0, 2.0, 4.0, 5.0, 1.5, 6.0, 1.5, 3.0, 2.5]
+_FALLBACK_TRADEABLE = {"bread", "timber", "ironOre", "salt", "wool", "stone", "ale", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish"}
 
 # Module-level references set by init_goods()
 GOODS: list[str] = []
@@ -541,22 +542,25 @@ def print_convergence(data: dict):
         print("  Not enough data for convergence analysis")
         return
 
-    # Check if bread unmet need is converging
-    unmet_food = [t["unmetNeedByGood"][0] for t in ts]
-    unmet_total = [t["totalUnmetNeed"] for t in ts]
+    # Staple goods indices for pooled analysis
+    staple_indices = [i for i, g in enumerate(GOODS) if g in _STAPLE_GOODS]
+
+    def total_staple_unmet(snap):
+        return sum(snap["unmetNeedByGood"][i] for i in staple_indices)
+
     starving = [t["starvingCounties"] for t in ts]
 
     # Rate of change over last 30 days
     window = min(30, len(ts))
     recent = ts[-window:]
-    food_rate = (recent[-1]["unmetNeedByGood"][0] - recent[0]["unmetNeedByGood"][0]) / window
+    staple_rate = (total_staple_unmet(recent[-1]) - total_staple_unmet(recent[0])) / window
     starving_rate = (recent[-1]["starvingCounties"] - recent[0]["starvingCounties"]) / window
     stock_rate = (recent[-1]["totalStock"] - recent[0]["totalStock"]) / window
 
     print(f"  Last {window} days (daily averages):")
-    print(f"    Bread unmet need change: {food_rate:+.1f}/day")
-    print(f"    Starving counties change:{starving_rate:+.2f}/day")
-    print(f"    Total stock change:      {fmt(stock_rate)}/day")
+    print(f"    Staple unmet need change: {staple_rate:+.1f}/day")
+    print(f"    Starving counties change: {starving_rate:+.2f}/day")
+    print(f"    Total stock change:       {fmt(stock_rate)}/day")
 
     # Steady state check: is stock growth slowing?
     if len(ts) >= 60:
@@ -571,17 +575,19 @@ def print_convergence(data: dict):
         else:
             print("  -> Growth not slowing (not yet near equilibrium)")
 
-    # Bread specifically
-    total_pop = data["summary"]["totalPopulation"]
-    latest_food_unmet = ts[-1]["unmetNeedByGood"][0]
-    latest_food_prod = ts[-1]["productionByGood"][0]
-    print(f"\n  Bread deficit: {fmt(latest_food_unmet)} unmet ({pct(latest_food_unmet, latest_food_prod)} of production)")
+    # Staple pool (bread + sausage + cheese)
+    latest_staple_unmet = total_staple_unmet(ts[-1])
+    latest_staple_prod = sum(ts[-1]["productionByGood"][i] for i in staple_indices)
+    latest_staple_cons = sum(ts[-1]["consumptionByGood"][i] for i in staple_indices)
+    staple_names = "+".join(GOODS[i] for i in staple_indices)
+    print(f"\n  Staple pool ({staple_names}):")
+    print(f"    Production:  {fmt(latest_staple_prod)}/day")
+    print(f"    Consumption: {fmt(latest_staple_cons)}/day")
+    print(f"    Unmet need:  {fmt(latest_staple_unmet)}")
     print(f"  Starving:     {ts[-1]['starvingCounties']}/{data['economy']['countyCount']} counties")
 
-    # Per-good status (skip bread, already reported above)
+    # Per-good status
     for i, good in enumerate(GOODS):
-        if i == 0:
-            continue  # bread already reported
         unmet = ts[-1]["unmetNeedByGood"][i]
         cons = ts[-1]["consumptionByGood"][i]
         demand = cons + unmet
