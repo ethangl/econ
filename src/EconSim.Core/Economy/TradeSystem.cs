@@ -493,44 +493,32 @@ namespace EconSim.Core.Economy
             {
                 int provId = _provinceIds[p];
                 var pe = provinces[provId];
-                for (int g = 0; g < Goods.Count; g++)
-                {
-                    pe.TaxCollected[g] = 0f;
-                    pe.ReliefGiven[g] = 0f;
-                }
+                Array.Clear(pe.TaxCollected, 0, pe.TaxCollected.Length);
+                Array.Clear(pe.ReliefGiven, 0, pe.ReliefGiven.Length);
 
                 var countyIds = _provinceCounties[provId];
                 for (int c = 0; c < countyIds.Length; c++)
                 {
                     var ce = counties[countyIds[c]];
-                    for (int g = 0; g < Goods.Count; g++)
-                    {
-                        ce.TaxPaid[g] = 0f;
-                        ce.Relief[g] = 0f;
-                        ce.FacilityQuota[g] = 0f;
-                    }
+                    Array.Clear(ce.TaxPaid, 0, ce.TaxPaid.Length);
+                    Array.Clear(ce.Relief, 0, ce.Relief.Length);
+                    Array.Clear(ce.FacilityQuota, 0, ce.FacilityQuota.Length);
                 }
             }
 
             for (int r = 0; r < _realmIds.Length; r++)
             {
                 var re = realms[_realmIds[r]];
-                for (int g = 0; g < Goods.Count; g++)
-                {
-                    re.TaxCollected[g] = 0f;
-                    re.ReliefGiven[g] = 0f;
-                }
+                Array.Clear(re.TaxCollected, 0, re.TaxCollected.Length);
+                Array.Clear(re.ReliefGiven, 0, re.ReliefGiven.Length);
                 re.GoldMinted = 0f;
                 re.SilverMinted = 0f;
                 re.CrownsMinted = 0f;
                 re.TradeSpending = 0f;
                 re.TradeRevenue = 0f;
-                for (int g = 0; g < Goods.Count; g++)
-                {
-                    re.Deficit[g] = 0f;
-                    re.TradeImports[g] = 0f;
-                    re.TradeExports[g] = 0f;
-                }
+                Array.Clear(re.Deficit, 0, re.Deficit.Length);
+                Array.Clear(re.TradeImports, 0, re.TradeImports.Length);
+                Array.Clear(re.TradeExports, 0, re.TradeExports.Length);
             }
         }
 

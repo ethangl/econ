@@ -145,6 +145,8 @@ namespace EconSim.Core.Economy
         {
             var econ = state.Economy;
             var counties = econ.Counties;
+            var countyFacilityIndices = econ.CountyFacilityIndices;
+            int goodsCount = Goods.Count;
 
             for (int i = 0; i < counties.Length; i++)
             {
@@ -153,16 +155,39 @@ namespace EconSim.Core.Economy
 
                 float pop = ce.Population;
                 float wf = pop > 0 ? (pop - ce.FacilityWorkers) / pop : 1f;
+                var indices = countyFacilityIndices != null && i < countyFacilityIndices.Length
+                    ? countyFacilityIndices[i]
+                    : null;
+
+                // Compute all local facility input demand once; pure-input extraction reuses this per good.
+                Span<float> facilityInputDemand = stackalloc float[Goods.Count];
+                if (indices != null && indices.Count > 0)
+                {
+                    for (int fi = 0; fi < indices.Count; fi++)
+                    {
+                        var def = econ.Facilities[indices[fi]].Def;
+                        if (def.OutputAmount <= 0f) continue;
+
+                        float target = Math.Max(def.BaselineOutput, ce.FacilityQuota[(int)def.OutputGood]);
+                        float maxByLabor = def.LaborPerUnit > 0
+                            ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
+                            : float.MaxValue;
+                        target = Math.Min(target, maxByLabor);
+
+                        float scale = target / def.OutputAmount;
+                        for (int ii = 0; ii < def.Inputs.Length; ii++)
+                            facilityInputDemand[(int)def.Inputs[ii].Good] += scale * def.Inputs[ii].Amount;
+                    }
+                }
 
                 // Production — all goods (extraction workforce reduced by facility labor)
-                for (int g = 0; g < Goods.Count; g++)
+                for (int g = 0; g < goodsCount; g++)
                 {
                     float produced;
                     if (!Goods.HasDirectDemand[g] && !Goods.IsPreciousMetal(g))
                     {
-                        // Facility-input-only: extract only what local facilities need
-                        float inputDemand = ComputeFacilityInputDemand(ce, econ, i, g);
-                        produced = Math.Min(inputDemand, pop * ce.Productivity[g]);
+                        // Facility-input-only: extract only what local facilities need.
+                        produced = Math.Min(facilityInputDemand[g], pop * ce.Productivity[g]);
                     }
                     else
                     {
@@ -173,10 +198,8 @@ namespace EconSim.Core.Economy
                 }
 
                 // Facility processing — demand-driven, realm-quota-aware
-                var facIndices = econ.CountyFacilityIndices;
-                if (facIndices != null && i < facIndices.Length && facIndices[i] != null)
+                if (indices != null && indices.Count > 0)
                 {
-                    var indices = facIndices[i];
                     float totalFacWorkers = 0f;
                     for (int fi = 0; fi < indices.Count; fi++)
                     {
@@ -225,7 +248,7 @@ namespace EconSim.Core.Economy
                 }
 
                 // Consumption — non-staple goods (durables and individual basics)
-                for (int g = 0; g < Goods.Count; g++)
+                for (int g = 0; g < goodsCount; g++)
                 {
                     if (Goods.Defs[g].Need == NeedCategory.Staple)
                         continue; // handled in pooled pass below
@@ -307,37 +330,6 @@ namespace EconSim.Core.Economy
 
             // Record snapshot
             econ.TimeSeries.Add(BuildSnapshot(state.CurrentDay, econ));
-        }
-
-        static float ComputeFacilityInputDemand(
-            CountyEconomy ce, EconomyState econ, int countyIdx, int goodIdx)
-        {
-            var facIndices = econ.CountyFacilityIndices;
-            if (facIndices == null || countyIdx >= facIndices.Length
-                || facIndices[countyIdx] == null)
-                return 0f;
-
-            float demand = 0f;
-            float pop = ce.Population;
-            var indices = facIndices[countyIdx];
-            for (int fi = 0; fi < indices.Count; fi++)
-            {
-                var def = econ.Facilities[indices[fi]].Def;
-                if (def.OutputAmount <= 0f) continue;
-                for (int ii = 0; ii < def.Inputs.Length; ii++)
-                {
-                    if ((int)def.Inputs[ii].Good != goodIdx) continue;
-                    // Match the facility production target (same formula as facility processing)
-                    float target = Math.Max(def.BaselineOutput, ce.FacilityQuota[(int)def.OutputGood]);
-                    // Apply labor cap — don't extract more than the facility can process
-                    float maxByLabor = def.LaborPerUnit > 0
-                        ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
-                        : float.MaxValue;
-                    target = Math.Min(target, maxByLabor);
-                    demand += target * def.Inputs[ii].Amount / def.OutputAmount;
-                }
-            }
-            return demand;
         }
 
         static void ComputeCountyProductivity(County county, MapData mapData, float[] output)
