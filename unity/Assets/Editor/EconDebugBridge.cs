@@ -494,6 +494,7 @@ namespace EconSim.Editor
             j.KV("totalCounties", mapData?.Counties?.Count ?? 0);
             j.KV("totalProvinces", mapData?.Provinces?.Count ?? 0);
             j.KV("totalRealms", mapData?.Realms?.Count ?? 0);
+            j.KV("marketCountyId", st.Economy?.MarketCountyId ?? -1);
 
             // Road stats
             if (st.Roads != null)
@@ -682,6 +683,7 @@ namespace EconSim.Editor
                 j.KV("crossRealmTollsPaid", snap.TotalCrossRealmTollsPaid);
                 j.KV("crossRealmTariffsPaid", snap.TotalCrossRealmTariffsPaid);
                 j.KV("crossRealmTariffsCollected", snap.TotalCrossRealmTariffsCollected);
+                j.KV("marketFeesCollected", snap.TotalMarketFeesCollected);
 
                 // Population dynamics
                 j.KV("totalPopulation", snap.TotalPopulation);
@@ -879,6 +881,9 @@ namespace EconSim.Editor
             float totalCRTradeSpending = 0f, totalCRTradeRevenue = 0f;
             float totalCRTollsPaid = 0f, totalCRTariffsPaid = 0f;
 
+            // Market fee aggregates
+            float totalMarketFeesCollected = 0f;
+
             for (int i = 0; i < econ.Counties.Length; i++)
             {
                 var ce2 = econ.Counties[i];
@@ -901,6 +906,7 @@ namespace EconSim.Editor
                 totalCRTradeRevenue += ce2.CrossRealmTradeCrownsEarned;
                 totalCRTollsPaid += ce2.CrossRealmTollsPaid;
                 totalCRTariffsPaid += ce2.CrossRealmTariffsPaid;
+                totalMarketFeesCollected += ce2.MarketFeesReceived;
             }
 
             j.KV("countyCount", countyCount);
@@ -979,6 +985,8 @@ namespace EconSim.Editor
                 }
             }
             j.KV("tradeTariffsCollected", totalTariffsCollected);
+            j.KV("marketFeesCollected", totalMarketFeesCollected);
+            j.KV("marketCountyId", econ.MarketCountyId);
 
             // Per-province summary (per-good stockpiles)
             j.Key("provinces"); j.ArrOpen();

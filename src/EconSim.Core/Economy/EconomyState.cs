@@ -48,5 +48,8 @@ namespace EconSim.Core.Economy
 
         /// <summary>Effective demand per pop per day, indexed by GoodType. Updated by EconomySystem each tick.</summary>
         public float[] EffectiveDemandPerPop;
+
+        /// <summary>County ID hosting the central market. Receives market fees from all trade transactions.</summary>
+        public int MarketCountyId = -1;
     }
 }

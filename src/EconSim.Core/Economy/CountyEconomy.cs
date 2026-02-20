@@ -101,5 +101,8 @@ namespace EconSim.Core.Economy
 
         /// <summary>Cross-realm trade: tariff crowns paid to own realm this tick (reset daily).</summary>
         public float CrossRealmTariffsPaid;
+
+        /// <summary>Market fees received this tick (reset daily). Only nonzero for market county.</summary>
+        public float MarketFeesReceived;
     }
 }

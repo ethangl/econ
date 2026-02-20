@@ -161,6 +161,9 @@ namespace EconSim.Core.Economy
             // (InterRealmTradeSystem updates these later, but runs after FiscalSystem)
             Array.Copy(Goods.BasePrice, econ.MarketPrices, Goods.Count);
 
+            // Resolve market county: first realm's capital burg → cell → county
+            econ.MarketCountyId = ResolveMarketCounty(mapData, econ);
+
             state.Economy = econ;
         }
 
@@ -476,6 +479,40 @@ namespace EconSim.Core.Economy
             }
         }
 
+        static int ResolveMarketCounty(MapData mapData, EconomyState econ)
+        {
+            // Try first realm's capital burg → cell → county
+            if (mapData.Realms != null && mapData.Realms.Count > 0 && mapData.Burgs != null)
+            {
+                var realm = mapData.Realms[0];
+                Burg burg = null;
+                foreach (var b in mapData.Burgs)
+                    if (b.Id == realm.CapitalBurgId) { burg = b; break; }
+
+                if (burg != null)
+                {
+                    var cell = mapData.CellById[burg.CellId];
+                    if (cell.CountyId > 0 && cell.CountyId < econ.Counties.Length
+                        && econ.Counties[cell.CountyId] != null)
+                        return cell.CountyId;
+                }
+            }
+
+            // Fallback: county with highest population
+            int bestId = -1;
+            float bestPop = -1f;
+            for (int i = 0; i < econ.Counties.Length; i++)
+            {
+                var ce = econ.Counties[i];
+                if (ce != null && ce.Population > bestPop)
+                {
+                    bestPop = ce.Population;
+                    bestId = i;
+                }
+            }
+            return bestId;
+        }
+
         static EconomySnapshot BuildSnapshot(int day, EconomyState econ)
         {
             var snap = new EconomySnapshot();
@@ -574,6 +611,7 @@ namespace EconSim.Core.Economy
                 snap.TotalCountyTreasury += ce.Treasury;
                 snap.TotalDucalTaxCrowns += ce.TaxCrownsReceived;
                 snap.TotalDucalReliefCrowns += ce.ReliefCrownsPaid;
+                snap.TotalMarketFeesCollected += ce.MarketFeesReceived;
             }
 
             // Backward-compat scalars = food values
