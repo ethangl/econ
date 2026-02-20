@@ -671,6 +671,8 @@ namespace EconSim.Editor
                 j.KV("crownsMinted", snap.TotalCrownsMinted);
                 j.KV("tradeSpending", snap.TotalTradeSpending);
                 j.KV("tradeRevenue", snap.TotalTradeRevenue);
+                j.KV("intraProvTradeSpending", snap.TotalIntraProvTradeSpending);
+                j.KV("intraProvTradeRevenue", snap.TotalIntraProvTradeRevenue);
 
                 // Population dynamics
                 j.KV("totalPopulation", snap.TotalPopulation);
@@ -729,6 +731,21 @@ namespace EconSim.Editor
                     j.Key("royalTaxByGood"); j.ArrOpen();
                     for (int g = 0; g < snap.TotalRoyalTaxByGood.Length; g++)
                         j.Val(snap.TotalRoyalTaxByGood[g]);
+                    j.ArrClose();
+                }
+
+                if (snap.TotalIntraProvTradeBoughtByGood != null)
+                {
+                    j.Key("intraProvTradeBoughtByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalIntraProvTradeBoughtByGood.Length; g++)
+                        j.Val(snap.TotalIntraProvTradeBoughtByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalIntraProvTradeSoldByGood != null)
+                {
+                    j.Key("intraProvTradeSoldByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalIntraProvTradeSoldByGood.Length; g++)
+                        j.Val(snap.TotalIntraProvTradeSoldByGood[g]);
                     j.ArrClose();
                 }
 
@@ -806,6 +823,23 @@ namespace EconSim.Editor
                 totalCountyTreasury += ce.Treasury;
             }
 
+            // Intra-province trade aggregates
+            float[] totalTradeBought = new float[Goods.Count];
+            float[] totalTradeSold = new float[Goods.Count];
+            float totalTradeSpending = 0f, totalTradeRevenue = 0f;
+            for (int i = 0; i < econ.Counties.Length; i++)
+            {
+                var ce2 = econ.Counties[i];
+                if (ce2 == null) continue;
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    totalTradeBought[g] += ce2.TradeBought[g];
+                    totalTradeSold[g] += ce2.TradeSold[g];
+                }
+                totalTradeSpending += ce2.TradeCrownsSpent;
+                totalTradeRevenue += ce2.TradeCrownsEarned;
+            }
+
             j.KV("countyCount", countyCount);
             // Backward compat: food-only scalars
             j.KV("totalDucalTax", totalTaxPaid[F]);
@@ -822,6 +856,18 @@ namespace EconSim.Editor
             for (int g = 0; g < Goods.Count; g++)
                 j.KV(goodNames[g], totalRelief[g]);
             j.ObjClose();
+
+            // Intra-province trade per-good
+            j.Key("intraProvTradeBoughtByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+                j.KV(goodNames[g], totalTradeBought[g]);
+            j.ObjClose();
+            j.Key("intraProvTradeSoldByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+                j.KV(goodNames[g], totalTradeSold[g]);
+            j.ObjClose();
+            j.KV("intraProvTradeSpending", totalTradeSpending);
+            j.KV("intraProvTradeRevenue", totalTradeRevenue);
 
             // Per-province summary (per-good stockpiles)
             j.Key("provinces"); j.ArrOpen();
