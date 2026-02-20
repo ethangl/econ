@@ -401,7 +401,7 @@ namespace EconSim.Core.Economy
                     for (int c = 0; c < countyIds.Length; c++)
                     {
                         var ce = counties[countyIds[c]];
-                        float surplus = ce.Stock[g] - ce.Population * retainPerPop;
+                        float surplus = ce.Stock[g] - ce.Population * retainPerPop - ce.FacilityInputNeed[g];
                         surpluses[c] = surplus;
                         if (surplus > 0f)
                             totalSupply += surplus;
@@ -484,7 +484,7 @@ namespace EconSim.Core.Economy
                     for (int c = 0; c < countyIds.Length; c++)
                     {
                         var ce = counties[countyIds[c]];
-                        float surplus = ce.Stock[g] - ce.Population * retainPerPop;
+                        float surplus = ce.Stock[g] - ce.Population * retainPerPop - ce.FacilityInputNeed[g];
                         realmSurpluses[c] = surplus;
                         if (surplus > 0f)
                             totalSupply += surplus;
@@ -569,7 +569,7 @@ namespace EconSim.Core.Economy
                     for (int c = 0; c < _allCountyIds.Length; c++)
                     {
                         var ce = counties[_allCountyIds[c]];
-                        float surplus = ce.Stock[g] - ce.Population * retainPerPop;
+                        float surplus = ce.Stock[g] - ce.Population * retainPerPop - ce.FacilityInputNeed[g];
                         globalSurpluses[c] = surplus;
                         if (surplus > 0f)
                             totalSupply += surplus;

@@ -246,8 +246,8 @@ namespace EconSim.Core.Economy
                     ? countyFacilityIndices[i]
                     : null;
 
-                // Compute all local facility input demand once; pure-input extraction reuses this per good.
-                Span<float> facilityInputDemand = stackalloc float[Goods.Count];
+                // Compute facility input demand for trade retain signal
+                Array.Clear(ce.FacilityInputNeed, 0, goodsCount);
                 if (indices != null && indices.Count > 0)
                 {
                     for (int fi = 0; fi < indices.Count; fi++)
@@ -263,23 +263,14 @@ namespace EconSim.Core.Economy
 
                         float scale = target / def.OutputAmount;
                         for (int ii = 0; ii < def.Inputs.Length; ii++)
-                            facilityInputDemand[(int)def.Inputs[ii].Good] += scale * def.Inputs[ii].Amount;
+                            ce.FacilityInputNeed[(int)def.Inputs[ii].Good] += scale * def.Inputs[ii].Amount;
                     }
                 }
 
                 // Production — all goods (extraction workforce reduced by facility labor)
                 for (int g = 0; g < goodsCount; g++)
                 {
-                    float produced;
-                    if (!Goods.HasDirectDemand[g] && !Goods.IsPreciousMetal(g))
-                    {
-                        // Facility-input-only: extract only what local facilities need.
-                        produced = Math.Min(facilityInputDemand[g], pop * ce.Productivity[g]);
-                    }
-                    else
-                    {
-                        produced = pop * ce.Productivity[g] * wf;
-                    }
+                    float produced = pop * ce.Productivity[g] * wf;
                     ce.Stock[g] += produced;
                     ce.Production[g] = produced;
                 }
