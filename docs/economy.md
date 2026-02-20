@@ -24,10 +24,10 @@ Currently the king intermediates all trade (inter-realm only) and counties recei
 Feudal redistribution (FiscalSystem) continues to run — taxes and relief still flow through the hierarchy. County trade is an additional channel that lets counties buy/sell surplus directly, bypassing the feudal pipeline for goods they can afford.
 
 **Phase A: Intra-Province Trade** (Complete)
-Counties within the same province trade directly at market prices. Untaxed (or negligible flat fee). The duke's province is a free-trade zone — counties with surplus sell to neighbors with deficit, routed via transport graph. Runs after ducal tax but before relief — trade resolves deficits first, relief covers what's left.
+Counties within the same province trade directly at market prices. Untaxed (or negligible flat fee). The duke's province is a free-trade zone — counties with surplus sell to neighbors with deficit, routed via transport graph.
 
 **Phase B: Cross-Province / Intra-Realm Trade**
-Counties trade across province boundaries within the same realm. The receiving duke collects a toll on goods entering the province. Creates incentive for provincial self-sufficiency while allowing inter-provincial specialization.
+Counties trade across province boundaries within the same realm. The buying county pays its own duke a 5% toll on goods entering the province. Creates incentive for provincial self-sufficiency while allowing inter-provincial specialization.
 
 **Phase C: Cross-Realm Trade**
 Counties trade across realm borders. The receiving king collects a tariff on imports (on top of any ducal toll). Replaces realm-level InterRealmTradeSystem with county-level actors. Kings set tariff rates rather than personally trading.

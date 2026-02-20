@@ -673,6 +673,10 @@ namespace EconSim.Editor
                 j.KV("tradeRevenue", snap.TotalTradeRevenue);
                 j.KV("intraProvTradeSpending", snap.TotalIntraProvTradeSpending);
                 j.KV("intraProvTradeRevenue", snap.TotalIntraProvTradeRevenue);
+                j.KV("crossProvTradeSpending", snap.TotalCrossProvTradeSpending);
+                j.KV("crossProvTradeRevenue", snap.TotalCrossProvTradeRevenue);
+                j.KV("tradeTollsPaid", snap.TotalTradeTollsPaid);
+                j.KV("tradeTollsCollected", snap.TotalTradeTollsCollected);
 
                 // Population dynamics
                 j.KV("totalPopulation", snap.TotalPopulation);
@@ -746,6 +750,21 @@ namespace EconSim.Editor
                     j.Key("intraProvTradeSoldByGood"); j.ArrOpen();
                     for (int g = 0; g < snap.TotalIntraProvTradeSoldByGood.Length; g++)
                         j.Val(snap.TotalIntraProvTradeSoldByGood[g]);
+                    j.ArrClose();
+                }
+
+                if (snap.TotalCrossProvTradeBoughtByGood != null)
+                {
+                    j.Key("crossProvTradeBoughtByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalCrossProvTradeBoughtByGood.Length; g++)
+                        j.Val(snap.TotalCrossProvTradeBoughtByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalCrossProvTradeSoldByGood != null)
+                {
+                    j.Key("crossProvTradeSoldByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalCrossProvTradeSoldByGood.Length; g++)
+                        j.Val(snap.TotalCrossProvTradeSoldByGood[g]);
                     j.ArrClose();
                 }
 
@@ -827,6 +846,13 @@ namespace EconSim.Editor
             float[] totalTradeBought = new float[Goods.Count];
             float[] totalTradeSold = new float[Goods.Count];
             float totalTradeSpending = 0f, totalTradeRevenue = 0f;
+
+            // Cross-province trade aggregates
+            float[] totalCPTradeBought = new float[Goods.Count];
+            float[] totalCPTradeSold = new float[Goods.Count];
+            float totalCPTradeSpending = 0f, totalCPTradeRevenue = 0f;
+            float totalTollsPaid = 0f;
+
             for (int i = 0; i < econ.Counties.Length; i++)
             {
                 var ce2 = econ.Counties[i];
@@ -835,9 +861,14 @@ namespace EconSim.Editor
                 {
                     totalTradeBought[g] += ce2.TradeBought[g];
                     totalTradeSold[g] += ce2.TradeSold[g];
+                    totalCPTradeBought[g] += ce2.CrossProvTradeBought[g];
+                    totalCPTradeSold[g] += ce2.CrossProvTradeSold[g];
                 }
                 totalTradeSpending += ce2.TradeCrownsSpent;
                 totalTradeRevenue += ce2.TradeCrownsEarned;
+                totalCPTradeSpending += ce2.CrossProvTradeCrownsSpent;
+                totalCPTradeRevenue += ce2.CrossProvTradeCrownsEarned;
+                totalTollsPaid += ce2.TradeTollsPaid;
             }
 
             j.KV("countyCount", countyCount);
@@ -868,6 +899,28 @@ namespace EconSim.Editor
             j.ObjClose();
             j.KV("intraProvTradeSpending", totalTradeSpending);
             j.KV("intraProvTradeRevenue", totalTradeRevenue);
+
+            // Cross-province trade per-good
+            j.Key("crossProvTradeBoughtByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+                j.KV(goodNames[g], totalCPTradeBought[g]);
+            j.ObjClose();
+            j.Key("crossProvTradeSoldByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+                j.KV(goodNames[g], totalCPTradeSold[g]);
+            j.ObjClose();
+            j.KV("crossProvTradeSpending", totalCPTradeSpending);
+            j.KV("crossProvTradeRevenue", totalCPTradeRevenue);
+            j.KV("tradeTollsPaid", totalTollsPaid);
+
+            // Province toll revenue
+            float totalTollsCollected = 0f;
+            for (int i = 0; i < econ.Provinces.Length; i++)
+            {
+                var pe2 = econ.Provinces[i];
+                if (pe2 != null) totalTollsCollected += pe2.TradeTollsCollected;
+            }
+            j.KV("tradeTollsCollected", totalTollsCollected);
 
             // Per-province summary (per-good stockpiles)
             j.Key("provinces"); j.ArrOpen();

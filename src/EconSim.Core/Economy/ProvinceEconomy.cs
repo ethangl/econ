@@ -29,5 +29,8 @@ namespace EconSim.Core.Economy
 
         /// <summary>Crowns paid to realm for relief received this tick (reset daily).</summary>
         public float RoyalReliefCrownsPaid;
+
+        /// <summary>Cross-province trade: toll revenue received from buying counties this tick (reset daily).</summary>
+        public float TradeTollsCollected;
     }
 }

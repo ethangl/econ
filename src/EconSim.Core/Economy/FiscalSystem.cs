@@ -41,8 +41,10 @@ namespace EconSim.Core.Economy
         /// <summary>Feudal lords pay 50% of market price when taxing goods (forced requisition discount).</summary>
         const float TaxPaymentDiscount = 0.50f;
 
-        /// <summary>Relief recipients pay 90% of market price (slight discount for redistributed goods).</summary>
-        const float ReliefPaymentDiscount = 0.90f;
+
+        /// <summary>Buyers pay 5% toll on cross-province trade (paid to own province treasury).</summary>
+        const float CrossProvTollRate = 0.05f;
+
 
         /// <summary>Province ID → array of county IDs.</summary>
         int[][] _provinceCounties;
@@ -61,6 +63,15 @@ namespace EconSim.Core.Economy
 
         /// <summary>Max county count across all provinces (for trade pass stackalloc sizing).</summary>
         int _maxCountiesPerProvince;
+
+        /// <summary>Realm ID → array of all county IDs in that realm.</summary>
+        int[][] _realmCounties;
+
+        /// <summary>Max county count across all realms (for cross-province trade stackalloc sizing).</summary>
+        int _maxCountiesPerRealm;
+
+        /// <summary>County ID → Province ID (for routing tolls to buyer's province).</summary>
+        int[] _countyToProvince;
 
         /// <summary>County ID → Realm ID (for deficit ledger).</summary>
         int[] _countyToRealm;
@@ -255,87 +266,9 @@ namespace EconSim.Core.Economy
                 re.CrownsMinted = crowns;
             }
 
-            // ── INTRA-PROVINCE TRADE PASS ───────────────────────────────
-            // Counties within the same province trade directly at market price.
-            // BuyPriority order ensures staples are bought before comfort goods.
-            var buyPriority = Goods.BuyPriority;
-            Span<float> surpluses = stackalloc float[_maxCountiesPerProvince];
-
-            for (int bp = 0; bp < buyPriority.Length; bp++)
-            {
-                int g = buyPriority[bp];
-                float price = prices[g];
-                if (price <= 0f) continue;
-
-                float retainPerPop = Goods.DurableRetainPerPop[g] > 0f
-                    ? Goods.DurableRetainPerPop[g]
-                    : Goods.Defs[g].Need == NeedCategory.Staple
-                        ? Goods.StapleIdealPerPop[g]
-                        : ConsumptionPerPop[g];
-
-                for (int p = 0; p < _provinceIds.Length; p++)
-                {
-                    int provId = _provinceIds[p];
-                    var countyIds = _provinceCounties[provId];
-                    if (countyIds.Length <= 1) continue;
-
-                    float totalSupply = 0f;
-                    float totalDemand = 0f;
-
-                    for (int c = 0; c < countyIds.Length; c++)
-                    {
-                        var ce = counties[countyIds[c]];
-                        float surplus = ce.Stock[g] - ce.Population * retainPerPop;
-                        surpluses[c] = surplus;
-                        if (surplus > 0f)
-                            totalSupply += surplus;
-                        else if (surplus < 0f)
-                        {
-                            // Treasury-constrain buyer demand
-                            float rawDemand = -surplus;
-                            float affordable = ce.Treasury / price;
-                            float demand = Math.Min(rawDemand, affordable);
-                            surpluses[c] = -demand; // store negative = buyer demand
-                            totalDemand += demand;
-                        }
-                    }
-
-                    if (totalSupply <= 0f || totalDemand <= 0f) continue;
-
-                    float fillRatio = Math.Min(1f, totalSupply / totalDemand);
-                    float sellRatio = Math.Min(1f, totalDemand / totalSupply);
-
-                    for (int c = 0; c < countyIds.Length; c++)
-                    {
-                        float s = surpluses[c];
-                        var ce = counties[countyIds[c]];
-
-                        if (s > 0f)
-                        {
-                            // Seller
-                            float sold = s * sellRatio;
-                            ce.Stock[g] -= sold;
-                            ce.TradeSold[g] += sold;
-                            float earned = sold * price;
-                            ce.Treasury += earned;
-                            ce.TradeCrownsEarned += earned;
-                        }
-                        else if (s < 0f)
-                        {
-                            // Buyer
-                            float bought = (-s) * fillRatio;
-                            ce.Stock[g] += bought;
-                            ce.TradeBought[g] += bought;
-                            float spent = bought * price;
-                            ce.Treasury -= spent;
-                            ce.TradeCrownsSpent += spent;
-                        }
-                    }
-                }
-            }
-
             // ── RELIEF PASS (Phases 6-7) ────────────────────────────────
-            // BuildRetainDeficitsForGood now sees post-trade stock levels.
+            // Relief runs BEFORE trade so counties pay for relief while they
+            // still have tax-payment crowns, then trade with the remainder.
             for (int g = 0; g < Goods.Count; g++)
             {
                 float retainPerPop = Goods.DurableRetainPerPop[g] > 0f
@@ -386,13 +319,6 @@ namespace EconSim.Core.Economy
                         pe.Stockpile[g] += relief;
                         re.Stockpile[g] -= relief;
                         re.ReliefGiven[g] += relief;
-
-                        float owed = relief * prices[g] * ReliefPaymentDiscount;
-                        float paid = Math.Min(owed, pe.Treasury);
-                        pe.Treasury -= paid;
-                        pe.RoyalReliefCrownsPaid += paid;
-                        re.Treasury += paid;
-                        re.ReliefCrownsReceived += paid;
                     }
                 }
 
@@ -423,13 +349,165 @@ namespace EconSim.Core.Economy
                         ce.Relief[g] += relief;
                         pe.Stockpile[g] -= relief;
                         pe.ReliefGiven[g] += relief;
+                    }
+                }
+            }
 
-                        float owed = relief * prices[g] * ReliefPaymentDiscount;
-                        float paid = Math.Min(owed, ce.Treasury);
-                        ce.Treasury -= paid;
-                        ce.ReliefCrownsPaid += paid;
-                        pe.Treasury += paid;
-                        pe.ReliefCrownsReceived += paid;
+            // ── INTRA-PROVINCE TRADE PASS ───────────────────────────────
+            // Counties within the same province trade directly at market price.
+            // BuyPriority order ensures staples are bought before comfort goods.
+            // Runs AFTER relief so counties have already paid for relief goods.
+            var buyPriority = Goods.BuyPriority;
+            Span<float> surpluses = stackalloc float[_maxCountiesPerProvince];
+
+            for (int bp = 0; bp < buyPriority.Length; bp++)
+            {
+                int g = buyPriority[bp];
+                float price = prices[g];
+                if (price <= 0f) continue;
+
+                float retainPerPop = Goods.DurableRetainPerPop[g] > 0f
+                    ? Goods.DurableRetainPerPop[g]
+                    : Goods.Defs[g].Need == NeedCategory.Staple
+                        ? Goods.StapleIdealPerPop[g]
+                        : ConsumptionPerPop[g];
+
+                for (int p = 0; p < _provinceIds.Length; p++)
+                {
+                    int provId = _provinceIds[p];
+                    var countyIds = _provinceCounties[provId];
+                    if (countyIds.Length <= 1) continue;
+
+                    float totalSupply = 0f;
+                    float totalDemand = 0f;
+
+                    for (int c = 0; c < countyIds.Length; c++)
+                    {
+                        var ce = counties[countyIds[c]];
+                        float surplus = ce.Stock[g] - ce.Population * retainPerPop;
+                        surpluses[c] = surplus;
+                        if (surplus > 0f)
+                            totalSupply += surplus;
+                        else if (surplus < 0f)
+                        {
+                            float rawDemand = -surplus;
+                            float affordable = ce.Treasury / price;
+                            float demand = Math.Min(rawDemand, affordable);
+                            surpluses[c] = -demand;
+                            totalDemand += demand;
+                        }
+                    }
+
+                    if (totalSupply <= 0f || totalDemand <= 0f) continue;
+
+                    float fillRatio = Math.Min(1f, totalSupply / totalDemand);
+                    float sellRatio = Math.Min(1f, totalDemand / totalSupply);
+
+                    for (int c = 0; c < countyIds.Length; c++)
+                    {
+                        float s = surpluses[c];
+                        var ce = counties[countyIds[c]];
+
+                        if (s > 0f)
+                        {
+                            float sold = s * sellRatio;
+                            ce.Stock[g] -= sold;
+                            ce.TradeSold[g] += sold;
+                            float earned = sold * price;
+                            ce.Treasury += earned;
+                            ce.TradeCrownsEarned += earned;
+                        }
+                        else if (s < 0f)
+                        {
+                            float bought = (-s) * fillRatio;
+                            ce.Stock[g] += bought;
+                            ce.TradeBought[g] += bought;
+                            float spent = bought * price;
+                            ce.Treasury -= spent;
+                            ce.TradeCrownsSpent += spent;
+                        }
+                    }
+                }
+            }
+
+            // ── CROSS-PROVINCE TRADE PASS ──────────────────────────────
+            // Counties across different provinces within the same realm trade
+            // at market price + 5% toll (paid by buyer to own province treasury).
+            Span<float> realmSurpluses = stackalloc float[_maxCountiesPerRealm];
+
+            for (int bp = 0; bp < buyPriority.Length; bp++)
+            {
+                int g = buyPriority[bp];
+                float price = prices[g];
+                if (price <= 0f) continue;
+
+                float retainPerPop = Goods.DurableRetainPerPop[g] > 0f
+                    ? Goods.DurableRetainPerPop[g]
+                    : Goods.Defs[g].Need == NeedCategory.Staple
+                        ? Goods.StapleIdealPerPop[g]
+                        : ConsumptionPerPop[g];
+
+                float costPerUnit = price * (1f + CrossProvTollRate);
+
+                for (int r = 0; r < _realmIds.Length; r++)
+                {
+                    int realmId = _realmIds[r];
+                    if (_realmProvinces[realmId].Length <= 1) continue;
+
+                    var countyIds = _realmCounties[realmId];
+                    float totalSupply = 0f;
+                    float totalDemand = 0f;
+
+                    for (int c = 0; c < countyIds.Length; c++)
+                    {
+                        var ce = counties[countyIds[c]];
+                        float surplus = ce.Stock[g] - ce.Population * retainPerPop;
+                        realmSurpluses[c] = surplus;
+                        if (surplus > 0f)
+                            totalSupply += surplus;
+                        else if (surplus < 0f)
+                        {
+                            float rawDemand = -surplus;
+                            float affordable = ce.Treasury / costPerUnit;
+                            float demand = Math.Min(rawDemand, affordable);
+                            realmSurpluses[c] = -demand;
+                            totalDemand += demand;
+                        }
+                    }
+
+                    if (totalSupply <= 0f || totalDemand <= 0f) continue;
+
+                    float fillRatio = Math.Min(1f, totalSupply / totalDemand);
+                    float sellRatio = Math.Min(1f, totalDemand / totalSupply);
+
+                    for (int c = 0; c < countyIds.Length; c++)
+                    {
+                        float s = realmSurpluses[c];
+                        int countyId = countyIds[c];
+                        var ce = counties[countyId];
+
+                        if (s > 0f)
+                        {
+                            float sold = s * sellRatio;
+                            ce.Stock[g] -= sold;
+                            ce.CrossProvTradeSold[g] += sold;
+                            float earned = sold * price;
+                            ce.Treasury += earned;
+                            ce.CrossProvTradeCrownsEarned += earned;
+                        }
+                        else if (s < 0f)
+                        {
+                            float bought = (-s) * fillRatio;
+                            ce.Stock[g] += bought;
+                            ce.CrossProvTradeBought[g] += bought;
+                            float goodsCost = bought * price;
+                            float toll = bought * price * CrossProvTollRate;
+                            ce.Treasury -= goodsCost + toll;
+                            ce.CrossProvTradeCrownsSpent += goodsCost;
+                            ce.TradeTollsPaid += toll;
+                            provinces[_countyToProvince[countyId]].TradeTollsCollected += toll;
+                            provinces[_countyToProvince[countyId]].Treasury += toll;
+                        }
                     }
                 }
             }
@@ -518,6 +596,7 @@ namespace EconSim.Core.Economy
                 pe.ReliefCrownsReceived = 0f;
                 pe.RoyalTaxCrownsReceived = 0f;
                 pe.RoyalReliefCrownsPaid = 0f;
+                pe.TradeTollsCollected = 0f;
 
                 var countyIds = _provinceCounties[provId];
                 for (int c = 0; c < countyIds.Length; c++)
@@ -527,10 +606,15 @@ namespace EconSim.Core.Economy
                     Array.Clear(ce.Relief, 0, ce.Relief.Length);
                     Array.Clear(ce.TradeBought, 0, ce.TradeBought.Length);
                     Array.Clear(ce.TradeSold, 0, ce.TradeSold.Length);
+                    Array.Clear(ce.CrossProvTradeBought, 0, ce.CrossProvTradeBought.Length);
+                    Array.Clear(ce.CrossProvTradeSold, 0, ce.CrossProvTradeSold.Length);
                     ce.TaxCrownsReceived = 0f;
                     ce.ReliefCrownsPaid = 0f;
                     ce.TradeCrownsSpent = 0f;
                     ce.TradeCrownsEarned = 0f;
+                    ce.CrossProvTradeCrownsSpent = 0f;
+                    ce.CrossProvTradeCrownsEarned = 0f;
+                    ce.TradeTollsPaid = 0f;
                     // FacilityQuota clearing owned by FacilityQuotaSystem
                 }
             }
@@ -622,7 +706,7 @@ namespace EconSim.Core.Economy
             }
             _realmIds = realmIdList.ToArray();
 
-            // County → realm and Province → realm lookups
+            // County → realm, County → province, and Province → realm lookups
             _provinceToRealm = new int[maxProvId + 1];
             foreach (var prov in mapData.Provinces)
                 _provinceToRealm[prov.Id] = prov.RealmId;
@@ -632,15 +716,36 @@ namespace EconSim.Core.Economy
                 if (county.Id > maxCountyId) maxCountyId = county.Id;
 
             _countyToRealm = new int[maxCountyId + 1];
+            _countyToProvince = new int[maxCountyId + 1];
             _countyRetainDeficit = new float[maxCountyId + 1];
             _countyRetainTarget = new float[maxCountyId + 1];
             _provinceRetainDeficit = new float[maxProvId + 1];
             foreach (var county in mapData.Counties)
             {
                 int provId = county.ProvinceId;
+                _countyToProvince[county.Id] = provId;
                 _countyToRealm[county.Id] = provId >= 0 && provId < _provinceToRealm.Length
                     ? _provinceToRealm[provId]
                     : 0;
+            }
+
+            // Realm → counties (flattened from realm → provinces → counties)
+            _realmCounties = new int[maxRealmId + 1][];
+            _maxCountiesPerRealm = 0;
+            foreach (var realm in mapData.Realms)
+            {
+                var allCounties = new List<int>();
+                var provIds = _realmProvinces[realm.Id];
+                for (int p = 0; p < provIds.Length; p++)
+                {
+                    var cIds = _provinceCounties[provIds[p]];
+                    for (int c = 0; c < cIds.Length; c++)
+                        allCounties.Add(cIds[c]);
+                }
+                var arr = allCounties.ToArray();
+                _realmCounties[realm.Id] = arr;
+                if (arr.Length > _maxCountiesPerRealm)
+                    _maxCountiesPerRealm = arr.Length;
             }
 
             // Facility mappings moved to FacilityQuotaSystem.
