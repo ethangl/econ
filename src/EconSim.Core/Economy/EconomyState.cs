@@ -49,6 +49,9 @@ namespace EconSim.Core.Economy
         /// <summary>Effective demand per pop per day, indexed by GoodType. Updated by EconomySystem each tick.</summary>
         public float[] EffectiveDemandPerPop;
 
+        /// <summary>Total extraction capacity per good (kg/day). sum(pop * Productivity[g]) across all counties. Updated by EconomySystem each tick.</summary>
+        public float[] ExtractionCapacity = new float[Goods.Count];
+
         /// <summary>County ID hosting the central market. Receives market fees from all trade transactions.</summary>
         public int MarketCountyId = -1;
     }

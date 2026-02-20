@@ -235,6 +235,17 @@ namespace EconSim.Core.Economy
             var countyFacilityIndices = econ.CountyFacilityIndices;
             int goodsCount = Goods.Count;
 
+            // Compute extraction capacity per good (for intermediate price discovery)
+            var extractionCap = econ.ExtractionCapacity;
+            Array.Clear(extractionCap, 0, goodsCount);
+            for (int i = 0; i < counties.Length; i++)
+            {
+                var ce = counties[i];
+                if (ce == null) continue;
+                for (int g = 0; g < goodsCount; g++)
+                    extractionCap[g] += ce.Population * ce.Productivity[g];
+            }
+
             for (int i = 0; i < counties.Length; i++)
             {
                 var ce = counties[i];
@@ -271,6 +282,14 @@ namespace EconSim.Core.Economy
                 for (int g = 0; g < goodsCount; g++)
                 {
                     float produced = pop * ce.Productivity[g] * wf;
+
+                    // Price-based extraction throttle for intermediate goods
+                    if (!Goods.HasDirectDemand[g] && Goods.BasePrice[g] > 0f)
+                    {
+                        float priceRatio = econ.MarketPrices[g] / Goods.BasePrice[g];
+                        if (priceRatio < 1f) produced *= priceRatio;
+                    }
+
                     ce.Stock[g] += produced;
                     ce.Production[g] = produced;
                 }

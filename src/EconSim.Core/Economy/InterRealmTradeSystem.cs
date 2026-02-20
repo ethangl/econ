@@ -147,6 +147,28 @@ namespace EconSim.Core.Economy
                 // Trade execution moved to FiscalSystem Phase C (cross-realm county trade).
             }
 
+            // Price discovery for intermediate goods (no direct demand, facility-driven)
+            for (int g = 0; g < Goods.Count; g++)
+            {
+                if (Goods.HasDirectDemand[g]) continue;
+
+                float capacity = econ.ExtractionCapacity[g];
+                if (capacity <= 0f) continue;
+
+                float totalFacDemand = 0f;
+                for (int i = 0; i < counties.Length; i++)
+                {
+                    var ce = counties[i];
+                    if (ce == null) continue;
+                    totalFacDemand += ce.FacilityInputNeed[g];
+                }
+
+                float rawPrice = totalFacDemand > 0f
+                    ? Goods.BasePrice[g] * totalFacDemand / capacity
+                    : Goods.MinPrice[g];
+                _prices[g] = Math.Max(Goods.MinPrice[g], Math.Min(rawPrice, Goods.MaxPrice[g]));
+            }
+
             Array.Copy(_prices, state.Economy.MarketPrices, Goods.Count);
         }
     }
