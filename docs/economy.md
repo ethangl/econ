@@ -18,6 +18,7 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 8. Domestic cash flow
 9. County Market Access
 10. Market Location + Market Fee
+11. Ungated resource extraction + Trading
 
 ### Future Layers (unordered)
 
