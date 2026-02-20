@@ -150,9 +150,9 @@ namespace EconSim.Core.Economy
 
             for (int g = 0; g < Goods.Count; g++)
             {
-                // For durables, retain target stock level; for staples, retain ideal share; for others, retain one day's consumption
-                float retainPerPop = Goods.TargetStockPerPop[g] > 0f
-                    ? Goods.TargetStockPerPop[g]
+                // For durables, retain 1 day's need (maintenance + catch-up); for staples, retain ideal share; for others, retain one day's consumption
+                float retainPerPop = Goods.DurableRetainPerPop[g] > 0f
+                    ? Goods.DurableRetainPerPop[g]
                     : Goods.Defs[g].Need == NeedCategory.Staple
                         ? Goods.StapleIdealPerPop[g]
                         : ConsumptionPerPop[g];
@@ -267,7 +267,12 @@ namespace EconSim.Core.Economy
                 }
 
                 // Precompute county/province retain deficits once per good (used by Phases 6 and 7).
-                BuildRetainDeficitsForGood(g, retainPerPop, counties, taxable);
+                // For durables, relief uses the full target (not the low tax threshold) so
+                // deficit counties request enough goods to actually reach their stock target.
+                float reliefRetainPerPop = Goods.DurableRetainPerPop[g] > 0f
+                    ? Goods.TargetStockPerPop[g]
+                    : retainPerPop;
+                BuildRetainDeficitsForGood(g, reliefRetainPerPop, counties, retainTargetsReady: false);
 
                 // Phase 6: King distributes remainder to deficit provinces
                 Span<float> provDeficits = stackalloc float[_maxProvincesPerRealm];
@@ -339,16 +344,31 @@ namespace EconSim.Core.Economy
             // Phase 8: Post-relief county deficit scan — record remaining unmet pop consumption per realm
             for (int g = 0; g < Goods.Count; g++)
             {
-                float retainRate = Goods.TargetStockPerPop[g] > 0f
-                    ? Goods.TargetStockPerPop[g]
-                    : ConsumptionPerPop[g];
-                if (retainRate <= 0f) continue;
+                float targetStockPerPop = Goods.TargetStockPerPop[g];
+                float retainRate = targetStockPerPop > 0f ? 0f : ConsumptionPerPop[g];
+                float spoilageRate = Goods.Defs[g].SpoilageRate;
+                float durableCatchUpRate = Goods.DurableCatchUpRate[g];
+                if (retainRate <= 0f && targetStockPerPop <= 0f) continue;
 
                 for (int i = 0; i < counties.Length; i++)
                 {
                     var ce = counties[i];
                     if (ce == null) continue;
-                    float shortfall = ce.Population * retainRate - ce.Stock[g];
+
+                    float shortfall;
+                    if (targetStockPerPop > 0f)
+                    {
+                        // Durables: replace daily wear + gradually refill stock gap based on durability.
+                        float targetStock = ce.Population * targetStockPerPop;
+                        float stockGap = Math.Max(0f, targetStock - ce.Stock[g]);
+                        float maintenanceNeed = ce.Stock[g] * spoilageRate;
+                        shortfall = maintenanceNeed + stockGap * durableCatchUpRate;
+                    }
+                    else
+                    {
+                        shortfall = ce.Population * retainRate - ce.Stock[g];
+                    }
+
                     if (shortfall > 0f)
                         realms[_countyToRealm[i]].Deficit[g] += shortfall;
                 }
@@ -466,6 +486,9 @@ namespace EconSim.Core.Economy
             // Phase 9c: Upstream quota propagation
             // If a facility's input is itself a facility output, propagate demand backward.
             // e.g. Smithy quota for Tools → Iron demand → FacilityQuota[Iron] → drives Smelter
+            // IMPORTANT: iterate in reverse facility order so downstream consumers (smithy)
+            // propagate before midstream producers (smelter). This ensures the smelter sees
+            // the iron quota set by the smithy when computing its own charcoal demand.
             if (_isFacilityOutput != null && state.Economy.Facilities != null)
             {
                 var facIndices = state.Economy.CountyFacilityIndices;
@@ -477,7 +500,7 @@ namespace EconSim.Core.Economy
                     if (i >= facIndices.Length || facIndices[i] == null || facIndices[i].Count == 0) continue;
 
                     var indices = facIndices[i];
-                    for (int fi = 0; fi < indices.Count; fi++)
+                    for (int fi = indices.Count - 1; fi >= 0; fi--)
                     {
                         var def = facilities[indices[fi]].Def;
                         int outputGood = (int)def.OutputGood;

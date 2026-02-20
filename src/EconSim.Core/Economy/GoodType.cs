@@ -71,6 +71,20 @@ namespace EconSim.Core.Economy
         /// <summary>Target stock per capita for durable goods (kg/person). Zero for consumables.</summary>
         public static readonly float[] TargetStockPerPop;
 
+        /// <summary>
+        /// Daily durable stock-gap catch-up rate (0-1), indexed by GoodType.
+        /// More durable goods (lower spoilage) refill more slowly.
+        /// </summary>
+        public static readonly float[] DurableCatchUpRate;
+
+        /// <summary>
+        /// Daily durable retain per capita — how much stock a county keeps before
+        /// surrendering surplus to the fiscal system. Mirrors the catch-up rate:
+        /// maintenance (spoilage) + catch-up slice, same as consumables retaining
+        /// one day's consumption.
+        /// </summary>
+        public static readonly float[] DurableRetainPerPop;
+
         /// <summary>True if good has population consumption or administrative demand.</summary>
         public static readonly bool[] HasDirectDemand;
 
@@ -175,6 +189,8 @@ namespace EconSim.Core.Economy
             RealmAdminPerPop    = new float[Count];
             MonthlyRetention    = new float[Count];
             TargetStockPerPop   = new float[Count];
+            DurableCatchUpRate  = new float[Count];
+            DurableRetainPerPop = new float[Count];
             HasDirectDemand     = new bool[Count];
 
             var tradeable = new List<int>();
@@ -192,6 +208,16 @@ namespace EconSim.Core.Economy
                 RealmAdminPerPop[i]    = d.RealmAdminPerPop;
                 MonthlyRetention[i]    = (float)Math.Pow(1.0 - d.SpoilageRate, 30);
                 TargetStockPerPop[i]   = d.TargetStockPerPop;
+                if (d.TargetStockPerPop > 0f)
+                {
+                    // Tie refill speed to durability: lower spoilage => slower catch-up.
+                    float catchUp = d.SpoilageRate * 30f;
+                    if (catchUp < 0.01f) catchUp = 0.01f;
+                    if (catchUp > 0.10f) catchUp = 0.10f;
+                    DurableCatchUpRate[i] = catchUp;
+                    // Retain = 1 day's need (maintenance + catch-up), symmetric with consumables
+                    DurableRetainPerPop[i] = d.TargetStockPerPop * (d.SpoilageRate + catchUp);
+                }
                 HasDirectDemand[i]     = d.ConsumptionPerPop > 0f
                                        || d.TargetStockPerPop > 0f
                                        || d.CountyAdminPerPop > 0f
