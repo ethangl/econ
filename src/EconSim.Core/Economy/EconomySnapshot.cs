@@ -35,7 +35,14 @@ namespace EconSim.Core.Economy
         public float[] TotalRoyalStockpileByGood;
 
         // Treasury / minting (Layer 4 Phase B)
-        public float TotalTreasury;
+        public float TotalTreasury;         // realm treasuries only (inter-realm trade)
+        public float TotalCountyTreasury;
+        public float TotalProvinceTreasury;
+        public float TotalDomesticTreasury; // county + province + realm combined
+        public float TotalDucalTaxCrowns;   // province → county payments
+        public float TotalRoyalTaxCrowns;   // realm → province payments
+        public float TotalDucalReliefCrowns;  // county → province payments
+        public float TotalRoyalReliefCrowns;  // province → realm payments
         public float TotalGoldMinted;
         public float TotalSilverMinted;
         public float TotalCrownsMinted;

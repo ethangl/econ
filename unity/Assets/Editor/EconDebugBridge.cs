@@ -659,6 +659,13 @@ namespace EconSim.Editor
                 j.KV("royalRelief", snap.TotalRoyalRelief);
                 j.KV("royalStockpile", snap.TotalRoyalStockpile);
                 j.KV("treasury", snap.TotalTreasury);
+                j.KV("countyTreasury", snap.TotalCountyTreasury);
+                j.KV("provinceTreasury", snap.TotalProvinceTreasury);
+                j.KV("domesticTreasury", snap.TotalDomesticTreasury);
+                j.KV("ducalTaxCrowns", snap.TotalDucalTaxCrowns);
+                j.KV("royalTaxCrowns", snap.TotalRoyalTaxCrowns);
+                j.KV("ducalReliefCrowns", snap.TotalDucalReliefCrowns);
+                j.KV("royalReliefCrowns", snap.TotalRoyalReliefCrowns);
                 j.KV("goldMinted", snap.TotalGoldMinted);
                 j.KV("silverMinted", snap.TotalSilverMinted);
                 j.KV("crownsMinted", snap.TotalCrownsMinted);
@@ -782,6 +789,7 @@ namespace EconSim.Editor
             float[] totalTaxPaid = new float[Goods.Count];
             float[] totalRelief = new float[Goods.Count];
             int taxPayingCounties = 0, reliefReceivingCounties = 0;
+            float totalCountyTreasury = 0f;
 
             for (int i = 0; i < econ.Counties.Length; i++)
             {
@@ -795,6 +803,7 @@ namespace EconSim.Editor
                 }
                 if (ce.TaxPaid[F] > 0f) taxPayingCounties++;
                 if (ce.Relief[F] > 0f) reliefReceivingCounties++;
+                totalCountyTreasury += ce.Treasury;
             }
 
             j.KV("countyCount", countyCount);
@@ -817,12 +826,14 @@ namespace EconSim.Editor
             // Per-province summary (per-good stockpiles)
             j.Key("provinces"); j.ArrOpen();
             float[] totalProvStockpile = new float[Goods.Count];
+            float totalProvinceTreasury = 0f;
             for (int i = 0; i < econ.Provinces.Length; i++)
             {
                 var pe = econ.Provinces[i];
                 if (pe == null) continue;
                 for (int g = 0; g < Goods.Count; g++)
                     totalProvStockpile[g] += pe.Stockpile[g];
+                totalProvinceTreasury += pe.Treasury;
 
                 j.ObjOpen();
                 j.KV("id", i);
@@ -865,6 +876,8 @@ namespace EconSim.Editor
                     j.KV("goldMinted", re.GoldMinted);
                     j.KV("silverMinted", re.SilverMinted);
                     j.KV("crownsMinted", re.CrownsMinted);
+                    j.KV("taxCrownsPaid", re.TaxCrownsPaid);
+                    j.KV("reliefCrownsReceived", re.ReliefCrownsReceived);
                     j.KV("tradeSpending", re.TradeSpending);
                     j.KV("tradeRevenue", re.TradeRevenue);
                     j.Key("tradeImportsByGood"); j.ObjOpen();
@@ -888,6 +901,9 @@ namespace EconSim.Editor
                     j.KV(goodNames[g], totalRealmStockpile[g]);
                 j.ObjClose();
                 j.KV("totalTreasury", totalTreasury);
+                j.KV("totalCountyTreasury", totalCountyTreasury);
+                j.KV("totalProvinceTreasury", totalProvinceTreasury);
+                j.KV("totalDomesticTreasury", totalCountyTreasury + totalProvinceTreasury + totalTreasury);
             }
 
             j.ObjClose();

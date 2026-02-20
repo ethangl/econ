@@ -47,5 +47,14 @@ namespace EconSim.Core.Economy
 
         /// <summary>Realm-distributed production target per good, indexed by GoodType. Set by FacilityQuotaSystem.</summary>
         public float[] FacilityQuota = new float[Goods.Count];
+
+        /// <summary>Crowns held by the county (received from tax payments, spent on relief).</summary>
+        public float Treasury;
+
+        /// <summary>Crowns received from province for taxed goods this tick (reset daily).</summary>
+        public float TaxCrownsReceived;
+
+        /// <summary>Crowns paid to province for relief goods this tick (reset daily).</summary>
+        public float ReliefCrownsPaid;
     }
 }

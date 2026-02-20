@@ -38,6 +38,12 @@ namespace EconSim.Core.Economy
         /// <summary>Precious metals are crown property — 100% tax rate (regal right).</summary>
         const float PreciousMetalTaxRate = 1.0f;
 
+        /// <summary>Feudal lords pay 50% of market price when taxing goods (forced requisition discount).</summary>
+        const float TaxPaymentDiscount = 0.50f;
+
+        /// <summary>Relief recipients pay 90% of market price (slight discount for redistributed goods).</summary>
+        const float ReliefPaymentDiscount = 0.90f;
+
         /// <summary>Province ID → array of county IDs.</summary>
         int[][] _provinceCounties;
 
@@ -81,6 +87,7 @@ namespace EconSim.Core.Economy
             var counties = state.Economy.Counties;
             var provinces = state.Economy.Provinces;
             var realms = state.Economy.Realms;
+            var prices = state.Economy.MarketPrices;
 
             // Shared population caches (updated by PopulationSystem monthly)
             var _provincePop = state.Economy.ProvincePop;
@@ -150,6 +157,18 @@ namespace EconSim.Core.Economy
                                 ce.TaxPaid[g] += tax;
                                 pe.Stockpile[g] += tax;
                                 pe.TaxCollected[g] += tax;
+
+                                // Crown payment: province pays county at discounted market price
+                                // Precious metals are crown property — no payment
+                                if (!Goods.IsPreciousMetal(g))
+                                {
+                                    float owed = tax * prices[g] * TaxPaymentDiscount;
+                                    float paid = Math.Min(owed, pe.Treasury);
+                                    pe.Treasury -= paid;
+                                    pe.TaxCrownsPaid += paid;
+                                    ce.Treasury += paid;
+                                    ce.TaxCrownsReceived += paid;
+                                }
                             }
                         }
                     }
@@ -189,6 +208,18 @@ namespace EconSim.Core.Economy
                             pe.Stockpile[g] -= tax;
                             re.Stockpile[g] += tax;
                             re.TaxCollected[g] += tax;
+
+                            // Crown payment: realm pays province at discounted market price
+                            // Precious metals are crown property — no payment
+                            if (!Goods.IsPreciousMetal(g))
+                            {
+                                float owed = tax * prices[g] * TaxPaymentDiscount;
+                                float paid = Math.Min(owed, re.Treasury);
+                                re.Treasury -= paid;
+                                re.TaxCrownsPaid += paid;
+                                pe.Treasury += paid;
+                                pe.RoyalTaxCrownsReceived += paid;
+                            }
                         }
                     }
                 }
@@ -246,9 +277,18 @@ namespace EconSim.Core.Economy
 
                         float share = provDeficits[p] / totalDeficit;
                         float relief = Math.Min(share * available, provDeficits[p]);
-                        provinces[provIds[p]].Stockpile[g] += relief;
+                        var pe = provinces[provIds[p]];
+                        pe.Stockpile[g] += relief;
                         re.Stockpile[g] -= relief;
                         re.ReliefGiven[g] += relief;
+
+                        // Crown payment: province pays realm at discounted market price
+                        float owed = relief * prices[g] * ReliefPaymentDiscount;
+                        float paid = Math.Min(owed, pe.Treasury);
+                        pe.Treasury -= paid;
+                        pe.RoyalReliefCrownsPaid += paid;
+                        re.Treasury += paid;
+                        re.ReliefCrownsReceived += paid;
                     }
                 }
 
@@ -279,6 +319,14 @@ namespace EconSim.Core.Economy
                         ce.Relief[g] += relief;
                         pe.Stockpile[g] -= relief;
                         pe.ReliefGiven[g] += relief;
+
+                        // Crown payment: county pays province at discounted market price
+                        float owed = relief * prices[g] * ReliefPaymentDiscount;
+                        float paid = Math.Min(owed, ce.Treasury);
+                        ce.Treasury -= paid;
+                        ce.ReliefCrownsPaid += paid;
+                        pe.Treasury += paid;
+                        pe.ReliefCrownsReceived += paid;
                     }
                 }
             }
@@ -383,12 +431,19 @@ namespace EconSim.Core.Economy
                 Array.Clear(pe.TaxCollected, 0, pe.TaxCollected.Length);
                 Array.Clear(pe.ReliefGiven, 0, pe.ReliefGiven.Length);
 
+                pe.TaxCrownsPaid = 0f;
+                pe.ReliefCrownsReceived = 0f;
+                pe.RoyalTaxCrownsReceived = 0f;
+                pe.RoyalReliefCrownsPaid = 0f;
+
                 var countyIds = _provinceCounties[provId];
                 for (int c = 0; c < countyIds.Length; c++)
                 {
                     var ce = counties[countyIds[c]];
                     Array.Clear(ce.TaxPaid, 0, ce.TaxPaid.Length);
                     Array.Clear(ce.Relief, 0, ce.Relief.Length);
+                    ce.TaxCrownsReceived = 0f;
+                    ce.ReliefCrownsPaid = 0f;
                     // FacilityQuota clearing owned by FacilityQuotaSystem
                 }
             }
@@ -401,6 +456,8 @@ namespace EconSim.Core.Economy
                 re.GoldMinted = 0f;
                 re.SilverMinted = 0f;
                 re.CrownsMinted = 0f;
+                re.TaxCrownsPaid = 0f;
+                re.ReliefCrownsReceived = 0f;
                 // Trade accumulators cleared by InterRealmTradeSystem
                 Array.Clear(re.Deficit, 0, re.Deficit.Length);
             }
