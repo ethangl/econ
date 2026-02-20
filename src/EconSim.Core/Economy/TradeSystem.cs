@@ -339,16 +339,31 @@ namespace EconSim.Core.Economy
             // Phase 8: Post-relief county deficit scan — record remaining unmet pop consumption per realm
             for (int g = 0; g < Goods.Count; g++)
             {
-                float retainRate = Goods.TargetStockPerPop[g] > 0f
-                    ? Goods.TargetStockPerPop[g]
-                    : ConsumptionPerPop[g];
-                if (retainRate <= 0f) continue;
+                float targetStockPerPop = Goods.TargetStockPerPop[g];
+                float retainRate = targetStockPerPop > 0f ? 0f : ConsumptionPerPop[g];
+                float spoilageRate = Goods.Defs[g].SpoilageRate;
+                float durableCatchUpRate = Goods.DurableCatchUpRate[g];
+                if (retainRate <= 0f && targetStockPerPop <= 0f) continue;
 
                 for (int i = 0; i < counties.Length; i++)
                 {
                     var ce = counties[i];
                     if (ce == null) continue;
-                    float shortfall = ce.Population * retainRate - ce.Stock[g];
+
+                    float shortfall;
+                    if (targetStockPerPop > 0f)
+                    {
+                        // Durables: replace daily wear + gradually refill stock gap based on durability.
+                        float targetStock = ce.Population * targetStockPerPop;
+                        float stockGap = Math.Max(0f, targetStock - ce.Stock[g]);
+                        float maintenanceNeed = ce.Stock[g] * spoilageRate;
+                        shortfall = maintenanceNeed + stockGap * durableCatchUpRate;
+                    }
+                    else
+                    {
+                        shortfall = ce.Population * retainRate - ce.Stock[g];
+                    }
+
                     if (shortfall > 0f)
                         realms[_countyToRealm[i]].Deficit[g] += shortfall;
                 }

@@ -263,7 +263,7 @@ namespace EconSim.Core.Economy
                         float wear = Math.Min(ce.Stock[g], replacement);
                         ce.Stock[g] -= wear;
                         ce.Consumption[g] = wear;
-                        ce.UnmetNeed[g] = deficit * 0.1f + Math.Max(0f, replacement - wear);
+                        ce.UnmetNeed[g] = deficit * Goods.DurableCatchUpRate[g];
                     }
                     else
                     {
