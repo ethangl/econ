@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
-using EconSim.Core.Economy;
 using EconSim.Core.Transport;
 
 namespace EconSim.Core.Simulation
@@ -70,10 +69,9 @@ namespace EconSim.Core.Simulation
 
         public static StaticBackboneStats Build(SimulationState state, MapData mapData)
         {
-            var economy = state?.Economy;
             var transport = state?.Transport;
-            var roads = economy?.Roads;
-            if (economy == null || transport == null || roads == null || mapData?.Counties == null || mapData.CountyById == null)
+            var roads = state?.Roads;
+            if (transport == null || roads == null || mapData?.Counties == null || mapData.CountyById == null)
             {
                 return new StaticBackboneStats(0, 0, 0, 0, 0, 0, 0, 0);
             }

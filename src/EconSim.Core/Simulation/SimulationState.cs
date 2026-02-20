@@ -1,4 +1,3 @@
-using System;
 using EconSim.Core.Economy;
 using EconSim.Core.Transport;
 
@@ -30,43 +29,23 @@ namespace EconSim.Core.Simulation
         public int TotalTicksProcessed { get; set; }
 
         /// <summary>
-        /// Effective economy seed used for deterministic replay.
-        /// </summary>
-        public int EconomySeed { get; set; }
-
-        /// <summary>
-        /// Dedicated deterministic RNG stream for economy systems.
-        /// </summary>
-        public Random EconomyRng { get; set; }
-
-        /// <summary>
-        /// Economic state (goods, facilities, county economies).
-        /// </summary>
-        public EconomyState Economy { get; set; }
-
-        /// <summary>
         /// Transport graph for pathfinding between cells.
         /// </summary>
         public TransportGraph Transport { get; set; }
 
         /// <summary>
-        /// Current subsistence wage used by wage/labor systems.
+        /// Road state (static backbone traffic and tiers).
         /// </summary>
-        public float SubsistenceWage { get; set; }
-
-        /// <summary>
-        /// Smoothed 30-day basic basket cost EMA.
-        /// </summary>
-        public float SmoothedBasketCost { get; set; }
-
-        /// <summary>
-        /// End-of-day economy telemetry snapshot.
-        /// </summary>
-        public EconomyTelemetry Telemetry { get; set; } = new EconomyTelemetry();
+        public RoadState Roads { get; set; }
 
         /// <summary>
         /// Runtime timing metrics for whole ticks and tick systems.
         /// </summary>
         public SimulationPerformanceStats Performance { get; set; } = new SimulationPerformanceStats();
+
+        /// <summary>
+        /// Economy state (production, consumption, stock per county).
+        /// </summary>
+        public EconomyState Economy { get; set; }
     }
 }

@@ -306,8 +306,6 @@ GameObject:
   - component: {fileID: 2010017524}
   - component: {fileID: 2010017523}
   - component: {fileID: 2010017526}
-  - component: {fileID: 2010017527}
-  - component: {fileID: 2010017528}
   m_Layer: 0
   m_Name: UI
   m_TagString: Untagged
@@ -383,35 +381,6 @@ MonoBehaviour:
   _panelTemplate: {fileID: 0}
   _styleSheet: {fileID: 7433441132597879392, guid: 693a22797ab114fa8975aaac0de5c171, type: 3}
   _mapView: {fileID: 0}
---- !u!114 &2010017527
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2010017522}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d5f0f1673273040edb295b6382ca4a27, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EconSim::EconSim.UI.MarketInspectorPanel
-  _uiDocument: {fileID: 0}
-  _styleSheet: {fileID: 0}
-  _mapView: {fileID: 0}
---- !u!114 &2010017528
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2010017522}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 80c2d29ac46374c3c9d0d6ed7f15889e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: EconSim::EconSim.UI.EconomyPanel
-  _uiDocument: {fileID: 0}
-  _toggleKey: 101
 --- !u!1 &2039203590
 GameObject:
   m_ObjectHideFlags: 0

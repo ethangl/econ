@@ -1,110 +1,124 @@
-using System;
-using System.Collections.Generic;
-
 namespace EconSim.Core.Economy
 {
-    /// <summary>
-    /// Type of labor required to staff a facility.
-    /// </summary>
-    public enum LaborType
+    public enum FacilityType
     {
-        Unskilled,  // Laborers - farms, mines, basic extraction
-        Skilled     // Craftsmen - smiths, millers, carpenters
+        Kiln = 0,
+        Carpenter = 1,
+        Smelter = 2,
+        Smithy = 3,
+        CharcoalBurner = 4,
+        Weaver = 5,
+        Butcher = 6,
+        Smokehouse = 7,
+        Cheesemaker = 8,
+        Salter = 9,
+        DryingRack = 10,
+    }
+
+    public readonly struct RecipeInput
+    {
+        public readonly GoodType Good;
+        public readonly float Amount;
+        public RecipeInput(GoodType good, float amount) { Good = good; Amount = amount; }
     }
 
     /// <summary>
-    /// Static definition of a facility type (sawmill, smelter, farm, etc.).
-    /// Loaded from data files, immutable at runtime.
+    /// Static definition for a facility type. Describes the production recipe,
+    /// labor requirements, and placement rules.
     /// </summary>
-    [Serializable]
-    public class FacilityDef
+    public readonly struct FacilityDef
     {
-        public string Id;
-        public string Name;
+        public readonly FacilityType Type;
+        public readonly string Name;
 
-        /// <summary>What this facility produces.</summary>
-        public string OutputGoodId;
+        // Recipe: input goods + amounts → output good + amount (per labor-day)
+        public readonly RecipeInput[] Inputs;
+        public readonly GoodType OutputGood;
+        public readonly float OutputAmount;
 
-        /// <summary>Number of workers needed for full efficiency.</summary>
-        public int LaborRequired;
+        /// <summary>Workers needed to produce OutputAmount per day at full capacity.</summary>
+        public readonly int LaborPerUnit;
 
-        /// <summary>Type of workers needed.</summary>
-        public LaborType LaborType;
+        /// <summary>Good whose biome productivity determines placement. Defaults to Inputs[0].Good.</summary>
+        public readonly GoodType PlacementGood;
 
-        /// <summary>Kilograms produced per tick at full staffing.</summary>
-        public float BaseThroughput;
+        /// <summary>Minimum biome productivity of PlacementGood required for placement.</summary>
+        public readonly float PlacementMinProductivity;
 
-        /// <summary>
-        /// For extraction facilities: required terrain/biome types.
-        /// Empty means no terrain restriction (processing facilities).
-        /// </summary>
-        public List<string> TerrainRequirements;
+        /// <summary>Max fraction of county pop that can work in this industry.</summary>
+        public readonly float MaxLaborFraction;
 
-        /// <summary>
-        /// Whether this facility extracts raw resources (vs processing).
-        /// Extraction facilities need matching terrain AND resource presence.
-        /// </summary>
-        public bool IsExtraction;
+        /// <summary>Minimum daily output (cold start / idle production).</summary>
+        public readonly float BaselineOutput;
 
-        /// <summary>
-        /// Optional: override the output good's default Inputs for this facility.
-        /// Allows facility-specific alternate recipes.
-        /// </summary>
-        public List<GoodInput> InputOverrides;
-
-        /// <summary>
-        /// Explicit-unit alias for <see cref="BaseThroughput"/>.
-        /// </summary>
-        public float BaseThroughputKgPerDay
+        public FacilityDef(
+            FacilityType type, string name,
+            RecipeInput[] inputs,
+            GoodType outputGood, float outputAmount,
+            int laborPerUnit,
+            float placementMinProductivity,
+            float maxLaborFraction,
+            float baselineOutput,
+            GoodType? placementGood = null)
         {
-            get => BaseThroughput;
-            set => BaseThroughput = value;
+            Type = type;
+            Name = name;
+            Inputs = inputs;
+            OutputGood = outputGood;
+            OutputAmount = outputAmount;
+            LaborPerUnit = laborPerUnit;
+            PlacementGood = placementGood ?? inputs[0].Good;
+            PlacementMinProductivity = placementMinProductivity;
+            MaxLaborFraction = maxLaborFraction;
+            BaselineOutput = baselineOutput;
         }
-
-        public bool HasTerrainRequirement => TerrainRequirements != null && TerrainRequirements.Count > 0;
     }
 
-    /// <summary>
-    /// Registry of all facility type definitions.
-    /// </summary>
-    public class FacilityRegistry
+    public static class Facilities
     {
-        private readonly Dictionary<string, FacilityDef> _facilities = new Dictionary<string, FacilityDef>();
+        public static readonly FacilityDef[] Defs;
+        public static readonly int Count;
 
-        public void Register(FacilityDef facility)
+        static Facilities()
         {
-            _facilities[facility.Id] = facility;
-        }
-
-        public FacilityDef Get(string id)
-        {
-            return _facilities.TryGetValue(id, out var facility) ? facility : null;
-        }
-
-        public IEnumerable<FacilityDef> All => _facilities.Values;
-
-        public IEnumerable<FacilityDef> ExtractionFacilities
-        {
-            get
+            Defs = new[]
             {
-                foreach (var f in _facilities.Values)
-                {
-                    if (f.IsExtraction)
-                        yield return f;
-                }
-            }
-        }
+                new FacilityDef(FacilityType.Kiln,    "kiln",
+                    new[] { new RecipeInput(GoodType.Clay, 2.0f), new RecipeInput(GoodType.Timber, 0.5f) },
+                    GoodType.Pottery, 1.0f, 3, 0.05f, 0.05f, 1.0f),
+                new FacilityDef(FacilityType.Carpenter, "carpenter",
+                    new[] { new RecipeInput(GoodType.Timber, 3.0f) },
+                    GoodType.Furniture, 2.0f, 1, 0.2f, 0.10f, 1.0f),
+                new FacilityDef(FacilityType.Smelter, "smelter",
+                    new[] { new RecipeInput(GoodType.IronOre, 3.0f), new RecipeInput(GoodType.Charcoal, 0.4f) },
+                    GoodType.Iron, 2.0f, 1, 0.0f, 0.05f, 1.0f),
+                new FacilityDef(FacilityType.Smithy,  "smithy",
+                    new[] { new RecipeInput(GoodType.Iron, 2.0f), new RecipeInput(GoodType.Charcoal, 0.2f) },
+                    GoodType.Tools, 1.0f, 1, 0.0f, 0.05f, 1.0f, GoodType.IronOre),
+                new FacilityDef(FacilityType.CharcoalBurner, "charcoalBurner",
+                    new[] { new RecipeInput(GoodType.Timber, 5.0f) },
+                    GoodType.Charcoal, 1.0f, 1, 0.1f, 0.10f, 2.0f),
+                new FacilityDef(FacilityType.Weaver, "weaver",
+                    new[] { new RecipeInput(GoodType.Wool, 3.0f) },
+                    GoodType.Clothes, 2.0f, 2, 0.05f, 0.10f, 2.0f),
+                new FacilityDef(FacilityType.Butcher, "butcher",
+                    new[] { new RecipeInput(GoodType.Pork, 1.0f), new RecipeInput(GoodType.Salt, 0.2f) },
+                    GoodType.Sausage, 3.0f, 2, 0.05f, 0.10f, 3.0f, GoodType.Pork),
+                new FacilityDef(FacilityType.Smokehouse, "smokehouse",
+                    new[] { new RecipeInput(GoodType.Pork, 2.0f), new RecipeInput(GoodType.Timber, 1.0f) },
+                    GoodType.Bacon, 2.0f, 1, 0.05f, 0.10f, 2.0f, GoodType.Pork),
+                new FacilityDef(FacilityType.Cheesemaker, "cheesemaker",
+                    new[] { new RecipeInput(GoodType.Milk, 3.0f), new RecipeInput(GoodType.Salt, 0.3f) },
+                    GoodType.Cheese, 1.0f, 1, 0.05f, 0.10f, 1.0f, GoodType.Milk),
+                new FacilityDef(FacilityType.Salter, "salter",
+                    new[] { new RecipeInput(GoodType.Fish, 1.0f), new RecipeInput(GoodType.Salt, 0.5f) },
+                    GoodType.SaltedFish, 2.0f, 1, 0.05f, 0.10f, 2.0f, GoodType.Fish),
+                new FacilityDef(FacilityType.DryingRack, "dryingRack",
+                    new[] { new RecipeInput(GoodType.Fish, 2.0f) },
+                    GoodType.Stockfish, 1.5f, 1, 0.05f, 0.10f, 1.5f, GoodType.Fish),
+            };
 
-        public IEnumerable<FacilityDef> ProcessingFacilities
-        {
-            get
-            {
-                foreach (var f in _facilities.Values)
-                {
-                    if (!f.IsExtraction)
-                        yield return f;
-                }
-            }
+            Count = Defs.Length;
         }
     }
 }

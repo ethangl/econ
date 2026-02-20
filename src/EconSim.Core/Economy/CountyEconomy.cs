@@ -1,57 +1,51 @@
-using System;
-using System.Collections.Generic;
-
 namespace EconSim.Core.Economy
 {
     /// <summary>
-    /// Economic state for a single county.
-    /// This is the runtime data that changes each tick.
-    /// A county contains one or more cells grouped during map generation.
+    /// Per-county runtime economic state. All per-good arrays indexed by (int)GoodType.
     /// </summary>
-    [Serializable]
     public class CountyEconomy
     {
-        /// <summary>County ID this economy belongs to (from MapData.Counties).</summary>
-        public int CountyId;
+        /// <summary>Goods on hand, per good type (kg).</summary>
+        public float[] Stock = new float[Goods.Count];
 
-        /// <summary>Population cohorts and employment state.</summary>
-        public CountyPopulation Population;
+        /// <summary>County population (cached at init).</summary>
+        public float Population;
 
-        /// <summary>Local stockpile of goods.</summary>
-        public Stockpile Stockpile;
+        /// <summary>Goods produced per person per day, per good type (set at init from biome).</summary>
+        public float[] Productivity = new float[Goods.Count];
 
-        /// <summary>Facilities located in this county.</summary>
-        public List<int> FacilityIds;
+        /// <summary>Last tick's production output, per good type.</summary>
+        public float[] Production = new float[Goods.Count];
 
-        /// <summary>
-        /// Natural resources available in this county.
-        /// Maps good ID → abundance (0-1 multiplier on harvest yield).
-        /// </summary>
-        public Dictionary<string, float> Resources;
+        /// <summary>Last tick's consumption, per good type.</summary>
+        public float[] Consumption = new float[Goods.Count];
 
-        /// <summary>Unmet demand from last consumption tick (for tracking/effects).</summary>
-        public Dictionary<string, float> UnmetDemand;
+        /// <summary>Shortfall when stock hits zero, per good type.</summary>
+        public float[] UnmetNeed = new float[Goods.Count];
 
-        public CountyEconomy(int countyId)
-        {
-            CountyId = countyId;
-            Population = new CountyPopulation();
-            Stockpile = new Stockpile();
-            FacilityIds = new List<int>();
-            Resources = new Dictionary<string, float>();
-            UnmetDemand = new Dictionary<string, float>();
-        }
+        /// <summary>Tax paid to provincial stockpile this tick, per good type.</summary>
+        public float[] TaxPaid = new float[Goods.Count];
 
-        /// <summary>Check if this county has a particular natural resource.</summary>
-        public bool HasResource(string goodId)
-        {
-            return Resources.ContainsKey(goodId) && Resources[goodId] > 0;
-        }
+        /// <summary>Relief received from provincial stockpile this tick, per good type.</summary>
+        public float[] Relief = new float[Goods.Count];
 
-        /// <summary>Get resource abundance (0 if not present).</summary>
-        public float GetResourceAbundance(string goodId)
-        {
-            return Resources.TryGetValue(goodId, out var abundance) ? abundance : 0f;
-        }
+        /// <summary>Exponential moving average of daily basic-needs satisfaction (0=starving, 1=fully supplied). ~30-day window.
+        /// Weighted average of all NeedCategory.Basic goods (food, ale, salt) by consumption rate.</summary>
+        public float BasicSatisfaction = 1f;
+
+        /// <summary>Births this month (reset monthly by PopulationSystem).</summary>
+        public float BirthsThisMonth;
+
+        /// <summary>Deaths this month (reset monthly by PopulationSystem).</summary>
+        public float DeathsThisMonth;
+
+        /// <summary>Net migration this month (reset monthly by PopulationSystem). Positive = inflow.</summary>
+        public float NetMigrationThisMonth;
+
+        /// <summary>Total workers assigned to facilities in this county. Updated each tick by EconomySystem.</summary>
+        public float FacilityWorkers;
+
+        /// <summary>Realm-distributed production target per good, indexed by GoodType. Set by TradeSystem Phase 9.</summary>
+        public float[] FacilityQuota = new float[Goods.Count];
     }
 }

@@ -5,6 +5,7 @@ using UnityEngine;
 using EconSim.Core.Data;
 using EconSim.Core.Common;
 using EconSim.Core.Import;
+using EconSim.Core.Economy;
 using EconSim.Core.Simulation;
 using EconSim.Renderer;
 using EconSim.Camera;
@@ -125,7 +126,7 @@ namespace EconSim.Core
             Debug.Log(
                 $"MapGen config: contract={generationContext.ContractVersion}, " +
                 $"rootSeed={generationContext.RootSeed}, mapGenSeed={generationContext.MapGenSeed}, " +
-                $"economySeed={generationContext.EconomySeed}, cells={config.CellCount}, template={config.Template}, " +
+                $"cells={config.CellCount}, template={config.Template}, " +
                 $"riverThreshold={config.EffectiveRiverThreshold:0.0}, " +
                 $"riverTrace={config.EffectiveRiverTraceThreshold:0.0}, " +
                 $"minRiverVertices={config.EffectiveMinRiverVertices}");
@@ -142,10 +143,8 @@ namespace EconSim.Core
             LogMapGenSummary(result, MapData);
 
             InitializeWithMapData(
-                generationContext,
                 GetLastMapTexturesDirectory(),
-                preferCachedOverlayTextures: false,
-                preferCachedSimulationBootstrap: false);
+                preferCachedOverlayTextures: false);
             SaveLastMapCache(MapData, config, generationContext);
 
             Profiler.End();
@@ -169,10 +168,8 @@ namespace EconSim.Core
             MapData = cachedMapData;
             Debug.Log($"Loading cached map: {GetLastMapPayloadPath()}");
             InitializeWithMapData(
-                generationContext,
                 GetLastMapTexturesDirectory(),
-                preferCachedOverlayTextures: true,
-                preferCachedSimulationBootstrap: true);
+                preferCachedOverlayTextures: true);
 
             Profiler.End();
             Profiler.LogResults();
@@ -218,10 +215,8 @@ namespace EconSim.Core
         }
 
         private void InitializeWithMapData(
-            WorldGenerationContext generationContext,
             string overlayTextureCacheDirectory = null,
-            bool preferCachedOverlayTextures = false,
-            bool preferCachedSimulationBootstrap = false)
+            bool preferCachedOverlayTextures = false)
         {
             Debug.Log($"Map loaded: {MapData.Info.Name}");
             Debug.Log($"  Dimensions: {MapData.Info.Width}x{MapData.Info.Height}");
@@ -253,22 +248,23 @@ namespace EconSim.Core
                 Debug.LogWarning("MapView not assigned to GameManager");
             }
 
-            // Initialize simulation (registers the full economy system stack)
+            // Initialize simulation
             Profiler.Begin("Simulation Init");
-            _simulation = new SimulationRunner(
-                MapData,
-                generationContext,
-                GetLastMapCacheDirectory(),
-                preferCachedSimulationBootstrap);
+            var runner = new SimulationRunner(MapData);
+            runner.RegisterSystem(new EconomySystem());
+            runner.RegisterSystem(new FacilityProductionSystem());
+            runner.RegisterSystem(new TradeSystem());
+            runner.RegisterSystem(new InterRealmTradeSystem());
+            runner.RegisterSystem(new PopulationSystem());
+            runner.RegisterSystem(new SpoilageSystem());
+            _simulation = runner;
             Profiler.End();
             _simulation.IsPaused = true;  // Start paused
 
-            // Provide economy state to map view for market mode and roads
+            // Provide road state to map view for road rendering
             if (mapView != null)
             {
-                var economy = _simulation.GetState().Economy;
-                mapView.SetEconomyState(economy);
-                mapView.SetRoadState(economy.Roads);
+                mapView.SetRoadState(_simulation.GetState().Roads);
             }
 
             Debug.Log("Simulation initialized (paused). Press Backspace to unpause, -/= to change speed.");
@@ -353,7 +349,7 @@ namespace EconSim.Core
             RenderSettings.ambientIntensity = 0f;
 
             // Check if a directional light already exists
-            foreach (var existing in FindObjectsOfType<Light>())
+            foreach (var existing in FindObjectsByType<Light>(FindObjectsSortMode.None))
             {
                 if (existing.type == LightType.Directional)
                 {

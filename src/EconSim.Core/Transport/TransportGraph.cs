@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using EconSim.Core.Common;
 using EconSim.Core.Data;
-using EconSim.Core.Economy;
 
 namespace EconSim.Core.Transport
 {

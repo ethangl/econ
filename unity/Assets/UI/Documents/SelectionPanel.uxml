@@ -32,29 +32,11 @@
                 <ui:Label text="Total" />
                 <ui:Label name="pop-total" text="0" />
             </ui:VisualElement>
-            <ui:VisualElement class="stat-row">
-                <ui:Label text="Workers" />
-                <ui:Label name="pop-workers" text="0" />
-            </ui:VisualElement>
-            <ui:VisualElement class="stat-row">
-                <ui:Label text="Employed" />
-                <ui:Label name="pop-employed" text="0" />
-            </ui:VisualElement>
         </ui:VisualElement>
 
         <ui:VisualElement name="resources-section" class="section">
             <ui:Label class="section-header" text="Resources" />
             <ui:VisualElement name="resources-list" />
-        </ui:VisualElement>
-
-        <ui:VisualElement name="stockpile-section" class="section">
-            <ui:Label class="section-header" text="Stockpile" />
-            <ui:VisualElement name="stockpile-list" />
-        </ui:VisualElement>
-
-        <ui:VisualElement name="facilities-section" class="section">
-            <ui:Label class="section-header" text="Facilities" />
-            <ui:Label name="facilities-count" text="0 facilities" />
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

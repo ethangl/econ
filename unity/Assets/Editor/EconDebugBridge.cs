@@ -10,12 +10,13 @@ using EconSim.Core;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
 using EconSim.Core.Simulation;
+using EconSim.Core.Transport;
 using MapGen.Core;
 
 namespace EconSim.Editor
 {
     /// <summary>
-    /// Editor-only debug bridge for automated economy analysis.
+    /// Editor-only debug bridge for automated analysis.
     ///
     /// Protocol:
     ///   1. Write command JSON to {ProjectRoot}/econ_debug_cmd.json
@@ -26,8 +27,7 @@ namespace EconSim.Editor
     /// Commands:
     ///   generate_and_run  { seed, cellCount, template, months }
     ///   run_months         { months }
-    ///   dump               { scope: all|summary|markets|counties|roads }
-    ///   reset_timeseries   (deletes econ_debug_timeseries.csv)
+    ///   dump               { scope: all|summary|roads }
     ///   status             (writes current sim status)
     ///   cancel             (cancels pending async operation)
     /// </summary>
@@ -41,7 +41,6 @@ namespace EconSim.Editor
         static string OutputPath => Path.Combine(ProjectRoot, "econ_debug_output.json");
         static string StatusPath => Path.Combine(ProjectRoot, "econ_debug_status.json");
         static string PendingPath => Path.Combine(ProjectRoot, "econ_debug_pending.json");
-        static string TimeseriesPath => Path.Combine(ProjectRoot, "econ_debug_timeseries.csv");
 
         // ── State ──────────────────────────────────────────────────
 
@@ -52,20 +51,6 @@ namespace EconSim.Editor
         static int _startDay;
         static bool _needsGenerate;
         static MapGenConfig _pendingConfig;
-        static int _lastTimeseriesDay = -1;
-
-        static readonly string[] TimeseriesGoods =
-        {
-            "wheat",
-            "rye",
-            "barley",
-            "flour",
-            "bread",
-            "malt",
-            "beer",
-            "raw_salt",
-            "salt"
-        };
 
         // ── Domain Reload Survival ─────────────────────────────────
 
@@ -172,11 +157,6 @@ namespace EconSim.Editor
                     if (!EnsureReady()) return;
                     DumpState(string.IsNullOrEmpty(cmd.scope) ? "all" : cmd.scope);
                     WriteStatus("complete", "Dump written");
-                    break;
-
-                case "reset_timeseries":
-                    ResetTimeseries();
-                    WriteStatus("complete", "Timeseries reset");
                     break;
 
                 case "status":
@@ -295,8 +275,6 @@ namespace EconSim.Editor
             _state = BridgeState.Running;
             sim.TimeScale = SimulationConfig.Speed.Hyper;
             sim.IsPaused = false;
-            _lastTimeseriesDay = -1;
-            TryAppendTimeseriesRow(sim.GetState(), sim.GetState().Economy, force: true);
 
             WriteStatus("running", $"Running from day {_startDay} to day {_targetDay}...");
 
@@ -342,7 +320,6 @@ namespace EconSim.Editor
 
                     var simState = GameManager.Instance.Simulation.GetState();
                     int currentDay = simState.CurrentDay;
-                    TryAppendTimeseriesRow(simState, simState.Economy);
                     if (currentDay >= _targetDay)
                     {
                         GameManager.Instance.Simulation.IsPaused = true;
@@ -440,9 +417,7 @@ namespace EconSim.Editor
         {
             var sim = GameManager.Instance.Simulation;
             var st = sim.GetState();
-            var econ = st.Economy;
             var mapData = GameManager.Instance.MapData;
-            TryAppendTimeseriesRow(st, econ);
 
             var j = new JW();
             j.ObjOpen();
@@ -453,137 +428,73 @@ namespace EconSim.Editor
             j.KV("totalTicks", st.TotalTicksProcessed);
             j.KV("timestamp", DateTime.UtcNow.ToString("o"));
 
+            WriteGoodsMetadata(j);
+
             if (scope == "all" || scope == "summary")
             {
-                WriteSummary(j, st, econ, mapData);
+                WriteSummary(j, st, mapData);
                 WritePerformance(j, st);
             }
-            if (scope == "all" || scope == "markets")
-                WriteMarkets(j, econ);
-            if (scope == "all" || scope == "counties")
-                WriteCounties(j, econ, mapData);
             if (scope == "all" || scope == "roads")
-                WriteRoads(j, econ);
+                WriteRoads(j, st);
+            if (scope == "all" || scope == "economy")
+                WriteEconomy(j, st);
+            if (scope == "all" || scope == "trade")
+                WriteTrade(j, st);
+            if (scope == "all" || scope == "facilities")
+                WriteFacilities(j, st);
 
             j.ObjClose();
             File.WriteAllText(OutputPath, j.ToString());
         }
 
-        static void WriteSummary(JW j, SimulationState st, EconomyState econ, MapData mapData)
+        static void WriteGoodsMetadata(JW j)
+        {
+            j.Key("goods"); j.ArrOpen();
+            for (int i = 0; i < Goods.Count; i++)
+            {
+                var d = Goods.Defs[i];
+                j.ObjOpen();
+                j.KV("index", i);
+                j.KV("name", d.Name);
+                j.KV("category", d.Category.ToString());
+                j.KV("need", d.Need.ToString());
+                j.KV("consumptionPerPop", d.ConsumptionPerPop);
+                j.KV("basePrice", d.BasePrice);
+                j.KV("isTradeable", d.IsTradeable);
+                j.KV("isPreciousMetal", d.IsPreciousMetal);
+                j.KV("spoilageRate", d.SpoilageRate);
+                j.ObjClose();
+            }
+            j.ArrClose();
+        }
+
+        static void WriteSummary(JW j, SimulationState st, MapData mapData)
         {
             j.Key("summary"); j.ObjOpen();
 
-            int totalPop = 0, totalWorkingAge = 0;
-            int totalEmployedU = 0, totalEmployedS = 0;
-            float totalStockpileValue = 0f;
-            float moneyInPopulation = 0f;
-            float moneyInFacilities = 0f;
-            int maxFacilitiesInCounty = 0;
-            int activeFacilities = 0;
-            int inactiveFacilities = 0;
-
-            foreach (var kvp in econ.Counties)
+            // Use dynamic population from economy state (reflects births/deaths/migration)
+            float totalPop = 0;
+            if (st.Economy?.Counties != null)
             {
-                var ce = kvp.Value;
-                totalPop += ce.Population.Total;
-                totalWorkingAge += ce.Population.WorkingAge;
-                totalEmployedU += ce.Population.EmployedUnskilled;
-                totalEmployedS += ce.Population.EmployedSkilled;
-                moneyInPopulation += ce.Population.Treasury;
-
-                foreach (var item in ce.Stockpile.All)
-                {
-                    if (TryResolveGood(econ, item.Key, out var good))
-                        totalStockpileValue += item.Value * good.BasePrice;
-                }
-
-                if (ce.FacilityIds != null && ce.FacilityIds.Count > maxFacilitiesInCounty)
-                    maxFacilitiesInCounty = ce.FacilityIds.Count;
+                foreach (var ce in st.Economy.Counties)
+                    if (ce != null) totalPop += ce.Population;
+            }
+            else if (mapData?.Cells != null)
+            {
+                foreach (var cell in mapData.Cells)
+                    totalPop += cell.Population;
             }
 
-            int totalEmployed = totalEmployedU + totalEmployedS;
             j.KV("totalPopulation", totalPop);
-            j.KV("totalWorkingAge", totalWorkingAge);
-            j.KV("totalEmployed", totalEmployed);
-            j.KV("employmentRate", totalWorkingAge > 0 ? (float)totalEmployed / totalWorkingAge : 0f);
-            j.KV("totalCounties", econ.Counties.Count);
-            j.KV("totalMarkets", econ.Markets.Count);
-            j.KV("totalFacilities", econ.Facilities.Count);
-            j.KV("totalStockpileValue", totalStockpileValue);
-            j.KV("economySeed", st.EconomySeed);
-            j.KV("useEconomyV2", true);
-            j.KV("subsistenceWage", st.SubsistenceWage);
-            j.KV("smoothedBasketCost", st.SmoothedBasketCost);
-
-            foreach (var facility in econ.Facilities.Values)
-            {
-                moneyInFacilities += facility.Treasury;
-                if (facility.IsActive) activeFacilities++;
-                else inactiveFacilities++;
-            }
-
-            float totalMoneySupply = moneyInPopulation + moneyInFacilities;
-            j.KV("moneyInPopulation", moneyInPopulation);
-            j.KV("moneyInFacilities", moneyInFacilities);
-            j.KV("totalMoneySupply", totalMoneySupply);
-            j.KV("moneyVelocity", st.Telemetry != null ? st.Telemetry.MoneyVelocity : 0f);
-
-            // Aggregate market stats
-            float totalSupplyOffered = 0f, totalClosingSupply = 0f, totalDemand = 0f, totalVolume = 0f;
-            float totalUnfilledNoFunds = 0f, totalUnfilledNoStock = 0f, totalUnfilledNoRoute = 0f, totalUnfilledPriceReject = 0f;
-            foreach (var market in econ.Markets.Values)
-            {
-                foreach (var gs in market.Goods.Values)
-                {
-                    totalSupplyOffered += gs.SupplyOffered;
-                    totalClosingSupply += gs.Supply;
-                    totalDemand += gs.Demand;
-                    totalVolume += gs.LastTradeVolume;
-                    totalUnfilledNoFunds += gs.UnfilledNoFunds;
-                    totalUnfilledNoStock += gs.UnfilledNoStock;
-                    totalUnfilledNoRoute += gs.UnfilledNoRoute;
-                    totalUnfilledPriceReject += gs.UnfilledPriceReject;
-                }
-            }
-            j.KV("totalMarketSupply", totalSupplyOffered);
-            j.KV("totalMarketClosingSupply", totalClosingSupply);
-            j.KV("totalMarketDemand", totalDemand);
-            j.KV("totalMarketVolume", totalVolume);
-            j.KV("totalUnfilledNoFunds", totalUnfilledNoFunds);
-            j.KV("totalUnfilledNoStock", totalUnfilledNoStock);
-            j.KV("totalUnfilledNoRoute", totalUnfilledNoRoute);
-            j.KV("totalUnfilledPriceReject", totalUnfilledPriceReject);
-
-            int totalPendingOrders = 0;
-            int totalConsignmentLots = 0;
-            int maxPendingOrdersPerMarket = 0;
-            int maxConsignmentLotsPerMarket = 0;
-            foreach (var market in econ.Markets.Values)
-            {
-                int pending = market.PendingBuyOrderCount;
-                int lots = market.InventoryLotCount;
-                totalPendingOrders += pending;
-                totalConsignmentLots += lots;
-                if (pending > maxPendingOrdersPerMarket)
-                    maxPendingOrdersPerMarket = pending;
-                if (lots > maxConsignmentLotsPerMarket)
-                    maxConsignmentLotsPerMarket = lots;
-            }
-            j.KV("totalPendingOrders", totalPendingOrders);
-            j.KV("totalConsignmentLots", totalConsignmentLots);
-            j.KV("avgPendingOrdersPerMarket", econ.Markets.Count > 0 ? (float)totalPendingOrders / econ.Markets.Count : 0f);
-            j.KV("avgConsignmentLotsPerMarket", econ.Markets.Count > 0 ? (float)totalConsignmentLots / econ.Markets.Count : 0f);
-            j.KV("maxPendingOrdersPerMarket", maxPendingOrdersPerMarket);
-            j.KV("maxConsignmentLotsPerMarket", maxConsignmentLotsPerMarket);
-            j.KV("activeFacilities", activeFacilities);
-            j.KV("inactiveFacilities", inactiveFacilities);
-            j.KV("avgFacilitiesPerCounty", econ.Counties.Count > 0 ? (float)econ.Facilities.Count / econ.Counties.Count : 0f);
-            j.KV("maxFacilitiesPerCounty", maxFacilitiesInCounty);
+            j.KV("totalCounties", mapData?.Counties?.Count ?? 0);
+            j.KV("totalProvinces", mapData?.Provinces?.Count ?? 0);
+            j.KV("totalRealms", mapData?.Realms?.Count ?? 0);
 
             // Road stats
-            if (econ.Roads != null)
+            if (st.Roads != null)
             {
-                var allRoads = econ.Roads.GetAllRoads();
+                var allRoads = st.Roads.GetAllRoads();
                 j.KV("pathSegments", allRoads.Count(r => r.Item3 == RoadTier.Path));
                 j.KV("roadSegments", allRoads.Count(r => r.Item3 == RoadTier.Road));
             }
@@ -630,192 +541,36 @@ namespace EconSim.Editor
             j.ObjClose();
         }
 
-        static void WriteMarkets(JW j, EconomyState econ)
-        {
-            j.Key("markets"); j.ArrOpen();
-
-            foreach (var market in econ.Markets.Values.OrderBy(m => m.Id))
-            {
-                j.ObjOpen();
-                j.KV("id", market.Id);
-                j.KV("name", market.Name ?? "");
-                j.KV("type", market.Type.ToString());
-                j.KV("locationCellId", market.LocationCellId);
-                j.KV("zoneCells", market.ZoneCellIds?.Count ?? 0);
-                j.KV("pendingOrders", market.PendingBuyOrderCount);
-                j.KV("consignmentLots", market.InventoryLotCount);
-
-                j.Key("goods"); j.ObjOpen();
-                foreach (var gs in market.Goods.Values.OrderBy(g => g.GoodId))
-                {
-                    j.Key(gs.GoodId); j.ObjOpen();
-                    j.KV("price", gs.Price);
-                    j.KV("basePrice", gs.BasePrice);
-                    j.KV("supply", gs.Supply);
-                    j.KV("supplyOffered", gs.SupplyOffered);
-                    j.KV("demand", gs.Demand);
-                    j.KV("volume", gs.LastTradeVolume);
-                    j.KV("revenue", gs.Revenue);
-                    j.KV("unfilledNoFunds", gs.UnfilledNoFunds);
-                    j.KV("unfilledNoStock", gs.UnfilledNoStock);
-                    j.KV("unfilledNoRoute", gs.UnfilledNoRoute);
-                    j.KV("unfilledPriceReject", gs.UnfilledPriceReject);
-                    j.ObjClose();
-                }
-                j.ObjClose();
-
-                j.ObjClose();
-            }
-
-            j.ArrClose();
-        }
-
-        static void WriteCounties(JW j, EconomyState econ, MapData mapData)
-        {
-            j.Key("counties"); j.ArrOpen();
-
-            foreach (var kvp in econ.Counties.OrderBy(c => c.Key))
-            {
-                var ce = kvp.Value;
-                County county = null;
-                mapData.CountyById?.TryGetValue(ce.CountyId, out county);
-
-                j.ObjOpen();
-                j.KV("id", ce.CountyId);
-                j.KV("name", county?.Name ?? "");
-                j.KV("realmId", county?.RealmId ?? -1);
-                j.KV("provinceId", county?.ProvinceId ?? -1);
-                j.KV("marketId", econ.CountyToMarket.TryGetValue(ce.CountyId, out int mid) ? mid : -1);
-                j.KV("cells", county?.CellIds?.Count ?? 0);
-
-                // Population
-                j.Key("population"); j.ObjOpen();
-                j.KV("total", ce.Population.Total);
-                j.KV("workingAge", ce.Population.WorkingAge);
-                j.KV("treasury", ce.Population.Treasury);
-                j.KV("employedUnskilled", ce.Population.EmployedUnskilled);
-                j.KV("employedSkilled", ce.Population.EmployedSkilled);
-                j.KV("idleUnskilled", ce.Population.IdleUnskilled);
-                j.KV("idleSkilled", ce.Population.IdleSkilled);
-
-                j.Key("estates"); j.ObjOpen();
-                foreach (Estate estate in Enum.GetValues(typeof(Estate)))
-                    j.KV(estate.ToString(), ce.Population.GetEstatePopulation(estate));
-                j.ObjClose();
-                j.ObjClose();
-
-                // Stockpile
-                j.Key("stockpile"); j.ObjOpen();
-                foreach (var item in ce.Stockpile.All.OrderBy(i => i.Key))
-                    j.KV(NormalizeGoodKey(econ, item.Key), item.Value);
-                j.ObjClose();
-
-                // Unmet demand
-                j.Key("unmetDemand"); j.ObjOpen();
-                foreach (var item in ce.UnmetDemand.Where(d => d.Value > 0.001f).OrderBy(d => d.Key))
-                    j.KV(item.Key, item.Value);
-                j.ObjClose();
-
-                // Resources
-                j.Key("resources"); j.ObjOpen();
-                foreach (var item in ce.Resources.OrderBy(r => r.Key))
-                    j.KV(item.Key, item.Value);
-                j.ObjClose();
-
-                // Facilities
-                j.Key("facilities"); j.ArrOpen();
-                foreach (var fid in ce.FacilityIds)
-                {
-                    var f = econ.GetFacility(fid);
-                    if (f == null) continue;
-                    var def = econ.FacilityDefs.Get(f.TypeId);
-
-                    j.ObjOpen();
-                    j.KV("id", f.Id);
-                    j.KV("type", f.TypeId);
-                    j.KV("unitCount", Math.Max(1, f.UnitCount));
-                    j.KV("workers", f.AssignedWorkers);
-                    j.KV("laborRequired", def != null ? f.GetRequiredLabor(def) : 0);
-                    j.KV("efficiency", def != null ? f.GetEfficiency(def) : 0f);
-                    j.KV("throughput", def != null ? f.GetThroughput(def) : 0f);
-                    j.KV("active", f.IsActive);
-                    j.KV("treasury", f.Treasury);
-                    j.KV("wageRate", f.WageRate);
-                    j.KV("wageDebtDays", f.WageDebtDays);
-                    j.KV("consecutiveLossDays", f.ConsecutiveLossDays);
-                    j.KV("graceDaysRemaining", f.GraceDaysRemaining);
-
-                    j.Key("inputs"); j.ObjOpen();
-                    foreach (var item in f.InputBuffer.All)
-                        j.KV(NormalizeGoodKey(econ, item.Key), item.Value);
-                    j.ObjClose();
-
-                    j.Key("outputs"); j.ObjOpen();
-                    foreach (var item in f.OutputBuffer.All)
-                        j.KV(NormalizeGoodKey(econ, item.Key), item.Value);
-                    j.ObjClose();
-
-                    j.ObjClose();
-                }
-                j.ArrClose();
-
-                j.ObjClose();
-            }
-
-            j.ArrClose();
-        }
-
-        static bool TryResolveGood(EconomyState econ, string goodKey, out GoodDef good)
-        {
-            good = econ.Goods.Get(goodKey);
-            if (good != null)
-                return true;
-
-            if (int.TryParse(goodKey, NumberStyles.Integer, CultureInfo.InvariantCulture, out int runtimeId))
-            {
-                good = econ.Goods.GetByRuntimeId(runtimeId);
-                if (good != null)
-                    return true;
-            }
-
-            return false;
-        }
-
-        static string NormalizeGoodKey(EconomyState econ, string goodKey)
-        {
-            return TryResolveGood(econ, goodKey, out var good) ? good.Id : goodKey;
-        }
-
-        static void WriteRoads(JW j, EconomyState econ)
+        static void WriteRoads(JW j, SimulationState st)
         {
             j.Key("roads"); j.ObjOpen();
 
-            if (econ.Roads == null)
+            if (st.Roads == null)
             {
                 j.KV("totalSegments", 0);
                 j.ObjClose();
                 return;
             }
 
-            var allRoads = econ.Roads.GetAllRoads();
+            var allRoads = st.Roads.GetAllRoads();
             j.KV("totalSegments", allRoads.Count);
             j.KV("paths", allRoads.Count(r => r.Item3 == RoadTier.Path));
             j.KV("roads", allRoads.Count(r => r.Item3 == RoadTier.Road));
 
             float totalTraffic = 0f;
             foreach (var r in allRoads)
-                totalTraffic += econ.Roads.GetTraffic(r.Item1, r.Item2);
+                totalTraffic += st.Roads.GetTraffic(r.Item1, r.Item2);
             j.KV("totalTraffic", totalTraffic);
 
             // Top 20 busiest segments
             j.Key("busiestSegments"); j.ArrOpen();
-            foreach (var r in allRoads.OrderByDescending(r => econ.Roads.GetTraffic(r.Item1, r.Item2)).Take(20))
+            foreach (var r in allRoads.OrderByDescending(r => st.Roads.GetTraffic(r.Item1, r.Item2)).Take(20))
             {
                 j.ObjOpen();
                 j.KV("cellA", r.Item1);
                 j.KV("cellB", r.Item2);
                 j.KV("tier", r.Item3.ToString());
-                j.KV("traffic", econ.Roads.GetTraffic(r.Item1, r.Item2));
+                j.KV("traffic", st.Roads.GetTraffic(r.Item1, r.Item2));
                 j.ObjClose();
             }
             j.ArrClose();
@@ -823,115 +578,381 @@ namespace EconSim.Editor
             j.ObjClose();
         }
 
+        static void WriteEconomy(JW j, SimulationState st)
+        {
+            j.Key("economy"); j.ObjOpen();
+
+            var econ = st.Economy;
+            if (econ == null || econ.Counties == null)
+            {
+                j.KV("countyCount", 0);
+                j.ObjClose();
+                return;
+            }
+
+            // Init stats
+            int countyCount = 0;
+            float[] sumProd = new float[Goods.Count];
+            float[] minProd = new float[Goods.Count];
+            float[] maxProd = new float[Goods.Count];
+            for (int g = 0; g < Goods.Count; g++)
+            {
+                minProd[g] = float.MaxValue;
+                maxProd[g] = float.MinValue;
+            }
+            for (int i = 0; i < econ.Counties.Length; i++)
+            {
+                var ce = econ.Counties[i];
+                if (ce == null) continue;
+                countyCount++;
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    sumProd[g] += ce.Productivity[g];
+                    if (ce.Productivity[g] < minProd[g]) minProd[g] = ce.Productivity[g];
+                    if (ce.Productivity[g] > maxProd[g]) maxProd[g] = ce.Productivity[g];
+                }
+            }
+
+            j.KV("countyCount", countyCount);
+            // Backward compat: food productivity
+            j.KV("avgProductivity", countyCount > 0 ? sumProd[0] / countyCount : 0f);
+            j.KV("minProductivity", countyCount > 0 ? minProd[0] : 0f);
+            j.KV("maxProductivity", countyCount > 0 ? maxProd[0] : 0f);
+
+            // Per-good productivity
+            string[] goodNames = Goods.Names;
+            j.Key("productivityByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+            {
+                j.Key(goodNames[g]); j.ObjOpen();
+                j.KV("avg", countyCount > 0 ? sumProd[g] / countyCount : 0f);
+                j.KV("min", countyCount > 0 ? minProd[g] : 0f);
+                j.KV("max", countyCount > 0 ? maxProd[g] : 0f);
+                j.ObjClose();
+            }
+            j.ObjClose();
+
+            // Time series
+            j.Key("timeSeries"); j.ArrOpen();
+            foreach (var snap in econ.TimeSeries)
+            {
+                j.ObjOpen();
+                j.KV("day", snap.Day);
+                j.KV("totalStock", snap.TotalStock);
+                j.KV("totalProduction", snap.TotalProduction);
+                j.KV("totalConsumption", snap.TotalConsumption);
+                j.KV("totalUnmetNeed", snap.TotalUnmetNeed);
+                j.KV("surplusCounties", snap.SurplusCounties);
+                j.KV("deficitCounties", snap.DeficitCounties);
+                j.KV("starvingCounties", snap.StarvingCounties);
+                j.KV("minStock", snap.MinStock);
+                j.KV("maxStock", snap.MaxStock);
+                j.KV("medianProductivity", snap.MedianProductivity);
+                j.KV("ducalTax", snap.TotalDucalTax);
+                j.KV("ducalRelief", snap.TotalDucalRelief);
+                j.KV("provincialStockpile", snap.TotalProvincialStockpile);
+                j.KV("royalTax", snap.TotalRoyalTax);
+                j.KV("royalRelief", snap.TotalRoyalRelief);
+                j.KV("royalStockpile", snap.TotalRoyalStockpile);
+                j.KV("treasury", snap.TotalTreasury);
+                j.KV("goldMinted", snap.TotalGoldMinted);
+                j.KV("silverMinted", snap.TotalSilverMinted);
+                j.KV("crownsMinted", snap.TotalCrownsMinted);
+                j.KV("tradeSpending", snap.TotalTradeSpending);
+                j.KV("tradeRevenue", snap.TotalTradeRevenue);
+
+                // Population dynamics
+                j.KV("totalPopulation", snap.TotalPopulation);
+                j.KV("totalBirths", snap.TotalBirths);
+                j.KV("totalDeaths", snap.TotalDeaths);
+                j.KV("avgBasicSatisfaction", snap.AvgBasicSatisfaction);
+                j.KV("minBasicSatisfaction", snap.MinBasicSatisfaction);
+                j.KV("maxBasicSatisfaction", snap.MaxBasicSatisfaction);
+                j.KV("countiesInDistress", snap.CountiesInDistress);
+
+                if (snap.MarketPrices != null)
+                {
+                    j.Key("marketPrices"); j.ArrOpen();
+                    for (int g = 0; g < snap.MarketPrices.Length; g++)
+                        j.Val(snap.MarketPrices[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalTradeImportsByGood != null)
+                {
+                    j.Key("tradeImportsByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalTradeImportsByGood.Length; g++)
+                        j.Val(snap.TotalTradeImportsByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalTradeExportsByGood != null)
+                {
+                    j.Key("tradeExportsByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalTradeExportsByGood.Length; g++)
+                        j.Val(snap.TotalTradeExportsByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalRealmDeficitByGood != null)
+                {
+                    j.Key("realmDeficitByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalRealmDeficitByGood.Length; g++)
+                        j.Val(snap.TotalRealmDeficitByGood[g]);
+                    j.ArrClose();
+                }
+
+                if (snap.TotalDucalTaxByGood != null)
+                {
+                    j.Key("ducalTaxByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalDucalTaxByGood.Length; g++)
+                        j.Val(snap.TotalDucalTaxByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalDucalReliefByGood != null)
+                {
+                    j.Key("ducalReliefByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalDucalReliefByGood.Length; g++)
+                        j.Val(snap.TotalDucalReliefByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalRoyalTaxByGood != null)
+                {
+                    j.Key("royalTaxByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalRoyalTaxByGood.Length; g++)
+                        j.Val(snap.TotalRoyalTaxByGood[g]);
+                    j.ArrClose();
+                }
+
+                // Per-good breakdowns
+                if (snap.TotalStockByGood != null)
+                {
+                    j.Key("stockByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalStockByGood.Length; g++)
+                        j.Val(snap.TotalStockByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalProductionByGood != null)
+                {
+                    j.Key("productionByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalProductionByGood.Length; g++)
+                        j.Val(snap.TotalProductionByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalConsumptionByGood != null)
+                {
+                    j.Key("consumptionByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalConsumptionByGood.Length; g++)
+                        j.Val(snap.TotalConsumptionByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalUnmetNeedByGood != null)
+                {
+                    j.Key("unmetNeedByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalUnmetNeedByGood.Length; g++)
+                        j.Val(snap.TotalUnmetNeedByGood[g]);
+                    j.ArrClose();
+                }
+
+                j.ObjClose();
+            }
+            j.ArrClose();
+
+            j.ObjClose();
+        }
+
+        static void WriteTrade(JW j, SimulationState st)
+        {
+            j.Key("trade"); j.ObjOpen();
+
+            var econ = st.Economy;
+            if (econ == null || econ.Provinces == null)
+            {
+                j.KV("provinceCount", 0);
+                j.ObjClose();
+                return;
+            }
+
+            string[] goodNames = Goods.Names;
+            const int F = (int)GoodType.Bread;
+
+            // County-level stats (per-good)
+            int countyCount = 0;
+            float[] totalTaxPaid = new float[Goods.Count];
+            float[] totalRelief = new float[Goods.Count];
+            int taxPayingCounties = 0, reliefReceivingCounties = 0;
+
+            for (int i = 0; i < econ.Counties.Length; i++)
+            {
+                var ce = econ.Counties[i];
+                if (ce == null) continue;
+                countyCount++;
+                for (int g = 0; g < Goods.Count; g++)
+                {
+                    totalTaxPaid[g] += ce.TaxPaid[g];
+                    totalRelief[g] += ce.Relief[g];
+                }
+                if (ce.TaxPaid[F] > 0f) taxPayingCounties++;
+                if (ce.Relief[F] > 0f) reliefReceivingCounties++;
+            }
+
+            j.KV("countyCount", countyCount);
+            // Backward compat: food-only scalars
+            j.KV("totalDucalTax", totalTaxPaid[F]);
+            j.KV("totalDucalRelief", totalRelief[F]);
+            j.KV("taxPayingCounties", taxPayingCounties);
+            j.KV("reliefReceivingCounties", reliefReceivingCounties);
+
+            // Per-good county tax/relief
+            j.Key("ducalTaxByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+                j.KV(goodNames[g], totalTaxPaid[g]);
+            j.ObjClose();
+            j.Key("ducalReliefByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+                j.KV(goodNames[g], totalRelief[g]);
+            j.ObjClose();
+
+            // Per-province summary (per-good stockpiles)
+            j.Key("provinces"); j.ArrOpen();
+            float[] totalProvStockpile = new float[Goods.Count];
+            for (int i = 0; i < econ.Provinces.Length; i++)
+            {
+                var pe = econ.Provinces[i];
+                if (pe == null) continue;
+                for (int g = 0; g < Goods.Count; g++)
+                    totalProvStockpile[g] += pe.Stockpile[g];
+
+                j.ObjOpen();
+                j.KV("id", i);
+                j.KV("stockpile", pe.Stockpile[F]);
+                j.Key("stockpileByGood"); j.ObjOpen();
+                for (int g = 0; g < Goods.Count; g++)
+                    j.KV(goodNames[g], pe.Stockpile[g]);
+                j.ObjClose();
+                j.ObjClose();
+            }
+            j.ArrClose();
+            j.KV("totalProvincialStockpile", totalProvStockpile[F]);
+            j.Key("provincialStockpileByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+                j.KV(goodNames[g], totalProvStockpile[g]);
+            j.ObjClose();
+
+            // Per-realm summary (per-good stockpiles)
+            if (econ.Realms != null)
+            {
+                j.Key("realms"); j.ArrOpen();
+                float[] totalRealmStockpile = new float[Goods.Count];
+                float totalTreasury = 0f;
+                for (int i = 0; i < econ.Realms.Length; i++)
+                {
+                    var re = econ.Realms[i];
+                    if (re == null) continue;
+                    for (int g = 0; g < Goods.Count; g++)
+                        totalRealmStockpile[g] += re.Stockpile[g];
+                    totalTreasury += re.Treasury;
+
+                    j.ObjOpen();
+                    j.KV("id", i);
+                    j.KV("stockpile", re.Stockpile[F]);
+                    j.Key("stockpileByGood"); j.ObjOpen();
+                    for (int g = 0; g < Goods.Count; g++)
+                        j.KV(goodNames[g], re.Stockpile[g]);
+                    j.ObjClose();
+                    j.KV("treasury", re.Treasury);
+                    j.KV("goldMinted", re.GoldMinted);
+                    j.KV("silverMinted", re.SilverMinted);
+                    j.KV("crownsMinted", re.CrownsMinted);
+                    j.KV("tradeSpending", re.TradeSpending);
+                    j.KV("tradeRevenue", re.TradeRevenue);
+                    j.Key("tradeImportsByGood"); j.ObjOpen();
+                    for (int g = 0; g < Goods.Count; g++)
+                        j.KV(goodNames[g], re.TradeImports[g]);
+                    j.ObjClose();
+                    j.Key("tradeExportsByGood"); j.ObjOpen();
+                    for (int g = 0; g < Goods.Count; g++)
+                        j.KV(goodNames[g], re.TradeExports[g]);
+                    j.ObjClose();
+                    j.Key("deficitByGood"); j.ObjOpen();
+                    for (int g = 0; g < Goods.Count; g++)
+                        j.KV(goodNames[g], re.Deficit[g]);
+                    j.ObjClose();
+                    j.ObjClose();
+                }
+                j.ArrClose();
+                j.KV("totalRoyalStockpile", totalRealmStockpile[F]);
+                j.Key("royalStockpileByGood"); j.ObjOpen();
+                for (int g = 0; g < Goods.Count; g++)
+                    j.KV(goodNames[g], totalRealmStockpile[g]);
+                j.ObjClose();
+                j.KV("totalTreasury", totalTreasury);
+            }
+
+            j.ObjClose();
+        }
+
+        static void WriteFacilities(JW j, SimulationState st)
+        {
+            j.Key("facilities"); j.ObjOpen();
+
+            var econ = st.Economy;
+            if (econ?.Facilities == null || econ.Facilities.Length == 0)
+            {
+                j.KV("totalCount", 0);
+                j.ObjClose();
+                return;
+            }
+
+            j.KV("totalCount", econ.Facilities.Length);
+
+            // Aggregate by type
+            float totalWorkers = 0f;
+            var countByType = new Dictionary<int, int>();
+            var throughputByType = new Dictionary<int, float>();
+            var workersByType = new Dictionary<int, float>();
+            foreach (var fac in econ.Facilities)
+            {
+                totalWorkers += fac.Workforce;
+                int t = (int)fac.Type;
+                countByType.TryGetValue(t, out int c);
+                countByType[t] = c + 1;
+                throughputByType.TryGetValue(t, out float tp);
+                throughputByType[t] = tp + fac.Throughput;
+                workersByType.TryGetValue(t, out float w);
+                workersByType[t] = w + fac.Workforce;
+            }
+
+            j.KV("totalWorkers", totalWorkers);
+            j.Key("byType"); j.ObjOpen();
+            foreach (var kv in countByType)
+            {
+                var def = Facilities.Defs[kv.Key];
+                j.Key(def.Name); j.ObjOpen();
+                j.KV("count", kv.Value);
+                j.Key("inputs"); j.ArrOpen();
+                for (int ii = 0; ii < def.Inputs.Length; ii++)
+                {
+                    j.ObjOpen();
+                    j.KV("good", Goods.Names[(int)def.Inputs[ii].Good]);
+                    j.KV("amount", def.Inputs[ii].Amount);
+                    j.ObjClose();
+                }
+                j.ArrClose();
+                j.KV("outputGood", Goods.Names[(int)def.OutputGood]);
+                j.KV("outputAmount", def.OutputAmount);
+                j.KV("laborPerUnit", def.LaborPerUnit);
+                j.KV("maxLaborFraction", def.MaxLaborFraction);
+                j.KV("expectedThroughput", kv.Value * def.OutputAmount);
+                throughputByType.TryGetValue(kv.Key, out float actualTp);
+                workersByType.TryGetValue(kv.Key, out float actualWk);
+                j.KV("actualThroughput", actualTp);
+                j.KV("actualWorkers", actualWk);
+                j.ObjClose();
+            }
+            j.ObjClose();
+
+            j.ObjClose();
+        }
+
         // ── Helpers ────────────────────────────────────────────────
-
-        struct GoodTsAgg
-        {
-            public float Supply;
-            public float Demand;
-            public float Volume;
-            public float PriceSum;
-            public int PriceCount;
-        }
-
-        static void ResetTimeseries()
-        {
-            _lastTimeseriesDay = -1;
-            if (File.Exists(TimeseriesPath))
-                File.Delete(TimeseriesPath);
-        }
-
-        static void TryAppendTimeseriesRow(SimulationState st, EconomyState econ, bool force = false)
-        {
-            if (st == null || econ == null)
-                return;
-
-            int day = st.CurrentDay;
-            if (!force && day == _lastTimeseriesDay)
-                return;
-
-            var perGood = new Dictionary<string, GoodTsAgg>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < TimeseriesGoods.Length; i++)
-                perGood[TimeseriesGoods[i]] = default;
-
-            float totalSupply = 0f;
-            float totalDemand = 0f;
-            float totalVolume = 0f;
-
-            foreach (var market in econ.Markets.Values)
-            {
-                foreach (var gs in market.Goods.Values)
-                {
-                    totalSupply += gs.SupplyOffered;
-                    totalDemand += gs.Demand;
-                    totalVolume += gs.LastTradeVolume;
-
-                    if (!perGood.TryGetValue(gs.GoodId, out var agg))
-                        continue;
-
-                    agg.Supply += gs.SupplyOffered;
-                    agg.Demand += gs.Demand;
-                    agg.Volume += gs.LastTradeVolume;
-                    agg.PriceSum += gs.Price;
-                    agg.PriceCount += 1;
-                    perGood[gs.GoodId] = agg;
-                }
-            }
-
-            bool writeHeader = !File.Exists(TimeseriesPath);
-            var line = new StringBuilder(2048);
-
-            if (writeHeader)
-            {
-                var header = new StringBuilder(2048);
-                header.Append("timestamp_utc,day,year,month,day_of_month,economy_seed,total_supply,total_demand,total_volume");
-                for (int i = 0; i < TimeseriesGoods.Length; i++)
-                {
-                    string g = TimeseriesGoods[i];
-                    header.Append(',').Append(g).Append("_supply");
-                    header.Append(',').Append(g).Append("_demand");
-                    header.Append(',').Append(g).Append("_volume");
-                    header.Append(',').Append(g).Append("_avg_price");
-                    header.Append(',').Append(g).Append("_fill");
-                    header.Append(',').Append(g).Append("_s_over_d");
-                }
-                header.Append('\n');
-                File.AppendAllText(TimeseriesPath, header.ToString());
-            }
-
-            int year = day / 360 + 1;
-            int month = (day % 360) / 30 + 1;
-            int dayOfMonth = day % 30 + 1;
-
-            line.Append(DateTime.UtcNow.ToString("o"));
-            line.Append(',').Append(day.ToString(CultureInfo.InvariantCulture));
-            line.Append(',').Append(year.ToString(CultureInfo.InvariantCulture));
-            line.Append(',').Append(month.ToString(CultureInfo.InvariantCulture));
-            line.Append(',').Append(dayOfMonth.ToString(CultureInfo.InvariantCulture));
-            line.Append(',').Append(st.EconomySeed.ToString(CultureInfo.InvariantCulture));
-            line.Append(',').Append(totalSupply.ToString("G9", CultureInfo.InvariantCulture));
-            line.Append(',').Append(totalDemand.ToString("G9", CultureInfo.InvariantCulture));
-            line.Append(',').Append(totalVolume.ToString("G9", CultureInfo.InvariantCulture));
-
-            for (int i = 0; i < TimeseriesGoods.Length; i++)
-            {
-                var g = perGood[TimeseriesGoods[i]];
-                float avgPrice = g.PriceCount > 0 ? g.PriceSum / g.PriceCount : 0f;
-                float fill = g.Demand > 0f ? g.Volume / g.Demand : 1f;
-                float sOverD = g.Demand > 0f ? g.Supply / g.Demand : (g.Supply > 0f ? float.PositiveInfinity : 0f);
-
-                line.Append(',').Append(g.Supply.ToString("G9", CultureInfo.InvariantCulture));
-                line.Append(',').Append(g.Demand.ToString("G9", CultureInfo.InvariantCulture));
-                line.Append(',').Append(g.Volume.ToString("G9", CultureInfo.InvariantCulture));
-                line.Append(',').Append(avgPrice.ToString("G9", CultureInfo.InvariantCulture));
-                line.Append(',').Append(fill.ToString("G9", CultureInfo.InvariantCulture));
-                line.Append(',').Append(float.IsPositiveInfinity(sOverD) ? "inf" : sOverD.ToString("G9", CultureInfo.InvariantCulture));
-            }
-
-            line.Append('\n');
-            File.AppendAllText(TimeseriesPath, line.ToString());
-            _lastTimeseriesDay = day;
-        }
 
         static bool EnsureReady()
         {

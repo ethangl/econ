@@ -1,7 +1,7 @@
 {
   "action": "generate_and_run",
-  "seed": 12345,
+  "seed": 424242,
   "cellCount": 100000,
   "template": "Continents",
-  "months": 120
+  "months": 12
 }

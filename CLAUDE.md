@@ -2,9 +2,17 @@
 
 ## Project Overview
 
-Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.md` for full design document.
+Real-time economic simulator with EU4-style map visualization.
 
-**Stack:** Unity + C# + R3 + UI Toolkit
+**Stack:** Unity + C# + UI Toolkit
+
+## Dumps / Dump Analysis
+
+The user runs economy simulations via the EconDebugBridge in Unity, which writes results to `unity/econ_debug_output.json`. To analyze a dump:
+
+1. **Wait for the user** to tell you a dump is ready. Do NOT trigger dumps yourself.
+2. Run the analyzer: `python3 scripts/analyze_econ.py`
+3. The script reads `unity/econ_debug_output.json` and prints a full summary (economy, fiscal, convergence, roads, etc.).
 
 ### Unity Instructions
 
@@ -19,6 +27,8 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 **When the user asks for a "sanity check":** prioritize checking intent alignment, logical consistency, likely regressions, and API/contract mismatches in the code. Do not start by running builds/tests unless the user asks for that explicitly.
 
 ### Unity Gotchas
+
+No standalone csproj — this is a Unity project with assembly definitions.
 
 **Namespace conflicts:** The `EconSim.Renderer` namespace conflicts with Unity types. Use fully qualified names:
 
@@ -41,7 +51,6 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 
 | What           | Where                   |
 | -------------- | ----------------------- |
-| Design doc     | `docs/DESIGN.md`        |
 | Core library   | `src/EconSim.Core/`     |
 | Unity frontend | `unity/Assets/Scripts/` |
 
@@ -77,12 +86,10 @@ Real-time economic simulator with EU4-style map visualization. See `docs/DESIGN.
 - `CoreExtensions` - Bridge (Vec2↔Vector2, etc.)
 - `TimeControlPanel` - UI Toolkit: day display, pause/play, speed controls
 - `SelectionPanel` - UI Toolkit: mode-aware political inspector (realm/province/county)
-- `MarketInspectorPanel` - UI Toolkit: market inspection (hub, zone, goods table)
-- `EconomyPanel` - UI Toolkit: global economy (E key, tabbed: overview/production/trade)
 
 **UI Toolkit** (`Assets/UI/`):
 
-- `Documents/MainHUD.uxml` - Main UI layout (selection panel, market panel, time controls)
+- `Documents/MainHUD.uxml` - Main UI layout (selection panel, time controls)
 - `Styles/Main.uss` - Stylesheet
 
 ## Setup
