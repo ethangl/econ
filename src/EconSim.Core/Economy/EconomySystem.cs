@@ -102,7 +102,87 @@ namespace EconSim.Core.Economy
             // Build county adjacency graph
             econ.CountyAdjacency = BuildCountyAdjacency(mapData, maxCountyId);
 
+            // Facility placement (absorbed from FacilityProductionSystem)
+            var facilities = new List<Facility>();
+            var countyFacilityIndices = new List<int>[maxCountyId + 1];
+            for (int ci = 0; ci <= maxCountyId; ci++)
+                countyFacilityIndices[ci] = new List<int>();
+
+            foreach (var county in mapData.Counties)
+            {
+                var ce = econ.Counties[county.Id];
+                if (ce == null) continue;
+
+                for (int f = 0; f < Facilities.Count; f++)
+                {
+                    var def = Facilities.Defs[f];
+                    int placementGood = (int)def.PlacementGood;
+
+                    if (ce.Productivity[placementGood] > 0f
+                        && ce.Productivity[placementGood] >= def.PlacementMinProductivity)
+                    {
+                        int idx = facilities.Count;
+                        var facility = new Facility(def.Type, county.Id, county.SeatCellId);
+                        facilities.Add(facility);
+                        countyFacilityIndices[county.Id].Add(idx);
+                    }
+                }
+            }
+
+            econ.Facilities = facilities.ToArray();
+            econ.CountyFacilityIndices = countyFacilityIndices;
+
+            // Initialize province/realm economy arrays
+            int maxProvId = 0;
+            foreach (var prov in mapData.Provinces)
+                if (prov.Id > maxProvId) maxProvId = prov.Id;
+
+            econ.Provinces = new ProvinceEconomy[maxProvId + 1];
+            foreach (var prov in mapData.Provinces)
+                econ.Provinces[prov.Id] = new ProvinceEconomy();
+
+            int maxRealmId = 0;
+            foreach (var realm in mapData.Realms)
+                if (realm.Id > maxRealmId) maxRealmId = realm.Id;
+
+            econ.Realms = new RealmEconomy[maxRealmId + 1];
+            foreach (var realm in mapData.Realms)
+                econ.Realms[realm.Id] = new RealmEconomy();
+
+            // Population caches per province and realm
+            econ.ProvincePop = new float[maxProvId + 1];
+            econ.RealmPop = new float[maxRealmId + 1];
+            ComputePopulationCaches(econ, mapData);
+
+            // Demand signal array (populated each tick)
+            econ.EffectiveDemandPerPop = new float[Goods.Count];
+
             state.Economy = econ;
+        }
+
+        static void ComputePopulationCaches(EconomyState econ, MapData mapData)
+        {
+            Array.Clear(econ.ProvincePop, 0, econ.ProvincePop.Length);
+            Array.Clear(econ.RealmPop, 0, econ.RealmPop.Length);
+
+            // Sum county populations per province
+            foreach (var county in mapData.Counties)
+            {
+                var ce = econ.Counties[county.Id];
+                if (ce == null) continue;
+
+                int provId = county.ProvinceId;
+                if (provId >= 0 && provId < econ.ProvincePop.Length)
+                    econ.ProvincePop[provId] += ce.Population;
+            }
+
+            // Sum province populations per realm
+            foreach (var prov in mapData.Provinces)
+            {
+                int realmId = prov.RealmId;
+                if (realmId >= 0 && realmId < econ.RealmPop.Length)
+                    econ.RealmPop[realmId] += econ.ProvincePop[prov.Id];
+            }
         }
 
         static int[][] BuildCountyAdjacency(MapData mapData, int maxCountyId)
@@ -262,7 +342,7 @@ namespace EconSim.Core.Economy
                         float wear = Math.Min(ce.Stock[g], replacement);
                         ce.Stock[g] -= wear;
                         ce.Consumption[g] = wear;
-                        // Measure gap post-wear (consistent with TradeSystem Phase 8)
+                        // Measure gap post-wear (consistent with InterRealmTradeSystem deficit scan)
                         float deficit = Math.Max(0f, targetStock - ce.Stock[g]);
                         ce.UnmetNeed[g] = deficit * Goods.DurableCatchUpRate[g];
                     }
@@ -327,6 +407,32 @@ namespace EconSim.Core.Economy
                     daily += IndividualBasicWeights[b] * ratio;
                 }
                 ce.BasicSatisfaction += 0.065f * (daily - ce.BasicSatisfaction);
+            }
+
+            // Compute effective demand per pop (used by FiscalSystem and FacilityQuotaSystem)
+            var demandPerPop = econ.EffectiveDemandPerPop;
+            float totalPop = 0f;
+            for (int i = 0; i < counties.Length; i++)
+                if (counties[i] != null) totalPop += counties[i].Population;
+            for (int g = 0; g < goodsCount; g++)
+            {
+                if (Goods.TargetStockPerPop[g] > 0f && totalPop > 0f)
+                {
+                    float totalDemand = 0f;
+                    for (int i = 0; i < counties.Length; i++)
+                    {
+                        var c = counties[i];
+                        if (c == null) continue;
+                        totalDemand += c.Consumption[g] + c.UnmetNeed[g];
+                    }
+                    demandPerPop[g] = totalDemand / totalPop;
+                }
+                else
+                {
+                    demandPerPop[g] = Goods.Defs[g].Need == NeedCategory.Staple
+                        ? Goods.StapleIdealPerPop[g]
+                        : ConsumptionPerPop[g];
+                }
             }
 
             // Record snapshot only when explicitly enabled (EconDebugBridge runs).

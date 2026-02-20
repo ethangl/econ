@@ -29,7 +29,7 @@ namespace EconSim.Core.Economy
 
         // ── Inter-realm trade fields (reset daily) ──────────────
 
-        /// <summary>Total unmet demand per good (set by TradeSystem deficit ledger).</summary>
+        /// <summary>Total unmet demand per good (set by FiscalSystem admin + InterRealmTradeSystem deficit scan).</summary>
         public float[] Deficit = new float[Goods.Count];
 
         /// <summary>Quantities imported from the inter-realm market this tick, per good.</summary>

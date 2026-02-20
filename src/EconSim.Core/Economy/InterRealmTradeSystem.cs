@@ -6,7 +6,9 @@ using EconSim.Core.Simulation.Systems;
 namespace EconSim.Core.Economy
 {
     /// <summary>
-    /// Global inter-realm market. Runs daily AFTER TradeSystem (feudal redistribution + minting).
+    /// Global inter-realm market. Runs daily AFTER FiscalSystem (feudal redistribution + minting).
+    ///
+    /// Phase 8: Post-relief county deficit scan — record remaining unmet pop consumption per realm.
     ///
     /// For each tradeable good (in buy-priority order):
     /// 1. Compute net position per realm: surplus from stockpile minus deficit.
@@ -21,8 +23,13 @@ namespace EconSim.Core.Economy
         public string Name => "InterRealmTrade";
         public int TickInterval => SimulationConfig.Intervals.Daily;
 
+        static readonly float[] ConsumptionPerPop = Goods.ConsumptionPerPop;
+
         int[] _realmIds;
         float[] _prices;
+
+        /// <summary>County ID → Realm ID (for deficit scan).</summary>
+        int[] _countyToRealm;
 
         public void Initialize(SimulationState state, MapData mapData)
         {
@@ -33,23 +40,87 @@ namespace EconSim.Core.Economy
 
             _prices = new float[Goods.Count];
             Array.Copy(Goods.BasePrice, _prices, Goods.Count);
+
+            // Build county → realm mapping for deficit scan
+            int maxProvId = 0;
+            foreach (var prov in mapData.Provinces)
+                if (prov.Id > maxProvId) maxProvId = prov.Id;
+
+            var provinceToRealm = new int[maxProvId + 1];
+            foreach (var prov in mapData.Provinces)
+                provinceToRealm[prov.Id] = prov.RealmId;
+
+            int maxCountyId = 0;
+            foreach (var county in mapData.Counties)
+                if (county.Id > maxCountyId) maxCountyId = county.Id;
+
+            _countyToRealm = new int[maxCountyId + 1];
+            foreach (var county in mapData.Counties)
+            {
+                int provId = county.ProvinceId;
+                _countyToRealm[county.Id] = provId >= 0 && provId < provinceToRealm.Length
+                    ? provinceToRealm[provId]
+                    : 0;
+            }
         }
 
         public void Tick(SimulationState state, MapData mapData)
         {
-            var realms = state.Economy.Realms;
+            var econ = state.Economy;
+            var counties = econ.Counties;
+            var realms = econ.Realms;
             int realmCount = _realmIds.Length;
 
-            // Temporary per-realm arrays for net position calculation
-            Span<float> netPosition = stackalloc float[realmCount]; // positive = seller, negative = buyer
+            // Clear trade accumulators (owned by this system)
+            for (int r = 0; r < realmCount; r++)
+            {
+                var re = realms[_realmIds[r]];
+                re.TradeSpending = 0f;
+                re.TradeRevenue = 0f;
+                Array.Clear(re.TradeImports, 0, re.TradeImports.Length);
+                Array.Clear(re.TradeExports, 0, re.TradeExports.Length);
+            }
 
-            // Process each tradeable good in buy-priority order
+            // Phase 8: Post-relief county deficit scan — record remaining unmet pop consumption per realm
+            for (int g = 0; g < Goods.Count; g++)
+            {
+                float targetStockPerPop = Goods.TargetStockPerPop[g];
+                float retainRate = targetStockPerPop > 0f ? 0f : ConsumptionPerPop[g];
+                float spoilageRate = Goods.Defs[g].SpoilageRate;
+                float durableCatchUpRate = Goods.DurableCatchUpRate[g];
+                if (retainRate <= 0f && targetStockPerPop <= 0f) continue;
+
+                for (int i = 0; i < counties.Length; i++)
+                {
+                    var ce = counties[i];
+                    if (ce == null) continue;
+
+                    float shortfall;
+                    if (targetStockPerPop > 0f)
+                    {
+                        float targetStock = ce.Population * targetStockPerPop;
+                        float stockGap = Math.Max(0f, targetStock - ce.Stock[g]);
+                        float maintenanceNeed = ce.Stock[g] * spoilageRate;
+                        shortfall = maintenanceNeed + stockGap * durableCatchUpRate;
+                    }
+                    else
+                    {
+                        shortfall = ce.Population * retainRate - ce.Stock[g];
+                    }
+
+                    if (shortfall > 0f)
+                        realms[_countyToRealm[i]].Deficit[g] += shortfall;
+                }
+            }
+
+            // Inter-realm trade
+            Span<float> netPosition = stackalloc float[realmCount];
+
             var buyPriority = Goods.BuyPriority;
             for (int bp = 0; bp < buyPriority.Length; bp++)
             {
                 int g = buyPriority[bp];
 
-                // Step 1: Compute net position per realm (self-satisfy first)
                 float totalSupply = 0f;
                 float totalDemand = 0f;
 
@@ -59,7 +130,6 @@ namespace EconSim.Core.Economy
                     float stock = re.Stockpile[g];
                     float deficit = re.Deficit[g];
 
-                    // Self-satisfy: realm uses own stockpile to cover own deficit
                     float selfSatisfy = Math.Min(stock, deficit);
                     stock -= selfSatisfy;
                     deficit -= selfSatisfy;
@@ -74,18 +144,13 @@ namespace EconSim.Core.Economy
                 }
 
                 if (totalSupply <= 0f || totalDemand <= 0f)
-                {
-                    // No trade possible — keep previous price
                     continue;
-                }
 
-                // Step 2: Clearing price from supply/demand ratio
                 float basePrice = Goods.BasePrice[g];
                 float rawPrice = basePrice * totalDemand / totalSupply;
                 float price = Math.Max(Goods.MinPrice[g], Math.Min(rawPrice, Goods.MaxPrice[g]));
                 _prices[g] = price;
 
-                // Step 3: Treasury-limit each buyer's effective demand
                 float totalEffectiveDemand = 0f;
                 Span<float> effectiveDemand = stackalloc float[realmCount];
 
@@ -107,18 +172,15 @@ namespace EconSim.Core.Economy
                 if (totalEffectiveDemand <= 0f)
                     continue;
 
-                // Step 4: Fill ratio
                 float fillRatio = Math.Min(1f, totalSupply / totalEffectiveDemand);
                 float sellRatio = Math.Min(1f, totalEffectiveDemand / totalSupply);
 
-                // Step 5: Execute trades
                 for (int r = 0; r < realmCount; r++)
                 {
                     var re = realms[_realmIds[r]];
 
                     if (netPosition[r] > 0f)
                     {
-                        // Seller
                         float sold = netPosition[r] * sellRatio;
                         float revenue = sold * price;
                         re.Stockpile[g] -= sold;
@@ -128,7 +190,6 @@ namespace EconSim.Core.Economy
                     }
                     else if (effectiveDemand[r] > 0f)
                     {
-                        // Buyer
                         float bought = effectiveDemand[r] * fillRatio;
                         float cost = bought * price;
                         re.Stockpile[g] += bought;
@@ -139,7 +200,6 @@ namespace EconSim.Core.Economy
                 }
             }
 
-            // Write prices to economy state for snapshot capture
             Array.Copy(_prices, state.Economy.MarketPrices, Goods.Count);
         }
     }
