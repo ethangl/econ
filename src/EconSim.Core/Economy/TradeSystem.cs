@@ -86,6 +86,12 @@ namespace EconSim.Core.Economy
         /// <summary>Effective demand per pop per day — ConsumptionPerPop for consumables, aggregate demand/pop for durables.</summary>
         float[] _effectiveDemandPerPop;
 
+        /// <summary>Per-county retain deficit scratch for the current good. Indexed by county ID.</summary>
+        float[] _countyRetainDeficit;
+
+        /// <summary>Per-province total retain deficit scratch for the current good. Indexed by province ID.</summary>
+        float[] _provinceRetainDeficit;
+
         public void Initialize(SimulationState state, MapData mapData)
         {
             BuildMappings(state, mapData);
@@ -237,6 +243,9 @@ namespace EconSim.Core.Economy
                     }
                 }
 
+                // Precompute county/province retain deficits once per good (used by Phases 6 and 7).
+                BuildRetainDeficitsForGood(g, retainPerPop, counties);
+
                 // Phase 6: King distributes remainder to deficit provinces
                 Span<float> provDeficits = stackalloc float[_maxProvincesPerRealm];
                 for (int r = 0; r < _realmIds.Length; r++)
@@ -250,8 +259,9 @@ namespace EconSim.Core.Economy
                     float totalDeficit = 0f;
                     for (int p = 0; p < provIds.Length; p++)
                     {
-                        float d = ComputeProvinceDeficit(
-                            g, retainPerPop, provinces[provIds[p]], counties, _provinceCounties[provIds[p]]);
+                        int provId = provIds[p];
+                        float d = _provinceRetainDeficit[provId] - provinces[provId].Stockpile[g];
+                        if (d < 0f) d = 0f;
                         provDeficits[p] = d;
                         if (d > 0f)
                             totalDeficit += d;
@@ -280,24 +290,18 @@ namespace EconSim.Core.Economy
                     if (pe.Stockpile[g] <= 0f) continue;
 
                     var countyIds = _provinceCounties[provId];
-
-                    float totalDeficit = 0f;
-                    for (int c = 0; c < countyIds.Length; c++)
-                    {
-                        var ce = counties[countyIds[c]];
-                        float deficit = ce.Population * retainPerPop - ce.Stock[g];
-                        if (deficit > 0f)
-                            totalDeficit += deficit;
-                    }
+                    float totalDeficit = _provinceRetainDeficit[provId];
 
                     if (totalDeficit <= 0f) continue;
 
                     float available = pe.Stockpile[g];
                     for (int c = 0; c < countyIds.Length; c++)
                     {
-                        var ce = counties[countyIds[c]];
-                        float deficit = ce.Population * retainPerPop - ce.Stock[g];
+                        int countyId = countyIds[c];
+                        float deficit = _countyRetainDeficit[countyId];
                         if (deficit <= 0f) continue;
+                        var ce = counties[countyId];
+                        if (ce == null) continue;
 
                         float share = deficit / totalDeficit;
                         float relief = Math.Min(share * available, deficit);
@@ -466,24 +470,31 @@ namespace EconSim.Core.Economy
             }
         }
 
-        /// <summary>
-        /// Sum of (retainTarget - stock) across deficit counties in a province for a single good.
-        /// Accounts for what the provincial stockpile could cover locally.
-        /// </summary>
-        static float ComputeProvinceDeficit(
-            int g, float retainPerPop, ProvinceEconomy pe, CountyEconomy[] counties, int[] countyIds)
+        void BuildRetainDeficitsForGood(int goodIdx, float retainPerPop, CountyEconomy[] counties)
         {
-            float totalDeficit = 0f;
-            for (int c = 0; c < countyIds.Length; c++)
+            for (int p = 0; p < _provinceIds.Length; p++)
             {
-                var ce = counties[countyIds[c]];
-                float deficit = ce.Population * retainPerPop - ce.Stock[g];
-                if (deficit > 0f)
-                    totalDeficit += deficit;
-            }
+                int provId = _provinceIds[p];
+                var countyIds = _provinceCounties[provId];
+                float totalDeficit = 0f;
 
-            // Province can cover some of the deficit locally
-            return Math.Max(0f, totalDeficit - pe.Stockpile[g]);
+                for (int c = 0; c < countyIds.Length; c++)
+                {
+                    int countyId = countyIds[c];
+                    var ce = counties[countyId];
+                    float deficit = 0f;
+                    if (ce != null)
+                    {
+                        deficit = ce.Population * retainPerPop - ce.Stock[goodIdx];
+                        if (deficit < 0f) deficit = 0f;
+                    }
+
+                    _countyRetainDeficit[countyId] = deficit;
+                    totalDeficit += deficit;
+                }
+
+                _provinceRetainDeficit[provId] = totalDeficit;
+            }
         }
 
         void ResetAccumulators(
@@ -599,6 +610,8 @@ namespace EconSim.Core.Economy
 
             _countyToRealm = new int[maxCountyId + 1];
             _countyToProvince = new int[maxCountyId + 1];
+            _countyRetainDeficit = new float[maxCountyId + 1];
+            _provinceRetainDeficit = new float[maxProvId + 1];
             foreach (var county in mapData.Counties)
             {
                 int provId = county.ProvinceId;
