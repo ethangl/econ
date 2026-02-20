@@ -496,6 +496,8 @@ namespace EconSim.Core.Economy
             snap.TotalIntraProvTradeSoldByGood = new float[Goods.Count];
             snap.TotalCrossProvTradeBoughtByGood = new float[Goods.Count];
             snap.TotalCrossProvTradeSoldByGood = new float[Goods.Count];
+            snap.TotalCrossRealmTradeBoughtByGood = new float[Goods.Count];
+            snap.TotalCrossRealmTradeSoldByGood = new float[Goods.Count];
 
             int countyCount = 0;
             snap.MinBasicSatisfaction = float.MaxValue;
@@ -525,12 +527,18 @@ namespace EconSim.Core.Economy
                     snap.TotalIntraProvTradeSoldByGood[g] += ce.TradeSold[g];
                     snap.TotalCrossProvTradeBoughtByGood[g] += ce.CrossProvTradeBought[g];
                     snap.TotalCrossProvTradeSoldByGood[g] += ce.CrossProvTradeSold[g];
+                    snap.TotalCrossRealmTradeBoughtByGood[g] += ce.CrossRealmTradeBought[g];
+                    snap.TotalCrossRealmTradeSoldByGood[g] += ce.CrossRealmTradeSold[g];
                 }
                 snap.TotalIntraProvTradeSpending += ce.TradeCrownsSpent;
                 snap.TotalIntraProvTradeRevenue += ce.TradeCrownsEarned;
                 snap.TotalCrossProvTradeSpending += ce.CrossProvTradeCrownsSpent;
                 snap.TotalCrossProvTradeRevenue += ce.CrossProvTradeCrownsEarned;
                 snap.TotalTradeTollsPaid += ce.TradeTollsPaid;
+                snap.TotalCrossRealmTradeSpending += ce.CrossRealmTradeCrownsSpent;
+                snap.TotalCrossRealmTradeRevenue += ce.CrossRealmTradeCrownsEarned;
+                snap.TotalCrossRealmTollsPaid += ce.CrossRealmTollsPaid;
+                snap.TotalCrossRealmTariffsPaid += ce.CrossRealmTariffsPaid;
 
                 float foodStock = ce.Stock[Food];
                 if (foodStock < snap.MinStock) snap.MinStock = foodStock;
@@ -628,6 +636,7 @@ namespace EconSim.Core.Economy
                     snap.TotalCrownsMinted += re.CrownsMinted;
                     snap.TotalTradeSpending += re.TradeSpending;
                     snap.TotalTradeRevenue += re.TradeRevenue;
+                    snap.TotalCrossRealmTariffsCollected += re.TradeTariffsCollected;
                 }
             }
 

@@ -331,3 +331,18 @@ With the mechanism proven, add more production chains. Each is a data-driven add
 **Raw inputs not directly consumed:** Pork, milk, fish, clay, wool, charcoal, iron — extracted on-demand by local facilities or at full capacity if tradeable with direct demand. Tax-exempt when purely facility inputs.
 
 ## Layer 8: Domestic Cash Flow
+
+### Layer 9: County Market Access
+
+Currently the king intermediates all trade (inter-realm only) and counties receive goods solely through feudal relief. This layer makes counties the trading agents, opening markets progressively with tolls replacing in-kind taxation at each political boundary.
+
+Feudal redistribution (FiscalSystem) continues to run — taxes and relief still flow through the hierarchy. County trade is an additional channel that lets counties buy/sell surplus directly, bypassing the feudal pipeline for goods they can afford.
+
+**Phase A: Intra-Province Trade**
+Counties within the same province trade directly at market prices. Untaxed (or negligible flat fee). The duke's province is a free-trade zone — counties with surplus sell to neighbors with deficit, routed via transport graph.
+
+**Phase B: Cross-Province / Intra-Realm Trade**
+Counties trade across province boundaries within the same realm. The buying county pays its own duke a 5% toll on goods entering the province. Creates incentive for provincial self-sufficiency while allowing inter-provincial specialization.
+
+**Phase C: Cross-Realm Trade**
+Counties trade across realm borders. Buyers pay 5% ducal toll + 10% royal tariff (price × 1.15). Global county pool — all counties participate regardless of realm. Sequential pass ordering ensures Phase C only handles residual surplus/deficit not cleared within a realm by Phase A+B. InterRealmTradeSystem retains deficit scan and price discovery (no trade execution).

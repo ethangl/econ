@@ -83,5 +83,23 @@ namespace EconSim.Core.Economy
 
         /// <summary>Cross-province trade: toll crowns paid to own province this tick (reset daily).</summary>
         public float TradeTollsPaid;
+
+        /// <summary>Cross-realm trade: kg bought per good this tick (reset daily).</summary>
+        public float[] CrossRealmTradeBought = new float[Goods.Count];
+
+        /// <summary>Cross-realm trade: kg sold per good this tick (reset daily).</summary>
+        public float[] CrossRealmTradeSold = new float[Goods.Count];
+
+        /// <summary>Cross-realm trade: total crowns spent buying this tick (reset daily).</summary>
+        public float CrossRealmTradeCrownsSpent;
+
+        /// <summary>Cross-realm trade: total crowns earned selling this tick (reset daily).</summary>
+        public float CrossRealmTradeCrownsEarned;
+
+        /// <summary>Cross-realm trade: toll crowns paid to own province this tick (reset daily).</summary>
+        public float CrossRealmTollsPaid;
+
+        /// <summary>Cross-realm trade: tariff crowns paid to own realm this tick (reset daily).</summary>
+        public float CrossRealmTariffsPaid;
     }
 }
