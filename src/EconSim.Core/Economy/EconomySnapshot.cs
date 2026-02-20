@@ -61,6 +61,15 @@ namespace EconSim.Core.Economy
         public float TotalTradeTollsPaid;
         public float TotalTradeTollsCollected;
 
+        // Cross-realm trade (Layer 9 Phase C)
+        public float[] TotalCrossRealmTradeBoughtByGood;
+        public float[] TotalCrossRealmTradeSoldByGood;
+        public float TotalCrossRealmTradeSpending;
+        public float TotalCrossRealmTradeRevenue;
+        public float TotalCrossRealmTollsPaid;
+        public float TotalCrossRealmTariffsPaid;
+        public float TotalCrossRealmTariffsCollected;
+
         // Inter-realm trade (Layer 4 Phase C)
         public float[] MarketPrices;
         public float[] TotalTradeImportsByGood;

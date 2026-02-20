@@ -1,7 +1,1 @@
-{
-  "action": "generate_and_run",
-  "seed": 424242,
-  "cellCount": 100000,
-  "template": "Continents",
-  "months": 12
-}
+{"action":"generate_and_run","seed":42,"cellCount":60000,"template":"Continents","months":6}

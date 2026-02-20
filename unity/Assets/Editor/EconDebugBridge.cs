@@ -677,6 +677,11 @@ namespace EconSim.Editor
                 j.KV("crossProvTradeRevenue", snap.TotalCrossProvTradeRevenue);
                 j.KV("tradeTollsPaid", snap.TotalTradeTollsPaid);
                 j.KV("tradeTollsCollected", snap.TotalTradeTollsCollected);
+                j.KV("crossRealmTradeSpending", snap.TotalCrossRealmTradeSpending);
+                j.KV("crossRealmTradeRevenue", snap.TotalCrossRealmTradeRevenue);
+                j.KV("crossRealmTollsPaid", snap.TotalCrossRealmTollsPaid);
+                j.KV("crossRealmTariffsPaid", snap.TotalCrossRealmTariffsPaid);
+                j.KV("crossRealmTariffsCollected", snap.TotalCrossRealmTariffsCollected);
 
                 // Population dynamics
                 j.KV("totalPopulation", snap.TotalPopulation);
@@ -768,6 +773,21 @@ namespace EconSim.Editor
                     j.ArrClose();
                 }
 
+                if (snap.TotalCrossRealmTradeBoughtByGood != null)
+                {
+                    j.Key("crossRealmTradeBoughtByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalCrossRealmTradeBoughtByGood.Length; g++)
+                        j.Val(snap.TotalCrossRealmTradeBoughtByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalCrossRealmTradeSoldByGood != null)
+                {
+                    j.Key("crossRealmTradeSoldByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalCrossRealmTradeSoldByGood.Length; g++)
+                        j.Val(snap.TotalCrossRealmTradeSoldByGood[g]);
+                    j.ArrClose();
+                }
+
                 // Per-good breakdowns
                 if (snap.TotalStockByGood != null)
                 {
@@ -853,6 +873,12 @@ namespace EconSim.Editor
             float totalCPTradeSpending = 0f, totalCPTradeRevenue = 0f;
             float totalTollsPaid = 0f;
 
+            // Cross-realm trade aggregates
+            float[] totalCRTradeBought = new float[Goods.Count];
+            float[] totalCRTradeSold = new float[Goods.Count];
+            float totalCRTradeSpending = 0f, totalCRTradeRevenue = 0f;
+            float totalCRTollsPaid = 0f, totalCRTariffsPaid = 0f;
+
             for (int i = 0; i < econ.Counties.Length; i++)
             {
                 var ce2 = econ.Counties[i];
@@ -863,12 +889,18 @@ namespace EconSim.Editor
                     totalTradeSold[g] += ce2.TradeSold[g];
                     totalCPTradeBought[g] += ce2.CrossProvTradeBought[g];
                     totalCPTradeSold[g] += ce2.CrossProvTradeSold[g];
+                    totalCRTradeBought[g] += ce2.CrossRealmTradeBought[g];
+                    totalCRTradeSold[g] += ce2.CrossRealmTradeSold[g];
                 }
                 totalTradeSpending += ce2.TradeCrownsSpent;
                 totalTradeRevenue += ce2.TradeCrownsEarned;
                 totalCPTradeSpending += ce2.CrossProvTradeCrownsSpent;
                 totalCPTradeRevenue += ce2.CrossProvTradeCrownsEarned;
                 totalTollsPaid += ce2.TradeTollsPaid;
+                totalCRTradeSpending += ce2.CrossRealmTradeCrownsSpent;
+                totalCRTradeRevenue += ce2.CrossRealmTradeCrownsEarned;
+                totalCRTollsPaid += ce2.CrossRealmTollsPaid;
+                totalCRTariffsPaid += ce2.CrossRealmTariffsPaid;
             }
 
             j.KV("countyCount", countyCount);
@@ -921,6 +953,32 @@ namespace EconSim.Editor
                 if (pe2 != null) totalTollsCollected += pe2.TradeTollsCollected;
             }
             j.KV("tradeTollsCollected", totalTollsCollected);
+
+            // Cross-realm trade per-good
+            j.Key("crossRealmTradeBoughtByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+                j.KV(goodNames[g], totalCRTradeBought[g]);
+            j.ObjClose();
+            j.Key("crossRealmTradeSoldByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+                j.KV(goodNames[g], totalCRTradeSold[g]);
+            j.ObjClose();
+            j.KV("crossRealmTradeSpending", totalCRTradeSpending);
+            j.KV("crossRealmTradeRevenue", totalCRTradeRevenue);
+            j.KV("crossRealmTollsPaid", totalCRTollsPaid);
+            j.KV("crossRealmTariffsPaid", totalCRTariffsPaid);
+
+            // Realm tariff revenue
+            float totalTariffsCollected = 0f;
+            if (econ.Realms != null)
+            {
+                for (int i = 0; i < econ.Realms.Length; i++)
+                {
+                    var re2 = econ.Realms[i];
+                    if (re2 != null) totalTariffsCollected += re2.TradeTariffsCollected;
+                }
+            }
+            j.KV("tradeTariffsCollected", totalTariffsCollected);
 
             // Per-province summary (per-good stockpiles)
             j.Key("provinces"); j.ArrOpen();
@@ -979,6 +1037,7 @@ namespace EconSim.Editor
                     j.KV("reliefCrownsReceived", re.ReliefCrownsReceived);
                     j.KV("tradeSpending", re.TradeSpending);
                     j.KV("tradeRevenue", re.TradeRevenue);
+                    j.KV("tradeTariffsCollected", re.TradeTariffsCollected);
                     j.Key("tradeImportsByGood"); j.ObjOpen();
                     for (int g = 0; g < Goods.Count; g++)
                         j.KV(goodNames[g], re.TradeImports[g]);

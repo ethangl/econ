@@ -49,5 +49,8 @@ namespace EconSim.Core.Economy
 
         /// <summary>Crowns received from provinces for relief this tick (reset daily).</summary>
         public float ReliefCrownsReceived;
+
+        /// <summary>Tariff crowns collected from cross-realm imports this tick (reset daily).</summary>
+        public float TradeTariffsCollected;
     }
 }

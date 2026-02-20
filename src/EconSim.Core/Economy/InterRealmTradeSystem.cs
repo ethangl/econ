@@ -71,15 +71,7 @@ namespace EconSim.Core.Economy
             var realms = econ.Realms;
             int realmCount = _realmIds.Length;
 
-            // Clear trade accumulators (owned by this system)
-            for (int r = 0; r < realmCount; r++)
-            {
-                var re = realms[_realmIds[r]];
-                re.TradeSpending = 0f;
-                re.TradeRevenue = 0f;
-                Array.Clear(re.TradeImports, 0, re.TradeImports.Length);
-                Array.Clear(re.TradeExports, 0, re.TradeExports.Length);
-            }
+            // Trade accumulators now cleared by FiscalSystem.ResetAccumulators.
 
             // Phase 8: Post-relief county deficit scan — record remaining unmet pop consumption per realm
             for (int g = 0; g < Goods.Count; g++)
@@ -146,58 +138,13 @@ namespace EconSim.Core.Economy
                 if (totalSupply <= 0f || totalDemand <= 0f)
                     continue;
 
+                // Price discovery: compute clearing price from supply/demand ratio
                 float basePrice = Goods.BasePrice[g];
                 float rawPrice = basePrice * totalDemand / totalSupply;
                 float price = Math.Max(Goods.MinPrice[g], Math.Min(rawPrice, Goods.MaxPrice[g]));
                 _prices[g] = price;
 
-                float totalEffectiveDemand = 0f;
-                Span<float> effectiveDemand = stackalloc float[realmCount];
-
-                for (int r = 0; r < realmCount; r++)
-                {
-                    if (netPosition[r] >= 0f)
-                    {
-                        effectiveDemand[r] = 0f;
-                        continue;
-                    }
-
-                    float want = -netPosition[r];
-                    float canAfford = realms[_realmIds[r]].Treasury / price;
-                    float eff = Math.Min(want, canAfford);
-                    effectiveDemand[r] = eff;
-                    totalEffectiveDemand += eff;
-                }
-
-                if (totalEffectiveDemand <= 0f)
-                    continue;
-
-                float fillRatio = Math.Min(1f, totalSupply / totalEffectiveDemand);
-                float sellRatio = Math.Min(1f, totalEffectiveDemand / totalSupply);
-
-                for (int r = 0; r < realmCount; r++)
-                {
-                    var re = realms[_realmIds[r]];
-
-                    if (netPosition[r] > 0f)
-                    {
-                        float sold = netPosition[r] * sellRatio;
-                        float revenue = sold * price;
-                        re.Stockpile[g] -= sold;
-                        re.Treasury += revenue;
-                        re.TradeExports[g] += sold;
-                        re.TradeRevenue += revenue;
-                    }
-                    else if (effectiveDemand[r] > 0f)
-                    {
-                        float bought = effectiveDemand[r] * fillRatio;
-                        float cost = bought * price;
-                        re.Stockpile[g] += bought;
-                        re.Treasury -= cost;
-                        re.TradeImports[g] += bought;
-                        re.TradeSpending += cost;
-                    }
-                }
+                // Trade execution moved to FiscalSystem Phase C (cross-realm county trade).
             }
 
             Array.Copy(_prices, state.Economy.MarketPrices, Goods.Count);

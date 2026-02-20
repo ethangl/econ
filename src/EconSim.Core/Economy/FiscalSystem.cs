@@ -45,6 +45,9 @@ namespace EconSim.Core.Economy
         /// <summary>Buyers pay 5% toll on cross-province trade (paid to own province treasury).</summary>
         const float CrossProvTollRate = 0.05f;
 
+        /// <summary>Buyers pay 10% tariff on cross-realm trade (paid to own realm treasury).</summary>
+        const float CrossRealmTariffRate = 0.10f;
+
 
         /// <summary>Province ID → array of county IDs.</summary>
         int[][] _provinceCounties;
@@ -69,6 +72,12 @@ namespace EconSim.Core.Economy
 
         /// <summary>Max county count across all realms (for cross-province trade stackalloc sizing).</summary>
         int _maxCountiesPerRealm;
+
+        /// <summary>All county IDs (for cross-realm trade global pool).</summary>
+        int[] _allCountyIds;
+
+        /// <summary>Total county count (for stackalloc sizing in cross-realm trade).</summary>
+        int _totalCountyCount;
 
         /// <summary>County ID → Province ID (for routing tolls to buyer's province).</summary>
         int[] _countyToProvince;
@@ -512,6 +521,96 @@ namespace EconSim.Core.Economy
                 }
             }
 
+            // ── CROSS-REALM TRADE PASS ────────────────────────────────
+            // Counties across different realms trade at market price + 5% toll + 10% tariff.
+            // Only runs if there are multiple realms; single-realm maps skip.
+            if (_realmIds.Length > 1)
+            {
+                // Use heap allocation — county count typically 300-1000, stackalloc risky at upper end
+                float[] globalSurpluses = new float[_totalCountyCount];
+
+                for (int bp = 0; bp < buyPriority.Length; bp++)
+                {
+                    int g = buyPriority[bp];
+                    float price = prices[g];
+                    if (price <= 0f) continue;
+
+                    float retainPerPop = Goods.DurableRetainPerPop[g] > 0f
+                        ? Goods.DurableRetainPerPop[g]
+                        : Goods.Defs[g].Need == NeedCategory.Staple
+                            ? Goods.StapleIdealPerPop[g]
+                            : ConsumptionPerPop[g];
+
+                    float costPerUnit = price * (1f + CrossProvTollRate + CrossRealmTariffRate);
+
+                    float totalSupply = 0f;
+                    float totalDemand = 0f;
+
+                    for (int c = 0; c < _allCountyIds.Length; c++)
+                    {
+                        var ce = counties[_allCountyIds[c]];
+                        float surplus = ce.Stock[g] - ce.Population * retainPerPop;
+                        globalSurpluses[c] = surplus;
+                        if (surplus > 0f)
+                            totalSupply += surplus;
+                        else if (surplus < 0f)
+                        {
+                            float rawDemand = -surplus;
+                            float affordable = ce.Treasury / costPerUnit;
+                            float demand = Math.Min(rawDemand, affordable);
+                            globalSurpluses[c] = -demand;
+                            totalDemand += demand;
+                        }
+                    }
+
+                    if (totalSupply <= 0f || totalDemand <= 0f) continue;
+
+                    float fillRatio = Math.Min(1f, totalSupply / totalDemand);
+                    float sellRatio = Math.Min(1f, totalDemand / totalSupply);
+
+                    for (int c = 0; c < _allCountyIds.Length; c++)
+                    {
+                        float s = globalSurpluses[c];
+                        int countyId = _allCountyIds[c];
+                        var ce = counties[countyId];
+
+                        if (s > 0f)
+                        {
+                            float sold = s * sellRatio;
+                            ce.Stock[g] -= sold;
+                            ce.CrossRealmTradeSold[g] += sold;
+                            float earned = sold * price;
+                            ce.Treasury += earned;
+                            ce.CrossRealmTradeCrownsEarned += earned;
+                            int realmId = _countyToRealm[countyId];
+                            realms[realmId].TradeExports[g] += sold;
+                            realms[realmId].TradeRevenue += earned;
+                        }
+                        else if (s < 0f)
+                        {
+                            float bought = (-s) * fillRatio;
+                            ce.Stock[g] += bought;
+                            ce.CrossRealmTradeBought[g] += bought;
+                            float goodsCost = bought * price;
+                            float toll = bought * price * CrossProvTollRate;
+                            float tariff = bought * price * CrossRealmTariffRate;
+                            ce.Treasury -= goodsCost + toll + tariff;
+                            ce.CrossRealmTradeCrownsSpent += goodsCost;
+                            ce.CrossRealmTollsPaid += toll;
+                            ce.CrossRealmTariffsPaid += tariff;
+                            int provId = _countyToProvince[countyId];
+                            provinces[provId].TradeTollsCollected += toll;
+                            provinces[provId].Treasury += toll;
+                            int realmId = _countyToRealm[countyId];
+                            realms[realmId].TradeTariffsCollected += tariff;
+                            realms[realmId].Treasury += tariff;
+                            realms[realmId].TradeImports[g] += bought;
+                            realms[realmId].TradeSpending += goodsCost;
+                        }
+                    }
+                }
+            }
+
             // Phase 8 (deficit scan) moved to InterRealmTradeSystem.
             // Phase 9a/b/c (facility quotas) moved to FacilityQuotaSystem.
         }
@@ -615,6 +714,12 @@ namespace EconSim.Core.Economy
                     ce.CrossProvTradeCrownsSpent = 0f;
                     ce.CrossProvTradeCrownsEarned = 0f;
                     ce.TradeTollsPaid = 0f;
+                    Array.Clear(ce.CrossRealmTradeBought, 0, ce.CrossRealmTradeBought.Length);
+                    Array.Clear(ce.CrossRealmTradeSold, 0, ce.CrossRealmTradeSold.Length);
+                    ce.CrossRealmTradeCrownsSpent = 0f;
+                    ce.CrossRealmTradeCrownsEarned = 0f;
+                    ce.CrossRealmTollsPaid = 0f;
+                    ce.CrossRealmTariffsPaid = 0f;
                     // FacilityQuota clearing owned by FacilityQuotaSystem
                 }
             }
@@ -629,7 +734,11 @@ namespace EconSim.Core.Economy
                 re.CrownsMinted = 0f;
                 re.TaxCrownsPaid = 0f;
                 re.ReliefCrownsReceived = 0f;
-                // Trade accumulators cleared by InterRealmTradeSystem
+                re.TradeSpending = 0f;
+                re.TradeRevenue = 0f;
+                Array.Clear(re.TradeImports, 0, re.TradeImports.Length);
+                Array.Clear(re.TradeExports, 0, re.TradeExports.Length);
+                re.TradeTariffsCollected = 0f;
                 Array.Clear(re.Deficit, 0, re.Deficit.Length);
             }
         }
@@ -747,6 +856,13 @@ namespace EconSim.Core.Economy
                 if (arr.Length > _maxCountiesPerRealm)
                     _maxCountiesPerRealm = arr.Length;
             }
+
+            // All county IDs for cross-realm trade
+            var allCountyList = new List<int>(mapData.Counties.Count);
+            foreach (var county in mapData.Counties)
+                allCountyList.Add(county.Id);
+            _allCountyIds = allCountyList.ToArray();
+            _totalCountyCount = _allCountyIds.Length;
 
             // Facility mappings moved to FacilityQuotaSystem.
         }
