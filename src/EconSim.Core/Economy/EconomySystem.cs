@@ -70,6 +70,12 @@ namespace EconSim.Core.Economy
                 var ce = new CountyEconomy();
                 ce.Population = county.TotalPopulation;
                 ComputeCountyProductivity(county, mapData, ce.Productivity);
+
+                // Seed durable goods proportional to population
+                for (int g = 0; g < Goods.Count; g++)
+                    if (Goods.TargetStockPerPop[g] > 0f)
+                        ce.Stock[g] = ce.Population * Goods.TargetStockPerPop[g];
+
                 econ.Counties[county.Id] = ce;
             }
 
@@ -218,11 +224,26 @@ namespace EconSim.Core.Economy
                 // Consumption — all goods
                 for (int g = 0; g < Goods.Count; g++)
                 {
-                    float needed = pop * ConsumptionPerPop[g];
-                    float consumed = Math.Min(ce.Stock[g], needed);
-                    ce.Stock[g] -= consumed;
-                    ce.Consumption[g] = consumed;
-                    ce.UnmetNeed[g] = needed - consumed;
+                    float tgt = Goods.TargetStockPerPop[g];
+                    if (tgt > 0f)
+                    {
+                        // Durable: only wear removes stock; deficit is a demand signal
+                        float targetStock = pop * tgt;
+                        float deficit = Math.Max(0f, targetStock - ce.Stock[g]);
+                        float replacement = ce.Stock[g] * Goods.Defs[g].SpoilageRate;
+                        float wear = Math.Min(ce.Stock[g], replacement);
+                        ce.Stock[g] -= wear;
+                        ce.Consumption[g] = wear;
+                        ce.UnmetNeed[g] = deficit * 0.1f + Math.Max(0f, replacement - wear);
+                    }
+                    else
+                    {
+                        float needed = pop * ConsumptionPerPop[g];
+                        float consumed = Math.Min(ce.Stock[g], needed);
+                        ce.Stock[g] -= consumed;
+                        ce.Consumption[g] = consumed;
+                        ce.UnmetNeed[g] = needed - consumed;
+                    }
                 }
 
                 // Basic-needs satisfaction EMA (alpha ≈ 2/(30+1) ≈ 0.065, ~30-day smoothing)

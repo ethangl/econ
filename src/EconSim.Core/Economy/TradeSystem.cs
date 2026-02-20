@@ -83,6 +83,9 @@ namespace EconSim.Core.Economy
         /// <summary>True if this good is produced as output by any facility type.</summary>
         bool[] _isFacilityOutput;
 
+        /// <summary>Effective demand per pop per day — ConsumptionPerPop for consumables, aggregate demand/pop for durables.</summary>
+        float[] _effectiveDemandPerPop;
+
         public void Initialize(SimulationState state, MapData mapData)
         {
             BuildMappings(state, mapData);
@@ -94,12 +97,41 @@ namespace EconSim.Core.Economy
             var provinces = state.Economy.Provinces;
             var realms = state.Economy.Realms;
 
+            // Precompute effective demand per pop for durable goods
+            if (_effectiveDemandPerPop == null)
+                _effectiveDemandPerPop = new float[Goods.Count];
+            float totalPop = 0f;
+            for (int i = 0; i < counties.Length; i++)
+                if (counties[i] != null) totalPop += counties[i].Population;
+            for (int g = 0; g < Goods.Count; g++)
+            {
+                if (Goods.TargetStockPerPop[g] > 0f && totalPop > 0f)
+                {
+                    float totalDemand = 0f;
+                    for (int i = 0; i < counties.Length; i++)
+                    {
+                        var ce = counties[i];
+                        if (ce == null) continue;
+                        totalDemand += ce.Consumption[g] + ce.UnmetNeed[g];
+                    }
+                    _effectiveDemandPerPop[g] = totalDemand / totalPop;
+                }
+                else
+                {
+                    _effectiveDemandPerPop[g] = ConsumptionPerPop[g];
+                }
+            }
+
             // Reset per-tick accumulators
             ResetAccumulators(counties, provinces, realms);
 
             for (int g = 0; g < Goods.Count; g++)
             {
                 float consumeRate = ConsumptionPerPop[g];
+                // For durables, retain target stock level; for consumables, retain one day's consumption
+                float retainPerPop = Goods.TargetStockPerPop[g] > 0f
+                    ? Goods.TargetStockPerPop[g]
+                    : consumeRate;
 
                 // Phase 1: County administrative consumption (building upkeep)
                 float countyAdmin = Goods.CountyAdminPerPop[g];
@@ -132,8 +164,8 @@ namespace EconSim.Core.Economy
                         for (int c = 0; c < countyIds.Length; c++)
                         {
                             var ce = counties[countyIds[c]];
-                            float dailyNeed = ce.Population * consumeRate;
-                            float surplus = ce.Stock[g] - dailyNeed;
+                            float retain = ce.Population * retainPerPop;
+                            float surplus = ce.Stock[g] - retain;
 
                             if (surplus > 0f)
                             {
@@ -216,7 +248,7 @@ namespace EconSim.Core.Economy
                     for (int p = 0; p < provIds.Length; p++)
                     {
                         float d = ComputeProvinceDeficit(
-                            g, consumeRate, provinces[provIds[p]], counties, _provinceCounties[provIds[p]]);
+                            g, retainPerPop, provinces[provIds[p]], counties, _provinceCounties[provIds[p]]);
                         provDeficits[p] = d;
                         if (d > 0f)
                             totalDeficit += d;
@@ -250,7 +282,7 @@ namespace EconSim.Core.Economy
                     for (int c = 0; c < countyIds.Length; c++)
                     {
                         var ce = counties[countyIds[c]];
-                        float deficit = ce.Population * consumeRate - ce.Stock[g];
+                        float deficit = ce.Population * retainPerPop - ce.Stock[g];
                         if (deficit > 0f)
                             totalDeficit += deficit;
                     }
@@ -261,7 +293,7 @@ namespace EconSim.Core.Economy
                     for (int c = 0; c < countyIds.Length; c++)
                     {
                         var ce = counties[countyIds[c]];
-                        float deficit = ce.Population * consumeRate - ce.Stock[g];
+                        float deficit = ce.Population * retainPerPop - ce.Stock[g];
                         if (deficit <= 0f) continue;
 
                         float share = deficit / totalDeficit;
@@ -277,14 +309,16 @@ namespace EconSim.Core.Economy
             // Phase 8: Post-relief county deficit scan — record remaining unmet pop consumption per realm
             for (int g = 0; g < Goods.Count; g++)
             {
-                float consumeRate = ConsumptionPerPop[g];
-                if (consumeRate <= 0f) continue;
+                float retainRate = Goods.TargetStockPerPop[g] > 0f
+                    ? Goods.TargetStockPerPop[g]
+                    : ConsumptionPerPop[g];
+                if (retainRate <= 0f) continue;
 
                 for (int i = 0; i < counties.Length; i++)
                 {
                     var ce = counties[i];
                     if (ce == null) continue;
-                    float shortfall = ce.Population * consumeRate - ce.Stock[g];
+                    float shortfall = ce.Population * retainRate - ce.Stock[g];
                     if (shortfall > 0f)
                         realms[_countyToRealm[i]].Deficit[g] += shortfall;
                 }
@@ -329,7 +363,7 @@ namespace EconSim.Core.Economy
                         if (totalProducingPop <= 0f) continue;
 
                         // Provincial need = pop consumption + county admin + province admin
-                        float perCapNeed = Goods.ConsumptionPerPop[g]
+                        float perCapNeed = _effectiveDemandPerPop[g]
                                          + Goods.CountyAdminPerPop[g]
                                          + Goods.ProvinceAdminPerPop[g];
                         float provinceTotalNeed = provPopulation * perCapNeed;
@@ -380,7 +414,7 @@ namespace EconSim.Core.Economy
                                 && _provinceFacilityCounties[provId][g].Length > 0)
                                 continue; // province handles its own need
 
-                            float perCapNeed = Goods.ConsumptionPerPop[g]
+                            float perCapNeed = _effectiveDemandPerPop[g]
                                              + Goods.CountyAdminPerPop[g]
                                              + Goods.ProvinceAdminPerPop[g];
                             realmQuota += _provincePop[provId] * perCapNeed;
@@ -430,17 +464,17 @@ namespace EconSim.Core.Economy
         }
 
         /// <summary>
-        /// Sum of (dailyNeed - stock) across deficit counties in a province for a single good.
+        /// Sum of (retainTarget - stock) across deficit counties in a province for a single good.
         /// Accounts for what the provincial stockpile could cover locally.
         /// </summary>
         static float ComputeProvinceDeficit(
-            int g, float consumeRate, ProvinceEconomy pe, CountyEconomy[] counties, int[] countyIds)
+            int g, float retainPerPop, ProvinceEconomy pe, CountyEconomy[] counties, int[] countyIds)
         {
             float totalDeficit = 0f;
             for (int c = 0; c < countyIds.Length; c++)
             {
                 var ce = counties[countyIds[c]];
-                float deficit = ce.Population * consumeRate - ce.Stock[g];
+                float deficit = ce.Population * retainPerPop - ce.Stock[g];
                 if (deficit > 0f)
                     totalDeficit += deficit;
             }

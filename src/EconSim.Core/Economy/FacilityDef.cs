@@ -3,10 +3,11 @@ namespace EconSim.Core.Economy
     public enum FacilityType
     {
         Kiln = 0,
-        Sawmill = 1,
+        Carpenter = 1,
         Smelter = 2,
         Smithy = 3,
         CharcoalBurner = 4,
+        Weaver = 5,
     }
 
     public readonly struct RecipeInput
@@ -80,9 +81,9 @@ namespace EconSim.Core.Economy
                 new FacilityDef(FacilityType.Kiln,    "kiln",
                     new[] { new RecipeInput(GoodType.Clay, 2.0f), new RecipeInput(GoodType.Timber, 0.5f) },
                     GoodType.Pottery, 1.0f, 3, 0.05f, 0.05f, 1.0f),
-                new FacilityDef(FacilityType.Sawmill, "sawmill",
+                new FacilityDef(FacilityType.Carpenter, "carpenter",
                     new[] { new RecipeInput(GoodType.Timber, 3.0f) },
-                    GoodType.Lumber, 2.0f, 1, 0.2f, 0.10f, 5.0f),
+                    GoodType.Furniture, 2.0f, 1, 0.2f, 0.10f, 1.0f),
                 new FacilityDef(FacilityType.Smelter, "smelter",
                     new[] { new RecipeInput(GoodType.IronOre, 3.0f), new RecipeInput(GoodType.Charcoal, 0.4f) },
                     GoodType.Iron, 2.0f, 1, 0.0f, 0.05f, 1.0f),
@@ -92,6 +93,9 @@ namespace EconSim.Core.Economy
                 new FacilityDef(FacilityType.CharcoalBurner, "charcoalBurner",
                     new[] { new RecipeInput(GoodType.Timber, 5.0f) },
                     GoodType.Charcoal, 1.0f, 1, 0.1f, 0.10f, 2.0f),
+                new FacilityDef(FacilityType.Weaver, "weaver",
+                    new[] { new RecipeInput(GoodType.Wool, 3.0f) },
+                    GoodType.Clothes, 2.0f, 2, 0.05f, 0.10f, 2.0f),
             };
 
             Count = Defs.Length;

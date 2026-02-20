@@ -34,15 +34,15 @@ namespace EconSim.Core.Economy
             for (int i = 0; i < mapData.Realms.Count; i++)
                 _realmIds[i] = mapData.Realms[i].Id;
 
-            // Precompute which goods actually spoil
+            // Precompute which goods actually spoil (skip durables — wear handled in EconomySystem)
             int count = 0;
             for (int g = 0; g < Goods.Count; g++)
-                if (Goods.MonthlyRetention[g] < 1f) count++;
+                if (Goods.MonthlyRetention[g] < 1f && Goods.TargetStockPerPop[g] <= 0f) count++;
 
             _perishableGoods = new int[count];
             int idx = 0;
             for (int g = 0; g < Goods.Count; g++)
-                if (Goods.MonthlyRetention[g] < 1f)
+                if (Goods.MonthlyRetention[g] < 1f && Goods.TargetStockPerPop[g] <= 0f)
                     _perishableGoods[idx++] = g;
         }
 

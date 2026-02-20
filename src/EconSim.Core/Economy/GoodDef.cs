@@ -19,6 +19,7 @@ namespace EconSim.Core.Economy
         public readonly bool IsTradeable;
         public readonly bool IsPreciousMetal;
         public readonly float SpoilageRate;
+        public readonly float TargetStockPerPop;
 
         public GoodDef(
             GoodType type, string name,
@@ -27,7 +28,7 @@ namespace EconSim.Core.Economy
             float countyAdminPerPop, float provinceAdminPerPop, float realmAdminPerPop,
             float basePrice, float minPrice, float maxPrice,
             bool isTradeable, bool isPreciousMetal,
-            float spoilageRate = 0f)
+            float spoilageRate = 0f, float targetStockPerPop = 0f)
         {
             Type = type;
             Name = name;
@@ -43,6 +44,7 @@ namespace EconSim.Core.Economy
             IsTradeable = isTradeable;
             IsPreciousMetal = isPreciousMetal;
             SpoilageRate = spoilageRate;
+            TargetStockPerPop = targetStockPerPop;
         }
     }
 }

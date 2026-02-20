@@ -16,10 +16,11 @@ namespace EconSim.Core.Economy
         Ale = 8,
         Clay = 9,
         Pottery = 10,
-        Lumber = 11,
+        Furniture = 11,
         Iron = 12,
         Tools = 13,
         Charcoal = 14,
+        Clothes = 15,
     }
 
     public static class Goods
@@ -59,6 +60,9 @@ namespace EconSim.Core.Economy
         /// <summary>Monthly retention factor pow(1 - spoilageRate, 30), indexed by GoodType.</summary>
         public static readonly float[] MonthlyRetention;
 
+        /// <summary>Target stock per capita for durable goods (kg/person). Zero for consumables.</summary>
+        public static readonly float[] TargetStockPerPop;
+
         /// <summary>True if good has population consumption or administrative demand.</summary>
         public static readonly bool[] HasDirectDemand;
 
@@ -72,11 +76,11 @@ namespace EconSim.Core.Economy
             (int)GoodType.Ale,
             (int)GoodType.Tools,
             (int)GoodType.Salt,
-            (int)GoodType.Wool,
-            (int)GoodType.Pottery,
-            (int)GoodType.Lumber,
-            (int)GoodType.Stone,
+            (int)GoodType.Clothes,
             (int)GoodType.Timber,
+            (int)GoodType.Pottery,
+            (int)GoodType.Furniture,
+            (int)GoodType.Stone,
             (int)GoodType.Clay,
             (int)GoodType.IronOre,
             (int)GoodType.Iron,
@@ -106,20 +110,21 @@ namespace EconSim.Core.Economy
             {
                 //                                                                                                                                              spoilage
                 new GoodDef(GoodType.Food,      "food",      GoodCategory.Raw, NeedCategory.Basic,   1.0f,   0.0f,   0.0f,   0.02f,  1.0f,  0.1f,  10.0f, true,  false, 0.03f),
-                new GoodDef(GoodType.Timber,     "timber",    GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.5f,  0.05f, 5.0f,  true,  false, 0.001f),
+                new GoodDef(GoodType.Timber,     "timber",    GoodCategory.Raw, NeedCategory.Comfort, 0.2f,   0.0f,   0.0f,   0.0f,   0.5f,  0.05f, 5.0f,  true,  false, 0.001f),
                 new GoodDef(GoodType.IronOre,    "ironOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   5.0f,  0.5f,  50.0f, true,  false),
                 new GoodDef(GoodType.GoldOre,    "goldOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
                 new GoodDef(GoodType.SilverOre,  "silverOre", GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
                 new GoodDef(GoodType.Salt,       "salt",      GoodCategory.Raw, NeedCategory.Basic,   0.05f,  0.0f,   0.0f,   0.0f,   3.0f,  0.3f,  30.0f, true,  false),
-                new GoodDef(GoodType.Wool,       "wool",      GoodCategory.Raw, NeedCategory.Comfort, 0.1f,   0.0f,   0.0f,   0.005f, 2.0f,  0.2f,  20.0f, true,  false, 0.001f),
+                new GoodDef(GoodType.Wool,       "wool",      GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   2.0f,  0.2f,  20.0f, true,  false, 0.001f),
                 new GoodDef(GoodType.Stone,      "stone",     GoodCategory.Raw, NeedCategory.None,    0.0f,   0.005f, 0.008f, 0.012f, 0.3f,  0.03f, 3.0f,  true,  false),
                 new GoodDef(GoodType.Ale,        "ale",       GoodCategory.Raw, NeedCategory.Basic,   0.5f,   0.0f,   0.0f,   0.0f,   0.8f,  0.08f, 8.0f,  true,  false, 0.05f),
                 new GoodDef(GoodType.Clay,       "clay",      GoodCategory.Raw,     NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.2f,  0.02f, 2.0f,  true,  false),
-                new GoodDef(GoodType.Pottery,    "pottery",   GoodCategory.Refined, NeedCategory.Comfort, 0.01f,  0.002f, 0.001f, 0.001f, 2.0f,  0.2f,  20.0f, true,  false),
-                new GoodDef(GoodType.Lumber,     "lumber",    GoodCategory.Refined, NeedCategory.Comfort, 0.2f,   0.02f,  0.01f,  0.01f,  1.0f,  0.1f,  10.0f, true,  false, 0.001f),
+                new GoodDef(GoodType.Pottery,    "pottery",   GoodCategory.Refined, NeedCategory.Comfort, 0.0f,   0.002f, 0.001f, 0.001f, 2.0f,  0.2f,  20.0f, true,  false, 0.002f, 1.0f),
+                new GoodDef(GoodType.Furniture,  "furniture", GoodCategory.Finished,NeedCategory.Comfort, 0.0f,   0.001f, 0.0f,   0.0f,   5.0f,  0.5f,  50.0f, true,  false, 0.001f, 2.0f),
                 new GoodDef(GoodType.Iron,       "iron",      GoodCategory.Refined, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   10.0f, 1.0f,  100.0f,true,  false),
-                new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.005f, 0.001f, 0.001f, 0.002f, 15.0f, 1.5f,  150.0f,true,  false, 0.001f),
+                new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.0f,   0.001f, 0.001f, 0.002f, 15.0f, 1.5f,  150.0f,true,  false, 0.001f, 2.0f),
                 new GoodDef(GoodType.Charcoal,   "charcoal",  GoodCategory.Refined, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   2.0f,  0.2f,  20.0f, true,  false),
+                new GoodDef(GoodType.Clothes,    "clothes",   GoodCategory.Finished,NeedCategory.Comfort, 0.0f,   0.001f, 0.0f,   0.005f, 3.0f,  0.3f,  30.0f, true,  false, 0.002f, 2.0f),
             };
 
             Count = Defs.Length;
@@ -134,6 +139,7 @@ namespace EconSim.Core.Economy
             ProvinceAdminPerPop = new float[Count];
             RealmAdminPerPop    = new float[Count];
             MonthlyRetention    = new float[Count];
+            TargetStockPerPop   = new float[Count];
             HasDirectDemand     = new bool[Count];
 
             var tradeable = new List<int>();
@@ -150,7 +156,9 @@ namespace EconSim.Core.Economy
                 ProvinceAdminPerPop[i] = d.ProvinceAdminPerPop;
                 RealmAdminPerPop[i]    = d.RealmAdminPerPop;
                 MonthlyRetention[i]    = (float)Math.Pow(1.0 - d.SpoilageRate, 30);
+                TargetStockPerPop[i]   = d.TargetStockPerPop;
                 HasDirectDemand[i]     = d.ConsumptionPerPop > 0f
+                                       || d.TargetStockPerPop > 0f
                                        || d.CountyAdminPerPop > 0f
                                        || d.ProvinceAdminPerPop > 0f
                                        || d.RealmAdminPerPop > 0f;
