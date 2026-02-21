@@ -19,6 +19,7 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 9. County Market Access
 10. Market Location + Market Fee
 11. Ungated resource extraction + Trading
+12. Remove Quotas and In-kind taxation
 
 ### Future Layers (unordered)
 

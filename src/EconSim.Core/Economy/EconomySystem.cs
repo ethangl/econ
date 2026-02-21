@@ -79,6 +79,9 @@ namespace EconSim.Core.Economy
                     if (Goods.TargetStockPerPop[g] > 0f)
                         ce.Stock[g] = ce.Population * Goods.TargetStockPerPop[g];
 
+                // Seed treasury so trade + taxation can bootstrap
+                ce.Treasury = ce.Population * 1.0f;
+
                 econ.Counties[county.Id] = ce;
             }
 
@@ -555,12 +558,10 @@ namespace EconSim.Core.Economy
             snap.TotalProductionByGood = new float[Goods.Count];
             snap.TotalConsumptionByGood = new float[Goods.Count];
             snap.TotalUnmetNeedByGood = new float[Goods.Count];
-            snap.TotalDucalTaxByGood = new float[Goods.Count];
             snap.TotalDucalReliefByGood = new float[Goods.Count];
             snap.TotalProvincialStockpileByGood = new float[Goods.Count];
-            snap.TotalRoyalTaxByGood = new float[Goods.Count];
-            snap.TotalRoyalReliefByGood = new float[Goods.Count];
             snap.TotalRoyalStockpileByGood = new float[Goods.Count];
+            snap.TotalGranaryRequisitionedByGood = new float[Goods.Count];
             snap.TotalIntraProvTradeBoughtByGood = new float[Goods.Count];
             snap.TotalIntraProvTradeSoldByGood = new float[Goods.Count];
             snap.TotalCrossProvTradeBoughtByGood = new float[Goods.Count];
@@ -590,8 +591,8 @@ namespace EconSim.Core.Economy
 
                 for (int g = 0; g < Goods.Count; g++)
                 {
-                    snap.TotalDucalTaxByGood[g] += ce.TaxPaid[g];
                     snap.TotalDucalReliefByGood[g] += ce.Relief[g];
+                    snap.TotalGranaryRequisitionedByGood[g] += ce.GranaryRequisitioned[g];
                     snap.TotalIntraProvTradeBoughtByGood[g] += ce.TradeBought[g];
                     snap.TotalIntraProvTradeSoldByGood[g] += ce.TradeSold[g];
                     snap.TotalCrossProvTradeBoughtByGood[g] += ce.CrossProvTradeBought[g];
@@ -625,7 +626,7 @@ namespace EconSim.Core.Economy
                 float stapleBudget = ce.Population * Goods.StapleBudgetPerPop;
 
                 if (totalStapleCons < stapleBudget * 0.999f)
-                    snap.StarvingCounties++;
+                    snap.ShortfallCounties++;
                 else if (totalStapleProd < totalStapleCons)
                     snap.DeficitCounties++;
                 else
@@ -641,8 +642,8 @@ namespace EconSim.Core.Economy
                 if (ce.BasicSatisfaction < 0.5f) snap.CountiesInDistress++;
 
                 snap.TotalCountyTreasury += ce.Treasury;
-                snap.TotalDucalTaxCrowns += ce.TaxCrownsReceived;
-                snap.TotalDucalReliefCrowns += ce.ReliefCrownsPaid;
+                snap.TotalMonetaryTaxToProvince += ce.MonetaryTaxPaid;
+                snap.TotalGranaryRequisitionCrowns += ce.GranaryRequisitionCrownsReceived;
                 snap.TotalMarketFeesCollected += ce.MarketFeesReceived;
             }
 
@@ -674,8 +675,8 @@ namespace EconSim.Core.Economy
                     for (int g = 0; g < Goods.Count; g++)
                         snap.TotalProvincialStockpileByGood[g] += pe.Stockpile[g];
                     snap.TotalProvinceTreasury += pe.Treasury;
-                    snap.TotalRoyalTaxCrowns += pe.RoyalTaxCrownsReceived;
-                    snap.TotalRoyalReliefCrowns += pe.RoyalReliefCrownsPaid;
+                    snap.TotalMonetaryTaxToRealm += pe.MonetaryTaxPaidToRealm;
+                    snap.TotalProvinceAdminCost += pe.AdminCrownsCost;
                     snap.TotalTradeTollsCollected += pe.TradeTollsCollected;
                 }
             }
@@ -693,13 +694,12 @@ namespace EconSim.Core.Economy
                     if (re == null) continue;
                     for (int g = 0; g < Goods.Count; g++)
                     {
-                        snap.TotalRoyalTaxByGood[g] += re.TaxCollected[g];
-                        snap.TotalRoyalReliefByGood[g] += re.ReliefGiven[g];
                         snap.TotalRoyalStockpileByGood[g] += re.Stockpile[g];
                         snap.TotalTradeImportsByGood[g] += re.TradeImports[g];
                         snap.TotalTradeExportsByGood[g] += re.TradeExports[g];
                         snap.TotalRealmDeficitByGood[g] += re.Deficit[g];
                     }
+                    snap.TotalRealmAdminCost += re.AdminCrownsCost;
                     snap.TotalTreasury += re.Treasury;
                     snap.TotalGoldMinted += re.GoldMinted;
                     snap.TotalSilverMinted += re.SilverMinted;
@@ -721,11 +721,8 @@ namespace EconSim.Core.Economy
             }
 
             // Backward-compat scalars = food values
-            snap.TotalDucalTax = snap.TotalDucalTaxByGood[Food];
             snap.TotalDucalRelief = snap.TotalDucalReliefByGood[Food];
             snap.TotalProvincialStockpile = snap.TotalProvincialStockpileByGood[Food];
-            snap.TotalRoyalTax = snap.TotalRoyalTaxByGood[Food];
-            snap.TotalRoyalRelief = snap.TotalRoyalReliefByGood[Food];
             snap.TotalRoyalStockpile = snap.TotalRoyalStockpileByGood[Food];
 
             snap.MedianProductivity = econ.MedianProductivity[Food];

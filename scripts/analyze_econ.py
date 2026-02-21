@@ -149,18 +149,18 @@ def print_stocks(data: dict):
     for key, label in [
         ("surplusCounties", "Surplus counties"),
         ("deficitCounties", "Deficit counties"),
-        ("starvingCounties", "Starving counties"),
+        ("shortfallCounties", "Shortfall counties"),
     ]:
         v0, v1 = first[key], last[key]
         delta = v1 - v0
         sign = "+" if delta >= 0 else ""
         print(f"  {label:20s}  {v0:>8d}  {v1:>8d}  {sign}{delta:>7d}")
 
-    # Find when starvation bottomed out
-    starving = [t["starvingCounties"] for t in ts]
-    min_starving = min(starving)
-    min_day = ts[starving.index(min_starving)]["day"]
-    print(f"\n  Starvation low: {min_starving} counties on day {min_day}")
+    # Find when shortfall bottomed out
+    shortfall = [t["shortfallCounties"] for t in ts]
+    min_shortfall = min(shortfall)
+    min_day = ts[shortfall.index(min_shortfall)]["day"]
+    print(f"\n  Shortfall low: {min_shortfall} counties on day {min_day}")
 
 
 def print_fiscal(data: dict):
@@ -168,60 +168,109 @@ def print_fiscal(data: dict):
     ts = data["economy"]["timeSeries"]
     last = ts[-1]
 
-    print(f"  Ducal tax:       {fmt(last['ducalTax']):>10s}    Relief: {fmt(last['ducalRelief']):>10s}    Provincial stockpile: {fmt(last['provincialStockpile'])}")
-    print(f"  Royal tax:       {fmt(last['royalTax']):>10s}    Relief: {fmt(last['royalRelief']):>10s}    Royal stockpile:      {fmt(last['royalStockpile'])}")
+    # Monetary taxation
+    tax_to_prov = last.get("monetaryTaxToProvince", 0)
+    tax_to_realm = last.get("monetaryTaxToRealm", 0)
+    prov_admin = last.get("provinceAdminCost", 0)
+    realm_admin = last.get("realmAdminCost", 0)
+    granary_crowns = last.get("granaryRequisitionCrowns", 0)
+    relief = last.get("ducalRelief", 0)
+    prov_stock = last.get("provincialStockpile", 0)
+    royal_stock = last.get("royalStockpile", 0)
 
+    print(f"  Monetary Flows (Crowns/day):")
+    print(f"    County → Province prod tax:  {fmt(tax_to_prov)}")
+    print(f"    Province → Realm rev share:  {fmt(tax_to_realm)}")
+    print(f"    Province admin cost:          {fmt(prov_admin)}")
+    print(f"    Realm admin cost:             {fmt(realm_admin)}")
+    print(f"    Granary requisition spend:    {fmt(granary_crowns)}")
     print()
-    print(f"  {'Good':8s}  {'Ducal Tax':>12s}  {'Ducal Relief':>12s}  {'Royal Tax':>12s}")
-    print(f"  {'-'*8}  {'-'*12}  {'-'*12}  {'-'*12}")
-    for i, good in enumerate(GOODS):
-        dt = last["ducalTaxByGood"][i]
-        dr = last["ducalReliefByGood"][i]
-        rt = last["royalTaxByGood"][i]
-        print(f"  {good:8s}  {fmt(dt):>12s}  {fmt(dr):>12s}  {fmt(rt):>12s}")
+    print(f"  Ducal relief (food):           {fmt(relief)}")
+    print(f"  Provincial stockpile (granary): {fmt(prov_stock)}")
+    print(f"  Royal stockpile (metals):       {fmt(royal_stock)}")
+
+    # Ducal granary fill status
+    granary_req = last.get("granaryRequisitionedByGood")
+    ducal_relief = last.get("ducalReliefByGood")
+    if granary_req or ducal_relief:
+        print()
+        n = len(GOODS)
+        if not granary_req:
+            granary_req = [0] * n
+        if not ducal_relief:
+            ducal_relief = [0] * n
+        print(f"  {'Good':12s}  {'Requisitioned':>14s}  {'Relief':>10s}")
+        print(f"  {'-'*12}  {'-'*14}  {'-'*10}")
+        for i, good in enumerate(GOODS):
+            if good not in _STAPLE_GOODS:
+                continue
+            req = granary_req[i] if i < len(granary_req) else 0
+            rel = ducal_relief[i] if i < len(ducal_relief) else 0
+            if req > 0 or rel > 0:
+                print(f"  {good:12s}  {fmt(req):>14s}  {fmt(rel):>10s}")
 
     # Fiscal evolution
     section("FISCAL TRENDS (first 5 days vs last 5 days)")
-    early = ts[4:9]  # days 6-10 (first days with fiscal data)
+    early = ts[4:9]
     late = ts[-5:]
     if early and late:
-        avg_early_tax = sum(t["ducalTax"] for t in early) / len(early)
-        avg_late_tax = sum(t["ducalTax"] for t in late) / len(late)
-        avg_early_relief = sum(t["ducalRelief"] for t in early) / len(early)
-        avg_late_relief = sum(t["ducalRelief"] for t in late) / len(late)
-        print(f"  Avg ducal tax:    {fmt(avg_early_tax):>10s} -> {fmt(avg_late_tax):>10s}")
-        print(f"  Avg ducal relief: {fmt(avg_early_relief):>10s} -> {fmt(avg_late_relief):>10s}")
-        surplus_early = avg_early_tax - avg_early_relief
-        surplus_late = avg_late_tax - avg_late_relief
-        print(f"  Net ducal surplus:{fmt(surplus_early):>10s} -> {fmt(surplus_late):>10s}")
+        avg_early_tax = sum(t.get("monetaryTaxToProvince", 0) for t in early) / len(early)
+        avg_late_tax = sum(t.get("monetaryTaxToProvince", 0) for t in late) / len(late)
+        avg_early_relief = sum(t.get("ducalRelief", 0) for t in early) / len(early)
+        avg_late_relief = sum(t.get("ducalRelief", 0) for t in late) / len(late)
+        print(f"  Avg prod tax (county→prov): {fmt(avg_early_tax):>10s} -> {fmt(avg_late_tax):>10s}")
+        print(f"  Avg ducal relief:           {fmt(avg_early_relief):>10s} -> {fmt(avg_late_relief):>10s}")
 
 
 def print_trade_snapshot(data: dict):
     section("TRADE / FISCAL SNAPSHOT (end of sim)")
     t = data["trade"]
-    print(f"  Tax-paying counties:      {t['taxPayingCounties']}")
-    print(f"  Relief-receiving counties: {t['reliefReceivingCounties']}")
+    print(f"  Relief-receiving counties: {t.get('reliefReceivingCounties', 0)}")
+    print(f"  Production tax (county→prov): {fmt(t.get('totalMonetaryTaxToProvince', 0))} Crowns/day")
+    print(f"  Granary requisition crowns: {fmt(t.get('totalGranaryRequisitionCrowns', 0))} Crowns/day")
     print()
-    print(f"  {'Good':8s}  {'Ducal Tax':>12s}  {'Ducal Relief':>12s}")
-    print(f"  {'-'*8}  {'-'*12}  {'-'*12}")
-    for good in GOODS:
-        dt = t["ducalTaxByGood"].get(good, 0)
-        dr = t["ducalReliefByGood"].get(good, 0)
-        print(f"  {good:8s}  {fmt(dt):>12s}  {fmt(dr):>12s}")
 
-    # Provincial stockpiles
-    print()
-    print(f"  Total provincial stockpile: {fmt(t['totalProvincialStockpile'])}")
+    # Per-good relief + granary
+    print(f"  {'Good':12s}  {'Relief':>10s}  {'Granary Req':>12s}")
+    print(f"  {'-'*12}  {'-'*10}  {'-'*12}")
+    relief_map = t.get("ducalReliefByGood", {})
+    granary_map = t.get("granaryRequisitionedByGood", {})
     for good in GOODS:
-        v = t["provincialStockpileByGood"].get(good, 0)
-        print(f"    {good:8s}: {fmt(v)}")
+        dr = relief_map.get(good, 0)
+        gr = granary_map.get(good, 0)
+        if dr > 0 or gr > 0:
+            print(f"  {good:12s}  {fmt(dr):>10s}  {fmt(gr):>12s}")
 
-    # Royal stockpiles
+    # Ducal granary (provincial stockpiles — staples only)
     print()
-    print(f"  Total royal stockpile: {fmt(t['totalRoyalStockpile'])}")
+    prov_stock = t.get("provincialStockpileByGood", {})
+    total_granary = sum(prov_stock.get(g, 0) for g in _STAPLE_GOODS)
+    print(f"  Ducal Granary (staples): {fmt(total_granary)}")
     for good in GOODS:
-        v = t["royalStockpileByGood"].get(good, 0)
-        print(f"    {good:8s}: {fmt(v)}")
+        if good not in _STAPLE_GOODS:
+            continue
+        v = prov_stock.get(good, 0)
+        if v > 0:
+            print(f"    {good:12s}: {fmt(v)}")
+
+    # Royal stockpile (precious metals only)
+    print()
+    royal_stock = t.get("royalStockpileByGood", {})
+    precious = {"goldOre", "silverOre"}
+    total_royal = sum(royal_stock.get(g, 0) for g in precious)
+    print(f"  Royal Stockpile (metals): {fmt(total_royal)}")
+    for good in precious:
+        v = royal_stock.get(good, 0)
+        if v > 0:
+            print(f"    {good:12s}: {fmt(v)}")
+
+    # Province monetary summary
+    print()
+    print(f"  Province monetary flows:")
+    print(f"    Tax collected (county→prov): {fmt(t.get('totalProvMonetaryTaxCollected', 0))}")
+    print(f"    Tax paid (prov→realm):       {fmt(t.get('totalProvMonetaryTaxToRealm', 0))}")
+    print(f"    Admin cost:                  {fmt(t.get('totalProvAdminCost', 0))}")
+    print(f"    Granary spend:               {fmt(t.get('totalProvGranarySpent', 0))}")
 
     # Market fees
     market_fees = t.get("marketFeesCollected", 0)
@@ -231,13 +280,12 @@ def print_trade_snapshot(data: dict):
 
     # Per-realm breakdown
     print()
-    print(f"  Realm stockpiles:")
-    for r in t["realms"]:
-        parts = []
-        for good in GOODS:
-            v = r["stockpileByGood"].get(good, 0)
-            parts.append(f"{good}={fmt(v):>8s}")
-        print(f"    Realm {r['id']:2d}: {'  '.join(parts)}")
+    print(f"  Realm summary:")
+    for r in t.get("realms", []):
+        print(f"    Realm {r['id']:2d}: treasury={fmt(r.get('treasury', 0)):>10s}  "
+              f"taxCollected={fmt(r.get('monetaryTaxCollected', 0)):>8s}  "
+              f"adminCost={fmt(r.get('adminCrownsCost', 0)):>8s}  "
+              f"minted={fmt(r.get('crownsMinted', 0)):>8s}")
 
 
 def print_treasury(data: dict):
@@ -253,10 +301,11 @@ def print_treasury(data: dict):
     print(f"  Treasury trend:             {fmt(first.get('treasury', 0))} -> {fmt(last.get('treasury', 0))}  ({trend([first.get('treasury', 0), last.get('treasury', 0)])})")
     print()
     print(f"  Daily crown flows (latest):")
-    print(f"    Ducal tax crowns (prov→county):  {fmt(last.get('ducalTaxCrowns', 0))}")
-    print(f"    Royal tax crowns (realm→prov):    {fmt(last.get('royalTaxCrowns', 0))}")
-    print(f"    Ducal relief crowns (county→prov): {fmt(last.get('ducalReliefCrowns', 0))}")
-    print(f"    Royal relief crowns (prov→realm):  {fmt(last.get('royalReliefCrowns', 0))}")
+    print(f"    Prod tax (county→prov):           {fmt(last.get('monetaryTaxToProvince', 0))}")
+    print(f"    Rev share (prov→realm):           {fmt(last.get('monetaryTaxToRealm', 0))}")
+    print(f"    Province admin cost:              {fmt(last.get('provinceAdminCost', 0))}")
+    print(f"    Realm admin cost:                 {fmt(last.get('realmAdminCost', 0))}")
+    print(f"    Granary requisition:              {fmt(last.get('granaryRequisitionCrowns', 0))}")
     print()
     print(f"  Daily minting (latest):")
     print(f"    Gold minted:   {fmt(last.get('goldMinted', 0))} kg")
@@ -793,18 +842,18 @@ def print_convergence(data: dict):
     def total_staple_unmet(snap):
         return sum(snap["unmetNeedByGood"][i] for i in staple_indices)
 
-    starving = [t["starvingCounties"] for t in ts]
+    shortfall = [t["shortfallCounties"] for t in ts]
 
     # Rate of change over last 30 days
     window = min(30, len(ts))
     recent = ts[-window:]
     staple_rate = (total_staple_unmet(recent[-1]) - total_staple_unmet(recent[0])) / window
-    starving_rate = (recent[-1]["starvingCounties"] - recent[0]["starvingCounties"]) / window
+    shortfall_rate = (recent[-1]["shortfallCounties"] - recent[0]["shortfallCounties"]) / window
     stock_rate = (recent[-1]["totalStock"] - recent[0]["totalStock"]) / window
 
     print(f"  Last {window} days (daily averages):")
     print(f"    Staple unmet need change: {staple_rate:+.1f}/day")
-    print(f"    Starving counties change: {starving_rate:+.2f}/day")
+    print(f"    Shortfall counties change: {shortfall_rate:+.2f}/day")
     print(f"    Total stock change:       {fmt(stock_rate)}/day")
 
     # Steady state check: is stock growth slowing?
@@ -829,7 +878,7 @@ def print_convergence(data: dict):
     print(f"    Production:  {fmt(latest_staple_prod)}/day")
     print(f"    Consumption: {fmt(latest_staple_cons)}/day")
     print(f"    Unmet need:  {fmt(latest_staple_unmet)}")
-    print(f"  Starving:     {ts[-1]['starvingCounties']}/{data['economy']['countyCount']} counties")
+    print(f"  Shortfall:    {ts[-1]['shortfallCounties']}/{data['economy']['countyCount']} counties")
 
     # Per-good status
     for i, good in enumerate(GOODS):

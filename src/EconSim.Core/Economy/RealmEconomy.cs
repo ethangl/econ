@@ -6,16 +6,10 @@ namespace EconSim.Core.Economy
     /// </summary>
     public class RealmEconomy
     {
-        /// <summary>Goods held in the royal stockpile, per good type.</summary>
+        /// <summary>Goods held in the royal stockpile (precious metals only), per good type.</summary>
         public float[] Stockpile = new float[Goods.Count];
 
-        /// <summary>Tax collected from surplus provinces this tick, per good type.</summary>
-        public float[] TaxCollected = new float[Goods.Count];
-
-        /// <summary>Relief distributed to deficit provinces this tick, per good type.</summary>
-        public float[] ReliefGiven = new float[Goods.Count];
-
-        /// <summary>Crowns held by the realm (minted from precious metals).</summary>
+        /// <summary>Crowns held by the realm (minted from precious metals + revenue share from provinces).</summary>
         public float Treasury;
 
         /// <summary>Kg of gold ore minted this tick (reset daily).</summary>
@@ -26,6 +20,12 @@ namespace EconSim.Core.Economy
 
         /// <summary>Crowns generated this tick (reset daily).</summary>
         public float CrownsMinted;
+
+        /// <summary>Revenue share collected from provinces this tick (reset daily).</summary>
+        public float MonetaryTaxCollected;
+
+        /// <summary>Admin crown cost deducted this tick (reset daily).</summary>
+        public float AdminCrownsCost;
 
         // ── Inter-realm trade fields (reset daily) ──────────────
 
@@ -43,12 +43,6 @@ namespace EconSim.Core.Economy
 
         /// <summary>Crowns earned from market sales this tick.</summary>
         public float TradeRevenue;
-
-        /// <summary>Crowns paid to provinces for royal tax this tick (reset daily).</summary>
-        public float TaxCrownsPaid;
-
-        /// <summary>Crowns received from provinces for relief this tick (reset daily).</summary>
-        public float ReliefCrownsReceived;
 
         /// <summary>Tariff crowns collected from cross-realm imports this tick (reset daily).</summary>
         public float TradeTariffsCollected;
