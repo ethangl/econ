@@ -53,6 +53,9 @@ namespace EconSim.Core.Economy
         /// <summary>Buyers pay 2% market fee on all trade (paid to market county treasury).</summary>
         const float MarketFeeRate = 0.02f;
 
+        /// <summary>Counties with BasicSatisfaction below this threshold receive feudal relief.</summary>
+        const float ReliefSatisfactionThreshold = 0.70f;
+
 
         /// <summary>Province ID → array of county IDs.</summary>
         int[][] _provinceCounties;
@@ -157,7 +160,10 @@ namespace EconSim.Core.Economy
                 }
 
                 // Phase 2: Duke taxes surplus counties → provincial stockpile
-                bool taxable = Goods.HasDirectDemand[g] || Goods.IsPreciousMetal(g);
+                // Durables (TargetStockPerPop > 0) are excluded — they flow via trade, not taxation.
+                // Taxing them creates a black hole (relief only returns staples).
+                bool taxable = (Goods.HasDirectDemand[g] && Goods.TargetStockPerPop[g] <= 0f)
+                             || Goods.IsPreciousMetal(g);
                 if (taxable)
                 {
                     float taxRate = Goods.IsPreciousMetal(g) ? PreciousMetalTaxRate : DucalTaxRate;
@@ -280,26 +286,47 @@ namespace EconSim.Core.Economy
                 re.CrownsMinted = crowns;
             }
 
-            // ── RELIEF PASS (Phases 6-7) ────────────────────────────────
-            // Relief runs BEFORE trade so counties pay for relief while they
-            // still have tax-payment crowns, then trade with the remainder.
-            for (int g = 0; g < Goods.Count; g++)
+            // ── TRADE PASSES ──────────────────────────────────────────
+            // Cascading scope: local trade runs first, consuming surplus before wider passes.
+            // Intra-province (market fee only) → cross-province (+toll) → cross-realm (+tariff).
+
+            // Intra-province: counties within the same province
+            for (int p = 0; p < _provinceIds.Length; p++)
             {
-                float retainPerPop = Goods.DurableRetainPerPop[g] > 0f
-                    ? Goods.DurableRetainPerPop[g]
-                    : Goods.Defs[g].Need == NeedCategory.Staple
-                        ? Goods.StapleIdealPerPop[g]
-                        : ConsumptionPerPop[g];
+                var ids = _provinceCounties[_provinceIds[p]];
+                if (ids.Length <= 1) continue;
+                ExecuteTradePass(counties, ids, _surplusBuf, prices,
+                    0f, 0f, provinces, realms, TradeScope.IntraProvince);
+            }
+
+            // Cross-province: counties across provinces within the same realm
+            for (int r = 0; r < _realmIds.Length; r++)
+            {
+                if (_realmProvinces[_realmIds[r]].Length <= 1) continue;
+                ExecuteTradePass(counties, _realmCounties[_realmIds[r]], _surplusBuf, prices,
+                    CrossProvTollRate, 0f, provinces, realms, TradeScope.CrossProvince);
+            }
+
+            // Cross-realm: all counties globally
+            if (_realmIds.Length > 1)
+                ExecuteTradePass(counties, _allCountyIds, _surplusBuf, prices,
+                    CrossProvTollRate, CrossRealmTariffRate, provinces, realms, TradeScope.CrossRealm);
+
+            // ── RELIEF PASS ──────────────────────────────────────────
+            // Emergency backstop AFTER trade: staple goods only, distressed counties only.
+            // Trade handles routine redistribution; relief prevents famine.
+            var stapleGoods = Goods.StapleGoods;
+            for (int si = 0; si < stapleGoods.Length; si++)
+            {
+                int g = stapleGoods[si];
+                float retainPerPop = Goods.StapleIdealPerPop[g];
 
                 if (!_hasStockByGood[g] && retainPerPop <= 0f)
                     continue;
 
-                float reliefRetainPerPop = Goods.DurableRetainPerPop[g] > 0f
-                    ? Goods.TargetStockPerPop[g]
-                    : retainPerPop;
-                BuildRetainDeficitsForGood(g, reliefRetainPerPop, counties, retainTargetsReady: false);
+                BuildRetainDeficitsForGood(g, retainPerPop, counties, retainTargetsReady: false);
 
-                // Phase 6: King distributes remainder to deficit provinces
+                // King distributes royal stockpile to deficit provinces
                 Span<float> provDeficits = stackalloc float[_maxProvincesPerRealm];
                 for (int r = 0; r < _realmIds.Length; r++)
                 {
@@ -336,7 +363,7 @@ namespace EconSim.Core.Economy
                     }
                 }
 
-                // Phase 7: Duke distributes provincial stockpile to deficit counties
+                // Duke distributes provincial stockpile to deficit counties
                 for (int p = 0; p < _provinceIds.Length; p++)
                 {
                     int provId = _provinceIds[p];
@@ -366,32 +393,6 @@ namespace EconSim.Core.Economy
                     }
                 }
             }
-
-            // ── TRADE PASSES ──────────────────────────────────────────
-            // Cascading scope: local trade runs first, consuming surplus before wider passes.
-            // Intra-province (market fee only) → cross-province (+toll) → cross-realm (+tariff).
-
-            // Intra-province: counties within the same province
-            for (int p = 0; p < _provinceIds.Length; p++)
-            {
-                var ids = _provinceCounties[_provinceIds[p]];
-                if (ids.Length <= 1) continue;
-                ExecuteTradePass(counties, ids, _surplusBuf, prices,
-                    0f, 0f, provinces, realms, TradeScope.IntraProvince);
-            }
-
-            // Cross-province: counties across provinces within the same realm
-            for (int r = 0; r < _realmIds.Length; r++)
-            {
-                if (_realmProvinces[_realmIds[r]].Length <= 1) continue;
-                ExecuteTradePass(counties, _realmCounties[_realmIds[r]], _surplusBuf, prices,
-                    CrossProvTollRate, 0f, provinces, realms, TradeScope.CrossProvince);
-            }
-
-            // Cross-realm: all counties globally
-            if (_realmIds.Length > 1)
-                ExecuteTradePass(counties, _allCountyIds, _surplusBuf, prices,
-                    CrossProvTollRate, CrossRealmTariffRate, provinces, realms, TradeScope.CrossRealm);
 
             // Phase 8 (deficit scan) moved to InterRealmTradeSystem.
         }
@@ -578,8 +579,12 @@ namespace EconSim.Core.Economy
                             _countyRetainTarget[countyId] = retain;
                         }
 
-                        deficit = retain - ce.Stock[goodIdx];
-                        if (deficit < 0f) deficit = 0f;
+                        // Only distressed counties qualify for relief
+                        if (ce.BasicSatisfaction < ReliefSatisfactionThreshold)
+                        {
+                            deficit = retain - ce.Stock[goodIdx];
+                            if (deficit < 0f) deficit = 0f;
+                        }
                     }
 
                     _countyRetainDeficit[countyId] = deficit;
