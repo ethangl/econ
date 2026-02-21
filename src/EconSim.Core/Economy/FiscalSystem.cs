@@ -9,20 +9,16 @@ namespace EconSim.Core.Economy
     enum TradeScope { IntraProvince, CrossProvince, CrossRealm }
 
     /// <summary>
-    /// Feudal redistribution with administrative consumption. Runs daily AFTER EconomySystem.
-    /// All goods flow through the hierarchy independently.
+    /// Monetary taxation with ducal granary. Runs daily AFTER EconomySystem.
     ///
-    /// Phase 1: County admin consumption (building upkeep)
-    /// Phase 2: Duke taxes surplus counties → provincial stockpile
-    /// Phase 3: Provincial admin consumption (infrastructure)
-    /// Phase 4: King taxes surplus provinces → royal stockpile
-    /// Phase 5: Royal admin consumption (military upkeep)
-    /// Phase 5b: Mint precious metals into Crowns (realm treasury)
-    /// Phase 6: King distributes remainder → deficit provinces
-    /// Phase 7: Duke distributes provincial stockpile → deficit counties
-    ///
-    /// Admin consumption before tax/redistribution at each tier ensures the hierarchy
-    /// feeds itself first, then passes surplus up and relief down.
+    /// Phase 1: County admin consumption (building upkeep — unchanged)
+    /// Phase 2: Precious metal confiscation (100% county gold/silver → realm)
+    /// Phase 3: Monetary taxation (county → province production tax, province → realm revenue share)
+    /// Phase 4: Admin wages (province + realm spend on admin, wages flow to counties)
+    /// Phase 5: Minting (precious metals → crowns)
+    /// Phase 6: Trade passes (intra-prov, cross-prov, cross-realm with fees)
+    /// Phase 7: Ducal granary requisition (duke buys preserved staples from surplus counties)
+    /// Phase 8: Emergency relief (duke distributes granary to distressed counties)
     /// </summary>
     public class FiscalSystem : ITickSystem
     {
@@ -31,17 +27,23 @@ namespace EconSim.Core.Economy
 
         static readonly float[] ConsumptionPerPop = Goods.ConsumptionPerPop;
 
-        /// <summary>Fraction of surplus the duke takes from counties.</summary>
-        const float DucalTaxRate = 0.20f;
+        /// <summary>Fraction of daily production value paid to province (tithe-style).</summary>
+        const float DucalProductionTaxRate = 0.013f;
 
-        /// <summary>Fraction of provincial stockpile the king takes.</summary>
-        const float RoyalTaxRate = 0.20f;
+        /// <summary>Fraction of province's collected tax revenue passed up to realm.</summary>
+        const float RoyalRevenueShareRate = 0.40f;
 
         /// <summary>Precious metals are crown property — 100% tax rate (regal right).</summary>
         const float PreciousMetalTaxRate = 1.0f;
 
-        /// <summary>Feudal lords pay 50% of market price when taxing goods (forced requisition discount).</summary>
-        const float TaxPaymentDiscount = 0.50f;
+        /// <summary>Days of food reserve the duke aims to maintain.</summary>
+        const float GranaryDaysBuffer = 7f;
+
+        /// <summary>Duke pays 60% of market price when requisitioning goods.</summary>
+        const float GranaryRequisitionDiscount = 0.60f;
+
+        /// <summary>Fraction of gap filled per day (gradual fill).</summary>
+        const float GranaryFillRate = 0.05f;
 
 
         /// <summary>Buyers pay 5% toll on cross-province trade (paid to own province treasury).</summary>
@@ -55,6 +57,25 @@ namespace EconSim.Core.Economy
 
         /// <summary>Counties with BasicSatisfaction below this threshold receive feudal relief.</summary>
         const float ReliefSatisfactionThreshold = 0.70f;
+
+        /// <summary>Province admin cost in crowns per capita per day (computed from per-good rates × base prices).</summary>
+        static readonly float ProvinceAdminCostPerPop;
+
+        /// <summary>Realm admin cost in crowns per capita per day (computed from per-good rates × base prices).</summary>
+        static readonly float RealmAdminCostPerPop;
+
+        static FiscalSystem()
+        {
+            float provCost = 0f;
+            float realmCost = 0f;
+            for (int g = 0; g < Goods.Count; g++)
+            {
+                provCost += Goods.ProvinceAdminPerPop[g] * Goods.BasePrice[g];
+                realmCost += Goods.RealmAdminPerPop[g] * Goods.BasePrice[g];
+            }
+            ProvinceAdminCostPerPop = provCost;
+            RealmAdminCostPerPop = realmCost;
+        }
 
 
         /// <summary>Province ID → array of county IDs.</summary>
@@ -105,9 +126,6 @@ namespace EconSim.Core.Economy
         /// <summary>Per-county retain target scratch for the current good. Indexed by county ID.</summary>
         float[] _countyRetainTarget;
 
-        /// <summary>Per-good stock presence across county/province/realm stores for this tick.</summary>
-        bool[] _hasStockByGood;
-
         public void Initialize(SimulationState state, MapData mapData)
         {
             BuildMappings(state, mapData);
@@ -126,148 +144,144 @@ namespace EconSim.Core.Economy
 
             // Reset per-tick accumulators
             ResetAccumulators(counties, provinces, realms);
-            BuildHasStockByGood(counties, provinces, realms);
 
-            // ── TAXATION PASS (Phases 1-5) ──────────────────────────────
+            // ── PHASE 1: County admin consumption ───────────────────
             for (int g = 0; g < Goods.Count; g++)
             {
-                float retainPerPop = Goods.DurableRetainPerPop[g] > 0f
-                    ? Goods.DurableRetainPerPop[g]
-                    : Goods.Defs[g].Need == NeedCategory.Staple
-                        ? Goods.StapleIdealPerPop[g]
-                        : ConsumptionPerPop[g];
                 float countyAdmin = Goods.CountyAdminPerPop[g];
-                float provAdmin = Goods.ProvinceAdminPerPop[g];
-                float realmAdmin = Goods.RealmAdminPerPop[g];
+                if (countyAdmin <= 0f) continue;
 
-                if (!_hasStockByGood[g] && retainPerPop <= 0f
-                    && countyAdmin <= 0f && provAdmin <= 0f && realmAdmin <= 0f)
-                    continue;
-
-                // Phase 1: County administrative consumption (building upkeep)
-                if (countyAdmin > 0f)
+                for (int i = 0; i < counties.Length; i++)
                 {
-                    for (int i = 0; i < counties.Length; i++)
-                    {
-                        var ce = counties[i];
-                        if (ce == null) continue;
-                        float need = ce.Population * countyAdmin;
-                        float consumed = Math.Min(ce.Stock[g], need);
-                        ce.Stock[g] -= consumed;
-                        if (consumed < need)
-                            realms[_countyToRealm[i]].Deficit[g] += need - consumed;
-                    }
+                    var ce = counties[i];
+                    if (ce == null) continue;
+                    float need = ce.Population * countyAdmin;
+                    float consumed = Math.Min(ce.Stock[g], need);
+                    ce.Stock[g] -= consumed;
+                    if (consumed < need)
+                        realms[_countyToRealm[i]].Deficit[g] += need - consumed;
                 }
+            }
 
-                // Phase 2: Duke taxes surplus counties → provincial stockpile
-                // Durables (TargetStockPerPop > 0) are excluded — they flow via trade, not taxation.
-                // Taxing them creates a black hole (relief only returns staples).
-                bool taxable = (Goods.HasDirectDemand[g] && Goods.TargetStockPerPop[g] <= 0f)
-                             || Goods.IsPreciousMetal(g);
-                if (taxable)
+            // ── PHASE 2: Precious metal confiscation ────────────────
+            // 100% of county gold/silver ore → realm stockpile (simplified from 2-tier)
+            for (int r = 0; r < _realmIds.Length; r++)
+            {
+                int realmId = _realmIds[r];
+                var re = realms[realmId];
+                var countyIds = _realmCounties[realmId];
+
+                for (int c = 0; c < countyIds.Length; c++)
                 {
-                    float taxRate = Goods.IsPreciousMetal(g) ? PreciousMetalTaxRate : DucalTaxRate;
-                    for (int p = 0; p < _provinceIds.Length; p++)
-                    {
-                        int provId = _provinceIds[p];
-                        var pe = provinces[provId];
-                        var countyIds = _provinceCounties[provId];
+                    var ce = counties[countyIds[c]];
+                    if (ce == null) continue;
 
-                        for (int c = 0; c < countyIds.Length; c++)
+                    for (int g = 0; g < Goods.Count; g++)
+                    {
+                        if (!Goods.IsPreciousMetal(g)) continue;
+                        float amount = ce.Stock[g];
+                        if (amount > 0f)
                         {
-                            int countyId = countyIds[c];
-                            var ce = counties[countyId];
-                            float retain = ce.Population * retainPerPop;
-                            _countyRetainTarget[countyId] = retain;
-                            float surplus = ce.Stock[g] - retain;
-
-                            if (surplus > 0f)
-                            {
-                                float tax = taxRate * surplus;
-                                ce.Stock[g] -= tax;
-                                ce.TaxPaid[g] += tax;
-                                pe.Stockpile[g] += tax;
-                                pe.TaxCollected[g] += tax;
-
-                                if (!Goods.IsPreciousMetal(g))
-                                {
-                                    float owed = tax * prices[g] * TaxPaymentDiscount;
-                                    float paid = Math.Min(owed, pe.Treasury);
-                                    pe.Treasury -= paid;
-                                    pe.TaxCrownsPaid += paid;
-                                    ce.Treasury += paid;
-                                    ce.TaxCrownsReceived += paid;
-                                }
-                            }
+                            ce.Stock[g] = 0f;
+                            re.Stockpile[g] += amount;
                         }
-                    }
-                }
-
-                // Phase 3: Provincial administrative consumption (infrastructure)
-                if (provAdmin > 0f)
-                {
-                    for (int p = 0; p < _provinceIds.Length; p++)
-                    {
-                        int provId = _provinceIds[p];
-                        var pe = provinces[provId];
-                        float need = _provincePop[provId] * provAdmin;
-                        float consumed = Math.Min(pe.Stockpile[g], need);
-                        pe.Stockpile[g] -= consumed;
-                        if (consumed < need)
-                            realms[_provinceToRealm[provId]].Deficit[g] += need - consumed;
-                    }
-                }
-
-                // Phase 4: King taxes surplus provincial stockpiles → royal stockpile
-                if (taxable)
-                {
-                    float royalRate = Goods.IsPreciousMetal(g) ? PreciousMetalTaxRate : RoyalTaxRate;
-                    for (int r = 0; r < _realmIds.Length; r++)
-                    {
-                        int realmId = _realmIds[r];
-                        var re = realms[realmId];
-                        var provIds = _realmProvinces[realmId];
-
-                        for (int p = 0; p < provIds.Length; p++)
-                        {
-                            var pe = provinces[provIds[p]];
-                            if (pe.Stockpile[g] <= 0f) continue;
-
-                            float tax = royalRate * pe.Stockpile[g];
-                            pe.Stockpile[g] -= tax;
-                            re.Stockpile[g] += tax;
-                            re.TaxCollected[g] += tax;
-
-                            if (!Goods.IsPreciousMetal(g))
-                            {
-                                float owed = tax * prices[g] * TaxPaymentDiscount;
-                                float paid = Math.Min(owed, re.Treasury);
-                                re.Treasury -= paid;
-                                re.TaxCrownsPaid += paid;
-                                pe.Treasury += paid;
-                                pe.RoyalTaxCrownsReceived += paid;
-                            }
-                        }
-                    }
-                }
-
-                // Phase 5: Royal administrative consumption (military upkeep)
-                if (realmAdmin > 0f)
-                {
-                    for (int r = 0; r < _realmIds.Length; r++)
-                    {
-                        int realmId = _realmIds[r];
-                        var re = realms[realmId];
-                        float need = _realmPop[realmId] * realmAdmin;
-                        float consumed = Math.Min(re.Stockpile[g], need);
-                        re.Stockpile[g] -= consumed;
-                        if (consumed < need)
-                            re.Deficit[g] += need - consumed;
                     }
                 }
             }
 
-            // ── MINTING ─────────────────────────────────────────────────
+            // ── PHASE 3: Monetary taxation ──────────────────────────
+            // Counties pay production-value tax to province (tithe-style)
+            for (int p = 0; p < _provinceIds.Length; p++)
+            {
+                int provId = _provinceIds[p];
+                var pe = provinces[provId];
+                var countyIds = _provinceCounties[provId];
+
+                for (int c = 0; c < countyIds.Length; c++)
+                {
+                    var ce = counties[countyIds[c]];
+                    if (ce == null) continue;
+
+                    float productionValue = 0f;
+                    for (int g = 0; g < Goods.Count; g++)
+                        productionValue += ce.Production[g] * prices[g];
+
+                    float tax = Math.Min(productionValue * DucalProductionTaxRate, ce.Treasury);
+                    if (tax > 0f)
+                    {
+                        ce.Treasury -= tax;
+                        ce.MonetaryTaxPaid += tax;
+                        pe.Treasury += tax;
+                        pe.MonetaryTaxCollected += tax;
+                    }
+                }
+            }
+
+            // Provinces pay revenue share to realm
+            for (int p = 0; p < _provinceIds.Length; p++)
+            {
+                int provId = _provinceIds[p];
+                var pe = provinces[provId];
+                int realmId = _provinceToRealm[provId];
+                var re = realms[realmId];
+
+                float tax = Math.Min(pe.MonetaryTaxCollected * RoyalRevenueShareRate, pe.Treasury);
+                if (tax > 0f)
+                {
+                    pe.Treasury -= tax;
+                    pe.MonetaryTaxPaidToRealm += tax;
+                    re.Treasury += tax;
+                    re.MonetaryTaxCollected += tax;
+                }
+            }
+
+            // ── PHASE 4: Admin wages ──────────────────────────────────
+            // Admin costs are wages paid to county workers (not destroyed).
+            // Province deducts from treasury, distributes to counties proportional to pop.
+            for (int p = 0; p < _provinceIds.Length; p++)
+            {
+                int provId = _provinceIds[p];
+                var pe = provinces[provId];
+                float provPop = _provincePop[provId];
+                float cost = Math.Min(provPop * ProvinceAdminCostPerPop, pe.Treasury);
+                pe.Treasury -= cost;
+                pe.AdminCrownsCost += cost;
+
+                if (cost > 0f && provPop > 0f)
+                {
+                    var cIds = _provinceCounties[provId];
+                    for (int c = 0; c < cIds.Length; c++)
+                    {
+                        var ce = counties[cIds[c]];
+                        if (ce == null) continue;
+                        ce.Treasury += cost * (ce.Population / provPop);
+                    }
+                }
+            }
+
+            // Realm admin wages distributed to all counties in realm.
+            for (int r = 0; r < _realmIds.Length; r++)
+            {
+                int realmId = _realmIds[r];
+                var re = realms[realmId];
+                float rPop = _realmPop[realmId];
+                float cost = Math.Min(rPop * RealmAdminCostPerPop, re.Treasury);
+                re.Treasury -= cost;
+                re.AdminCrownsCost += cost;
+
+                if (cost > 0f && rPop > 0f)
+                {
+                    var cIds = _realmCounties[realmId];
+                    for (int c = 0; c < cIds.Length; c++)
+                    {
+                        var ce = counties[cIds[c]];
+                        if (ce == null) continue;
+                        ce.Treasury += cost * (ce.Population / rPop);
+                    }
+                }
+            }
+
+            // ── PHASE 5: Minting ────────────────────────────────────
             for (int r = 0; r < _realmIds.Length; r++)
             {
                 int realmId = _realmIds[r];
@@ -286,9 +300,8 @@ namespace EconSim.Core.Economy
                 re.CrownsMinted = crowns;
             }
 
-            // ── TRADE PASSES ──────────────────────────────────────────
+            // ── PHASE 6: Trade passes ───────────────────────────────
             // Cascading scope: local trade runs first, consuming surplus before wider passes.
-            // Intra-province (market fee only) → cross-province (+toll) → cross-realm (+tariff).
 
             // Intra-province: counties within the same province
             for (int p = 0; p < _provinceIds.Length; p++)
@@ -312,58 +325,84 @@ namespace EconSim.Core.Economy
                 ExecuteTradePass(counties, _allCountyIds, _surplusBuf, prices,
                     CrossProvTollRate, CrossRealmTariffRate, provinces, realms, TradeScope.CrossRealm);
 
-            // ── RELIEF PASS ──────────────────────────────────────────
-            // Emergency backstop AFTER trade: staple goods only, distressed counties only.
-            // Trade handles routine redistribution; relief prevents famine.
+            // ── PHASE 7: Ducal granary requisition ──────────────────
+            // Duke buys preserved staples from surplus counties at a discount.
             var stapleGoods = Goods.StapleGoods;
+            for (int p = 0; p < _provinceIds.Length; p++)
+            {
+                int provId = _provinceIds[p];
+                var pe = provinces[provId];
+                var countyIds = _provinceCounties[provId];
+                float provPop = _provincePop[provId];
+
+                for (int si = 0; si < stapleGoods.Length; si++)
+                {
+                    int g = stapleGoods[si];
+                    float target = GranaryDaysBuffer * provPop * Goods.StapleIdealPerPop[g];
+                    float gap = target - pe.Stockpile[g];
+                    if (gap <= 0f) continue;
+
+                    float fillAmount = gap * GranaryFillRate;
+                    float unitCost = prices[g] * GranaryRequisitionDiscount;
+                    float maxAffordable = unitCost > 0f ? pe.Treasury / unitCost : float.MaxValue;
+                    fillAmount = Math.Min(fillAmount, maxAffordable);
+                    if (fillAmount <= 0f) continue;
+
+                    // Collect proportionally from surplus counties
+                    float totalSurplus = 0f;
+                    float retainPerPop = Goods.StapleIdealPerPop[g];
+                    for (int c = 0; c < countyIds.Length; c++)
+                    {
+                        var ce = counties[countyIds[c]];
+                        if (ce == null) continue;
+                        float surplus = ce.Stock[g] - ce.Population * retainPerPop;
+                        if (surplus > 0f) totalSurplus += surplus;
+                    }
+
+                    if (totalSurplus <= 0f) continue;
+                    float collectRatio = Math.Min(1f, fillAmount / totalSurplus);
+
+                    float totalCollected = 0f;
+                    for (int c = 0; c < countyIds.Length; c++)
+                    {
+                        int countyId = countyIds[c];
+                        var ce = counties[countyId];
+                        if (ce == null) continue;
+                        float surplus = ce.Stock[g] - ce.Population * retainPerPop;
+                        if (surplus <= 0f) continue;
+
+                        float take = surplus * collectRatio;
+                        ce.Stock[g] -= take;
+                        ce.GranaryRequisitioned[g] += take;
+                        totalCollected += take;
+
+                        // Pay county at discount
+                        float payment = take * unitCost;
+                        ce.Treasury += payment;
+                        ce.GranaryRequisitionCrownsReceived += payment;
+                    }
+
+                    if (totalCollected > 0f)
+                    {
+                        float totalCost = totalCollected * unitCost;
+                        pe.Treasury -= totalCost;
+                        pe.GranaryRequisitionCrownsSpent += totalCost;
+                        pe.Stockpile[g] += totalCollected;
+                        pe.GranaryRequisitioned[g] += totalCollected;
+                    }
+                }
+            }
+
+            // ── PHASE 8: Relief pass ────────────────────────────────
+            // Emergency backstop AFTER trade: staple goods only, distressed counties only.
             for (int si = 0; si < stapleGoods.Length; si++)
             {
                 int g = stapleGoods[si];
                 float retainPerPop = Goods.StapleIdealPerPop[g];
 
-                if (!_hasStockByGood[g] && retainPerPop <= 0f)
-                    continue;
-
                 BuildRetainDeficitsForGood(g, retainPerPop, counties, retainTargetsReady: false);
 
-                // King distributes royal stockpile to deficit provinces
-                Span<float> provDeficits = stackalloc float[_maxProvincesPerRealm];
-                for (int r = 0; r < _realmIds.Length; r++)
-                {
-                    int realmId = _realmIds[r];
-                    var re = realms[realmId];
-                    if (re.Stockpile[g] <= 0f) continue;
-
-                    var provIds = _realmProvinces[realmId];
-
-                    float totalDeficit = 0f;
-                    for (int pi = 0; pi < provIds.Length; pi++)
-                    {
-                        int provId = provIds[pi];
-                        float d = _provinceRetainDeficit[provId] - provinces[provId].Stockpile[g];
-                        if (d < 0f) d = 0f;
-                        provDeficits[pi] = d;
-                        if (d > 0f)
-                            totalDeficit += d;
-                    }
-
-                    if (totalDeficit <= 0f) continue;
-
-                    float available = re.Stockpile[g];
-                    for (int pi = 0; pi < provIds.Length; pi++)
-                    {
-                        if (provDeficits[pi] <= 0f) continue;
-
-                        float share = provDeficits[pi] / totalDeficit;
-                        float relief = Math.Min(share * available, provDeficits[pi]);
-                        var pe = provinces[provIds[pi]];
-                        pe.Stockpile[g] += relief;
-                        re.Stockpile[g] -= relief;
-                        re.ReliefGiven[g] += relief;
-                    }
-                }
-
-                // Duke distributes provincial stockpile to deficit counties
+                // Duke distributes provincial granary to deficit counties
                 for (int p = 0; p < _provinceIds.Length; p++)
                 {
                     int provId = _provinceIds[p];
@@ -393,8 +432,6 @@ namespace EconSim.Core.Economy
                     }
                 }
             }
-
-            // Phase 8 (deficit scan) moved to InterRealmTradeSystem.
         }
 
         void ExecuteTradePass(
@@ -525,37 +562,6 @@ namespace EconSim.Core.Economy
             }
         }
 
-        void BuildHasStockByGood(
-            CountyEconomy[] counties, ProvinceEconomy[] provinces, RealmEconomy[] realms)
-        {
-            if (_hasStockByGood == null || _hasStockByGood.Length != Goods.Count)
-                _hasStockByGood = new bool[Goods.Count];
-            else
-                Array.Clear(_hasStockByGood, 0, _hasStockByGood.Length);
-
-            for (int i = 0; i < counties.Length; i++)
-            {
-                var ce = counties[i];
-                if (ce == null) continue;
-                for (int g = 0; g < Goods.Count; g++)
-                    if (ce.Stock[g] > 0f) _hasStockByGood[g] = true;
-            }
-
-            for (int p = 0; p < _provinceIds.Length; p++)
-            {
-                var pe = provinces[_provinceIds[p]];
-                for (int g = 0; g < Goods.Count; g++)
-                    if (pe.Stockpile[g] > 0f) _hasStockByGood[g] = true;
-            }
-
-            for (int r = 0; r < _realmIds.Length; r++)
-            {
-                var re = realms[_realmIds[r]];
-                for (int g = 0; g < Goods.Count; g++)
-                    if (re.Stockpile[g] > 0f) _hasStockByGood[g] = true;
-            }
-        }
-
         void BuildRetainDeficitsForGood(
             int goodIdx, float retainPerPop, CountyEconomy[] counties, bool retainTargetsReady)
         {
@@ -602,27 +608,27 @@ namespace EconSim.Core.Economy
             {
                 int provId = _provinceIds[p];
                 var pe = provinces[provId];
-                Array.Clear(pe.TaxCollected, 0, pe.TaxCollected.Length);
                 Array.Clear(pe.ReliefGiven, 0, pe.ReliefGiven.Length);
+                Array.Clear(pe.GranaryRequisitioned, 0, pe.GranaryRequisitioned.Length);
 
-                pe.TaxCrownsPaid = 0f;
-                pe.ReliefCrownsReceived = 0f;
-                pe.RoyalTaxCrownsReceived = 0f;
-                pe.RoyalReliefCrownsPaid = 0f;
+                pe.MonetaryTaxCollected = 0f;
+                pe.MonetaryTaxPaidToRealm = 0f;
+                pe.AdminCrownsCost = 0f;
+                pe.GranaryRequisitionCrownsSpent = 0f;
                 pe.TradeTollsCollected = 0f;
 
                 var countyIds = _provinceCounties[provId];
                 for (int c = 0; c < countyIds.Length; c++)
                 {
                     var ce = counties[countyIds[c]];
-                    Array.Clear(ce.TaxPaid, 0, ce.TaxPaid.Length);
                     Array.Clear(ce.Relief, 0, ce.Relief.Length);
                     Array.Clear(ce.TradeBought, 0, ce.TradeBought.Length);
                     Array.Clear(ce.TradeSold, 0, ce.TradeSold.Length);
                     Array.Clear(ce.CrossProvTradeBought, 0, ce.CrossProvTradeBought.Length);
                     Array.Clear(ce.CrossProvTradeSold, 0, ce.CrossProvTradeSold.Length);
-                    ce.TaxCrownsReceived = 0f;
-                    ce.ReliefCrownsPaid = 0f;
+                    Array.Clear(ce.GranaryRequisitioned, 0, ce.GranaryRequisitioned.Length);
+                    ce.MonetaryTaxPaid = 0f;
+                    ce.GranaryRequisitionCrownsReceived = 0f;
                     ce.TradeCrownsSpent = 0f;
                     ce.TradeCrownsEarned = 0f;
                     ce.CrossProvTradeCrownsSpent = 0f;
@@ -641,13 +647,11 @@ namespace EconSim.Core.Economy
             for (int r = 0; r < _realmIds.Length; r++)
             {
                 var re = realms[_realmIds[r]];
-                Array.Clear(re.TaxCollected, 0, re.TaxCollected.Length);
-                Array.Clear(re.ReliefGiven, 0, re.ReliefGiven.Length);
                 re.GoldMinted = 0f;
                 re.SilverMinted = 0f;
                 re.CrownsMinted = 0f;
-                re.TaxCrownsPaid = 0f;
-                re.ReliefCrownsReceived = 0f;
+                re.MonetaryTaxCollected = 0f;
+                re.AdminCrownsCost = 0f;
                 re.TradeSpending = 0f;
                 re.TradeRevenue = 0f;
                 Array.Clear(re.TradeImports, 0, re.TradeImports.Length);

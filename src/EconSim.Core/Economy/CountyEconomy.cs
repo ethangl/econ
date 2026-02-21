@@ -23,10 +23,7 @@ namespace EconSim.Core.Economy
         /// <summary>Shortfall when stock hits zero, per good type.</summary>
         public float[] UnmetNeed = new float[Goods.Count];
 
-        /// <summary>Tax paid to provincial stockpile this tick, per good type.</summary>
-        public float[] TaxPaid = new float[Goods.Count];
-
-        /// <summary>Relief received from provincial stockpile this tick, per good type.</summary>
+        /// <summary>Relief received from provincial granary this tick, per good type.</summary>
         public float[] Relief = new float[Goods.Count];
 
         /// <summary>Exponential moving average of daily basic-needs satisfaction (0=starving, 1=fully supplied). ~30-day window.
@@ -48,14 +45,17 @@ namespace EconSim.Core.Economy
         /// <summary>Daily facility input demand per good (kg/day). Computed by EconomySystem, read by FiscalSystem for trade retain.</summary>
         public float[] FacilityInputNeed = new float[Goods.Count];
 
-        /// <summary>Crowns held by the county (received from tax payments, spent on relief).</summary>
+        /// <summary>Crowns held by the county.</summary>
         public float Treasury;
 
-        /// <summary>Crowns received from province for taxed goods this tick (reset daily).</summary>
-        public float TaxCrownsReceived;
+        /// <summary>Monetary production tax paid to province this tick (reset daily).</summary>
+        public float MonetaryTaxPaid;
 
-        /// <summary>Crowns paid to province for relief goods this tick (reset daily).</summary>
-        public float ReliefCrownsPaid;
+        /// <summary>Goods requisitioned by duke for granary this tick, per good type (reset daily).</summary>
+        public float[] GranaryRequisitioned = new float[Goods.Count];
+
+        /// <summary>Crowns received from duke for granary requisition this tick (reset daily).</summary>
+        public float GranaryRequisitionCrownsReceived;
 
         /// <summary>Intra-province trade: kg bought per good this tick (reset daily).</summary>
         public float[] TradeBought = new float[Goods.Count];

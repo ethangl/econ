@@ -649,24 +649,22 @@ namespace EconSim.Editor
                 j.KV("totalUnmetNeed", snap.TotalUnmetNeed);
                 j.KV("surplusCounties", snap.SurplusCounties);
                 j.KV("deficitCounties", snap.DeficitCounties);
-                j.KV("starvingCounties", snap.StarvingCounties);
+                j.KV("shortfallCounties", snap.ShortfallCounties);
                 j.KV("minStock", snap.MinStock);
                 j.KV("maxStock", snap.MaxStock);
                 j.KV("medianProductivity", snap.MedianProductivity);
-                j.KV("ducalTax", snap.TotalDucalTax);
                 j.KV("ducalRelief", snap.TotalDucalRelief);
                 j.KV("provincialStockpile", snap.TotalProvincialStockpile);
-                j.KV("royalTax", snap.TotalRoyalTax);
-                j.KV("royalRelief", snap.TotalRoyalRelief);
                 j.KV("royalStockpile", snap.TotalRoyalStockpile);
+                j.KV("monetaryTaxToProvince", snap.TotalMonetaryTaxToProvince);
+                j.KV("monetaryTaxToRealm", snap.TotalMonetaryTaxToRealm);
+                j.KV("provinceAdminCost", snap.TotalProvinceAdminCost);
+                j.KV("realmAdminCost", snap.TotalRealmAdminCost);
+                j.KV("granaryRequisitionCrowns", snap.TotalGranaryRequisitionCrowns);
                 j.KV("treasury", snap.TotalTreasury);
                 j.KV("countyTreasury", snap.TotalCountyTreasury);
                 j.KV("provinceTreasury", snap.TotalProvinceTreasury);
                 j.KV("domesticTreasury", snap.TotalDomesticTreasury);
-                j.KV("ducalTaxCrowns", snap.TotalDucalTaxCrowns);
-                j.KV("royalTaxCrowns", snap.TotalRoyalTaxCrowns);
-                j.KV("ducalReliefCrowns", snap.TotalDucalReliefCrowns);
-                j.KV("royalReliefCrowns", snap.TotalRoyalReliefCrowns);
                 j.KV("goldMinted", snap.TotalGoldMinted);
                 j.KV("silverMinted", snap.TotalSilverMinted);
                 j.KV("crownsMinted", snap.TotalCrownsMinted);
@@ -723,13 +721,6 @@ namespace EconSim.Editor
                     j.ArrClose();
                 }
 
-                if (snap.TotalDucalTaxByGood != null)
-                {
-                    j.Key("ducalTaxByGood"); j.ArrOpen();
-                    for (int g = 0; g < snap.TotalDucalTaxByGood.Length; g++)
-                        j.Val(snap.TotalDucalTaxByGood[g]);
-                    j.ArrClose();
-                }
                 if (snap.TotalDucalReliefByGood != null)
                 {
                     j.Key("ducalReliefByGood"); j.ArrOpen();
@@ -737,11 +728,11 @@ namespace EconSim.Editor
                         j.Val(snap.TotalDucalReliefByGood[g]);
                     j.ArrClose();
                 }
-                if (snap.TotalRoyalTaxByGood != null)
+                if (snap.TotalGranaryRequisitionedByGood != null)
                 {
-                    j.Key("royalTaxByGood"); j.ArrOpen();
-                    for (int g = 0; g < snap.TotalRoyalTaxByGood.Length; g++)
-                        j.Val(snap.TotalRoyalTaxByGood[g]);
+                    j.Key("granaryRequisitionedByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalGranaryRequisitionedByGood.Length; g++)
+                        j.Val(snap.TotalGranaryRequisitionedByGood[g]);
                     j.ArrClose();
                 }
 
@@ -842,11 +833,13 @@ namespace EconSim.Editor
             string[] goodNames = Goods.Names;
             const int F = (int)GoodType.Bread;
 
-            // County-level stats (per-good)
+            // County-level stats
             int countyCount = 0;
-            float[] totalTaxPaid = new float[Goods.Count];
             float[] totalRelief = new float[Goods.Count];
-            int taxPayingCounties = 0, reliefReceivingCounties = 0;
+            float[] totalGranaryReq = new float[Goods.Count];
+            float totalMonetaryTax = 0f;
+            float totalGranaryReqCrowns = 0f;
+            int reliefReceivingCounties = 0;
             float totalCountyTreasury = 0f;
 
             for (int i = 0; i < econ.Counties.Length; i++)
@@ -856,10 +849,11 @@ namespace EconSim.Editor
                 countyCount++;
                 for (int g = 0; g < Goods.Count; g++)
                 {
-                    totalTaxPaid[g] += ce.TaxPaid[g];
                     totalRelief[g] += ce.Relief[g];
+                    totalGranaryReq[g] += ce.GranaryRequisitioned[g];
                 }
-                if (ce.TaxPaid[F] > 0f) taxPayingCounties++;
+                totalMonetaryTax += ce.MonetaryTaxPaid;
+                totalGranaryReqCrowns += ce.GranaryRequisitionCrownsReceived;
                 if (ce.Relief[F] > 0f) reliefReceivingCounties++;
                 totalCountyTreasury += ce.Treasury;
             }
@@ -910,20 +904,19 @@ namespace EconSim.Editor
             }
 
             j.KV("countyCount", countyCount);
-            // Backward compat: food-only scalars
-            j.KV("totalDucalTax", totalTaxPaid[F]);
             j.KV("totalDucalRelief", totalRelief[F]);
-            j.KV("taxPayingCounties", taxPayingCounties);
             j.KV("reliefReceivingCounties", reliefReceivingCounties);
+            j.KV("totalMonetaryTaxToProvince", totalMonetaryTax);
+            j.KV("totalGranaryRequisitionCrowns", totalGranaryReqCrowns);
 
-            // Per-good county tax/relief
-            j.Key("ducalTaxByGood"); j.ObjOpen();
-            for (int g = 0; g < Goods.Count; g++)
-                j.KV(goodNames[g], totalTaxPaid[g]);
-            j.ObjClose();
+            // Per-good county relief + granary
             j.Key("ducalReliefByGood"); j.ObjOpen();
             for (int g = 0; g < Goods.Count; g++)
                 j.KV(goodNames[g], totalRelief[g]);
+            j.ObjClose();
+            j.Key("granaryRequisitionedByGood"); j.ObjOpen();
+            for (int g = 0; g < Goods.Count; g++)
+                j.KV(goodNames[g], totalGranaryReq[g]);
             j.ObjClose();
 
             // Intra-province trade per-good
@@ -988,10 +981,14 @@ namespace EconSim.Editor
             j.KV("marketFeesCollected", totalMarketFeesCollected);
             j.KV("marketCountyId", econ.MarketCountyId);
 
-            // Per-province summary (per-good stockpiles)
+            // Per-province summary (granary + monetary)
             j.Key("provinces"); j.ArrOpen();
             float[] totalProvStockpile = new float[Goods.Count];
             float totalProvinceTreasury = 0f;
+            float totalProvMonetaryTaxCollected = 0f;
+            float totalProvMonetaryTaxToRealm = 0f;
+            float totalProvAdminCost = 0f;
+            float totalProvGranarySpent = 0f;
             for (int i = 0; i < econ.Provinces.Length; i++)
             {
                 var pe = econ.Provinces[i];
@@ -999,11 +996,19 @@ namespace EconSim.Editor
                 for (int g = 0; g < Goods.Count; g++)
                     totalProvStockpile[g] += pe.Stockpile[g];
                 totalProvinceTreasury += pe.Treasury;
+                totalProvMonetaryTaxCollected += pe.MonetaryTaxCollected;
+                totalProvMonetaryTaxToRealm += pe.MonetaryTaxPaidToRealm;
+                totalProvAdminCost += pe.AdminCrownsCost;
+                totalProvGranarySpent += pe.GranaryRequisitionCrownsSpent;
 
                 j.ObjOpen();
                 j.KV("id", i);
-                j.KV("stockpile", pe.Stockpile[F]);
-                j.Key("stockpileByGood"); j.ObjOpen();
+                j.KV("treasury", pe.Treasury);
+                j.KV("monetaryTaxCollected", pe.MonetaryTaxCollected);
+                j.KV("monetaryTaxPaidToRealm", pe.MonetaryTaxPaidToRealm);
+                j.KV("adminCrownsCost", pe.AdminCrownsCost);
+                j.KV("granaryRequisitionCrownsSpent", pe.GranaryRequisitionCrownsSpent);
+                j.Key("granaryByGood"); j.ObjOpen();
                 for (int g = 0; g < Goods.Count; g++)
                     j.KV(goodNames[g], pe.Stockpile[g]);
                 j.ObjClose();
@@ -1015,6 +1020,10 @@ namespace EconSim.Editor
             for (int g = 0; g < Goods.Count; g++)
                 j.KV(goodNames[g], totalProvStockpile[g]);
             j.ObjClose();
+            j.KV("totalProvMonetaryTaxCollected", totalProvMonetaryTaxCollected);
+            j.KV("totalProvMonetaryTaxToRealm", totalProvMonetaryTaxToRealm);
+            j.KV("totalProvAdminCost", totalProvAdminCost);
+            j.KV("totalProvGranarySpent", totalProvGranarySpent);
 
             // Per-realm summary (per-good stockpiles)
             if (econ.Realms != null)
@@ -1041,8 +1050,8 @@ namespace EconSim.Editor
                     j.KV("goldMinted", re.GoldMinted);
                     j.KV("silverMinted", re.SilverMinted);
                     j.KV("crownsMinted", re.CrownsMinted);
-                    j.KV("taxCrownsPaid", re.TaxCrownsPaid);
-                    j.KV("reliefCrownsReceived", re.ReliefCrownsReceived);
+                    j.KV("monetaryTaxCollected", re.MonetaryTaxCollected);
+                    j.KV("adminCrownsCost", re.AdminCrownsCost);
                     j.KV("tradeSpending", re.TradeSpending);
                     j.KV("tradeRevenue", re.TradeRevenue);
                     j.KV("tradeTariffsCollected", re.TradeTariffsCollected);

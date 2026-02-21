@@ -21,28 +21,31 @@ namespace EconSim.Core.Economy
         public float TotalUnmetNeed;
         public int SurplusCounties;
         public int DeficitCounties;
-        public int StarvingCounties;
+        public int ShortfallCounties;
         public float MinStock;
         public float MaxStock;
         public float MedianProductivity;
 
-        // Feudal redistribution — per-good (Layer 3 Phase C)
-        public float[] TotalDucalTaxByGood;
+        // Feudal redistribution — ducal relief (provincial granary → counties)
         public float[] TotalDucalReliefByGood;
         public float[] TotalProvincialStockpileByGood;
-        public float[] TotalRoyalTaxByGood;
-        public float[] TotalRoyalReliefByGood;
         public float[] TotalRoyalStockpileByGood;
+
+        // Monetary taxation
+        public float TotalMonetaryTaxToProvince;   // county → province production tax
+        public float TotalMonetaryTaxToRealm;      // province → realm revenue share
+        public float TotalProvinceAdminCost;        // province admin crown cost
+        public float TotalRealmAdminCost;           // realm admin crown cost
+
+        // Granary requisition
+        public float[] TotalGranaryRequisitionedByGood;
+        public float TotalGranaryRequisitionCrowns;
 
         // Treasury / minting (Layer 4 Phase B)
         public float TotalTreasury;         // realm treasuries only (inter-realm trade)
         public float TotalCountyTreasury;
         public float TotalProvinceTreasury;
         public float TotalDomesticTreasury; // county + province + realm combined
-        public float TotalDucalTaxCrowns;   // province → county payments
-        public float TotalRoyalTaxCrowns;   // realm → province payments
-        public float TotalDucalReliefCrowns;  // county → province payments
-        public float TotalRoyalReliefCrowns;  // province → realm payments
         public float TotalGoldMinted;
         public float TotalSilverMinted;
         public float TotalCrownsMinted;
@@ -91,11 +94,8 @@ namespace EconSim.Core.Economy
         public int CountiesInDistress;      // satisfaction < 0.5
 
         // Backward-compat scalars = food values
-        public float TotalDucalTax;
         public float TotalDucalRelief;
         public float TotalProvincialStockpile;
-        public float TotalRoyalTax;
-        public float TotalRoyalRelief;
         public float TotalRoyalStockpile;
     }
 }

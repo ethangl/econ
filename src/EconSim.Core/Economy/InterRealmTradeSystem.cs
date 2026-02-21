@@ -100,9 +100,7 @@ namespace EconSim.Core.Economy
                 if (capacity <= 0f) continue;
 
                 float demandPerPop = ConsumptionPerPop[g]
-                                   + Goods.CountyAdminPerPop[g]
-                                   + Goods.ProvinceAdminPerPop[g]
-                                   + Goods.RealmAdminPerPop[g];
+                                   + Goods.CountyAdminPerPop[g];
                 float replacementPerPop = Goods.TargetStockPerPop[g] * Goods.Defs[g].SpoilageRate;
 
                 float totalDemand = 0f;
