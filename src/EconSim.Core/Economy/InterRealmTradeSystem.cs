@@ -147,30 +147,48 @@ namespace EconSim.Core.Economy
                 // Trade execution moved to FiscalSystem Phase C (cross-realm county trade).
             }
 
-            // Price discovery for intermediate goods (no direct demand, facility-driven)
+            // Unified price discovery for all produced goods.
             // Supply = production capacity + stock glut term. When stock accumulates,
             // effective supply rises and price drops, throttling production.
             const float StockBufferDays = 7f;
             for (int g = 0; g < Goods.Count; g++)
             {
-                if (Goods.HasDirectDemand[g]) continue;
-
                 float capacity = econ.ProductionCapacity[g];
                 if (capacity <= 0f) continue;
 
-                float totalFacDemand = 0f;
+                float cPerPop = ConsumptionPerPop[g];
+                float adminPerPop = Goods.CountyAdminPerPop[g]
+                                  + Goods.ProvinceAdminPerPop[g]
+                                  + Goods.RealmAdminPerPop[g];
+                float targetSPP = Goods.TargetStockPerPop[g];
+                float spoilRate = Goods.Defs[g].SpoilageRate;
+                float catchUp = Goods.DurableCatchUpRate[g];
+
+                float totalDemand = 0f;
                 float totalStock = 0f;
                 for (int i = 0; i < counties.Length; i++)
                 {
                     var ce = counties[i];
                     if (ce == null) continue;
-                    totalFacDemand += ce.FacilityInputNeed[g];
+                    totalDemand += ce.FacilityInputNeed[g];
                     totalStock += ce.Stock[g];
+
+                    if (cPerPop > 0f || adminPerPop > 0f || targetSPP > 0f)
+                    {
+                        float pop = ce.Population;
+                        totalDemand += pop * (cPerPop + adminPerPop);
+                        if (targetSPP > 0f)
+                        {
+                            float tgt = pop * targetSPP;
+                            float gap = Math.Max(0f, tgt - ce.Stock[g]);
+                            totalDemand += ce.Stock[g] * spoilRate + gap * catchUp;
+                        }
+                    }
                 }
 
                 float supply = capacity + totalStock / StockBufferDays;
-                float rawPrice = totalFacDemand > 0f
-                    ? Goods.BasePrice[g] * totalFacDemand / supply
+                float rawPrice = totalDemand > 0f
+                    ? Goods.BasePrice[g] * totalDemand / supply
                     : Goods.MinPrice[g];
                 _prices[g] = Math.Max(Goods.MinPrice[g], Math.Min(rawPrice, Goods.MaxPrice[g]));
             }

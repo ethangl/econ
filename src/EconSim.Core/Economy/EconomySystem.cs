@@ -339,8 +339,8 @@ namespace EconSim.Core.Economy
                         float throughput = Math.Min(maxByInput, maxByLabor);
                         if (throughput < 0f) throughput = 0f;
 
-                        // Price-based facility throttle for intermediate goods
-                        if (!Goods.HasDirectDemand[output] && Goods.BasePrice[output] > 0f)
+                        // Price-based facility throttle for all produced goods
+                        if (Goods.BasePrice[output] > 0f)
                         {
                             float priceRatio = econ.MarketPrices[output] / Goods.BasePrice[output];
                             if (priceRatio < 1f) throughput *= priceRatio;
