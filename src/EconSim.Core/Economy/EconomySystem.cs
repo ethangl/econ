@@ -278,7 +278,7 @@ namespace EconSim.Core.Economy
                     ? countyFacilityIndices[i]
                     : null;
 
-                // Compute facility input demand for trade retain signal
+                // Compute facility input demand for trade retain signal + intermediate price discovery
                 Array.Clear(ce.FacilityInputNeed, 0, goodsCount);
                 if (indices != null && indices.Count > 0)
                 {

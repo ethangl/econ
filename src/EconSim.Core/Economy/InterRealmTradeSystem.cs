@@ -148,6 +148,9 @@ namespace EconSim.Core.Economy
             }
 
             // Price discovery for intermediate goods (no direct demand, facility-driven)
+            // Supply = production capacity + stock glut term. When stock accumulates,
+            // effective supply rises and price drops, throttling production.
+            const float StockBufferDays = 7f;
             for (int g = 0; g < Goods.Count; g++)
             {
                 if (Goods.HasDirectDemand[g]) continue;
@@ -156,15 +159,18 @@ namespace EconSim.Core.Economy
                 if (capacity <= 0f) continue;
 
                 float totalFacDemand = 0f;
+                float totalStock = 0f;
                 for (int i = 0; i < counties.Length; i++)
                 {
                     var ce = counties[i];
                     if (ce == null) continue;
                     totalFacDemand += ce.FacilityInputNeed[g];
+                    totalStock += ce.Stock[g];
                 }
 
+                float supply = capacity + totalStock / StockBufferDays;
                 float rawPrice = totalFacDemand > 0f
-                    ? Goods.BasePrice[g] * totalFacDemand / capacity
+                    ? Goods.BasePrice[g] * totalFacDemand / supply
                     : Goods.MinPrice[g];
                 _prices[g] = Math.Max(Goods.MinPrice[g], Math.Min(rawPrice, Goods.MaxPrice[g]));
             }
