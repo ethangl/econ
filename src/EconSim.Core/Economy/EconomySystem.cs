@@ -235,15 +235,36 @@ namespace EconSim.Core.Economy
             var countyFacilityIndices = econ.CountyFacilityIndices;
             int goodsCount = Goods.Count;
 
-            // Compute extraction capacity per good (for intermediate price discovery)
-            var extractionCap = econ.ExtractionCapacity;
-            Array.Clear(extractionCap, 0, goodsCount);
+            // Compute production capacity per good (for intermediate price discovery)
+            var productionCap = econ.ProductionCapacity;
+            Array.Clear(productionCap, 0, goodsCount);
+            // Extraction capacity
             for (int i = 0; i < counties.Length; i++)
             {
                 var ce = counties[i];
                 if (ce == null) continue;
                 for (int g = 0; g < goodsCount; g++)
-                    extractionCap[g] += ce.Population * ce.Productivity[g];
+                    productionCap[g] += ce.Population * ce.Productivity[g];
+            }
+            // Facility labor capacity
+            var allFacilities = econ.Facilities;
+            if (allFacilities != null)
+            {
+                for (int i = 0; i < counties.Length; i++)
+                {
+                    var ce = counties[i];
+                    if (ce == null) continue;
+                    var indices = countyFacilityIndices != null && i < countyFacilityIndices.Length
+                        ? countyFacilityIndices[i] : null;
+                    if (indices == null || indices.Count == 0) continue;
+                    float pop = ce.Population;
+                    for (int fi = 0; fi < indices.Count; fi++)
+                    {
+                        var def = allFacilities[indices[fi]].Def;
+                        if (def.LaborPerUnit > 0 && def.OutputAmount > 0f)
+                            productionCap[(int)def.OutputGood] += pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount;
+                    }
+                }
             }
 
             for (int i = 0; i < counties.Length; i++)
@@ -266,13 +287,11 @@ namespace EconSim.Core.Economy
                         var def = econ.Facilities[indices[fi]].Def;
                         if (def.OutputAmount <= 0f) continue;
 
-                        float target = Math.Max(def.BaselineOutput, ce.FacilityQuota[(int)def.OutputGood]);
                         float maxByLabor = def.LaborPerUnit > 0
                             ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
                             : float.MaxValue;
-                        target = Math.Min(target, maxByLabor);
 
-                        float scale = target / def.OutputAmount;
+                        float scale = maxByLabor / def.OutputAmount;
                         for (int ii = 0; ii < def.Inputs.Length; ii++)
                             ce.FacilityInputNeed[(int)def.Inputs[ii].Good] += scale * def.Inputs[ii].Amount;
                     }
@@ -294,7 +313,7 @@ namespace EconSim.Core.Economy
                     ce.Production[g] = produced;
                 }
 
-                // Facility processing — demand-driven, realm-quota-aware
+                // Facility processing — input/labor constrained, price-throttled for intermediates
                 if (indices != null && indices.Count > 0)
                 {
                     float totalFacWorkers = 0f;
@@ -303,10 +322,6 @@ namespace EconSim.Core.Economy
                         var fac = econ.Facilities[indices[fi]];
                         var def = fac.Def;
                         int output = (int)def.OutputGood;
-
-                        // Target: realm quota (includes local + admin + redistribution needs)
-                        // Falls back to baseline on first tick when quota is 0
-                        float target = Math.Max(def.BaselineOutput, ce.FacilityQuota[output]);
 
                         // Material constraint: min across all inputs
                         float maxByInput = float.MaxValue;
@@ -321,8 +336,15 @@ namespace EconSim.Core.Economy
                             ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
                             : float.MaxValue;
 
-                        float throughput = Math.Min(target, Math.Min(maxByInput, maxByLabor));
+                        float throughput = Math.Min(maxByInput, maxByLabor);
                         if (throughput < 0f) throughput = 0f;
+
+                        // Price-based facility throttle for intermediate goods
+                        if (!Goods.HasDirectDemand[output] && Goods.BasePrice[output] > 0f)
+                        {
+                            float priceRatio = econ.MarketPrices[output] / Goods.BasePrice[output];
+                            if (priceRatio < 1f) throughput *= priceRatio;
+                        }
 
                         // Consume all inputs proportionally
                         for (int ii = 0; ii < def.Inputs.Length; ii++)
@@ -426,7 +448,7 @@ namespace EconSim.Core.Economy
                 ce.BasicSatisfaction += 0.065f * (daily - ce.BasicSatisfaction);
             }
 
-            // Compute effective demand per pop (used by FiscalSystem and FacilityQuotaSystem)
+            // Compute effective demand per pop (used by FiscalSystem)
             var demandPerPop = econ.EffectiveDemandPerPop;
             float totalPop = 0f;
             for (int i = 0; i < counties.Length; i++)

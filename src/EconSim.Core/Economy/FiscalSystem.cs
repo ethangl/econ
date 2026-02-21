@@ -394,7 +394,6 @@ namespace EconSim.Core.Economy
                     CrossProvTollRate, CrossRealmTariffRate, provinces, realms, TradeScope.CrossRealm);
 
             // Phase 8 (deficit scan) moved to InterRealmTradeSystem.
-            // Phase 9a/b/c (facility quotas) moved to FacilityQuotaSystem.
         }
 
         void ExecuteTradePass(
@@ -631,7 +630,6 @@ namespace EconSim.Core.Economy
                     ce.CrossRealmTollsPaid = 0f;
                     ce.CrossRealmTariffsPaid = 0f;
                     ce.MarketFeesReceived = 0f;
-                    // FacilityQuota clearing owned by FacilityQuotaSystem
                 }
             }
 
@@ -767,8 +765,6 @@ namespace EconSim.Core.Economy
             _surplusBuf = new float[_totalCountyCount];
 
             _marketCountyId = state.Economy.MarketCountyId;
-
-            // Facility mappings moved to FacilityQuotaSystem.
         }
     }
 }

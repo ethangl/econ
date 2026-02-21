@@ -152,7 +152,7 @@ namespace EconSim.Core.Economy
             {
                 if (Goods.HasDirectDemand[g]) continue;
 
-                float capacity = econ.ExtractionCapacity[g];
+                float capacity = econ.ProductionCapacity[g];
                 if (capacity <= 0f) continue;
 
                 float totalFacDemand = 0f;
