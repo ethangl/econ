@@ -254,7 +254,7 @@ namespace EconSim.Core
             runner.RegisterSystem(new EconomySystem());
             runner.RegisterSystem(new FiscalSystem());
             runner.RegisterSystem(new InterRealmTradeSystem());
-            runner.RegisterSystem(new FacilityQuotaSystem());
+
             runner.RegisterSystem(new PopulationSystem());
             runner.RegisterSystem(new SpoilageSystem());
             _simulation = runner;

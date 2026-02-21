@@ -45,9 +45,6 @@ namespace EconSim.Core.Economy
         /// <summary>Total workers assigned to facilities in this county. Updated each tick by EconomySystem.</summary>
         public float FacilityWorkers;
 
-        /// <summary>Realm-distributed production target per good, indexed by GoodType. Set by FacilityQuotaSystem.</summary>
-        public float[] FacilityQuota = new float[Goods.Count];
-
         /// <summary>Daily facility input demand per good (kg/day). Computed by EconomySystem, read by FiscalSystem for trade retain.</summary>
         public float[] FacilityInputNeed = new float[Goods.Count];
 
