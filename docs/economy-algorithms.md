@@ -3,7 +3,6 @@
 This document describes every algorithm in the economic simulation in plain
 language. Indentation represents nesting — loops, conditionals, and sub-steps.
 
-
 ## Overview
 
 The simulation runs on a **fixed-timestep tick loop** where each tick represents
@@ -15,7 +14,6 @@ The registration order is:
 3. **InterRealmTradeSystem** — daily — deficit scanning, price discovery
 4. **PopulationSystem** — every 30 days — births, deaths, migration
 5. **SpoilageSystem** — every 30 days — monthly decay of perishable stockpiles
-
 
 ## Tick Loop
 
@@ -33,7 +31,6 @@ Each Unity frame:
 A frame budget (default 4 ticks) caps how many days are processed per frame to
 prevent stalls when running at high speed.
 
-
 ## Goods
 
 There are 26 goods, each belonging to a **need category**:
@@ -49,10 +46,9 @@ There are 26 goods, each belonging to a **need category**:
   demand
 
 Each good has a **base price** in Crowns/kg. Market prices float based on
-supply and demand (see Price Discovery below), bounded by a floor (10% of base)
-and a ceiling (10x base). Durables and durable-input goods use fixed base
+supply and demand (see Price Discovery below), bounded by a floor (5% of base)
+and a ceiling (20x base). Durables and durable-input goods use fixed base
 pricing instead.
-
 
 ### Staple Pool
 
@@ -62,7 +58,6 @@ person**. Each staple has a nominal consumption rate (e.g. wheat 0.50, sausage
 pool, normalized so the shares sum to 1.0 kg. People eat from whatever staples
 are available, proportional to stock.
 
-
 ### Durable Goods
 
 Durables (pottery, furniture, tools, clothes) are not consumed daily. Instead
@@ -70,7 +65,6 @@ each person needs a **target stock level** (e.g. 2.0 kg/person for tools).
 Stock degrades at a daily spoilage rate (wear). Production aims to maintain
 stock at the target, with a catch-up rate tied to durability: lower spoilage
 means slower catch-up, preventing overproduction of very durable items.
-
 
 ## Initialization (EconomySystem)
 
@@ -105,7 +99,6 @@ When the simulation starts, EconomySystem sets up all economic state:
         Try the first realm's capital burg's cell's county
         Fallback: the county with the highest population
 
-
 ## Static Transport Backbone
 
 Before the first tick, a road network is generated:
@@ -130,7 +123,6 @@ Before the first tick, a road network is generated:
         The top 20% (by usage weight) become "road" tier
         Roads reduce travel cost for future pathfinding
 
-
 ## EconomySystem (Daily)
 
 This system handles production, facility processing, and consumption for every
@@ -147,12 +139,12 @@ county.
 
 These totals feed into price discovery (in InterRealmTradeSystem).
 
-
 ### Per-County Production and Consumption
 
     For each county:
         Compute the workforce fraction available for extraction:
             workforce_fraction = (population - facility_workers) / population
+            (facility_workers is from the previous tick; on tick 1 it is zero)
 
 #### Compute Facility Input Demand (two-pass)
 
@@ -171,12 +163,17 @@ governs demand-driven extraction and trade retain calculations.
                     Accumulate input demand proportional to throughput
 
         Pass 2 — Non-durable outputs (iron, charcoal, sausage, bread, etc.):
+            Processed in facility enum order (smelter before charcoal burner, so
+            charcoal demand already includes smelter's needs when charcoal burner runs)
+
             For each facility that produces a non-durable good:
                 Compute labor-constrained max output
                 If this good is a durable-chain input (iron, charcoal, etc.):
                     Throughput is capped by downstream demand:
                         target_stock = downstream_facility_demand × 7 days buffer
                         throughput = min(max_by_labor, max(0, target_stock - current_stock))
+                Else (commodity — sausage, bread, ale, etc.):
+                    Throughput = max labor capacity (no stock cap)
                 For each input good of this facility:
                     Accumulate input demand proportional to throughput
 
@@ -287,7 +284,6 @@ Two satisfaction metrics are computed as 30-day exponential moving averages
         Blended satisfaction = 0.70 × needs_score + 0.30 × comfort_average
         Satisfaction += 0.065 × (blended - Satisfaction)
 
-
 ## FiscalSystem (Daily)
 
 Runs after EconomySystem. Handles taxation, minting, trade, granaries, and
@@ -361,12 +357,13 @@ before the wider pass runs, so local needs are met first.
 Counties within the same province trade with each other.
 
 **Pass 2 — Cross-province trade:**
-Counties across provinces within the same realm. Buyers pay a 5% toll (to their
-own province).
+All counties within the same realm re-enter a single pool (including those that
+already traded locally). After pass 1 consumed some surplus, remaining stock is
+re-evaluated. Buyers pay a 5% toll (to their own province).
 
 **Pass 3 — Cross-realm trade:**
-All counties globally. Buyers pay a 5% toll (to province) and a 10% tariff (to
-realm).
+All counties globally re-enter a single pool. Buyers pay a 5% toll (to
+province) and a 10% tariff (to realm).
 
 All three passes use the same matching algorithm, iterated in **buy priority
 order** (wheat first, then bread, barley, ale, sausage, salted fish, ... down
@@ -435,7 +432,6 @@ After trade and granary filling, distribute food to distressed counties.
             If the granary has stock and there are distressed counties:
                 Distribute granary stock proportional to each county's deficit share
 
-
 ## InterRealmTradeSystem (Daily)
 
 Runs after FiscalSystem. Two jobs: deficit scanning and price discovery.
@@ -471,13 +467,12 @@ their exclusive inputs use fixed base prices.
 
     Publish prices to shared MarketPrices array
 
-
 ## PopulationSystem (Monthly, every 30 days)
 
 ### Phase 1: Birth and Death
 
     For each county:
-        birth_multiplier = 0.5 + satisfaction  (ranges 0.5 to 1.5)
+        birth_multiplier = 0.5 + BasicSatisfaction  (ranges 0.5 to 1.5)
         births = population × 0.3% × birth_multiplier
 
         starvation = max(0, 1 - BasicSatisfaction)
@@ -511,7 +506,6 @@ BasicSatisfaction.
     Apply all migration atomically:
         For each county, population += inflow - outflow
 
-
 ## SpoilageSystem (Monthly, every 30 days)
 
 Applies monthly decay to perishable stockpiles. "Perishable" means any good
@@ -525,7 +519,6 @@ EconomySystem). The monthly retention factor is (1 - daily_spoilage)^30.
         For each province: granary_stock *= monthly_retention
         For each realm:    stockpile *= monthly_retention
 
-
 ## Facilities (Production Chains)
 
 Every county contains one of each facility type. Facilities process raw goods
@@ -533,28 +526,28 @@ into refined or finished goods. Each has a recipe (inputs → output), a labor
 requirement, and a max labor fraction (cap on what share of the county
 population can work there).
 
-| Facility        | Inputs                     | Output      | Labor | Max Pop % |
-|-----------------|----------------------------|-------------|-------|-----------|
-| Kiln            | 2.0 clay                   | 1.0 pottery | 3     | 5%        |
-| Carpenter       | 3.0 timber                 | 2.0 furn.   | 1     | 10%       |
-| Charcoal Burner | 5.0 timber                 | 2.0 charcoal| 1     | 10%       |
-| Smelter         | 3.0 iron ore + 0.4 charcoal| 2.0 iron    | 1     | 5%        |
-| Smithy          | 2.0 iron + 0.2 charcoal    | 4.0 tools   | 1     | 5%        |
-| Weaver          | 3.0 wool                   | 3.0 clothes | 2     | 10%       |
-| Butcher         | 1.0 pork + 0.2 salt        | 3.0 sausage | 2     | 10%       |
-| Smokehouse      | 2.0 pork                   | 2.0 bacon   | 1     | 10%       |
-| Cheesemaker     | 3.0 milk + 0.3 salt        | 1.0 cheese  | 1     | 10%       |
-| Salter          | 1.0 fish + 0.5 salt        | 2.0 s.fish  | 1     | 10%       |
-| Drying Rack     | 2.0 fish                   | 1.5 s.fish  | 1     | 10%       |
-| Bakery          | 2.0 wheat + 0.03 salt      | 2.8 bread   | 1     | 15%       |
-| Brewery         | 2.0 barley                 | 4.0 ale     | 1     | 15%       |
+| Facility        | Inputs                      | Output       | Labor | Max Pop % |
+| --------------- | --------------------------- | ------------ | ----- | --------- |
+| Kiln            | 2.0 clay                    | 1.0 pottery  | 3     | 5%        |
+| Carpenter       | 3.0 timber                  | 2.0 furn.    | 1     | 10%       |
+| Charcoal Burner | 5.0 timber                  | 2.0 charcoal | 1     | 10%       |
+| Smelter         | 3.0 iron ore + 0.4 charcoal | 2.0 iron     | 1     | 5%        |
+| Smithy          | 2.0 iron + 0.2 charcoal     | 4.0 tools    | 1     | 5%        |
+| Weaver          | 3.0 wool                    | 3.0 clothes  | 2     | 10%       |
+| Butcher         | 1.0 pork + 0.2 salt         | 3.0 sausage  | 2     | 10%       |
+| Smokehouse      | 2.0 pork                    | 2.0 bacon    | 1     | 10%       |
+| Cheesemaker     | 3.0 milk + 0.3 salt         | 1.0 cheese   | 1     | 10%       |
+| Salter          | 1.0 fish + 0.5 salt         | 2.0 s.fish   | 1     | 10%       |
+| Drying Rack     | 2.0 fish                    | 1.5 stkfish  | 1     | 10%       |
+| Bakery          | 2.0 wheat + 0.03 salt       | 2.8 bread    | 1     | 15%       |
+| Brewery         | 2.0 barley                  | 4.0 ale      | 1     | 15%       |
 
 Throughput is constrained by the minimum of:
+
 - **Material**: available stock of each input, scaled proportionally
 - **Labor**: population × max_labor_fraction / labor_per_unit × output_amount
 - **Demand** (durables only): stock-gap cap prevents overproduction
 - **Price** (commodities only): price-throttle reduces output when prices are low
-
 
 ## Money Supply
 
@@ -563,6 +556,7 @@ silver ore produced by counties, smelt it (1% yield for gold, 5% for silver),
 and mint coins (1000 Cr/kg gold, 100 Cr/kg silver).
 
 Money circulates through:
+
 - Production taxes (county → province, 1.3% of production value)
 - Revenue sharing (province → realm, 40% of tax collected)
 - Admin wages (province/realm → counties, proportional to population)
