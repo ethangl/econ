@@ -25,8 +25,8 @@ namespace EconSim.Core.Economy
     }
 
     /// <summary>
-    /// Static definition for a facility type. Describes the production recipe,
-    /// labor requirements, and placement rules.
+    /// Static definition for a facility type. Describes the production recipe
+    /// and labor requirements.
     /// </summary>
     public readonly struct FacilityDef
     {
@@ -41,12 +41,6 @@ namespace EconSim.Core.Economy
         /// <summary>Workers needed to produce OutputAmount per day at full capacity.</summary>
         public readonly int LaborPerUnit;
 
-        /// <summary>Good whose biome productivity determines placement. Defaults to Inputs[0].Good.</summary>
-        public readonly GoodType PlacementGood;
-
-        /// <summary>Minimum biome productivity of PlacementGood required for placement.</summary>
-        public readonly float PlacementMinProductivity;
-
         /// <summary>Max fraction of county pop that can work in this industry.</summary>
         public readonly float MaxLaborFraction;
 
@@ -58,10 +52,8 @@ namespace EconSim.Core.Economy
             RecipeInput[] inputs,
             GoodType outputGood, float outputAmount,
             int laborPerUnit,
-            float placementMinProductivity,
             float maxLaborFraction,
-            float baselineOutput,
-            GoodType? placementGood = null)
+            float baselineOutput)
         {
             Type = type;
             Name = name;
@@ -69,8 +61,6 @@ namespace EconSim.Core.Economy
             OutputGood = outputGood;
             OutputAmount = outputAmount;
             LaborPerUnit = laborPerUnit;
-            PlacementGood = placementGood ?? inputs[0].Good;
-            PlacementMinProductivity = placementMinProductivity;
             MaxLaborFraction = maxLaborFraction;
             BaselineOutput = baselineOutput;
         }
@@ -87,43 +77,43 @@ namespace EconSim.Core.Economy
             {
                 new FacilityDef(FacilityType.Kiln,    "kiln",
                     new[] { new RecipeInput(GoodType.Clay, 2.0f) },
-                    GoodType.Pottery, 1.0f, 3, 0.05f, 0.05f, 1.0f),
+                    GoodType.Pottery, 1.0f, 3, 0.05f, 1.0f),
                 new FacilityDef(FacilityType.Carpenter, "carpenter",
                     new[] { new RecipeInput(GoodType.Timber, 3.0f) },
-                    GoodType.Furniture, 2.0f, 1, 0.2f, 0.10f, 1.0f),
+                    GoodType.Furniture, 2.0f, 1, 0.10f, 1.0f),
                 new FacilityDef(FacilityType.Smelter, "smelter",
                     new[] { new RecipeInput(GoodType.IronOre, 3.0f), new RecipeInput(GoodType.Charcoal, 0.4f) },
-                    GoodType.Iron, 2.0f, 1, 0.0f, 0.05f, 1.0f),
+                    GoodType.Iron, 2.0f, 1, 0.05f, 1.0f),
                 new FacilityDef(FacilityType.Smithy,  "smithy",
                     new[] { new RecipeInput(GoodType.Iron, 2.0f), new RecipeInput(GoodType.Charcoal, 0.2f) },
-                    GoodType.Tools, 4.0f, 1, 0.0f, 0.05f, 1.0f, GoodType.IronOre),
+                    GoodType.Tools, 4.0f, 1, 0.05f, 1.0f),
                 new FacilityDef(FacilityType.CharcoalBurner, "charcoalBurner",
                     new[] { new RecipeInput(GoodType.Timber, 5.0f) },
-                    GoodType.Charcoal, 2.0f, 1, 0.1f, 0.10f, 2.0f),
+                    GoodType.Charcoal, 2.0f, 1, 0.10f, 2.0f),
                 new FacilityDef(FacilityType.Weaver, "weaver",
                     new[] { new RecipeInput(GoodType.Wool, 3.0f) },
-                    GoodType.Clothes, 3.0f, 2, 0.05f, 0.10f, 2.0f),
+                    GoodType.Clothes, 3.0f, 2, 0.10f, 2.0f),
                 new FacilityDef(FacilityType.Butcher, "butcher",
                     new[] { new RecipeInput(GoodType.Pork, 1.0f), new RecipeInput(GoodType.Salt, 0.2f) },
-                    GoodType.Sausage, 3.0f, 2, 0.05f, 0.10f, 3.0f, GoodType.Pork),
+                    GoodType.Sausage, 3.0f, 2, 0.10f, 3.0f),
                 new FacilityDef(FacilityType.Smokehouse, "smokehouse",
                     new[] { new RecipeInput(GoodType.Pork, 2.0f) },
-                    GoodType.Bacon, 2.0f, 1, 0.05f, 0.10f, 2.0f, GoodType.Pork),
+                    GoodType.Bacon, 2.0f, 1, 0.10f, 2.0f),
                 new FacilityDef(FacilityType.Cheesemaker, "cheesemaker",
                     new[] { new RecipeInput(GoodType.Milk, 3.0f), new RecipeInput(GoodType.Salt, 0.3f) },
-                    GoodType.Cheese, 1.0f, 1, 0.05f, 0.10f, 1.0f, GoodType.Milk),
+                    GoodType.Cheese, 1.0f, 1, 0.10f, 1.0f),
                 new FacilityDef(FacilityType.Salter, "salter",
                     new[] { new RecipeInput(GoodType.Fish, 1.0f), new RecipeInput(GoodType.Salt, 0.5f) },
-                    GoodType.SaltedFish, 2.0f, 1, 0.05f, 0.10f, 2.0f, GoodType.Fish),
+                    GoodType.SaltedFish, 2.0f, 1, 0.10f, 2.0f),
                 new FacilityDef(FacilityType.DryingRack, "dryingRack",
                     new[] { new RecipeInput(GoodType.Fish, 2.0f) },
-                    GoodType.Stockfish, 1.5f, 1, 0.05f, 0.10f, 1.5f, GoodType.Fish),
+                    GoodType.Stockfish, 1.5f, 1, 0.10f, 1.5f),
                 new FacilityDef(FacilityType.Bakery, "bakery",
                     new[] { new RecipeInput(GoodType.Wheat, 2.0f), new RecipeInput(GoodType.Salt, 0.03f) },
-                    GoodType.Bread, 2.8f, 1, 0.10f, 0.15f, 2.8f, GoodType.Wheat),
+                    GoodType.Bread, 2.8f, 1, 0.15f, 2.8f),
                 new FacilityDef(FacilityType.Brewery, "brewery",
                     new[] { new RecipeInput(GoodType.Barley, 2.0f) },
-                    GoodType.Ale, 4.0f, 1, 0.10f, 0.15f, 4.0f, GoodType.Barley),
+                    GoodType.Ale, 4.0f, 1, 0.15f, 4.0f),
             };
 
             Count = Defs.Length;

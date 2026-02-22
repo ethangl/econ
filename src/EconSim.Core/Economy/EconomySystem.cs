@@ -140,16 +140,10 @@ namespace EconSim.Core.Economy
                 for (int f = 0; f < Facilities.Count; f++)
                 {
                     var def = Facilities.Defs[f];
-                    int placementGood = (int)def.PlacementGood;
-
-                    if (ce.Productivity[placementGood] > 0f
-                        && ce.Productivity[placementGood] >= def.PlacementMinProductivity)
-                    {
-                        int idx = facilities.Count;
-                        var facility = new Facility(def.Type, county.Id, county.SeatCellId);
-                        facilities.Add(facility);
-                        countyFacilityIndices[county.Id].Add(idx);
-                    }
+                    int idx = facilities.Count;
+                    var facility = new Facility(def.Type, county.Id, county.SeatCellId);
+                    facilities.Add(facility);
+                    countyFacilityIndices[county.Id].Add(idx);
                 }
             }
 
