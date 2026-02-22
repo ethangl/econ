@@ -126,7 +126,7 @@ namespace EconSim.Core.Economy
                     continue;
 
                 int realmId = _countyRealmIds[i];
-                float sat = ce.BasicSatisfaction;
+                float sat = ce.Satisfaction;
 
                 // Find best adjacent same-realm neighbor with satisfaction gap > threshold
                 int bestNeighborIdx = -1;
@@ -144,7 +144,7 @@ namespace EconSim.Core.Economy
                     // Same realm only
                     if (_countyRealmIds[nIdx] != realmId) continue;
 
-                    float nSat = counties[nid].BasicSatisfaction;
+                    float nSat = counties[nid].Satisfaction;
                     float gap = nSat - sat;
                     if (gap > bestGap)
                     {

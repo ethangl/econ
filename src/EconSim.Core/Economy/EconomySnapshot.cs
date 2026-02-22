@@ -88,10 +88,13 @@ namespace EconSim.Core.Economy
         public float TotalPopulation;
         public float TotalBirths;
         public float TotalDeaths;
-        public float AvgBasicSatisfaction;   // population-weighted
+        public float AvgBasicSatisfaction;   // population-weighted, needs only (drives birth/death)
         public float MinBasicSatisfaction;
         public float MaxBasicSatisfaction;
-        public int CountiesInDistress;      // satisfaction < 0.5
+        public float AvgSatisfaction;        // population-weighted, needs + comfort (drives migration)
+        public float MinSatisfaction;
+        public float MaxSatisfaction;
+        public int CountiesInDistress;      // BasicSatisfaction < 0.5
 
         // Backward-compat scalars = food values
         public float TotalDucalRelief;

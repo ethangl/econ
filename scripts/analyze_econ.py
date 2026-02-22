@@ -5,10 +5,10 @@ import json
 import sys
 from pathlib import Path
 
-_FALLBACK_GOODS = ["bread", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone", "ale", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish"]
-_STAPLE_GOODS = {"bread", "sausage", "cheese", "saltedFish", "stockfish"}
-_FALLBACK_BASE_PRICES = [1.0, 0.5, 5.0, 0.0, 0.0, 3.0, 2.0, 0.3, 0.8, 0.2, 2.0, 5.0, 10.0, 15.0, 2.0, 3.0, 2.0, 4.0, 5.0, 1.5, 6.0, 1.5, 3.0, 2.5]
-_FALLBACK_TRADEABLE = {"bread", "timber", "ironOre", "salt", "wool", "stone", "ale", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish"}
+_FALLBACK_GOODS = ["wheat", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone", "barley", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish", "bread", "ale"]
+_STAPLE_GOODS = {"wheat", "sausage", "cheese", "saltedFish", "stockfish"}
+_FALLBACK_BASE_PRICES = [0.03, 0.02, 0.15, 0.0, 0.0, 0.10, 0.80, 0.01, 0.025, 0.005, 0.10, 0.10, 0.50, 1.00, 0.06, 1.20, 0.08, 0.20, 0.25, 0.025, 0.15, 0.05, 0.12, 0.08, 0.04, 0.04]
+_FALLBACK_TRADEABLE = {"wheat", "timber", "ironOre", "salt", "wool", "stone", "barley", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish", "bread", "ale"}
 
 # Module-level references set by init_goods()
 GOODS: list[str] = []
@@ -687,15 +687,22 @@ def print_population(data: dict):
         print(f"  Annualized:  {'+' if annual_rate >= 0 else ''}{annual_rate * 100:.2f}%/yr over {days} days")
 
     # Latest satisfaction
-    avg_sat = last.get("avgBasicSatisfaction", last.get("avgFoodSatisfaction", 0))
-    min_sat = last.get("minBasicSatisfaction", last.get("minFoodSatisfaction", 0))
-    max_sat = last.get("maxBasicSatisfaction", last.get("maxFoodSatisfaction", 0))
+    avg_needs = last.get("avgBasicSatisfaction", last.get("avgFoodSatisfaction", 0))
+    min_needs = last.get("minBasicSatisfaction", last.get("minFoodSatisfaction", 0))
+    max_needs = last.get("maxBasicSatisfaction", last.get("maxFoodSatisfaction", 0))
+    avg_sat = last.get("avgSatisfaction", avg_needs)
+    min_sat = last.get("minSatisfaction", min_needs)
+    max_sat = last.get("maxSatisfaction", max_needs)
     distress = last.get("countiesInDistress", 0)
-    print(f"\n  Basic Satisfaction (latest):")
+    print(f"\n  Needs Fulfillment (drives birth/death):")
+    print(f"    Average:   {avg_needs:.3f}")
+    print(f"    Min:       {min_needs:.3f}")
+    print(f"    Max:       {max_needs:.3f}")
+    print(f"  Satisfaction (drives migration):")
     print(f"    Average:   {avg_sat:.3f}")
     print(f"    Min:       {min_sat:.3f}")
     print(f"    Max:       {max_sat:.3f}")
-    print(f"    Distressed counties (<0.5): {distress}")
+    print(f"    Distressed counties (<0.5 needs): {distress}")
 
     # Births / deaths from latest snapshot
     births = last.get("totalBirths", 0)
@@ -712,9 +719,10 @@ def print_population(data: dict):
         for idx in indices:
             snap = ts[idx]
             pop = snap.get("totalPopulation", 0)
-            sat = snap.get("avgBasicSatisfaction", snap.get("avgFoodSatisfaction", 0))
+            needs = snap.get("avgBasicSatisfaction", snap.get("avgFoodSatisfaction", 0))
+            sat = snap.get("avgSatisfaction", needs)
             dist = snap.get("countiesInDistress", 0)
-            print(f"    Day {snap['day']:>4d}: pop={fmt(pop, 0):>8s}  sat={sat:.3f}  distress={dist}")
+            print(f"    Day {snap['day']:>4d}: pop={fmt(pop, 0):>8s}  needs={needs:.3f}  sat={sat:.3f}  distress={dist}")
 
     # Population trend (first vs last 30 days)
     if len(ts) >= 60:
