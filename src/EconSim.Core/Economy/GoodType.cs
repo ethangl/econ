@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using MapGen.Core;
 
 namespace EconSim.Core.Economy
 {
@@ -94,6 +95,9 @@ namespace EconSim.Core.Economy
         /// <summary>True if good is a raw/intermediate that exclusively feeds durable chains. Uses fixed pricing and stock-ceiling production.</summary>
         public static readonly bool[] IsDurableInput;
 
+        /// <summary>Biome productivity: kg produced per person per day. Indexed [biomeId, goodType].</summary>
+        public static readonly float[,] BiomeYield;
+
         /// <summary>Goods that can be traded on the inter-realm market.</summary>
         public static readonly int[] TradeableGoods;
 
@@ -152,34 +156,121 @@ namespace EconSim.Core.Economy
 
         static Goods()
         {
-            //                            Type                Name        Category            Need             Cons    CAdmin  PAdmin  RAdmin  Base   Min    Max    Trade  Prec
+            //                            Type                Name        Category            Need             Cons    CAdmin  PAdmin  RAdmin  Base   Min    Max    Trade  Prec  Spoil  TgtStk  BiomeYields
             Defs = new[]
             {
-                //                                                                                                                                              spoilage
-                new GoodDef(GoodType.Bread,     "bread",     GoodCategory.Raw, NeedCategory.Staple,  0.50f,  0.0f,   0.0f,   0.02f,  0.05f, 0.0025f, 1.0f, true,  false, 0.03f),
-                new GoodDef(GoodType.Timber,     "timber",    GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.02f, 0.001f, 0.4f,  true,  false, 0.001f),
-                new GoodDef(GoodType.IronOre,    "ironOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.15f, 0.0075f, 3.0f, true,  false),
-                new GoodDef(GoodType.GoldOre,    "goldOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
-                new GoodDef(GoodType.SilverOre,  "silverOre", GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
-                new GoodDef(GoodType.Salt,       "salt",      GoodCategory.Raw, NeedCategory.Basic,   0.05f,  0.0f,   0.0f,   0.0f,   0.10f, 0.005f, 2.0f,  true,  false),
-                new GoodDef(GoodType.Wool,       "wool",      GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.80f, 0.04f, 16.0f, true,  false, 0.001f),
-                new GoodDef(GoodType.Stone,      "stone",     GoodCategory.Raw, NeedCategory.None,    0.0f,   0.005f, 0.008f, 0.012f, 0.01f, 0.0005f, 0.2f, true,  false),
-                new GoodDef(GoodType.Ale,        "ale",       GoodCategory.Raw, NeedCategory.Basic,   0.5f,   0.0f,   0.0f,   0.0f,   0.03f, 0.0015f, 0.6f, true,  false, 0.05f),
-                new GoodDef(GoodType.Clay,       "clay",      GoodCategory.Raw,     NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.005f, 0.00025f, 0.1f, true,  false),
-                new GoodDef(GoodType.Pottery,    "pottery",   GoodCategory.Refined, NeedCategory.Comfort, 0.0f,   0.002f, 0.001f, 0.001f, 0.10f, 0.005f, 2.0f,  true,  false, 0.002f, 1.0f),
-                new GoodDef(GoodType.Furniture,  "furniture", GoodCategory.Finished,NeedCategory.Comfort, 0.0f,   0.001f, 0.0f,   0.0f,   0.10f, 0.005f, 2.0f,  true,  false, 0.001f, 2.0f),
-                new GoodDef(GoodType.Iron,       "iron",      GoodCategory.Refined, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.50f, 0.025f, 10.0f, true,  false),
-                new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.0f,   0.001f, 0.001f, 0.002f, 1.00f, 0.05f, 20.0f, true,  false, 0.001f, 2.0f),
-                new GoodDef(GoodType.Charcoal,   "charcoal",  GoodCategory.Refined, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.06f, 0.003f, 1.2f,  true,  false),
-                new GoodDef(GoodType.Clothes,    "clothes",   GoodCategory.Finished,NeedCategory.Comfort, 0.0f,   0.001f, 0.0f,   0.005f, 1.20f, 0.06f, 24.0f, true,  false, 0.002f, 2.0f),
-                new GoodDef(GoodType.Pork,      "pork",      GoodCategory.Raw,      NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.08f, 0.004f, 1.6f,  true,  false, 0.02f),
-                new GoodDef(GoodType.Sausage,   "sausage",   GoodCategory.Finished, NeedCategory.Staple,  0.21f,  0.0f,   0.0f,   0.0f,   0.20f, 0.01f, 4.0f,  true,  false, 0.002f),
-                new GoodDef(GoodType.Bacon,     "bacon",     GoodCategory.Finished, NeedCategory.Comfort, 0.1f,   0.0f,   0.0f,   0.0f,   0.25f, 0.0125f, 5.0f, true,  false, 0.02f),
-                new GoodDef(GoodType.Milk,     "milk",      GoodCategory.Raw,      NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.025f, 0.00125f, 0.5f, true,  false, 0.05f),
-                new GoodDef(GoodType.Cheese,   "cheese",    GoodCategory.Finished, NeedCategory.Staple,  0.07f,  0.0f,   0.0f,   0.0f,   0.15f, 0.0075f, 3.0f, true,  false, 0.003f),
-                new GoodDef(GoodType.Fish,       "fish",      GoodCategory.Raw,      NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.05f, 0.0025f, 1.0f, true,  false, 0.10f),
-                new GoodDef(GoodType.SaltedFish,  "saltedFish",GoodCategory.Finished, NeedCategory.Staple,  0.14f,  0.0f,   0.0f,   0.0f,   0.12f, 0.006f, 2.4f,  true,  false, 0.003f),
-                new GoodDef(GoodType.Stockfish,   "stockfish", GoodCategory.Finished, NeedCategory.Staple,  0.08f,  0.0f,   0.0f,   0.0f,   0.08f, 0.004f, 1.6f,  true,  false, 0.001f),
+                new GoodDef(GoodType.Bread, "bread", GoodCategory.Raw, NeedCategory.Staple, 0.50f, 0.0f, 0.0f, 0.02f, 0.05f, 0.0025f, 1.0f, true, false, 0.03f, 0f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.Tundra, 0.18f }, { (int)BiomeId.SaltFlat, 0.09f },
+                        { (int)BiomeId.CoastalMarsh, 0.69f }, { (int)BiomeId.AlpineBarren, 0.18f },
+                        { (int)BiomeId.MountainShrub, 0.35f }, { (int)BiomeId.Floodplain, 1.39f },
+                        { (int)BiomeId.Wetland, 0.69f }, { (int)BiomeId.HotDesert, 0.23f },
+                        { (int)BiomeId.ColdDesert, 0.23f }, { (int)BiomeId.Scrubland, 0.46f },
+                        { (int)BiomeId.TropicalRainforest, 0.81f }, { (int)BiomeId.TropicalDryForest, 0.92f },
+                        { (int)BiomeId.Savanna, 1.05f }, { (int)BiomeId.BorealForest, 0.58f },
+                        { (int)BiomeId.TemperateForest, 0.87f }, { (int)BiomeId.Grassland, 1.28f },
+                        { (int)BiomeId.Woodland, 0.98f },
+                    }),
+                new GoodDef(GoodType.Timber, "timber", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.02f, 0.001f, 0.4f, true, false, 0.001f, 0f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.MountainShrub, 0.11f }, { (int)BiomeId.Wetland, 0.11f },
+                        { (int)BiomeId.Scrubland, 0.11f }, { (int)BiomeId.TropicalRainforest, 0.55f },
+                        { (int)BiomeId.TropicalDryForest, 0.44f }, { (int)BiomeId.Savanna, 0.11f },
+                        { (int)BiomeId.BorealForest, 0.55f }, { (int)BiomeId.TemperateForest, 0.55f },
+                        { (int)BiomeId.Woodland, 0.33f },
+                    }),
+                new GoodDef(GoodType.IronOre, "ironOre", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.15f, 0.0075f, 3.0f, true, false, 0f, 0f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.CoastalMarsh, 0.02f }, { (int)BiomeId.AlpineBarren, 0.4f },
+                        { (int)BiomeId.MountainShrub, 0.3f }, { (int)BiomeId.Wetland, 0.03f },
+                        { (int)BiomeId.HotDesert, 0.25f }, { (int)BiomeId.ColdDesert, 0.25f },
+                        { (int)BiomeId.Scrubland, 0.15f }, { (int)BiomeId.Savanna, 0.02f },
+                        { (int)BiomeId.BorealForest, 0.02f }, { (int)BiomeId.TemperateForest, 0.02f },
+                        { (int)BiomeId.Woodland, 0.02f },
+                    }),
+                new GoodDef(GoodType.GoldOre, "goldOre", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false, true, 0f, 0f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.AlpineBarren, 0.02f }, { (int)BiomeId.MountainShrub, 0.01f },
+                    }),
+                new GoodDef(GoodType.SilverOre, "silverOre", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false, true, 0f, 0f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.AlpineBarren, 0.03f }, { (int)BiomeId.MountainShrub, 0.02f },
+                        { (int)BiomeId.HotDesert, 0.01f }, { (int)BiomeId.ColdDesert, 0.01f },
+                        { (int)BiomeId.Scrubland, 0.005f },
+                    }),
+                new GoodDef(GoodType.Salt, "salt", GoodCategory.Raw, NeedCategory.Basic, 0.05f, 0.0f, 0.0f, 0.0f, 0.10f, 0.005f, 2.0f, true, false, 0f, 0f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.SaltFlat, 0.9f }, { (int)BiomeId.CoastalMarsh, 0.70f },
+                        { (int)BiomeId.Wetland, 0.15f },
+                    }),
+                new GoodDef(GoodType.Wool, "wool", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.80f, 0.04f, 16.0f, true, false, 0.001f, 0f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.Tundra, 0.05f }, { (int)BiomeId.MountainShrub, 0.15f },
+                        { (int)BiomeId.Floodplain, 0.1f }, { (int)BiomeId.ColdDesert, 0.05f },
+                        { (int)BiomeId.Scrubland, 0.15f }, { (int)BiomeId.Savanna, 0.25f },
+                        { (int)BiomeId.TemperateForest, 0.05f }, { (int)BiomeId.Grassland, 0.35f },
+                        { (int)BiomeId.Woodland, 0.1f },
+                    }),
+                new GoodDef(GoodType.Stone, "stone", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.005f, 0.008f, 0.012f, 0.01f, 0.0005f, 0.2f, true, false, 0f, 0f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.Tundra, 0.05f }, { (int)BiomeId.SaltFlat, 0.1f },
+                        { (int)BiomeId.AlpineBarren, 0.4f }, { (int)BiomeId.MountainShrub, 0.3f },
+                        { (int)BiomeId.Floodplain, 0.02f }, { (int)BiomeId.HotDesert, 0.2f },
+                        { (int)BiomeId.ColdDesert, 0.2f }, { (int)BiomeId.Scrubland, 0.1f },
+                        { (int)BiomeId.TropicalRainforest, 0.02f }, { (int)BiomeId.TropicalDryForest, 0.03f },
+                        { (int)BiomeId.Savanna, 0.05f }, { (int)BiomeId.BorealForest, 0.03f },
+                        { (int)BiomeId.TemperateForest, 0.05f }, { (int)BiomeId.Grassland, 0.02f },
+                        { (int)BiomeId.Woodland, 0.05f },
+                    }),
+                new GoodDef(GoodType.Ale, "ale", GoodCategory.Raw, NeedCategory.Basic, 0.5f, 0.0f, 0.0f, 0.0f, 0.03f, 0.0015f, 0.6f, true, false, 0.05f, 0f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.CoastalMarsh, 0.1f }, { (int)BiomeId.Floodplain, 1.0f },
+                        { (int)BiomeId.Wetland, 0.2f }, { (int)BiomeId.Scrubland, 0.1f },
+                        { (int)BiomeId.TropicalDryForest, 0.2f }, { (int)BiomeId.Savanna, 0.55f },
+                        { (int)BiomeId.BorealForest, 0.1f }, { (int)BiomeId.TemperateForest, 0.35f },
+                        { (int)BiomeId.Grassland, 0.9f }, { (int)BiomeId.Woodland, 0.3f },
+                    }),
+                new GoodDef(GoodType.Clay, "clay", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.005f, 0.00025f, 0.1f, true, false, 0f, 0f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.CoastalMarsh, 0.2f }, { (int)BiomeId.Floodplain, 0.3f },
+                        { (int)BiomeId.Wetland, 0.15f }, { (int)BiomeId.Scrubland, 0.05f },
+                    }),
+                new GoodDef(GoodType.Pottery,    "pottery",   GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.002f, 0.001f, 0.001f, 0.10f, 0.005f, 2.0f, true, false, 0.002f, 1.0f),
+                new GoodDef(GoodType.Furniture,  "furniture", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.001f, 0.0f, 0.0f, 0.10f, 0.005f, 2.0f, true, false, 0.001f, 2.0f),
+                new GoodDef(GoodType.Iron,       "iron",      GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.50f, 0.025f, 10.0f, true, false),
+                new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.001f, 0.001f, 0.002f, 1.00f, 0.05f, 20.0f, true, false, 0.001f, 2.0f),
+                new GoodDef(GoodType.Charcoal,   "charcoal",  GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.06f, 0.003f, 1.2f, true, false),
+                new GoodDef(GoodType.Clothes,    "clothes",   GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.001f, 0.0f, 0.005f, 1.20f, 0.06f, 24.0f, true, false, 0.002f, 2.0f),
+                new GoodDef(GoodType.Pork, "pork", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.02f, 0f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.Tundra, 0.02f }, { (int)BiomeId.CoastalMarsh, 0.08f },
+                        { (int)BiomeId.MountainShrub, 0.08f }, { (int)BiomeId.Floodplain, 0.15f },
+                        { (int)BiomeId.Wetland, 0.05f }, { (int)BiomeId.ColdDesert, 0.03f },
+                        { (int)BiomeId.Scrubland, 0.10f }, { (int)BiomeId.TropicalDryForest, 0.20f },
+                        { (int)BiomeId.Savanna, 0.20f }, { (int)BiomeId.BorealForest, 0.10f },
+                        { (int)BiomeId.TemperateForest, 0.25f }, { (int)BiomeId.Grassland, 0.15f },
+                        { (int)BiomeId.Woodland, 0.30f },
+                    }),
+                new GoodDef(GoodType.Sausage,    "sausage",   GoodCategory.Finished, NeedCategory.Staple, 0.21f, 0.0f, 0.0f, 0.0f, 0.20f, 0.01f, 4.0f, true, false, 0.002f),
+                new GoodDef(GoodType.Bacon,      "bacon",     GoodCategory.Finished, NeedCategory.Comfort, 0.1f, 0.0f, 0.0f, 0.0f, 0.25f, 0.0125f, 5.0f, true, false, 0.02f),
+                new GoodDef(GoodType.Milk, "milk", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.025f, 0.00125f, 0.5f, true, false, 0.05f, 0f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.Tundra, 0.02f }, { (int)BiomeId.CoastalMarsh, 0.05f },
+                        { (int)BiomeId.MountainShrub, 0.10f }, { (int)BiomeId.Floodplain, 0.25f },
+                        { (int)BiomeId.Wetland, 0.08f }, { (int)BiomeId.ColdDesert, 0.02f },
+                        { (int)BiomeId.Scrubland, 0.08f }, { (int)BiomeId.TropicalDryForest, 0.05f },
+                        { (int)BiomeId.Savanna, 0.20f }, { (int)BiomeId.BorealForest, 0.05f },
+                        { (int)BiomeId.TemperateForest, 0.10f }, { (int)BiomeId.Grassland, 0.30f },
+                        { (int)BiomeId.Woodland, 0.15f },
+                    }),
+                new GoodDef(GoodType.Cheese,     "cheese",    GoodCategory.Finished, NeedCategory.Staple, 0.07f, 0.0f, 0.0f, 0.0f, 0.15f, 0.0075f, 3.0f, true, false, 0.003f),
+                new GoodDef(GoodType.Fish, "fish", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.05f, 0.0025f, 1.0f, true, false, 0.10f, 0f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.CoastalMarsh, 0.08f }, { (int)BiomeId.Floodplain, 0.10f },
+                        { (int)BiomeId.Wetland, 0.05f },
+                    }),
+                new GoodDef(GoodType.SaltedFish,  "saltedFish", GoodCategory.Finished, NeedCategory.Staple, 0.14f, 0.0f, 0.0f, 0.0f, 0.12f, 0.006f, 2.4f, true, false, 0.003f),
+                new GoodDef(GoodType.Stockfish,   "stockfish",  GoodCategory.Finished, NeedCategory.Staple, 0.08f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.001f),
             };
 
             Count = Defs.Length;
@@ -261,6 +352,17 @@ namespace EconSim.Core.Economy
                     int g = StapleGoods[s];
                     StapleIdealPerPop[g] = ConsumptionPerPop[g] / totalStapleWeight * StapleBudgetPerPop;
                 }
+            }
+
+            // Build flat biome yield array from per-good BiomeYields dictionaries
+            int biomeCount = Enum.GetValues(typeof(BiomeId)).Length;
+            BiomeYield = new float[biomeCount, Count];
+            for (int i = 0; i < Count; i++)
+            {
+                var yields = Defs[i].BiomeYields;
+                if (yields == null) continue;
+                foreach (var kv in yields)
+                    BiomeYield[kv.Key, i] = kv.Value;
             }
         }
 
