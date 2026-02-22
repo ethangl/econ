@@ -76,6 +76,9 @@ namespace EconSim.Core.Economy
         // Market fees (Layer 10)
         public float TotalMarketFeesCollected;
 
+        // Transport costs (destroyed money)
+        public float TotalTransportCostsPaid;
+
         // Inter-realm trade (Layer 4 Phase C)
         public float[] MarketPrices;
         public float[] TotalTradeImportsByGood;

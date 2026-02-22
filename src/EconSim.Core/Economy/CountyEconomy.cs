@@ -107,5 +107,8 @@ namespace EconSim.Core.Economy
 
         /// <summary>Market fees received this tick (reset daily). Only nonzero for market county.</summary>
         public float MarketFeesReceived;
+
+        /// <summary>Transport costs paid this tick (destroyed). Reset daily.</summary>
+        public float TransportCostsPaid;
     }
 }

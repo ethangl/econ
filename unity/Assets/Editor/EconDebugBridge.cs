@@ -682,6 +682,7 @@ namespace EconSim.Editor
                 j.KV("crossRealmTariffsPaid", snap.TotalCrossRealmTariffsPaid);
                 j.KV("crossRealmTariffsCollected", snap.TotalCrossRealmTariffsCollected);
                 j.KV("marketFeesCollected", snap.TotalMarketFeesCollected);
+                j.KV("transportCostsPaid", snap.TotalTransportCostsPaid);
 
                 // Population dynamics
                 j.KV("totalPopulation", snap.TotalPopulation);
@@ -880,6 +881,7 @@ namespace EconSim.Editor
 
             // Market fee aggregates
             float totalMarketFeesCollected = 0f;
+            float totalTransportCostsPaid = 0f;
 
             for (int i = 0; i < econ.Counties.Length; i++)
             {
@@ -904,6 +906,7 @@ namespace EconSim.Editor
                 totalCRTollsPaid += ce2.CrossRealmTollsPaid;
                 totalCRTariffsPaid += ce2.CrossRealmTariffsPaid;
                 totalMarketFeesCollected += ce2.MarketFeesReceived;
+                totalTransportCostsPaid += ce2.TransportCostsPaid;
             }
 
             j.KV("countyCount", countyCount);
@@ -982,6 +985,7 @@ namespace EconSim.Editor
             }
             j.KV("tradeTariffsCollected", totalTariffsCollected);
             j.KV("marketFeesCollected", totalMarketFeesCollected);
+            j.KV("totalTransportCostsPaid", totalTransportCostsPaid);
             j.KV("marketCountyId", econ.MarketCountyId);
 
             // Per-province summary (granary + monetary)

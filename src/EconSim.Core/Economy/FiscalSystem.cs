@@ -114,6 +114,8 @@ namespace EconSim.Core.Economy
         /// <summary>County ID hosting the market (receives market fees).</summary>
         int _marketCountyId = -1;
 
+        DeliveryService _delivery;
+
         /// <summary>Province ID → Realm ID (for deficit ledger).</summary>
         int[] _provinceToRealm;
 
@@ -128,6 +130,7 @@ namespace EconSim.Core.Economy
 
         public void Initialize(SimulationState state, MapData mapData)
         {
+            _delivery = new DeliveryService();
             BuildMappings(state, mapData);
         }
 
@@ -376,7 +379,7 @@ namespace EconSim.Core.Economy
                         if (surplus <= 0f) continue;
 
                         float take = surplus * collectRatio;
-                        ce.Stock[g] -= take;
+                        _delivery.ShipToGranary(ce, pe, g, take);
                         ce.GranaryRequisitioned[g] += take;
                         totalCollected += take;
 
@@ -391,7 +394,6 @@ namespace EconSim.Core.Economy
                         float totalCost = totalCollected * unitCost;
                         pe.Treasury -= totalCost;
                         pe.GranaryRequisitionCrownsSpent += totalCost;
-                        pe.Stockpile[g] += totalCollected;
                         pe.GranaryRequisitioned[g] += totalCollected;
                     }
                 }
@@ -429,9 +431,8 @@ namespace EconSim.Core.Economy
 
                         float share = deficit / totalDeficit;
                         float relief = Math.Min(share * available, deficit);
-                        ce.Stock[g] += relief;
+                        _delivery.ShipFromGranary(pe, ce, g, relief);
                         ce.Relief[g] += relief;
-                        pe.Stockpile[g] -= relief;
                         pe.ReliefGiven[g] += relief;
                     }
                 }
@@ -452,13 +453,15 @@ namespace EconSim.Core.Economy
                 float price = prices[g];
                 if (price <= 0f) continue;
 
+                float transportPerKg = _delivery.GetTransportCost(scope);
+
                 float retainPerPop = Goods.DurableRetainPerPop[g] > 0f
                     ? Goods.DurableRetainPerPop[g]
                     : Goods.Defs[g].Need == NeedCategory.Staple
                         ? Goods.StapleIdealPerPop[g]
                         : ConsumptionPerPop[g];
 
-                float costPerUnit = price * (1f + tollRate + tariffRate + MarketFeeRate);
+                float costPerUnit = price * (1f + tollRate + tariffRate + MarketFeeRate) + transportPerKg;
 
                 float totalSupply = 0f;
                 float totalDemand = 0f;
@@ -494,7 +497,7 @@ namespace EconSim.Core.Economy
                     if (s > 0f)
                     {
                         float sold = s * sellRatio;
-                        ce.Stock[g] -= sold;
+                        _delivery.Dispatch(ce, g, sold);
                         float earned = sold * price;
                         ce.Treasury += earned;
 
@@ -520,12 +523,14 @@ namespace EconSim.Core.Economy
                     else if (s < 0f)
                     {
                         float bought = (-s) * fillRatio;
-                        ce.Stock[g] += bought;
+                        _delivery.Receive(ce, g, bought);
                         float goodsCost = bought * price;
                         float toll = tollRate > 0f ? bought * price * tollRate : 0f;
                         float tariff = tariffRate > 0f ? bought * price * tariffRate : 0f;
                         float marketFee = bought * price * MarketFeeRate;
-                        ce.Treasury -= goodsCost + toll + tariff + marketFee;
+                        float transportCost = bought * transportPerKg;
+                        ce.Treasury -= goodsCost + toll + tariff + marketFee + transportCost;
+                        ce.TransportCostsPaid += transportCost;
 
                         switch (scope)
                         {
@@ -645,6 +650,7 @@ namespace EconSim.Core.Economy
                     ce.CrossRealmTollsPaid = 0f;
                     ce.CrossRealmTariffsPaid = 0f;
                     ce.MarketFeesReceived = 0f;
+                    ce.TransportCostsPaid = 0f;
                 }
             }
 

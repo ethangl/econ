@@ -309,12 +309,14 @@ emergency relief across the feudal hierarchy (county → province → realm).
 
 ### Phase 3: Monetary Taxation
 
-**County → Province (production tithe):**
+**County → Province (surplus tithe):**
 
     For each province:
         For each county in the province:
-            Compute production value = sum(production[g] × market_price[g]) across all goods
-            Tax = min(production_value × 1.3%, county_treasury)
+            Compute surplus value:
+                For each good where production > consumption:
+                    surplus_value += (production[g] - consumption[g]) × market_price[g]
+            Tax = min(surplus_value × 1.3%, county_treasury)
             Transfer tax from county treasury to province treasury
 
 **Province → Realm (revenue share):**
@@ -379,7 +381,7 @@ to charcoal):
             If surplus < 0: this county is a buyer
                 raw_demand = |surplus|
                 affordable = county_treasury / cost_per_unit
-                    where cost_per_unit = price × (1 + toll_rate + tariff_rate + 2% market_fee)
+                    where cost_per_unit = price × (1 + toll_rate + tariff_rate + 2% market_fee) + transport_cost_per_kg
                 demand = min(raw_demand, affordable)
 
         If no supply or no demand, skip this good
@@ -395,10 +397,27 @@ to charcoal):
         For each buyer:
             bought = demand × fill_ratio
             Add bought to stock
-            Pay goods_cost + toll + tariff + market_fee from treasury
+            Pay goods_cost + toll + tariff + market_fee + transport_cost from treasury
             Toll → buyer's province treasury
             Tariff → buyer's realm treasury
             Market fee → the designated market county's treasury
+            Transport cost → destroyed (represents consumed fodder, labor, cart wear)
+
+#### Transport Costs
+
+Physical transport costs apply per-kg based on trade scope:
+
+- **Intra-province**: free (0 Cr/kg)
+- **Cross-province**: 0.007 Cr/kg
+- **Cross-realm**: 0.021 Cr/kg (3× multiplier)
+
+Transport cost is additive (not multiplicative on price), so it hits cheap bulk goods
+(wheat at 0.03 Cr/kg → +23% cross-province) much harder than expensive goods
+(tools at 1.00 Cr/kg → +0.7%). This naturally localizes bulk commodity trade while
+allowing high-value goods to travel freely.
+
+Transport costs are **destroyed** — they represent real resource consumption (fodder,
+labor, cart wear) and act as a money sink alongside spoilage.
 
 ### Phase 7: Ducal Granary Requisition
 
@@ -557,7 +576,7 @@ and mint coins (1000 Cr/kg gold, 100 Cr/kg silver).
 
 Money circulates through:
 
-- Production taxes (county → province, 1.3% of production value)
+- Surplus taxes (county → province, 1.3% of surplus value above local consumption)
 - Revenue sharing (province → realm, 40% of tax collected)
 - Admin wages (province/realm → counties, proportional to population)
 - Trade payments (buyer treasury → seller treasury, with fees/tolls/tariffs
@@ -565,5 +584,7 @@ Money circulates through:
 - Granary requisition payments (province → surplus counties, at 60% of price)
 - Market fees (2% of all trade volume → market county)
 
-There is no explicit money destruction. Admin wages recirculate rather than
-being consumed.
+Money is destroyed through **transport costs**: buyers pay per-kg transport fees
+on cross-province and cross-realm trade. These costs represent consumed fodder,
+labor, and cart wear — they leave the economy entirely. This creates a natural
+money sink that scales with trade volume, counterbalancing minting.
