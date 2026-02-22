@@ -202,11 +202,15 @@ namespace EconSim.Core.Economy
                     var ce = counties[countyIds[c]];
                     if (ce == null) continue;
 
-                    float productionValue = 0f;
+                    float surplusValue = 0f;
                     for (int g = 0; g < Goods.Count; g++)
-                        productionValue += ce.Production[g] * prices[g];
+                    {
+                        float surplus = ce.Production[g] - ce.Consumption[g];
+                        if (surplus > 0f)
+                            surplusValue += surplus * prices[g];
+                    }
 
-                    float tax = Math.Min(productionValue * DucalProductionTaxRate, ce.Treasury);
+                    float tax = Math.Min(surplusValue * DucalProductionTaxRate, ce.Treasury);
                     if (tax > 0f)
                     {
                         ce.Treasury -= tax;

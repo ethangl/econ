@@ -22,14 +22,11 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 12. Remove Quotas and In-kind taxation
 13. Stock-gap production demand for Durables
 
-### Known Issues
+### Known Issues and Future Layers
 
-**Durable goods need a different production model.** Pottery, furniture, tools, and clothes are not commodities — they don't clear on a market the way grain or salt does. The current price-based extraction throttle treats them like commodities: production overshoots the slow stock-gap demand, stockpiles accumulate, prices crash to the floor, and the throttle strangles production to ~5% of capacity. The result is 95%+ unmet need despite ample inputs and labor. Durables need a stock-gap-driven production signal rather than a market-price-driven one.
-
-### Future Layers (unordered)
+See [Economy Design Concerns](./economy-design-concerns.md).
 
 - **Market Dynamics** - Counties respond to high market prices by producing above quota (price signal = demand signal).
-- **Weather/Seasonality**
 - **Money circulation + market tolls** — Market towns accumulate coin from tolls → grow in population → attract more trade (feedback loop)
 - **Labor specialization** — unskilled vs craftsman, skill acquisition from employment
 - **Road emergence** — traffic volume builds paths → roads, reducing transport cost
