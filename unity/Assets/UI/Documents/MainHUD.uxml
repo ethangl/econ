@@ -1,53 +1,68 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <Style src="../Styles/Main.uss" />
     <ui:VisualElement name="root" class="root-container">
-        <!-- Selection Panel (left side) -->
-        <ui:VisualElement name="selection-panel" class="panel hidden">
-            <ui:VisualElement class="panel-header-row">
-                <ui:Label name="county-name" class="panel-title" text="County" />
-                <ui:Button name="close-button" class="close-button" text="X" />
-            </ui:VisualElement>
-
-            <ui:VisualElement class="section">
-                <ui:Label class="section-header" text="Location" />
-                <ui:VisualElement class="stat-row">
-                    <ui:Label text="Province" />
-                    <ui:Label name="province-value" text="-" />
+        <ui:VisualElement name="top-bar" class="panel">
+            <ui:Label name="top-bar-title" class="top-bar-title" text="EconSim" />
+            <ui:VisualElement name="time-control-panel">
+                <ui:Button name="new-map-button" text="New Map" />
+                <ui:Label name="date-label" text="Y1 M1 D1" />
+                <ui:VisualElement name="speed-controls">
+                    <ui:Button name="slower-button" text="-" />
+                    <ui:Button name="pause-button" text="||" />
+                    <ui:Button name="faster-button" text="+" />
                 </ui:VisualElement>
-                <ui:VisualElement class="stat-row">
-                    <ui:Label text="Realm" />
-                    <ui:Label name="state-value" text="-" />
-                </ui:VisualElement>
-                <ui:VisualElement class="stat-row">
-                    <ui:Label text="Terrain" />
-                    <ui:Label name="terrain-value" text="-" />
-                </ui:VisualElement>
-            </ui:VisualElement>
-
-            <ui:VisualElement class="section">
-                <ui:Label class="section-header" text="Population" />
-                <ui:VisualElement class="stat-row">
-                    <ui:Label text="Total" />
-                    <ui:Label name="pop-total" text="0" />
-                </ui:VisualElement>
-            </ui:VisualElement>
-
-            <ui:VisualElement name="resources-section" class="section">
-                <ui:Label class="section-header" text="Resources" />
-                <ui:VisualElement name="resources-list" />
+                <ui:Label name="speed-label" text="1x" />
             </ui:VisualElement>
         </ui:VisualElement>
 
-        <!-- Time Control Panel (top right, horizontal) -->
-        <ui:VisualElement name="time-control-panel" class="panel">
-            <ui:Button name="new-map-button" text="New Map" />
-            <ui:Label name="date-label" text="Y1 M1 D1" />
-            <ui:VisualElement name="speed-controls">
-                <ui:Button name="slower-button" text="-" />
-                <ui:Button name="pause-button" text="||" />
-                <ui:Button name="faster-button" text="+" />
+        <ui:VisualElement name="content-row" class="content-row">
+            <ui:VisualElement name="selection-rail" class="selection-rail">
+                <ui:VisualElement name="selection-panel" class="panel">
+                    <ui:VisualElement class="panel-header-row">
+                        <ui:Label name="county-name" class="panel-title" text="County" />
+                        <ui:Button name="close-button" class="close-button" text="X" />
+                    </ui:VisualElement>
+
+                    <ui:VisualElement class="section">
+                        <ui:Label class="section-header" text="Location" />
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Province" />
+                            <ui:Label name="province-value" text="-" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Realm" />
+                            <ui:Label name="state-value" text="-" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Terrain" />
+                            <ui:Label name="terrain-value" text="-" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Culture" />
+                            <ui:Label name="culture-value" text="-" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Religion" />
+                            <ui:Label name="religion-value" text="-" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <ui:VisualElement class="section">
+                        <ui:Label class="section-header" text="Population" />
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Total" />
+                            <ui:Label name="pop-total" text="0" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <ui:VisualElement name="resources-section" class="section">
+                        <ui:Label class="section-header" text="Resources" />
+                        <ui:VisualElement name="resources-list" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
             </ui:VisualElement>
-            <ui:Label name="speed-label" text="1x" />
+
+            <ui:VisualElement name="map-content" class="map-content" />
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

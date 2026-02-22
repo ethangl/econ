@@ -34,8 +34,16 @@ namespace EconSim.UI
 
         private VisualElement _resourcesSection;
         private VisualElement _resourcesList;
+        private VisualElement _selectionRail;
 
         private MapData _mapData;
+        private Coroutine _panelAnimationCoroutine;
+        private float _currentRailWidth;
+        private float _nextOpenDuration = DefaultPanelAnimationDuration;
+
+        private const float PanelOpenWidth = 480f;
+        private const float DefaultPanelAnimationDuration = 0.35f;
+        private const float MinPanelAnimationDuration = 0.08f;
 
         // Selection state - what's currently selected based on mode
         private int _selectedCountyId = -1;
@@ -76,6 +84,7 @@ namespace EconSim.UI
             if (_mapView != null)
             {
                 _mapView.OnSelectionChanged += OnSelectionChanged;
+                _mapView.OnSelectionFocusStarted += OnSelectionFocusStarted;
             }
 
             SetupUI();
@@ -87,6 +96,13 @@ namespace EconSim.UI
             if (_mapView != null)
             {
                 _mapView.OnSelectionChanged -= OnSelectionChanged;
+                _mapView.OnSelectionFocusStarted -= OnSelectionFocusStarted;
+            }
+
+            if (_panelAnimationCoroutine != null)
+            {
+                StopCoroutine(_panelAnimationCoroutine);
+                _panelAnimationCoroutine = null;
             }
         }
 
@@ -151,6 +167,7 @@ namespace EconSim.UI
 
             // Query elements
             _panel = _root.Q<VisualElement>("selection-panel");
+            _selectionRail = _root.Q<VisualElement>("selection-rail");
             _closeButton = _root.Q<Button>("close-button");
             _entityName = _root.Q<Label>("county-name");  // Reusing as entity name
             _locationSection = _root.Q<VisualElement>("selection-panel")?.Q<VisualElement>(className: "section");
@@ -168,10 +185,7 @@ namespace EconSim.UI
             _closeButton?.RegisterCallback<ClickEvent>(evt => Hide());
 
             // Start hidden
-            if (_panel != null)
-            {
-                _panel.AddToClassList("hidden");
-            }
+            SetPanelOpenImmediate(false);
         }
 
         public void SelectRealm(int realmId)
@@ -179,7 +193,7 @@ namespace EconSim.UI
             ClearSelection();
             _selectedRealmId = realmId;
 
-            if (realmId <= 0 || _mapData == null || !_mapData.RealmById.ContainsKey(realmId))
+            if (!TryGetRealm(realmId, out _))
             {
                 Hide();
                 return;
@@ -194,7 +208,7 @@ namespace EconSim.UI
             ClearSelection();
             _selectedProvinceId = provinceId;
 
-            if (provinceId <= 0 || _mapData == null || !_mapData.ProvinceById.ContainsKey(provinceId))
+            if (!TryGetProvince(provinceId, out _))
             {
                 Hide();
                 return;
@@ -209,7 +223,7 @@ namespace EconSim.UI
             ClearSelection();
             _selectedCountyId = countyId;
 
-            if (countyId <= 0 || _mapData == null || !_mapData.CountyById.ContainsKey(countyId))
+            if (!TryGetCounty(countyId, out _))
             {
                 Hide();
                 return;
@@ -230,12 +244,13 @@ namespace EconSim.UI
 
         public void Show()
         {
-            _panel?.RemoveFromClassList("hidden");
+            AnimatePanel(true, _nextOpenDuration);
+            _nextOpenDuration = DefaultPanelAnimationDuration;
         }
 
         public void Hide()
         {
-            _panel?.AddToClassList("hidden");
+            AnimatePanel(false, DefaultPanelAnimationDuration);
             ClearSelection();
         }
 
@@ -262,8 +277,7 @@ namespace EconSim.UI
 
         private void UpdateRealmDisplay()
         {
-            if (_selectedRealmId <= 0 || _mapData == null) return;
-            if (!_mapData.RealmById.TryGetValue(_selectedRealmId, out var realm)) return;
+            if (!TryGetRealm(_selectedRealmId, out var realm)) return;
 
             // Title - use full name (includes government form, e.g. "Kuningaskunta of Härvälä")
             SetLabel(_entityName, realm.FullName ?? realm.Name ?? $"Realm {realm.Id}");
@@ -289,7 +303,7 @@ namespace EconSim.UI
             // Population - aggregate from all cells in this realm
             long totalPop = 0;
 
-            foreach (var cell in _mapData.Cells)
+            foreach (var cell in _mapData.Cells ?? Enumerable.Empty<Cell>())
             {
                 if (cell.RealmId != _selectedRealmId || !cell.IsLand) continue;
                 totalPop += (long)cell.Population;
@@ -304,8 +318,7 @@ namespace EconSim.UI
 
         private void UpdateProvinceDisplay()
         {
-            if (_selectedProvinceId <= 0 || _mapData == null) return;
-            if (!_mapData.ProvinceById.TryGetValue(_selectedProvinceId, out var province)) return;
+            if (!TryGetProvince(_selectedProvinceId, out var province)) return;
 
             // Title - use full name (e.g. "Province of Koskiniemi")
             SetLabel(_entityName, province.FullName ?? province.Name ?? $"Province {province.Id}");
@@ -314,7 +327,7 @@ namespace EconSim.UI
             SetLabel(_provinceValue, "-");
 
             string realmName = "-";
-            if (province.RealmId > 0 && _mapData.RealmById.TryGetValue(province.RealmId, out var realm))
+            if (TryGetRealm(province.RealmId, out var realm))
             {
                 realmName = realm.Name;
             }
@@ -337,7 +350,7 @@ namespace EconSim.UI
             // Population - aggregate from all cells in this province
             long totalPop = 0;
 
-            foreach (var cell in _mapData.Cells)
+            foreach (var cell in _mapData.Cells ?? Enumerable.Empty<Cell>())
             {
                 if (cell.ProvinceId != _selectedProvinceId || !cell.IsLand) continue;
                 totalPop += (long)cell.Population;
@@ -352,9 +365,7 @@ namespace EconSim.UI
 
         private void UpdateCountyDisplay()
         {
-            if (_selectedCountyId <= 0 || _mapData == null || _mapData.CountyById == null) return;
-
-            if (!_mapData.CountyById.TryGetValue(_selectedCountyId, out var county)) return;
+            if (!TryGetCounty(_selectedCountyId, out var county)) return;
 
             // Restore terrain label text to "Cells" for county mode
             var terrainRow = _terrainValue?.parent;
@@ -371,7 +382,7 @@ namespace EconSim.UI
 
             // Province
             string provinceName = "-";
-            if (county.ProvinceId > 0 && _mapData.ProvinceById.TryGetValue(county.ProvinceId, out var province))
+            if (TryGetProvince(county.ProvinceId, out var province))
             {
                 provinceName = province.Name;
             }
@@ -379,7 +390,7 @@ namespace EconSim.UI
 
             // Realm
             string realmName = "-";
-            if (county.RealmId > 0 && _mapData.RealmById.TryGetValue(county.RealmId, out var realm))
+            if (TryGetRealm(county.RealmId, out var realm))
             {
                 realmName = realm.Name;
             }
@@ -428,7 +439,7 @@ namespace EconSim.UI
 
             foreach (var provId in realm.ProvinceIds)
             {
-                if (!_mapData.ProvinceById.TryGetValue(provId, out var prov)) continue;
+                if (!TryGetProvince(provId, out var prov)) continue;
 
                 var row = new VisualElement();
                 row.AddToClassList("resource-item");
@@ -505,10 +516,89 @@ namespace EconSim.UI
             list?.Clear();
         }
 
+        private void OnSelectionFocusStarted(float durationSeconds)
+        {
+            if (durationSeconds <= 0f)
+            {
+                _nextOpenDuration = DefaultPanelAnimationDuration;
+                return;
+            }
+
+            _nextOpenDuration = Mathf.Max(MinPanelAnimationDuration, durationSeconds);
+        }
+
+        private void AnimatePanel(bool open, float durationSeconds)
+        {
+            if (_selectionRail == null)
+            {
+                return;
+            }
+
+            if (_panelAnimationCoroutine != null)
+            {
+                StopCoroutine(_panelAnimationCoroutine);
+                _panelAnimationCoroutine = null;
+            }
+
+            float targetWidth = open ? PanelOpenWidth : 0f;
+            if (Mathf.Abs(_currentRailWidth - targetWidth) < 0.01f)
+            {
+                SetRailWidth(targetWidth);
+                _selectionRail.pickingMode = open ? PickingMode.Position : PickingMode.Ignore;
+                return;
+            }
+
+            if (open)
+                _selectionRail.pickingMode = PickingMode.Position;
+            else
+                _selectionRail.pickingMode = PickingMode.Ignore;
+
+            _panelAnimationCoroutine = StartCoroutine(AnimatePanelCoroutine(targetWidth, durationSeconds));
+        }
+
+        private System.Collections.IEnumerator AnimatePanelCoroutine(float targetWidth, float durationSeconds)
+        {
+            float startWidth = _currentRailWidth;
+            float duration = Mathf.Max(MinPanelAnimationDuration, durationSeconds);
+            float elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                float eased = Mathf.SmoothStep(0f, 1f, t);
+                float width = Mathf.Lerp(startWidth, targetWidth, eased);
+                SetRailWidth(width);
+                yield return null;
+            }
+
+            SetRailWidth(targetWidth);
+            _panelAnimationCoroutine = null;
+        }
+
+        private void SetPanelOpenImmediate(bool open)
+        {
+            if (_selectionRail == null) return;
+
+            float targetWidth = open ? PanelOpenWidth : 0f;
+            SetRailWidth(targetWidth);
+            _selectionRail.pickingMode = open ? PickingMode.Position : PickingMode.Ignore;
+        }
+
+        private void SetRailWidth(float width)
+        {
+            if (_selectionRail == null) return;
+
+            _currentRailWidth = Mathf.Clamp(width, 0f, PanelOpenWidth);
+            _selectionRail.style.width = _currentRailWidth;
+            _selectionRail.style.minWidth = _currentRailWidth;
+            _selectionRail.style.maxWidth = _currentRailWidth;
+        }
+
         private string GetCultureName(int realmId)
         {
             if (_mapData == null || _mapData.CultureById == null) return "-";
-            if (realmId <= 0 || !_mapData.RealmById.TryGetValue(realmId, out var realm)) return "-";
+            if (!TryGetRealm(realmId, out var realm)) return "-";
             if (realm.CultureId <= 0 || !_mapData.CultureById.TryGetValue(realm.CultureId, out var culture)) return "-";
             return culture.Name ?? "-";
         }
@@ -516,10 +606,37 @@ namespace EconSim.UI
         private string GetReligionName(int realmId)
         {
             if (_mapData == null || _mapData.CultureById == null || _mapData.ReligionById == null) return "-";
-            if (realmId <= 0 || !_mapData.RealmById.TryGetValue(realmId, out var realm)) return "-";
+            if (!TryGetRealm(realmId, out var realm)) return "-";
             if (realm.CultureId <= 0 || !_mapData.CultureById.TryGetValue(realm.CultureId, out var culture)) return "-";
             if (culture.ReligionId <= 0 || !_mapData.ReligionById.TryGetValue(culture.ReligionId, out var religion)) return "-";
             return religion.Name ?? "-";
+        }
+
+        private bool TryGetRealm(int realmId, out Realm realm)
+        {
+            realm = null;
+            return _mapData != null
+                && _mapData.RealmById != null
+                && realmId > 0
+                && _mapData.RealmById.TryGetValue(realmId, out realm);
+        }
+
+        private bool TryGetProvince(int provinceId, out Province province)
+        {
+            province = null;
+            return _mapData != null
+                && _mapData.ProvinceById != null
+                && provinceId > 0
+                && _mapData.ProvinceById.TryGetValue(provinceId, out province);
+        }
+
+        private bool TryGetCounty(int countyId, out County county)
+        {
+            county = null;
+            return _mapData != null
+                && _mapData.CountyById != null
+                && countyId > 0
+                && _mapData.CountyById.TryGetValue(countyId, out county);
         }
 
         private string GetBurgNameById(int burgId)

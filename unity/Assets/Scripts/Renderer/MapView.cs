@@ -79,6 +79,8 @@ namespace EconSim.Renderer
 
         /// <summary>Event fired after selection changes. Passes the selection scope.</summary>
         public event Action<SelectionScope> OnSelectionChanged;
+        /// <summary>Event fired when focus pan starts. Passes animation duration in seconds.</summary>
+        public event Action<float> OnSelectionFocusStarted;
 
         private MapData mapData;
         private MeshFilter meshFilter;
@@ -794,22 +796,10 @@ namespace EconSim.Renderer
 
             ModeSelectionTarget target = ResolveModeSelectionTarget(currentMode);
             SelectionScope scope = ToSelectionScope(target);
+
+            float focusDuration = 0f;
+            OnSelectionFocusStarted?.Invoke(focusDuration);
             SelectByScope(scope, cell);
-
-            Bounds? selectionBounds = GetBoundsForSelectionScope(scope, cell);
-            if (selectionBounds.HasValue && mapCameraController != null)
-                mapCameraController.FocusOn(selectionBounds.Value.center);
-        }
-
-        private Bounds? GetBoundsForSelectionScope(SelectionScope scope, Cell cell)
-        {
-            return scope switch
-            {
-                SelectionScope.Realm => GetRealmBounds(cell.RealmId),
-                SelectionScope.Province => GetProvinceBounds(cell.ProvinceId),
-                SelectionScope.County => GetCountyBounds(cell.CountyId),
-                _ => null
-            };
         }
 
         /// <summary>
