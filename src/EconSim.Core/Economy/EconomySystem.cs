@@ -566,7 +566,7 @@ namespace EconSim.Core.Economy
                 if (!cell.IsLand) continue;
                 landCells++;
                 for (int g = 0; g < Goods.Count; g++)
-                    output[g] += BiomeProductivity.Get(cell.BiomeId, (GoodType)g);
+                    output[g] += Goods.BiomeYield[cell.BiomeId, g];
 
                 // Coast-proximity fishing bonus
                 switch (cell.CoastDistance)
