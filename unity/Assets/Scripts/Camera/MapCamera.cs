@@ -62,6 +62,7 @@ namespace EconSim.Camera
         /// Other systems should not process clicks during this time.
         /// </summary>
         public bool IsPanningMode => isMiddleMouseDragging || isPrimaryPointerDown;
+        public float CurrentFocusDuration => activeFocusSmoothTime;
 
         /// <summary>
         /// Returns whether the last primary-button release ended a drag gesture.

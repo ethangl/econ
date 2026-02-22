@@ -71,6 +71,7 @@ namespace EconSim.Renderer
         private const float DefaultModeHeightScale = 0f;
         private const float BiomesModeHeightScale = 0.3f;
         private const float HeightScaleTransitionSpeed = 2f;
+        private const float FocusCompensationRailWidthPixels = 480f;
         private float currentAnimatedHeightScale = DefaultModeHeightScale;
         private float targetHeightScale = DefaultModeHeightScale;
 
@@ -79,6 +80,8 @@ namespace EconSim.Renderer
 
         /// <summary>Event fired after selection changes. Passes the selection scope.</summary>
         public event Action<SelectionScope> OnSelectionChanged;
+        /// <summary>Event fired when focus pan starts. Passes animation duration in seconds.</summary>
+        public event Action<float> OnSelectionFocusStarted;
 
         private MapData mapData;
         private MeshFilter meshFilter;
@@ -794,11 +797,18 @@ namespace EconSim.Renderer
 
             ModeSelectionTarget target = ResolveModeSelectionTarget(currentMode);
             SelectionScope scope = ToSelectionScope(target);
-            SelectByScope(scope, cell);
 
+            float focusDuration = 0f;
             Bounds? selectionBounds = GetBoundsForSelectionScope(scope, cell);
             if (selectionBounds.HasValue && mapCameraController != null)
-                mapCameraController.FocusOn(selectionBounds.Value.center);
+            {
+                Vector3 focusTarget = ApplyFocusOffsetForSelectionRail(selectionBounds.Value.center);
+                mapCameraController.FocusOn(focusTarget);
+                focusDuration = mapCameraController.CurrentFocusDuration;
+            }
+
+            OnSelectionFocusStarted?.Invoke(focusDuration);
+            SelectByScope(scope, cell);
         }
 
         private Bounds? GetBoundsForSelectionScope(SelectionScope scope, Cell cell)
@@ -810,6 +820,42 @@ namespace EconSim.Renderer
                 SelectionScope.County => GetCountyBounds(cell.CountyId),
                 _ => null
             };
+        }
+
+        private Vector3 ApplyFocusOffsetForSelectionRail(Vector3 worldTarget)
+        {
+            var cam = selectionCamera != null ? selectionCamera : UnityEngine.Camera.main;
+            if (cam == null)
+                return worldTarget;
+
+            float railWidth = FocusCompensationRailWidthPixels;
+            if (railWidth <= 0.5f)
+                return worldTarget;
+
+            float centerX = Screen.width * 0.5f;
+            float centerY = Screen.height * 0.5f;
+            float mapCenterX = Mathf.Clamp(centerX + (railWidth * 0.5f), 0f, Screen.width);
+
+            if (!TryGetGroundPointAtScreen(cam, centerX, centerY, out Vector3 screenCenterGround))
+                return worldTarget;
+            if (!TryGetGroundPointAtScreen(cam, mapCenterX, centerY, out Vector3 mapCenterGround))
+                return worldTarget;
+
+            Vector3 delta = mapCenterGround - screenCenterGround;
+            delta.y = 0f;
+            return worldTarget - delta;
+        }
+
+        private static bool TryGetGroundPointAtScreen(UnityEngine.Camera cam, float x, float y, out Vector3 point)
+        {
+            point = Vector3.zero;
+            Ray ray = cam.ScreenPointToRay(new Vector3(x, y, 0f));
+            Plane groundPlane = new Plane(Vector3.up, Vector3.zero);
+            if (!groundPlane.Raycast(ray, out float distance))
+                return false;
+
+            point = ray.GetPoint(distance);
+            return true;
         }
 
         /// <summary>
