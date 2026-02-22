@@ -88,6 +88,9 @@ namespace EconSim.Core.Economy
         /// <summary>True if good has population consumption or administrative demand.</summary>
         public static readonly bool[] HasDirectDemand;
 
+        /// <summary>True if good is a durable (has TargetStockPerPop > 0). Uses fixed pricing and stock-gap production.</summary>
+        public static readonly bool[] IsDurable;
+
         /// <summary>Goods that can be traded on the inter-realm market.</summary>
         public static readonly int[] TradeableGoods;
 
@@ -192,12 +195,14 @@ namespace EconSim.Core.Economy
             DurableCatchUpRate  = new float[Count];
             DurableRetainPerPop = new float[Count];
             HasDirectDemand     = new bool[Count];
+            IsDurable           = new bool[Count];
 
             var tradeable = new List<int>();
 
             for (int i = 0; i < Count; i++)
             {
                 var d = Defs[i];
+                IsDurable[i]           = d.TargetStockPerPop > 0f;
                 ConsumptionPerPop[i]   = d.ConsumptionPerPop;
                 Names[i]               = d.Name;
                 BasePrice[i]           = d.BasePrice;

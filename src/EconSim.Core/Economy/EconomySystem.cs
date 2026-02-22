@@ -339,8 +339,20 @@ namespace EconSim.Core.Economy
                         float throughput = Math.Min(maxByInput, maxByLabor);
                         if (throughput < 0f) throughput = 0f;
 
-                        // Price-based facility throttle for all produced goods
-                        if (Goods.BasePrice[output] > 0f)
+                        // Stock-gap production cap for durables
+                        if (Goods.IsDurable[output])
+                        {
+                            float targetStock = pop * Goods.TargetStockPerPop[output];
+                            float currentStock = ce.Stock[output];
+                            float maintenance = currentStock * Goods.Defs[output].SpoilageRate;
+                            float gap = Math.Max(0f, targetStock - currentStock);
+                            float dailyNeed = maintenance + gap * Goods.DurableCatchUpRate[output];
+                            const float DurableBufferMultiplier = 3.0f;
+                            throughput = Math.Min(throughput, dailyNeed * DurableBufferMultiplier);
+                        }
+
+                        // Price-based facility throttle (skip durables — they use stock-gap cap above)
+                        if (Goods.BasePrice[output] > 0f && !Goods.IsDurable[output])
                         {
                             float priceRatio = econ.MarketPrices[output] / Goods.BasePrice[output];
                             if (priceRatio < 1f) throughput *= priceRatio;
