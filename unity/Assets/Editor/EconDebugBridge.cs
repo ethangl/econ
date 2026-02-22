@@ -690,6 +690,9 @@ namespace EconSim.Editor
                 j.KV("avgBasicSatisfaction", snap.AvgBasicSatisfaction);
                 j.KV("minBasicSatisfaction", snap.MinBasicSatisfaction);
                 j.KV("maxBasicSatisfaction", snap.MaxBasicSatisfaction);
+                j.KV("avgSatisfaction", snap.AvgSatisfaction);
+                j.KV("minSatisfaction", snap.MinSatisfaction);
+                j.KV("maxSatisfaction", snap.MaxSatisfaction);
                 j.KV("countiesInDistress", snap.CountiesInDistress);
 
                 if (snap.MarketPrices != null)

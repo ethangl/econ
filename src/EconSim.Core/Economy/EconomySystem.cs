@@ -26,6 +26,12 @@ namespace EconSim.Core.Economy
         static readonly float[] IndividualBasicWeights; // ConsumptionPerPop[g] / TotalSatisfactionDenom
         static readonly float StapleSatisfactionWeight; // StapleBudgetPerPop / TotalSatisfactionDenom
 
+        // Comfort goods for blended satisfaction (migration pull)
+        static readonly int[] ComfortGoods;
+        static readonly bool[] ComfortIsDurable; // true = stock/target, false = consumption/need
+        const float NeedsWeight = 0.7f;
+        const float ComfortWeight = 0.3f;
+
         static EconomySystem()
         {
             float totalIndividualBasic = 0f;
@@ -51,6 +57,24 @@ namespace EconSim.Core.Economy
                 {
                     IndividualBasicGoods[idx] = g;
                     IndividualBasicWeights[idx] = totalDenom > 0f ? ConsumptionPerPop[g] / totalDenom : 0f;
+                    idx++;
+                }
+            }
+
+            // Build comfort goods list
+            int comfortCount = 0;
+            for (int g = 0; g < Goods.Count; g++)
+                if (Goods.Defs[g].Need == NeedCategory.Comfort) comfortCount++;
+
+            ComfortGoods = new int[comfortCount];
+            ComfortIsDurable = new bool[comfortCount];
+            idx = 0;
+            for (int g = 0; g < Goods.Count; g++)
+            {
+                if (Goods.Defs[g].Need == NeedCategory.Comfort)
+                {
+                    ComfortGoods[idx] = g;
+                    ComfortIsDurable[idx] = Goods.TargetStockPerPop[g] > 0f;
                     idx++;
                 }
             }
@@ -506,19 +530,41 @@ namespace EconSim.Core.Economy
                     ce.UnmetNeed[g] = Math.Max(0f, pop * Goods.StapleIdealPerPop[g] - ce.Consumption[g]);
                 }
 
-                // Basic-needs satisfaction EMA (alpha ≈ 2/(30+1) ≈ 0.065, ~30-day smoothing)
-                // Staple pool fulfillment + individual basic fulfillment
+                // Basic-needs fulfillment EMA (alpha ≈ 2/(30+1) ≈ 0.065, ~30-day smoothing)
+                // Staple pool fulfillment + individual basic fulfillment — drives birth/death
                 float stapleFulfillment = stapleBudget > 0f
                     ? Math.Min(1f, totalStapleConsumed / stapleBudget) : 1f;
-                float daily = StapleSatisfactionWeight * stapleFulfillment;
+                float dailyNeeds = StapleSatisfactionWeight * stapleFulfillment;
                 for (int b = 0; b < IndividualBasicGoods.Length; b++)
                 {
                     int g = IndividualBasicGoods[b];
                     float needed = pop * ConsumptionPerPop[g];
                     float ratio = needed > 0f ? Math.Min(1f, ce.Consumption[g] / needed) : 1f;
-                    daily += IndividualBasicWeights[b] * ratio;
+                    dailyNeeds += IndividualBasicWeights[b] * ratio;
                 }
-                ce.BasicSatisfaction += 0.065f * (daily - ce.BasicSatisfaction);
+                ce.BasicSatisfaction += 0.065f * (dailyNeeds - ce.BasicSatisfaction);
+
+                // Comfort fulfillment — equal-weighted average across comfort goods
+                float comfortSum = 0f;
+                for (int c = 0; c < ComfortGoods.Length; c++)
+                {
+                    int g = ComfortGoods[c];
+                    if (ComfortIsDurable[c])
+                    {
+                        float target = pop * Goods.TargetStockPerPop[g];
+                        comfortSum += target > 0f ? Math.Min(1f, ce.Stock[g] / target) : 1f;
+                    }
+                    else
+                    {
+                        float needed = pop * ConsumptionPerPop[g];
+                        comfortSum += needed > 0f ? Math.Min(1f, ce.Consumption[g] / needed) : 1f;
+                    }
+                }
+                float comfortFulfillment = ComfortGoods.Length > 0 ? comfortSum / ComfortGoods.Length : 1f;
+
+                // Blended satisfaction: needs + comfort — drives migration
+                float dailySatisfaction = NeedsWeight * dailyNeeds + ComfortWeight * comfortFulfillment;
+                ce.Satisfaction += 0.065f * (dailySatisfaction - ce.Satisfaction);
             }
 
             // Compute effective demand per pop (used by FiscalSystem)
@@ -642,6 +688,9 @@ namespace EconSim.Core.Economy
             int countyCount = 0;
             snap.MinBasicSatisfaction = float.MaxValue;
             snap.MaxBasicSatisfaction = float.MinValue;
+            snap.MinSatisfaction = float.MaxValue;
+            snap.MaxSatisfaction = float.MinValue;
+            float weightedBasicSatisfaction = 0f;
             float weightedSatisfaction = 0f;
 
             for (int i = 0; i < econ.Counties.Length; i++)
@@ -706,9 +755,12 @@ namespace EconSim.Core.Economy
                 snap.TotalPopulation += ce.Population;
                 snap.TotalBirths += ce.BirthsThisMonth;
                 snap.TotalDeaths += ce.DeathsThisMonth;
-                weightedSatisfaction += ce.Population * ce.BasicSatisfaction;
+                weightedBasicSatisfaction += ce.Population * ce.BasicSatisfaction;
+                weightedSatisfaction += ce.Population * ce.Satisfaction;
                 if (ce.BasicSatisfaction < snap.MinBasicSatisfaction) snap.MinBasicSatisfaction = ce.BasicSatisfaction;
                 if (ce.BasicSatisfaction > snap.MaxBasicSatisfaction) snap.MaxBasicSatisfaction = ce.BasicSatisfaction;
+                if (ce.Satisfaction < snap.MinSatisfaction) snap.MinSatisfaction = ce.Satisfaction;
+                if (ce.Satisfaction > snap.MaxSatisfaction) snap.MaxSatisfaction = ce.Satisfaction;
                 if (ce.BasicSatisfaction < 0.5f) snap.CountiesInDistress++;
 
                 snap.TotalCountyTreasury += ce.Treasury;
@@ -729,9 +781,14 @@ namespace EconSim.Core.Economy
                 snap.MaxStock = 0;
                 snap.MinBasicSatisfaction = 0;
                 snap.MaxBasicSatisfaction = 0;
+                snap.MinSatisfaction = 0;
+                snap.MaxSatisfaction = 0;
             }
 
             snap.AvgBasicSatisfaction = snap.TotalPopulation > 0f
+                ? weightedBasicSatisfaction / snap.TotalPopulation
+                : 0f;
+            snap.AvgSatisfaction = snap.TotalPopulation > 0f
                 ? weightedSatisfaction / snap.TotalPopulation
                 : 0f;
 

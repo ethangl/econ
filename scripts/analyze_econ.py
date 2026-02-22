@@ -687,15 +687,22 @@ def print_population(data: dict):
         print(f"  Annualized:  {'+' if annual_rate >= 0 else ''}{annual_rate * 100:.2f}%/yr over {days} days")
 
     # Latest satisfaction
-    avg_sat = last.get("avgBasicSatisfaction", last.get("avgFoodSatisfaction", 0))
-    min_sat = last.get("minBasicSatisfaction", last.get("minFoodSatisfaction", 0))
-    max_sat = last.get("maxBasicSatisfaction", last.get("maxFoodSatisfaction", 0))
+    avg_needs = last.get("avgBasicSatisfaction", last.get("avgFoodSatisfaction", 0))
+    min_needs = last.get("minBasicSatisfaction", last.get("minFoodSatisfaction", 0))
+    max_needs = last.get("maxBasicSatisfaction", last.get("maxFoodSatisfaction", 0))
+    avg_sat = last.get("avgSatisfaction", avg_needs)
+    min_sat = last.get("minSatisfaction", min_needs)
+    max_sat = last.get("maxSatisfaction", max_needs)
     distress = last.get("countiesInDistress", 0)
-    print(f"\n  Basic Satisfaction (latest):")
+    print(f"\n  Needs Fulfillment (drives birth/death):")
+    print(f"    Average:   {avg_needs:.3f}")
+    print(f"    Min:       {min_needs:.3f}")
+    print(f"    Max:       {max_needs:.3f}")
+    print(f"  Satisfaction (drives migration):")
     print(f"    Average:   {avg_sat:.3f}")
     print(f"    Min:       {min_sat:.3f}")
     print(f"    Max:       {max_sat:.3f}")
-    print(f"    Distressed counties (<0.5): {distress}")
+    print(f"    Distressed counties (<0.5 needs): {distress}")
 
     # Births / deaths from latest snapshot
     births = last.get("totalBirths", 0)
@@ -712,9 +719,10 @@ def print_population(data: dict):
         for idx in indices:
             snap = ts[idx]
             pop = snap.get("totalPopulation", 0)
-            sat = snap.get("avgBasicSatisfaction", snap.get("avgFoodSatisfaction", 0))
+            needs = snap.get("avgBasicSatisfaction", snap.get("avgFoodSatisfaction", 0))
+            sat = snap.get("avgSatisfaction", needs)
             dist = snap.get("countiesInDistress", 0)
-            print(f"    Day {snap['day']:>4d}: pop={fmt(pop, 0):>8s}  sat={sat:.3f}  distress={dist}")
+            print(f"    Day {snap['day']:>4d}: pop={fmt(pop, 0):>8s}  needs={needs:.3f}  sat={sat:.3f}  distress={dist}")
 
     # Population trend (first vs last 30 days)
     if len(ts) >= 60:

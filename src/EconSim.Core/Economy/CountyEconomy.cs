@@ -26,9 +26,12 @@ namespace EconSim.Core.Economy
         /// <summary>Relief received from provincial granary this tick, per good type.</summary>
         public float[] Relief = new float[Goods.Count];
 
-        /// <summary>Exponential moving average of daily basic-needs satisfaction (0=starving, 1=fully supplied). ~30-day window.
-        /// Weighted average of all NeedCategory.Basic goods (food, ale, salt) by consumption rate.</summary>
+        /// <summary>Exponential moving average of daily basic-needs fulfillment (0=starving, 1=fully supplied). ~30-day window.
+        /// Weighted average of staple pool + NeedCategory.Basic goods (salt, ale). Drives birth/death rates.</summary>
         public float BasicSatisfaction = 1f;
+
+        /// <summary>Blended satisfaction (needs + comfort). Drives migration pull. ~30-day EMA.</summary>
+        public float Satisfaction = 1f;
 
         /// <summary>Births this month (reset monthly by PopulationSystem).</summary>
         public float BirthsThisMonth;
