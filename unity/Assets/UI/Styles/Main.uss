@@ -7,6 +7,7 @@
     height: 100%;
     flex-direction: column;
     padding: 0;
+    -unity-font-definition: url("../../Fonts/EBGaramond-Regular.ttf");
 }
 
 /* Shared panel look (startup modal still uses this). */
@@ -34,8 +35,8 @@
 }
 
 .top-bar-title {
-    font-size: 13px;
-    -unity-font-style: bold;
+    font-size: 15px;
+    -unity-font-definition: url("../../Fonts/EBGaramond-Bold.ttf");
     letter-spacing: 1px;
     color: rgb(220, 224, 232);
 }
@@ -47,7 +48,7 @@
 
 #new-map-button {
     height: 26px;
-    font-size: 11px;
+    font-size: 13px;
     background-color: rgb(50, 50, 55);
     border-color: rgb(70, 70, 75);
     border-width: 1px;
@@ -66,8 +67,8 @@
 }
 
 #date-label {
-    font-size: 13px;
-    -unity-font-style: bold;
+    font-size: 15px;
+    -unity-font-definition: url("../../Fonts/EBGaramond-Bold.ttf");
     -unity-text-align: middle-center;
     color: rgb(220, 220, 220);
     margin-right: 12px;
@@ -82,8 +83,8 @@
 #speed-controls Button {
     width: 28px;
     height: 26px;
-    font-size: 14px;
-    -unity-font-style: bold;
+    font-size: 16px;
+    -unity-font-definition: url("../../Fonts/EBGaramond-Bold.ttf");
     background-color: rgb(50, 50, 55);
     border-color: rgb(70, 70, 75);
     border-width: 1px;
@@ -105,7 +106,7 @@
 }
 
 #speed-label {
-    font-size: 11px;
+    font-size: 13px;
     -unity-text-align: middle-center;
     color: rgb(150, 150, 150);
     margin-left: 10px;
@@ -162,8 +163,8 @@
 }
 
 .panel-title {
-    font-size: 16px;
-    -unity-font-style: bold;
+    font-size: 18px;
+    -unity-font-definition: url("../../Fonts/EBGaramond-Bold.ttf");
     color: rgb(220, 220, 220);
     flex-grow: 1;
 }
@@ -171,8 +172,8 @@
 .close-button {
     width: 20px;
     height: 20px;
-    font-size: 12px;
-    -unity-font-style: bold;
+    font-size: 14px;
+    -unity-font-definition: url("../../Fonts/EBGaramond-Bold.ttf");
     background-color: transparent;
     border-width: 0;
     color: rgb(150, 150, 160);
@@ -190,8 +191,8 @@
 }
 
 .section-header {
-    font-size: 11px;
-    -unity-font-style: bold;
+    font-size: 13px;
+    -unity-font-definition: url("../../Fonts/EBGaramond-Bold.ttf");
     color: rgb(140, 140, 150);
     margin-bottom: 4px;
     letter-spacing: 1px;
@@ -204,20 +205,20 @@
 }
 
 .stat-row Label {
-    font-size: 12px;
+    font-size: 14px;
     color: rgb(170, 170, 180);
 }
 
 #province-value, #state-value, #terrain-value, #culture-value, #religion-value, #pop-total {
     color: rgb(220, 220, 230);
-    -unity-font-style: bold;
+    -unity-font-definition: url("../../Fonts/EBGaramond-Bold.ttf");
 }
 
 .resource-item {
     flex-direction: row;
     justify-content: space-between;
     padding: 1px 0;
-    font-size: 11px;
+    font-size: 13px;
 }
 
 .resource-item Label {
@@ -229,6 +230,19 @@
 }
 
 /* Startup Screen */
+.startup-overlay Label,
+.startup-overlay Button,
+.startup-overlay TextField,
+.startup-overlay IntegerField,
+.startup-overlay FloatField,
+.startup-overlay DropdownField,
+.startup-overlay .unity-base-field__label,
+.startup-overlay .unity-base-field__input,
+.startup-overlay .unity-text-input,
+.startup-overlay .unity-text-element {
+    -unity-font-definition: url("../../Fonts/EBGaramond-Regular.ttf");
+}
+
 .startup-overlay {
     position: absolute;
     left: 0;
@@ -253,8 +267,8 @@
 
 .startup-button {
     height: 40px;
-    font-size: 14px;
-    -unity-font-style: bold;
+    font-size: 16px;
+    -unity-font-definition: url("../../Fonts/EBGaramond-Bold.ttf");
     background-color: rgb(50, 70, 90);
     border-color: rgb(70, 100, 130);
     border-width: 1px;
@@ -287,7 +301,7 @@
 .startup-status {
     margin-top: 10px;
     min-height: 16px;
-    font-size: 11px;
+    font-size: 13px;
     color: rgb(170, 170, 180);
     -unity-text-align: middle-center;
 }

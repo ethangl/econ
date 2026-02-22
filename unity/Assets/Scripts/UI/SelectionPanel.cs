@@ -432,7 +432,7 @@ namespace EconSim.UI
             {
                 var noneLabel = new Label("None");
                 noneLabel.style.color = new Color(0.5f, 0.5f, 0.5f);
-                noneLabel.style.fontSize = 11;
+                noneLabel.style.fontSize = 13;
                 _resourcesList.Add(noneLabel);
                 return;
             }
@@ -471,7 +471,7 @@ namespace EconSim.UI
             {
                 var noneLabel = new Label("None");
                 noneLabel.style.color = new Color(0.5f, 0.5f, 0.5f);
-                noneLabel.style.fontSize = 11;
+                noneLabel.style.fontSize = 13;
                 _resourcesList.Add(noneLabel);
                 return;
             }
@@ -481,7 +481,7 @@ namespace EconSim.UI
             {
                 var countLabel = new Label($"{counties.Count} counties");
                 countLabel.style.color = new Color(0.7f, 0.7f, 0.7f);
-                countLabel.style.fontSize = 11;
+                countLabel.style.fontSize = 13;
                 _resourcesList.Add(countLabel);
                 return;
             }
