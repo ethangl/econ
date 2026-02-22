@@ -5,10 +5,10 @@ import json
 import sys
 from pathlib import Path
 
-_FALLBACK_GOODS = ["bread", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone", "ale", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish"]
-_STAPLE_GOODS = {"bread", "sausage", "cheese", "saltedFish", "stockfish"}
-_FALLBACK_BASE_PRICES = [1.0, 0.5, 5.0, 0.0, 0.0, 3.0, 2.0, 0.3, 0.8, 0.2, 2.0, 5.0, 10.0, 15.0, 2.0, 3.0, 2.0, 4.0, 5.0, 1.5, 6.0, 1.5, 3.0, 2.5]
-_FALLBACK_TRADEABLE = {"bread", "timber", "ironOre", "salt", "wool", "stone", "ale", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish"}
+_FALLBACK_GOODS = ["wheat", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone", "ale", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish", "bread"]
+_STAPLE_GOODS = {"wheat", "sausage", "cheese", "saltedFish", "stockfish"}
+_FALLBACK_BASE_PRICES = [1.0, 0.5, 5.0, 0.0, 0.0, 3.0, 2.0, 0.3, 0.8, 0.2, 2.0, 5.0, 10.0, 15.0, 2.0, 3.0, 2.0, 4.0, 5.0, 1.5, 6.0, 1.5, 3.0, 2.5, 0.06]
+_FALLBACK_TRADEABLE = {"wheat", "timber", "ironOre", "salt", "wool", "stone", "ale", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish", "bread"}
 
 # Module-level references set by init_goods()
 GOODS: list[str] = []

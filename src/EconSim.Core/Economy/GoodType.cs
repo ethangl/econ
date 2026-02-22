@@ -6,7 +6,7 @@ namespace EconSim.Core.Economy
 {
     public enum GoodType
     {
-        Bread = 0,
+        Wheat = 0,
         Timber = 1,
         IronOre = 2,
         GoldOre = 3,
@@ -30,6 +30,7 @@ namespace EconSim.Core.Economy
         Fish = 21,
         SaltedFish = 22,
         Stockfish = 23,
+        Bread = 24,
     }
 
     public static class Goods
@@ -115,6 +116,7 @@ namespace EconSim.Core.Economy
         /// </summary>
         static readonly int[] PreferredBuyPriority =
         {
+            (int)GoodType.Wheat,
             (int)GoodType.Bread,
             (int)GoodType.Ale,
             (int)GoodType.Sausage,
@@ -159,7 +161,7 @@ namespace EconSim.Core.Economy
             //                            Type                Name        Category            Need             Cons    CAdmin  PAdmin  RAdmin  Base   Min    Max    Trade  Prec  Spoil  TgtStk  BiomeYields
             Defs = new[]
             {
-                new GoodDef(GoodType.Bread, "bread", GoodCategory.Raw, NeedCategory.Staple, 0.50f, 0.0f, 0.0f, 0.02f, 0.05f, 0.0025f, 1.0f, true, false, 0.03f, 0f,
+                new GoodDef(GoodType.Wheat, "wheat", GoodCategory.Raw, NeedCategory.Staple, 0.50f, 0.0f, 0.0f, 0.02f, 0.03f, 0.0015f, 0.6f, true, false, 0.001f, 0f,
                     biomeYields: new Dictionary<int, float> {
                         { (int)BiomeId.Tundra, 0.18f }, { (int)BiomeId.SaltFlat, 0.09f },
                         { (int)BiomeId.CoastalMarsh, 0.69f }, { (int)BiomeId.AlpineBarren, 0.18f },
@@ -271,6 +273,7 @@ namespace EconSim.Core.Economy
                     }),
                 new GoodDef(GoodType.SaltedFish,  "saltedFish", GoodCategory.Finished, NeedCategory.Staple, 0.14f, 0.0f, 0.0f, 0.0f, 0.12f, 0.006f, 2.4f, true, false, 0.003f),
                 new GoodDef(GoodType.Stockfish,   "stockfish",  GoodCategory.Finished, NeedCategory.Staple, 0.08f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.001f),
+                new GoodDef(GoodType.Bread, "bread", GoodCategory.Finished, NeedCategory.Comfort, 0.05f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.03f),
             };
 
             Count = Defs.Length;
