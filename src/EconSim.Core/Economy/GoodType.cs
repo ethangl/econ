@@ -14,7 +14,7 @@ namespace EconSim.Core.Economy
         Salt = 5,
         Wool = 6,
         Stone = 7,
-        Ale = 8,
+        Barley = 8,
         Clay = 9,
         Pottery = 10,
         Furniture = 11,
@@ -31,6 +31,7 @@ namespace EconSim.Core.Economy
         SaltedFish = 22,
         Stockfish = 23,
         Bread = 24,
+        Ale = 25,
     }
 
     public static class Goods
@@ -118,6 +119,7 @@ namespace EconSim.Core.Economy
         {
             (int)GoodType.Wheat,
             (int)GoodType.Bread,
+            (int)GoodType.Barley,
             (int)GoodType.Ale,
             (int)GoodType.Sausage,
             (int)GoodType.SaltedFish,
@@ -224,13 +226,15 @@ namespace EconSim.Core.Economy
                         { (int)BiomeId.TemperateForest, 0.05f }, { (int)BiomeId.Grassland, 0.02f },
                         { (int)BiomeId.Woodland, 0.05f },
                     }),
-                new GoodDef(GoodType.Ale, "ale", GoodCategory.Raw, NeedCategory.Basic, 0.5f, 0.0f, 0.0f, 0.0f, 0.03f, 0.0015f, 0.6f, true, false, 0.05f, 0f,
+                new GoodDef(GoodType.Barley, "barley", GoodCategory.Raw, NeedCategory.Basic, 0.15f, 0.0f, 0.0f, 0.0f, 0.025f, 0.00125f, 0.5f, true, false, 0.001f, 0f,
                     biomeYields: new Dictionary<int, float> {
-                        { (int)BiomeId.CoastalMarsh, 0.1f }, { (int)BiomeId.Floodplain, 1.0f },
-                        { (int)BiomeId.Wetland, 0.2f }, { (int)BiomeId.Scrubland, 0.1f },
-                        { (int)BiomeId.TropicalDryForest, 0.2f }, { (int)BiomeId.Savanna, 0.55f },
-                        { (int)BiomeId.BorealForest, 0.1f }, { (int)BiomeId.TemperateForest, 0.35f },
-                        { (int)BiomeId.Grassland, 0.9f }, { (int)BiomeId.Woodland, 0.3f },
+                        { (int)BiomeId.Tundra, 0.10f }, { (int)BiomeId.CoastalMarsh, 0.04f },
+                        { (int)BiomeId.MountainShrub, 0.08f }, { (int)BiomeId.Floodplain, 0.40f },
+                        { (int)BiomeId.Wetland, 0.08f }, { (int)BiomeId.HotDesert, 0.04f },
+                        { (int)BiomeId.ColdDesert, 0.06f }, { (int)BiomeId.Scrubland, 0.04f },
+                        { (int)BiomeId.TropicalDryForest, 0.08f }, { (int)BiomeId.Savanna, 0.22f },
+                        { (int)BiomeId.BorealForest, 0.04f }, { (int)BiomeId.TemperateForest, 0.14f },
+                        { (int)BiomeId.Grassland, 0.36f }, { (int)BiomeId.Woodland, 0.12f },
                     }),
                 new GoodDef(GoodType.Clay, "clay", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.005f, 0.00025f, 0.1f, true, false, 0f, 0f,
                     biomeYields: new Dictionary<int, float> {
@@ -274,6 +278,7 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.SaltedFish,  "saltedFish", GoodCategory.Finished, NeedCategory.Staple, 0.14f, 0.0f, 0.0f, 0.0f, 0.12f, 0.006f, 2.4f, true, false, 0.003f),
                 new GoodDef(GoodType.Stockfish,   "stockfish",  GoodCategory.Finished, NeedCategory.Staple, 0.08f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.001f),
                 new GoodDef(GoodType.Bread, "bread", GoodCategory.Finished, NeedCategory.Comfort, 0.05f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.03f),
+                new GoodDef(GoodType.Ale, "ale", GoodCategory.Finished, NeedCategory.Comfort, 0.05f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.03f),
             };
 
             Count = Defs.Length;

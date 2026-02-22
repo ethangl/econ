@@ -14,6 +14,7 @@ namespace EconSim.Core.Economy
         Salter = 9,
         DryingRack = 10,
         Bakery = 11,
+        Brewery = 12,
     }
 
     public readonly struct RecipeInput
@@ -120,6 +121,9 @@ namespace EconSim.Core.Economy
                 new FacilityDef(FacilityType.Bakery, "bakery",
                     new[] { new RecipeInput(GoodType.Wheat, 2.0f), new RecipeInput(GoodType.Salt, 0.03f) },
                     GoodType.Bread, 2.8f, 1, 0.10f, 0.15f, 2.8f, GoodType.Wheat),
+                new FacilityDef(FacilityType.Brewery, "brewery",
+                    new[] { new RecipeInput(GoodType.Barley, 2.0f) },
+                    GoodType.Ale, 4.0f, 1, 0.10f, 0.15f, 4.0f, GoodType.Barley),
             };
 
             Count = Defs.Length;
