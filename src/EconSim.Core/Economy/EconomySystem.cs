@@ -74,10 +74,7 @@ namespace EconSim.Core.Economy
                 ce.Population = county.TotalPopulation;
                 ComputeCountyProductivity(county, mapData, ce.Productivity);
 
-                // Seed durable goods proportional to population
-                for (int g = 0; g < Goods.Count; g++)
-                    if (Goods.TargetStockPerPop[g] > 0f)
-                        ce.Stock[g] = ce.Population * Goods.TargetStockPerPop[g];
+                // Durable goods start at zero — built up naturally via production
 
                 // Seed treasury so trade + taxation can bootstrap
                 ce.Treasury = ce.Population * 1.0f;
