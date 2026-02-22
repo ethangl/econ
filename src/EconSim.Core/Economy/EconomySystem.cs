@@ -278,20 +278,62 @@ namespace EconSim.Core.Economy
                     ? countyFacilityIndices[i]
                     : null;
 
-                // Compute facility input demand for trade retain signal + intermediate price discovery
+                // Compute facility input demand (two-pass: durables first, then intermediates)
                 Array.Clear(ce.FacilityInputNeed, 0, goodsCount);
                 if (indices != null && indices.Count > 0)
                 {
+                    const float DurableBufferMultiplier = 3.0f;
+
+                    // Pass 1: Durable outputs (self-contained demand from TargetStockPerPop)
+                    // Populates FacilityInputNeed for their inputs (iron, charcoal, wool, etc.)
                     for (int fi = 0; fi < indices.Count; fi++)
                     {
                         var def = econ.Facilities[indices[fi]].Def;
                         if (def.OutputAmount <= 0f) continue;
+                        int output = (int)def.OutputGood;
+                        if (!Goods.IsDurable[output]) continue;
 
                         float maxByLabor = def.LaborPerUnit > 0
                             ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
                             : float.MaxValue;
 
-                        float scale = maxByLabor / def.OutputAmount;
+                        float targetStock = pop * Goods.TargetStockPerPop[output];
+                        float maintenance = ce.Stock[output] * Goods.Defs[output].SpoilageRate;
+                        float gap = Math.Max(0f, targetStock - ce.Stock[output]);
+                        float dailyNeed = maintenance + gap * Goods.DurableCatchUpRate[output];
+                        float throughput = Math.Min(maxByLabor, dailyNeed * DurableBufferMultiplier);
+
+                        float scale = throughput / def.OutputAmount;
+                        for (int ii = 0; ii < def.Inputs.Length; ii++)
+                            ce.FacilityInputNeed[(int)def.Inputs[ii].Good] += scale * def.Inputs[ii].Amount;
+                    }
+
+                    // Pass 2: Remaining facilities — IsDurableInput uses stock-ceiling from pass 1,
+                    // commodity facilities use max labor capacity.
+                    // Note: within this pass, smelter (enum 2) runs before charcoalBurner (enum 4),
+                    // so charcoal's FacilityInputNeed includes smelter demand when charcoalBurner reads it.
+                    for (int fi = 0; fi < indices.Count; fi++)
+                    {
+                        var def = econ.Facilities[indices[fi]].Def;
+                        if (def.OutputAmount <= 0f) continue;
+                        int output = (int)def.OutputGood;
+                        if (Goods.IsDurable[output]) continue;
+
+                        float maxByLabor = def.LaborPerUnit > 0
+                            ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
+                            : float.MaxValue;
+                        float throughput = maxByLabor;
+
+                        if (Goods.IsDurableInput[output])
+                        {
+                            float downstreamDemand = ce.FacilityInputNeed[output];
+                            const float ChainBufferDays = 7f;
+                            float targetStock = downstreamDemand * ChainBufferDays;
+                            float gap = Math.Max(0f, targetStock - ce.Stock[output]);
+                            throughput = Math.Min(throughput, gap);
+                        }
+
+                        float scale = throughput / def.OutputAmount;
                         for (int ii = 0; ii < def.Inputs.Length; ii++)
                             ce.FacilityInputNeed[(int)def.Inputs[ii].Good] += scale * def.Inputs[ii].Amount;
                     }
@@ -302,8 +344,17 @@ namespace EconSim.Core.Economy
                 {
                     float produced = pop * ce.Productivity[g] * wf;
 
-                    // Price-based extraction throttle for intermediate goods
-                    if (!Goods.HasDirectDemand[g] && Goods.BasePrice[g] > 0f)
+                    // Stock-ceiling cap for durable-chain raws (demand-driven extraction)
+                    if (Goods.IsDurableInput[g])
+                    {
+                        float localDemand = ce.FacilityInputNeed[g];
+                        const float ChainBufferDays = 14f;
+                        float targetStock = localDemand * ChainBufferDays;
+                        float gap = Math.Max(0f, targetStock - ce.Stock[g]);
+                        produced = Math.Min(produced, gap);
+                    }
+                    // Price-based extraction throttle for commodity intermediates
+                    else if (!Goods.HasDirectDemand[g] && Goods.BasePrice[g] > 0f)
                     {
                         float priceRatio = econ.MarketPrices[g] / Goods.BasePrice[g];
                         if (priceRatio < 1f) produced *= priceRatio;
@@ -339,8 +390,30 @@ namespace EconSim.Core.Economy
                         float throughput = Math.Min(maxByInput, maxByLabor);
                         if (throughput < 0f) throughput = 0f;
 
-                        // Price-based facility throttle for all produced goods
-                        if (Goods.BasePrice[output] > 0f)
+                        // Stock-gap production cap for durables
+                        if (Goods.IsDurable[output])
+                        {
+                            float targetStock = pop * Goods.TargetStockPerPop[output];
+                            float currentStock = ce.Stock[output];
+                            float maintenance = currentStock * Goods.Defs[output].SpoilageRate;
+                            float gap = Math.Max(0f, targetStock - currentStock);
+                            float dailyNeed = maintenance + gap * Goods.DurableCatchUpRate[output];
+                            const float DurableBufferMultiplier = 3.0f;
+                            throughput = Math.Min(throughput, dailyNeed * DurableBufferMultiplier);
+                        }
+
+                        // Stock-ceiling cap for durable-chain intermediates (iron, charcoal)
+                        if (Goods.IsDurableInput[output])
+                        {
+                            float downstreamDemand = ce.FacilityInputNeed[output];
+                            const float ChainBufferDays = 7f;
+                            float targetStock = downstreamDemand * ChainBufferDays;
+                            float gap = Math.Max(0f, targetStock - ce.Stock[output]);
+                            throughput = Math.Min(throughput, gap);
+                        }
+
+                        // Price-based facility throttle (skip durables and durable inputs — they use stock caps above)
+                        if (Goods.BasePrice[output] > 0f && !Goods.IsDurable[output] && !Goods.IsDurableInput[output])
                         {
                             float priceRatio = econ.MarketPrices[output] / Goods.BasePrice[output];
                             if (priceRatio < 1f) throughput *= priceRatio;

@@ -96,6 +96,12 @@ namespace EconSim.Core.Economy
             const float StockBufferDays = 7f;
             for (int g = 0; g < Goods.Count; g++)
             {
+                if (Goods.IsDurable[g] || Goods.IsDurableInput[g])
+                {
+                    _prices[g] = Goods.BasePrice[g];
+                    continue;
+                }
+
                 float capacity = econ.ProductionCapacity[g];
                 if (capacity <= 0f) continue;
 
