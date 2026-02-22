@@ -156,6 +156,7 @@ namespace EconSim.Camera
                 ApplyConstraints();
                 // Sync currentPanPosition with constrained position
                 currentPanPosition = new Vector2(transform.position.x, transform.position.z);
+                targetPanPosition = currentPanPosition;
             }
         }
 
@@ -164,9 +165,13 @@ namespace EconSim.Camera
             float scroll = Input.GetAxis("Mouse ScrollWheel");
             if (Mathf.Abs(scroll) > 0.01f)
             {
-                // Zoom toward/away from mouse position
-                targetZoom -= scroll * zoomSpeed * (targetZoom / maxZoom + 0.2f);
-                targetZoom = Mathf.Clamp(targetZoom, minZoom, maxZoom);
+                float newTargetZoom = targetZoom - scroll * zoomSpeed * (targetZoom / maxZoom + 0.2f);
+                newTargetZoom = Mathf.Clamp(newTargetZoom, minZoom, maxZoom);
+                if (Mathf.Abs(newTargetZoom - targetZoom) <= 0.0001f)
+                    return;
+
+                isFocusPanning = false;
+                targetZoom = newTargetZoom;
             }
         }
 
@@ -285,6 +290,11 @@ namespace EconSim.Camera
         /// </summary>
         private Vector2 ClampLookAtToBounds(Vector2 lookAt)
         {
+            return ClampLookAtToBounds(lookAt, currentZoom);
+        }
+
+        private Vector2 ClampLookAtToBounds(Vector2 lookAt, float zoomForBounds)
+        {
             // Skip if bounds haven't been set yet
             if (!constrainToBounds || cam == null || mapSize == Vector2.zero) return lookAt;
 
@@ -295,11 +305,11 @@ namespace EconSim.Camera
             float verticalFOV = cam.fieldOfView * Mathf.Deg2Rad;
             float horizontalFOV = 2f * Mathf.Atan(Mathf.Tan(verticalFOV / 2f) * cam.aspect);
 
-            float visibleHalfWidth = currentZoom * Mathf.Tan(horizontalFOV / 2f);
-            float visibleHalfHeight = currentZoom * Mathf.Tan(verticalFOV / 2f);
+            float visibleHalfWidth = zoomForBounds * Mathf.Tan(horizontalFOV / 2f);
+            float visibleHalfHeight = zoomForBounds * Mathf.Tan(verticalFOV / 2f);
 
             // Account for pitch - visible area in Z is stretched
-            float pitchRad = pitchAngle * Mathf.Deg2Rad;
+            float pitchRad = GetPitchForZoom(zoomForBounds) * Mathf.Deg2Rad;
             float pitchStretch = 1f / Mathf.Sin(pitchRad);
             visibleHalfHeight *= pitchStretch;
 
@@ -361,7 +371,7 @@ namespace EconSim.Camera
         {
             // Clamp the look-at point to valid bounds
             Vector2 lookAt = new Vector2(worldPosition.x, worldPosition.z);
-            lookAt = ClampLookAtToBounds(lookAt);
+            lookAt = ClampLookAtToBounds(lookAt, currentZoom);
 
             // Derive camera position from the look-at point
             float zOffset = GetLookAtOffset(currentZoom);
@@ -415,7 +425,7 @@ namespace EconSim.Camera
 
             // Pan to center on bounds
             Vector2 lookAt = new Vector2(bounds.center.x, bounds.center.z);
-            lookAt = ClampLookAtToBounds(lookAt);
+            lookAt = ClampLookAtToBounds(lookAt, targetZoom);
 
             float zOffset = GetLookAtOffset(targetZoom);
             Vector2 cameraTarget = new Vector2(lookAt.x, lookAt.y - zOffset);
