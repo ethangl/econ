@@ -84,7 +84,7 @@ namespace EconSim.Core.Economy
             Defs = new[]
             {
                 new FacilityDef(FacilityType.Kiln,    "kiln",
-                    new[] { new RecipeInput(GoodType.Clay, 2.0f), new RecipeInput(GoodType.Timber, 0.5f) },
+                    new[] { new RecipeInput(GoodType.Clay, 2.0f) },
                     GoodType.Pottery, 1.0f, 3, 0.05f, 0.05f, 1.0f),
                 new FacilityDef(FacilityType.Carpenter, "carpenter",
                     new[] { new RecipeInput(GoodType.Timber, 3.0f) },
@@ -105,7 +105,7 @@ namespace EconSim.Core.Economy
                     new[] { new RecipeInput(GoodType.Pork, 1.0f), new RecipeInput(GoodType.Salt, 0.2f) },
                     GoodType.Sausage, 3.0f, 2, 0.05f, 0.10f, 3.0f, GoodType.Pork),
                 new FacilityDef(FacilityType.Smokehouse, "smokehouse",
-                    new[] { new RecipeInput(GoodType.Pork, 2.0f), new RecipeInput(GoodType.Timber, 1.0f) },
+                    new[] { new RecipeInput(GoodType.Pork, 2.0f) },
                     GoodType.Bacon, 2.0f, 1, 0.05f, 0.10f, 2.0f, GoodType.Pork),
                 new FacilityDef(FacilityType.Cheesemaker, "cheesemaker",
                     new[] { new RecipeInput(GoodType.Milk, 3.0f), new RecipeInput(GoodType.Salt, 0.3f) },

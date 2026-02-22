@@ -91,6 +91,9 @@ namespace EconSim.Core.Economy
         /// <summary>True if good is a durable (has TargetStockPerPop > 0). Uses fixed pricing and stock-gap production.</summary>
         public static readonly bool[] IsDurable;
 
+        /// <summary>True if good is a raw/intermediate that exclusively feeds durable chains. Uses fixed pricing and stock-ceiling production.</summary>
+        public static readonly bool[] IsDurableInput;
+
         /// <summary>Goods that can be traded on the inter-realm market.</summary>
         public static readonly int[] TradeableGoods;
 
@@ -154,7 +157,7 @@ namespace EconSim.Core.Economy
             {
                 //                                                                                                                                              spoilage
                 new GoodDef(GoodType.Bread,     "bread",     GoodCategory.Raw, NeedCategory.Staple,  0.50f,  0.0f,   0.0f,   0.02f,  0.05f, 0.0025f, 1.0f, true,  false, 0.03f),
-                new GoodDef(GoodType.Timber,     "timber",    GoodCategory.Raw, NeedCategory.Comfort, 0.2f,   0.0f,   0.0f,   0.0f,   0.02f, 0.001f, 0.4f,  true,  false, 0.001f),
+                new GoodDef(GoodType.Timber,     "timber",    GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.02f, 0.001f, 0.4f,  true,  false, 0.001f),
                 new GoodDef(GoodType.IronOre,    "ironOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.15f, 0.0075f, 3.0f, true,  false),
                 new GoodDef(GoodType.GoldOre,    "goldOre",   GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
                 new GoodDef(GoodType.SilverOre,  "silverOre", GoodCategory.Raw, NeedCategory.None,    0.0f,   0.0f,   0.0f,   0.0f,   0.0f,  0.0f,  0.0f,  false, true),
@@ -196,6 +199,7 @@ namespace EconSim.Core.Economy
             DurableRetainPerPop = new float[Count];
             HasDirectDemand     = new bool[Count];
             IsDurable           = new bool[Count];
+            IsDurableInput      = new bool[Count];
 
             var tradeable = new List<int>();
 
@@ -203,6 +207,7 @@ namespace EconSim.Core.Economy
             {
                 var d = Defs[i];
                 IsDurable[i]           = d.TargetStockPerPop > 0f;
+                IsDurableInput[i]      = d.Name is "ironOre" or "wool" or "clay" or "timber" or "iron" or "charcoal";
                 ConsumptionPerPop[i]   = d.ConsumptionPerPop;
                 Names[i]               = d.Name;
                 BasePrice[i]           = d.BasePrice;
