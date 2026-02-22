@@ -445,11 +445,15 @@ def print_cross_province_trade(data: dict):
                 print(f"  {good:12s}  {fmt(b):>10s}  {fmt(s):>10s}")
 
     print()
+    transport = last.get("transportCostsPaid", 0)
+
+    print()
     print(f"  Crown flows (latest day):")
-    print(f"    Spending (buyers→sellers):  {fmt(spending)} Crowns  (+ 5% toll + 2% market fee)")
+    print(f"    Spending (buyers→sellers):  {fmt(spending)} Crowns  (+ 5% toll + 2% market fee + transport)")
     print(f"    Revenue (sellers):           {fmt(revenue)} Crowns")
     print(f"    Tolls paid (buyers→prov):    {fmt(tolls_paid)} Crowns")
     print(f"    Tolls collected (provinces): {fmt(tolls_collected)} Crowns")
+    print(f"    Transport costs (destroyed): {fmt(transport)} Crowns")
 
     # Trend over time
     if len(ts) >= 20:
@@ -561,6 +565,33 @@ def print_market_fees(data: dict):
     # Cumulative estimate
     total_fees = sum(t.get("marketFeesCollected", 0) for t in ts)
     print(f"  Cumulative (approx):  {fmt(total_fees)} Crowns")
+
+
+def print_transport_costs(data: dict):
+    section("TRANSPORT COSTS")
+    ts = data["economy"]["timeSeries"]
+    last = ts[-1]
+
+    daily = last.get("transportCostsPaid", 0)
+    print(f"  Daily transport costs (latest):  {fmt(daily)} Crowns (destroyed)")
+
+    # Trend over time
+    if len(ts) >= 20:
+        early = ts[4:14]
+        late = ts[-10:]
+        early_tc = sum(t.get("transportCostsPaid", 0) for t in early) / len(early)
+        late_tc = sum(t.get("transportCostsPaid", 0) for t in late) / len(late)
+        print(f"  Transport cost trend:            {fmt(early_tc)}/day -> {fmt(late_tc)}/day")
+
+    # Cumulative
+    total = sum(t.get("transportCostsPaid", 0) for t in ts)
+    print(f"  Cumulative (approx):             {fmt(total)} Crowns destroyed")
+
+    # Compare to minting
+    total_minted = sum(t.get("crownsMinted", 0) for t in ts)
+    if total_minted > 0:
+        pct = total / total_minted * 100
+        print(f"  As % of total minted:            {pct:.1f}%")
 
 
 def print_inter_realm_trade(data: dict):
@@ -920,6 +951,7 @@ def main():
     print_cross_province_trade(data)
     print_cross_realm_trade(data)
     print_market_fees(data)
+    print_transport_costs(data)
     print_inter_realm_trade(data)
     print_roads(data)
     print_facilities(data)

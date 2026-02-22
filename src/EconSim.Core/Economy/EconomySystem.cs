@@ -761,6 +761,7 @@ namespace EconSim.Core.Economy
                 snap.TotalMonetaryTaxToProvince += ce.MonetaryTaxPaid;
                 snap.TotalGranaryRequisitionCrowns += ce.GranaryRequisitionCrownsReceived;
                 snap.TotalMarketFeesCollected += ce.MarketFeesReceived;
+                snap.TotalTransportCostsPaid += ce.TransportCostsPaid;
             }
 
             // Backward-compat scalars = food values
