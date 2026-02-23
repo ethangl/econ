@@ -56,12 +56,12 @@ float3 ApplyMarketModeStyle(float2 uv, float3 marketColor)
     float3 edgeColor = marketColor * (1.0 - edgeDarkening);
     float3 modeColor = lerp(edgeColor, marketColor, edgeProximity);
 
-    // Path overlay: white dotted routes blended over market color.
+    // Path overlay: black routes blended over market color.
     // Mask is direct coverage (0=no path, 1=path), bilinear-filtered for AA.
     float roadMask = tex2D(_RoadMaskTex, uv).r;
     if (roadMask > 0.01)
     {
-        modeColor = lerp(modeColor, float3(1.0, 1.0, 1.0), roadMask * _PathOpacity);
+        modeColor = lerp(modeColor, float3(0.0, 0.0, 0.0), roadMask * _PathOpacity);
     }
 
     // Market zone border band overlay (distance texture + smoothstep AA).

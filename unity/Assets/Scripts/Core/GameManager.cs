@@ -261,10 +261,12 @@ namespace EconSim.Core
             Profiler.End();
             _simulation.IsPaused = true;  // Start paused
 
-            // Provide road state to map view for road rendering
+            // Provide road state and economy state to map view for rendering
             if (mapView != null)
             {
-                mapView.SetRoadState(_simulation.GetState().Roads);
+                var simState = _simulation.GetState();
+                mapView.SetRoadState(simState.Roads);
+                mapView.SetEconomyState(simState.Economy, simState.Transport);
             }
 
             Debug.Log("Simulation initialized (paused). Press Backspace to unpause, -/= to change speed.");

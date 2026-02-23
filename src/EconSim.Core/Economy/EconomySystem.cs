@@ -196,6 +196,35 @@ namespace EconSim.Core.Economy
             // Resolve market county: first realm's capital burg → cell → county
             econ.MarketCountyId = ResolveMarketCounty(mapData, econ);
 
+            // Populate market data (single market for now — all counties map to market 1)
+            econ.CountyToMarket = new int[maxCountyId + 1];
+            foreach (var county in mapData.Counties)
+                econ.CountyToMarket[county.Id] = 1;
+
+            int hubCellId = 0;
+            int hubRealmId = 0;
+            if (econ.MarketCountyId > 0)
+            {
+                foreach (var county in mapData.Counties)
+                {
+                    if (county.Id == econ.MarketCountyId)
+                    {
+                        hubCellId = county.SeatCellId;
+                        hubRealmId = county.RealmId;
+                        break;
+                    }
+                }
+            }
+
+            econ.Markets = new MarketInfo[2]; // slot 0 unused
+            econ.Markets[1] = new MarketInfo
+            {
+                Id = 1,
+                HubCountyId = econ.MarketCountyId,
+                HubCellId = hubCellId,
+                HubRealmId = hubRealmId
+            };
+
             state.Economy = econ;
         }
 

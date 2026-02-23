@@ -62,6 +62,44 @@
             </ui:VisualElement>
 
             <ui:VisualElement name="map-content" class="map-content" />
+
+            <ui:VisualElement name="market-rail" class="market-rail">
+                <ui:VisualElement name="market-panel" class="panel">
+                    <ui:VisualElement class="panel-header-row">
+                        <ui:Label name="market-title" class="panel-title" text="Market" />
+                        <ui:Button name="market-close-button" class="close-button" text="X" />
+                    </ui:VisualElement>
+
+                    <ui:VisualElement class="section">
+                        <ui:Label class="section-header" text="Overview" />
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Hub" />
+                            <ui:Label name="market-hub-value" text="-" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Realm" />
+                            <ui:Label name="market-realm-value" text="-" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Counties" />
+                            <ui:Label name="market-counties-value" text="0" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <ui:VisualElement class="section">
+                        <ui:Label class="section-header" text="Population" />
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Total" />
+                            <ui:Label name="market-pop-total" text="0" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <ui:VisualElement name="market-goods-section" class="section">
+                        <ui:Label class="section-header" text="Goods" />
+                        <ui:VisualElement name="market-goods-list" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>
