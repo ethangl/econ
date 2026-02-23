@@ -50,7 +50,7 @@ namespace EconSim.Core.Economy
         /// <summary>Serialization names, indexed by GoodType.</summary>
         public static readonly string[] Names;
 
-        /// <summary>Anchor price in Crowns per kg, indexed by GoodType. Gold/Silver = 0 (not traded).</summary>
+        /// <summary>Anchor price in Crowns per unit (per kg for bulk, per item for durables). Gold/Silver = 0 (not traded).</summary>
         public static readonly float[] BasePrice;
 
         /// <summary>Minimum price (10% of base) — price floor.</summary>
@@ -71,8 +71,11 @@ namespace EconSim.Core.Economy
         /// <summary>Monthly retention factor pow(1 - spoilageRate, 30), indexed by GoodType.</summary>
         public static readonly float[] MonthlyRetention;
 
-        /// <summary>Target stock per capita for durable goods (kg/person). Zero for consumables.</summary>
+        /// <summary>Target stock per capita for durable goods (units/person for durables). Zero for consumables.</summary>
         public static readonly float[] TargetStockPerPop;
+
+        /// <summary>Weight in kg per unit. 1.0 for bulk goods (unit = kg), >1 for durables (unit = item).</summary>
+        public static readonly float[] UnitWeight;
 
         /// <summary>
         /// Daily durable stock-gap catch-up rate (0-1), indexed by GoodType.
@@ -241,12 +244,12 @@ namespace EconSim.Core.Economy
                         { (int)BiomeId.CoastalMarsh, 0.2f }, { (int)BiomeId.Floodplain, 0.3f },
                         { (int)BiomeId.Wetland, 0.15f }, { (int)BiomeId.Scrubland, 0.05f },
                     }),
-                new GoodDef(GoodType.Pottery,    "pottery",   GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.002f, 0.001f, 0.001f, 0.10f, 0.005f, 2.0f, true, false, 0.002f, 1.0f),
-                new GoodDef(GoodType.Furniture,  "furniture", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.001f, 0.0f, 0.0f, 0.10f, 0.005f, 2.0f, true, false, 0.001f, 2.0f),
+                new GoodDef(GoodType.Pottery,    "pottery",   GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.001f, 0.0005f, 0.0005f, 0.15f, 0.0075f, 3.0f, true, false, 0.002f, 3.0f, unitWeight: 1.0f),
+                new GoodDef(GoodType.Furniture,  "furniture", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0f, 0.0f, 1.50f, 0.075f, 30.0f, true, false, 0.001f, 0.5f, unitWeight: 10.0f),
                 new GoodDef(GoodType.Iron,       "iron",      GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.50f, 0.025f, 10.0f, true, false),
-                new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.001f, 0.001f, 0.002f, 1.00f, 0.05f, 20.0f, true, false, 0.001f, 2.0f),
+                new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0005f, 0.001f, 3.00f, 0.15f, 60.0f, true, false, 0.001f, 1.0f, unitWeight: 3.0f),
                 new GoodDef(GoodType.Charcoal,   "charcoal",  GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.06f, 0.003f, 1.2f, true, false),
-                new GoodDef(GoodType.Clothes,    "clothes",   GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.001f, 0.0f, 0.005f, 1.20f, 0.06f, 24.0f, true, false, 0.002f, 2.0f),
+                new GoodDef(GoodType.Clothes,    "clothes",   GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0f, 0.002f, 2.50f, 0.125f, 50.0f, true, false, 0.002f, 2.0f, unitWeight: 2.0f),
                 new GoodDef(GoodType.Pork, "pork", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.02f, 0f,
                     biomeYields: new Dictionary<int, float> {
                         { (int)BiomeId.Tundra, 0.02f }, { (int)BiomeId.CoastalMarsh, 0.08f },
@@ -294,6 +297,7 @@ namespace EconSim.Core.Economy
             RealmAdminPerPop    = new float[Count];
             MonthlyRetention    = new float[Count];
             TargetStockPerPop   = new float[Count];
+            UnitWeight          = new float[Count];
             DurableCatchUpRate  = new float[Count];
             DurableRetainPerPop = new float[Count];
             HasDirectDemand     = new bool[Count];
@@ -317,6 +321,7 @@ namespace EconSim.Core.Economy
                 RealmAdminPerPop[i]    = d.RealmAdminPerPop;
                 MonthlyRetention[i]    = (float)Math.Pow(1.0 - d.SpoilageRate, 30);
                 TargetStockPerPop[i]   = d.TargetStockPerPop;
+                UnitWeight[i]          = d.UnitWeight;
                 if (d.TargetStockPerPop > 0f)
                 {
                     // Tie refill speed to durability: lower spoilage => slower catch-up.

@@ -468,6 +468,8 @@ namespace EconSim.Editor
                 j.KV("isTradeable", d.IsTradeable);
                 j.KV("isPreciousMetal", d.IsPreciousMetal);
                 j.KV("spoilageRate", d.SpoilageRate);
+                j.KV("unitWeight", d.UnitWeight);
+                j.KV("targetStockPerPop", d.TargetStockPerPop);
                 j.ObjClose();
             }
             j.ArrClose();

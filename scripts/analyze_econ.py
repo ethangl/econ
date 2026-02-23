@@ -7,19 +7,20 @@ from pathlib import Path
 
 _FALLBACK_GOODS = ["wheat", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone", "barley", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish", "bread", "ale"]
 _STAPLE_GOODS = {"wheat", "sausage", "cheese", "saltedFish", "stockfish"}
-_FALLBACK_BASE_PRICES = [0.03, 0.02, 0.15, 0.0, 0.0, 0.10, 0.80, 0.01, 0.025, 0.005, 0.10, 0.10, 0.50, 1.00, 0.06, 1.20, 0.08, 0.20, 0.25, 0.025, 0.15, 0.05, 0.12, 0.08, 0.04, 0.04]
+_FALLBACK_BASE_PRICES = [0.03, 0.02, 0.15, 0.0, 0.0, 0.10, 0.80, 0.01, 0.025, 0.005, 0.15, 1.50, 0.50, 3.00, 0.06, 2.50, 0.08, 0.20, 0.25, 0.025, 0.15, 0.05, 0.12, 0.08, 0.04, 0.04]
 _FALLBACK_TRADEABLE = {"wheat", "timber", "ironOre", "salt", "wool", "stone", "barley", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish", "bread", "ale"}
 
 # Module-level references set by init_goods()
 GOODS: list[str] = []
 GOOD_IDX: dict[str, int] = {}
 BASE_PRICES: list[float] = []
+UNIT_WEIGHTS: list[float] = []
 TRADEABLE: set[str] = set()
 
 
 def init_goods(data: dict):
     """Initialize goods metadata from dump or fallback to hardcoded values."""
-    global GOODS, GOOD_IDX, BASE_PRICES, TRADEABLE
+    global GOODS, GOOD_IDX, BASE_PRICES, UNIT_WEIGHTS, TRADEABLE
 
     goods_meta = data.get("goods")
     if goods_meta:
@@ -28,12 +29,25 @@ def init_goods(data: dict):
         GOODS = [g["name"] for g in goods_meta]
         GOOD_IDX = {g: i for i, g in enumerate(GOODS)}
         BASE_PRICES = [g["basePrice"] for g in goods_meta]
+        UNIT_WEIGHTS = [g.get("unitWeight", 1.0) for g in goods_meta]
         TRADEABLE = {g["name"] for g in goods_meta if g["isTradeable"]}
     else:
         GOODS = list(_FALLBACK_GOODS)
         GOOD_IDX = {g: i for i, g in enumerate(GOODS)}
         BASE_PRICES = list(_FALLBACK_BASE_PRICES)
+        UNIT_WEIGHTS = [1.0] * len(GOODS)
         TRADEABLE = set(_FALLBACK_TRADEABLE)
+
+
+def unit_label(good_idx: int) -> str:
+    """Return 'units' for durable goods (UnitWeight > 1), 'kg' otherwise."""
+    if good_idx < len(UNIT_WEIGHTS) and UNIT_WEIGHTS[good_idx] > 1.0:
+        return "units"
+    return "kg"
+
+
+def is_durable(good_idx: int) -> bool:
+    return good_idx < len(UNIT_WEIGHTS) and UNIT_WEIGHTS[good_idx] > 1.0
 
 
 def load(path: str | None = None) -> dict:
@@ -113,19 +127,24 @@ def print_economy(data: dict):
 
     # Production vs consumption balance
     section("PRODUCTION / CONSUMPTION BALANCE (latest day)")
-    print(f"  {'Good':8s}  {'Production':>12s}  {'Consumption':>12s}  {'Surplus':>12s}  {'Unmet Need':>12s}  {'Cons%':>6s}")
-    print(f"  {'-'*8}  {'-'*12}  {'-'*12}  {'-'*12}  {'-'*12}  {'-'*6}")
+    print(f"  {'Good':12s}  {'Production':>12s}  {'Consumption':>12s}  {'Surplus':>12s}  {'Unmet Need':>12s}  {'Cons%':>6s}")
+    print(f"  {'-'*12}  {'-'*12}  {'-'*12}  {'-'*12}  {'-'*12}  {'-'*6}")
     for i, good in enumerate(GOODS):
         prod = last["productionByGood"][i]
         cons = last["consumptionByGood"][i]
         unmet = last["unmetNeedByGood"][i]
         surplus = prod - cons
-        print(f"  {good:8s}  {fmt(prod):>12s}  {fmt(cons):>12s}  {fmt(surplus):>12s}  {fmt(unmet):>12s}  {pct(cons, prod):>6s}")
+        label = f"{good}" if not is_durable(i) else f"{good}*"
+        print(f"  {label:12s}  {fmt(prod):>12s}  {fmt(cons):>12s}  {fmt(surplus):>12s}  {fmt(unmet):>12s}  {pct(cons, prod):>6s}")
 
     total_prod = last["totalProduction"]
     total_cons = last["totalConsumption"]
     total_unmet = last["totalUnmetNeed"]
-    print(f"  {'TOTAL':8s}  {fmt(total_prod):>12s}  {fmt(total_cons):>12s}  {fmt(total_prod - total_cons):>12s}  {fmt(total_unmet):>12s}  {pct(total_cons, total_prod):>6s}")
+    print(f"  {'TOTAL':12s}  {fmt(total_prod):>12s}  {fmt(total_cons):>12s}  {fmt(total_prod - total_cons):>12s}  {fmt(total_unmet):>12s}  {pct(total_cons, total_prod):>6s}")
+    # Note about durables
+    durables = [g for i, g in enumerate(GOODS) if is_durable(i)]
+    if durables:
+        print(f"\n  * = units (not kg): {', '.join(durables)}")
 
 
 def print_stocks(data: dict):
@@ -135,12 +154,13 @@ def print_stocks(data: dict):
 
     print(f"  Total stock: {fmt(first['totalStock'])} -> {fmt(last['totalStock'])}  ({trend([first['totalStock'], last['totalStock']])})")
     print()
-    print(f"  {'Good':8s}  {'Day 2':>10s}  {'Latest':>10s}  {'Change':>10s}")
-    print(f"  {'-'*8}  {'-'*10}  {'-'*10}  {'-'*10}")
+    print(f"  {'Good':12s}  {'Day 2':>10s}  {'Latest':>10s}  {'Change':>10s}")
+    print(f"  {'-'*12}  {'-'*10}  {'-'*10}  {'-'*10}")
     for i, good in enumerate(GOODS):
         s0 = first["stockByGood"][i]
         s1 = last["stockByGood"][i]
-        print(f"  {good:8s}  {fmt(s0):>10s}  {fmt(s1):>10s}  {trend([s0, s1]):>10s}")
+        label = f"{good}" if not is_durable(i) else f"{good}*"
+        print(f"  {label:12s}  {fmt(s0):>10s}  {fmt(s1):>10s}  {trend([s0, s1]):>10s}")
 
     # County health
     section("COUNTY HEALTH TRENDS")
@@ -608,14 +628,15 @@ def print_inter_realm_trade(data: dict):
     tradeable_names = [g for g in GOODS if g in TRADEABLE]
     TRADEABLE_IDX = [GOOD_IDX[g] for g in tradeable_names]
 
-    print("  Market Prices (Crowns/kg):")
-    print(f"    {'Good':8s}  {'Price':>10s}  {'Base':>8s}  {'Ratio':>8s}")
-    print(f"    {'-'*8}  {'-'*10}  {'-'*8}  {'-'*8}")
+    print("  Market Prices (Crowns/unit):")
+    print(f"    {'Good':8s}  {'Price':>10s}  {'Base':>8s}  {'Ratio':>8s}  {'Unit':>6s}")
+    print(f"    {'-'*8}  {'-'*10}  {'-'*8}  {'-'*8}  {'-'*6}")
     for g in TRADEABLE_IDX:
         p = prices[g]
         bp = BASE_PRICES[g]
         ratio = f"{p/bp:.2f}x" if bp > 0 else "n/a"
-        print(f"    {GOODS[g]:8s}  {fmt(p, 2):>10s}  {fmt(bp, 2):>8s}  {ratio:>8s}")
+        ul = unit_label(g)
+        print(f"    {GOODS[g]:8s}  {fmt(p, 2):>10s}  {fmt(bp, 2):>8s}  {ratio:>8s}  {ul:>6s}")
 
     # Trade volumes
     n = len(GOODS)
