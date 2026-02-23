@@ -23,7 +23,7 @@ namespace PopGen.Core
     /// </summary>
     public static class CultureTypes
     {
-        public static readonly CultureType[] All = { Finnish, Icelandic, Danish, Welsh };
+        public static readonly CultureType[] All = { Finnish, Icelandic, Danish, Welsh, Gaelic, Brythonic };
 
         public static CultureType Finnish => new CultureType
         {
@@ -254,5 +254,129 @@ namespace PopGen.Core
                 "Gogledd", "De", "Dwyrain", "Gorllewin", "Uchaf", "Isaf", "Mewnol", "Allanol"
             }
         };
+
+        public static CultureType Gaelic => new CultureType
+        {
+            Name = "Gaelic",
+            LeadingOnsets = new[]
+            {
+                // Irish/Scottish Gaelic: lenited consonants (bh=/v/, mh=/v/, fh=silent, dh/gh=/ɣ/)
+                // Broad/slender distinction shapes consonant quality
+                "b", "bh", "c", "ch", "d", "dh", "f", "g", "gh", "l", "m", "mh", "n", "p", "r", "s", "sh", "t", "th",
+                "br", "cl", "cn", "cr", "dr", "fl", "fr", "gl", "gr", "sc", "sl", "sn", "sp", "sr", "st", "str", "tr",
+                "c", "d", "m", "s", "t", "b" // weighted for frequency
+            },
+            MedialOnsets = new[]
+            {
+                // Gaelic medial: lenited forms common between vowels, double consonants
+                "", "", "bh", "ch", "dh", "gh", "mh", "th", "sh",
+                "b", "c", "d", "f", "g", "l", "m", "n", "p", "r", "s", "t",
+                "ll", "nn", "rr", "cc", "pp", "tt",
+                "rc", "rd", "rg", "rl", "rm", "rn", "lb", "lc", "lg", "nd", "ng", "nt"
+            },
+            Vowels = new[]
+            {
+                // Gaelic has broad (a, o, u) and slender (e, i) vowels with fadas (á, é, í, ó, ú)
+                // "Caol le caol, leathan le leathan" (slender with slender, broad with broad)
+                "a", "e", "i", "o", "u",
+                "a", "e", "i", "o", "u",
+                "a", "e", "i", "o", "u",
+                "á", "é", "í", "ó", "ú",
+                "ai", "ei", "oi", "ui", "ao",
+                "ia", "ua", "ea", "io"
+            },
+            Codas = new[]
+            {
+                // Gaelic words often end open or with -n, -r, -l, -s, -dh, -gh (many silent in speech)
+                "", "", "", "n", "r", "l", "s", "t", "g", "d",
+                "dh", "gh", "th", "ch",
+                "nn", "ll", "rn", "rt", "rd"
+            },
+            CodaChance = 40,
+            RealmSuffixes = new[]
+            {
+                // From Gaelic kingdoms: Dál Riata, Connacht, Munster, Ulster, Ailech
+                "acht", "ster", "ail", "agh", "ala", "ria", "dha", "inn"
+            },
+            ProvinceSuffixes = new[]
+            {
+                // Gaelic regional/geographic suffixes (Irish forms)
+                "more", "beg", "ard", "inis", "loch", "gleann", "ros", "dún", "mhuir", "rath"
+            },
+            CountySuffixes = new[]
+            {
+                // Gaelic settlement elements (baile=town, cill=church, dún=fort, ard=height, rath=ring fort)
+                "baile", "cill", "dún", "ard", "rath", "drum", "lis", "ach", "agh", "more", "doire"
+            },
+            GovernmentForms = new[]
+            {
+                "Ríocht", "Tuath", "Tiarnas", "Cúige", "Dúiche", "Flaith"
+            },
+            DirectionalPrefixes = new[]
+            {
+                "Tuaisceart", "Deisceart", "Oirthear", "Iarthar", "Uachtar", "Íochtar", "Lár", "Imeall"
+            }
+        };
+
+        public static CultureType Brythonic => new CultureType
+        {
+            Name = "Brythonic",
+            LeadingOnsets = new[]
+            {
+                // Breton/Cornish: similar to Welsh but with distinct French influence (Breton)
+                // and more English-adjacent forms (Cornish). No ll or rh.
+                "b", "c", "d", "f", "g", "h", "k", "l", "m", "n", "p", "r", "s", "t", "w",
+                "br", "cr", "cl", "dr", "fr", "gl", "gr", "gw", "pr", "pl", "tr", "str", "sk",
+                "k", "t", "m", "p", "g", "l" // weighted for frequency
+            },
+            MedialOnsets = new[]
+            {
+                // Brythonic medial: simpler clusters than Welsh, more continental feel
+                "", "", "b", "c", "d", "f", "g", "h", "k", "l", "m", "n", "p", "r", "s", "t", "v", "w", "z",
+                "ll", "nn", "rr", "ss", "mm",
+                "rc", "rd", "rg", "rn", "rv", "lv", "nk", "nt", "nd", "ng", "sk", "st"
+            },
+            Vowels = new[]
+            {
+                // Breton/Cornish vowels: a, e, i, o, u plus nasal vowels in Breton (ã, õ)
+                // More continental feel than Welsh
+                "a", "e", "i", "o", "u",
+                "a", "e", "i", "o", "u",
+                "a", "e", "i", "o", "u",
+                "ae", "ei", "ou", "eu", "oa", "an", "en", "on"
+            },
+            Codas = new[]
+            {
+                // Brythonic codas: Cornish/Breton endings, less exotic than Welsh
+                "", "", "n", "r", "l", "s", "t", "k",
+                "th", "nk", "nt", "rk",
+                "rn", "rd", "rs", "ns"
+            },
+            CodaChance = 50,
+            RealmSuffixes = new[]
+            {
+                // From Brythonic kingdoms: Kernow, Dumnonia, Rheged, Elmet, Lothian
+                "ow", "onia", "ged", "met", "ian", "orn", "ek", "onn"
+            },
+            ProvinceSuffixes = new[]
+            {
+                // Brythonic regional suffixes (Cornish/Breton influenced)
+                "eth", "ock", "ard", "ance", "eur", "enn", "oer", "anz", "mor", "ster"
+            },
+            CountySuffixes = new[]
+            {
+                // Brythonic settlement elements (tre=town, pen=head, pol=pool, lan=enclosure, ker=fort)
+                "tre", "pen", "pol", "lan", "ker", "ros", "gor", "men", "cas", "bod", "porth"
+            },
+            GovernmentForms = new[]
+            {
+                "Rouantelezh", "Penndugelezh", "Tierniezh", "Kontell", "Brozh", "Dukiezh"
+            },
+            DirectionalPrefixes = new[]
+            {
+                "Hanternoz", "Kreisteiz", "Reter", "Kornôg", "Uhel", "Izel", "Kreiz", "Diavaez"
+            }
+        };
     }
 }
+

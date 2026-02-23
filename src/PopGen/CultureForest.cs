@@ -271,8 +271,8 @@ namespace PopGen.Core
                 // Celtic family
                 new CultureNode { Id = "celtic", DisplayName = "Celtic", ParentId = null, CultureTypeIndex = 3, EquatorProximity = 0.30f, IsLeaf = false },
                 new CultureNode { Id = "celtic.welsh", DisplayName = "Welsh", ParentId = "celtic", CultureTypeIndex = 3, EquatorProximity = 0.30f, IsLeaf = true },
-                new CultureNode { Id = "celtic.gaelic", DisplayName = "Gaelic", ParentId = "celtic", CultureTypeIndex = 3, EquatorProximity = 0.30f, IsLeaf = true },
-                new CultureNode { Id = "celtic.brythonic", DisplayName = "Brythonic", ParentId = "celtic", CultureTypeIndex = 3, EquatorProximity = 0.30f, IsLeaf = true },
+                new CultureNode { Id = "celtic.gaelic", DisplayName = "Gaelic", ParentId = "celtic", CultureTypeIndex = 4, EquatorProximity = 0.30f, IsLeaf = true },
+                new CultureNode { Id = "celtic.brythonic", DisplayName = "Brythonic", ParentId = "celtic", CultureTypeIndex = 5, EquatorProximity = 0.30f, IsLeaf = true },
 
                 // Germanic family
                 new CultureNode { Id = "germanic", DisplayName = "Germanic", ParentId = null, CultureTypeIndex = 2, EquatorProximity = 0.40f, IsLeaf = false },
