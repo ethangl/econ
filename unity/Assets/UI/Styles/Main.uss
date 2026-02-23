@@ -134,9 +134,9 @@
 }
 
 #selection-panel {
-    width: 480px;
-    min-width: 480px;
-    max-width: 480px;
+    width: 420px;
+    min-width: 420px;
+    max-width: 420px;
     min-height: 0;
     height: 100%;
     border-width: 0;
