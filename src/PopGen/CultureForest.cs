@@ -275,21 +275,21 @@ namespace PopGen.Core
                 new CultureNode { Id = "celtic.brythonic", DisplayName = "Brythonic", ParentId = "celtic", CultureTypeIndex = 5, EquatorProximity = 0.30f, IsLeaf = true },
 
                 // Germanic family
-                new CultureNode { Id = "germanic", DisplayName = "Germanic", ParentId = null, CultureTypeIndex = 2, EquatorProximity = 0.40f, IsLeaf = false },
-                new CultureNode { Id = "germanic.lowland", DisplayName = "Lowland", ParentId = "germanic", CultureTypeIndex = 2, EquatorProximity = 0.40f, IsLeaf = true },
-                new CultureNode { Id = "germanic.highland", DisplayName = "Highland", ParentId = "germanic", CultureTypeIndex = 1, EquatorProximity = 0.40f, IsLeaf = true },
-                new CultureNode { Id = "germanic.coastal", DisplayName = "Coastal", ParentId = "germanic", CultureTypeIndex = 2, EquatorProximity = 0.40f, IsLeaf = true },
+                new CultureNode { Id = "germanic", DisplayName = "Germanic", ParentId = null, CultureTypeIndex = 6, EquatorProximity = 0.40f, IsLeaf = false },
+                new CultureNode { Id = "germanic.lowland", DisplayName = "Lowland", ParentId = "germanic", CultureTypeIndex = 6, EquatorProximity = 0.40f, IsLeaf = true },
+                new CultureNode { Id = "germanic.highland", DisplayName = "Highland", ParentId = "germanic", CultureTypeIndex = 7, EquatorProximity = 0.40f, IsLeaf = true },
+                new CultureNode { Id = "germanic.coastal", DisplayName = "Coastal", ParentId = "germanic", CultureTypeIndex = 8, EquatorProximity = 0.40f, IsLeaf = true },
 
                 // Uralic family (cold)
                 new CultureNode { Id = "uralic", DisplayName = "Uralic", ParentId = null, CultureTypeIndex = 0, EquatorProximity = 0.20f, IsLeaf = false },
                 new CultureNode { Id = "uralic.western", DisplayName = "Western Uralic", ParentId = "uralic", CultureTypeIndex = 0, EquatorProximity = 0.20f, IsLeaf = true },
-                new CultureNode { Id = "uralic.eastern", DisplayName = "Eastern Uralic", ParentId = "uralic", CultureTypeIndex = 0, EquatorProximity = 0.20f, IsLeaf = true },
+                new CultureNode { Id = "uralic.eastern", DisplayName = "Eastern Uralic", ParentId = "uralic", CultureTypeIndex = 12, EquatorProximity = 0.20f, IsLeaf = true },
 
                 // Balto-Slavic family (temperate)
-                new CultureNode { Id = "balto-slavic", DisplayName = "Balto-Slavic", ParentId = null, CultureTypeIndex = 1, EquatorProximity = 0.50f, IsLeaf = false },
-                new CultureNode { Id = "balto-slavic.northern", DisplayName = "Northern Slavic", ParentId = "balto-slavic", CultureTypeIndex = 1, EquatorProximity = 0.50f, IsLeaf = true },
-                new CultureNode { Id = "balto-slavic.southern", DisplayName = "Southern Slavic", ParentId = "balto-slavic", CultureTypeIndex = 2, EquatorProximity = 0.50f, IsLeaf = true },
-                new CultureNode { Id = "balto-slavic.coastal", DisplayName = "Coastal Slavic", ParentId = "balto-slavic", CultureTypeIndex = 0, EquatorProximity = 0.50f, IsLeaf = true },
+                new CultureNode { Id = "balto-slavic", DisplayName = "Balto-Slavic", ParentId = null, CultureTypeIndex = 9, EquatorProximity = 0.50f, IsLeaf = false },
+                new CultureNode { Id = "balto-slavic.northern", DisplayName = "Northern Slavic", ParentId = "balto-slavic", CultureTypeIndex = 9, EquatorProximity = 0.50f, IsLeaf = true },
+                new CultureNode { Id = "balto-slavic.southern", DisplayName = "Southern Slavic", ParentId = "balto-slavic", CultureTypeIndex = 10, EquatorProximity = 0.50f, IsLeaf = true },
+                new CultureNode { Id = "balto-slavic.coastal", DisplayName = "Baltic", ParentId = "balto-slavic", CultureTypeIndex = 11, EquatorProximity = 0.50f, IsLeaf = true },
             };
         }
     }
