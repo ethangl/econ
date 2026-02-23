@@ -17,7 +17,7 @@ namespace EconSim.Tests
                 AspectRatio = 16f / 9f,
                 CellSizeKm = 2.5f,
                 Template = HeightmapTemplateType.Continents,
-                LatitudeSouth = 30f,
+                Latitude = 30f,
                 MaxElevationMeters = 5000f,
                 MaxSeaDepthMeters = 1500f
             };
@@ -91,8 +91,8 @@ namespace EconSim.Tests
         [Test]
         public void ConfigValidate_RejectsLatitudeOutsidePhysicalRange()
         {
-            var tooLow = new MapGenConfig { LatitudeSouth = -95f };
-            var tooHigh = new MapGenConfig { LatitudeSouth = 95f };
+            var tooLow = new MapGenConfig { Latitude = -95f };
+            var tooHigh = new MapGenConfig { Latitude = 95f };
 
             Assert.Throws<System.ArgumentOutOfRangeException>(() => tooLow.Validate());
             Assert.Throws<System.ArgumentOutOfRangeException>(() => tooHigh.Validate());
@@ -106,7 +106,7 @@ namespace EconSim.Tests
                 CellCount = 1_000_000,
                 AspectRatio = 1f,
                 CellSizeKm = 2.5f,
-                LatitudeSouth = 85f
+                Latitude = 85f
             };
 
             Assert.Throws<System.ArgumentOutOfRangeException>(() => config.Validate());

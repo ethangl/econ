@@ -103,13 +103,13 @@ namespace EconSim.UI
             var gameManager = EconSim.Core.GameManager.Instance;
             if (gameManager != null)
             {
-                float latitudeSouth = _latitudeField?.value ?? 50f;
+                float latitude = _latitudeField?.value ?? 50f;
                 var config = new MapGenConfig
                 {
                     Seed = _seedField?.value ?? 12345,
                     CellCount = _cellCountField?.value ?? 100000,
                     AspectRatio = _aspectRatioField?.value ?? 1.5f,
-                    LatitudeSouth = latitudeSouth,
+                    Latitude = latitude,
                 };
 
                 if (_templateDropdown != null && _templateDropdown.index >= 0)

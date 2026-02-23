@@ -14,11 +14,9 @@ namespace EconSim.Tests
             "_RealmBorderDistTex",
             "_ProvinceBorderDistTex",
             "_CountyBorderDistTex",
-            "_MarketBorderDistTex",
-            "_CellToMarketTex",
-            "_RoadMaskTex"
         };
 
+        // Market/road textures require EconomyState which the test fixture doesn't provide.
         private static readonly string[] DeterministicTextureProperties =
         {
             "_PoliticalIdsTex",
@@ -30,9 +28,6 @@ namespace EconSim.Tests
             "_RealmBorderDistTex",
             "_ProvinceBorderDistTex",
             "_CountyBorderDistTex",
-            "_MarketBorderDistTex",
-            "_CellToMarketTex",
-            "_RoadMaskTex"
         };
 
         [TestCaseSource(typeof(TextureTestHarness), nameof(TextureTestHarness.BaselineCases))]

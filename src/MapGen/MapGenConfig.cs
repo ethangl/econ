@@ -13,7 +13,11 @@ namespace MapGen.Core
         public float AspectRatio = 16f / 9f;
         public float CellSizeKm = 2.5f;
         public HeightmapTemplateType Template = HeightmapTemplateType.LowIsland;
-        public float LatitudeSouth = -50f;
+        /// <summary>
+        /// Latitude of the map center in degrees. South/north edges are derived
+        /// from this value and the map's height in km.
+        /// </summary>
+        public float Latitude = -35f;
 
         // Elevation envelope in signed meters (sea level = 0).
         public float MaxElevationMeters = 8000f;
@@ -124,10 +128,10 @@ namespace MapGen.Core
             if (CellCount <= 0) throw new ArgumentOutOfRangeException(nameof(CellCount), "CellCount must be positive.");
             if (AspectRatio <= 0f) throw new ArgumentOutOfRangeException(nameof(AspectRatio), "AspectRatio must be positive.");
             if (CellSizeKm <= 0f) throw new ArgumentOutOfRangeException(nameof(CellSizeKm), "CellSizeKm must be positive.");
-            if (float.IsNaN(LatitudeSouth) || float.IsInfinity(LatitudeSouth))
-                throw new ArgumentOutOfRangeException(nameof(LatitudeSouth), "LatitudeSouth must be finite.");
-            if (LatitudeSouth < -90f || LatitudeSouth > 90f)
-                throw new ArgumentOutOfRangeException(nameof(LatitudeSouth), "LatitudeSouth must be within [-90, 90].");
+            if (float.IsNaN(Latitude) || float.IsInfinity(Latitude))
+                throw new ArgumentOutOfRangeException(nameof(Latitude), "Latitude must be finite.");
+            if (Latitude < -90f || Latitude > 90f)
+                throw new ArgumentOutOfRangeException(nameof(Latitude), "Latitude must be within [-90, 90].");
             if (MaxElevationMeters <= 0f) throw new ArgumentOutOfRangeException(nameof(MaxElevationMeters), "MaxElevationMeters must be positive.");
             if (MaxSeaDepthMeters <= 0f) throw new ArgumentOutOfRangeException(nameof(MaxSeaDepthMeters), "MaxSeaDepthMeters must be positive.");
             if (float.IsNaN(TerrainShapeDomainMaxElevationMeters) || float.IsInfinity(TerrainShapeDomainMaxElevationMeters) || TerrainShapeDomainMaxElevationMeters <= 0f)
@@ -150,23 +154,25 @@ namespace MapGen.Core
                 throw new ArgumentOutOfRangeException(nameof(MinRealmPopulationFraction), "MinRealmPopulationFraction must be in [0, 1].");
             if (WindBands == null || WindBands.Length == 0) throw new ArgumentException("WindBands must be configured.", nameof(WindBands));
 
-            double latitudeNorth = ResolveLatitudeNorthEstimate();
-            if (double.IsNaN(latitudeNorth) || double.IsInfinity(latitudeNorth))
-                throw new ArgumentOutOfRangeException(nameof(LatitudeSouth), "Derived latitude range must be finite.");
-            if (latitudeNorth <= LatitudeSouth)
-                throw new ArgumentOutOfRangeException(nameof(LatitudeSouth), "Derived latitude span must increase northward.");
+            double halfSpan = ResolveHalfLatitudeSpanEstimate();
+            if (double.IsNaN(halfSpan) || double.IsInfinity(halfSpan) || halfSpan <= 0d)
+                throw new ArgumentOutOfRangeException(nameof(Latitude), "Derived latitude span must be positive and finite.");
+            double latitudeSouth = Latitude - halfSpan;
+            double latitudeNorth = Latitude + halfSpan;
+            if (latitudeSouth < -90d)
+                throw new ArgumentOutOfRangeException(nameof(Latitude), "Derived latitude south edge is below -90. Increase Latitude or reduce map size.");
             if (latitudeNorth > 90d)
-                throw new ArgumentOutOfRangeException(nameof(LatitudeSouth), "Derived latitude north edge exceeds +90. Reduce size or lower LatitudeSouth.");
+                throw new ArgumentOutOfRangeException(nameof(Latitude), "Derived latitude north edge exceeds +90. Decrease Latitude or reduce map size.");
         }
 
-        double ResolveLatitudeNorthEstimate()
+        double ResolveHalfLatitudeSpanEstimate()
         {
             double cellSizeKm = CellSizeKm;
             double aspectRatio = AspectRatio;
             double mapAreaKm2 = CellCount * cellSizeKm * cellSizeKm;
             double mapWidthKm = Math.Sqrt(mapAreaKm2 * aspectRatio);
             double mapHeightKm = mapWidthKm / aspectRatio;
-            return LatitudeSouth + mapHeightKm / 111d;
+            return mapHeightKm / 111d / 2d;
         }
     }
 }
