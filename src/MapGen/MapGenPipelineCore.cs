@@ -227,7 +227,9 @@ namespace MapGen.Core
 
         static WorldMetadata BuildWorldMetadata(MapGenConfig config, CellMesh mesh)
         {
-            float latitudeNorth = config.LatitudeSouth + mesh.Height / 111f;
+            float halfSpanDeg = mesh.Height / 111f / 2f;
+            float latitudeSouth = config.Latitude - halfSpanDeg;
+            float latitudeNorth = config.Latitude + halfSpanDeg;
 
             return new WorldMetadata
             {
@@ -235,7 +237,7 @@ namespace MapGen.Core
                 MapWidthKm = mesh.Width,
                 MapHeightKm = mesh.Height,
                 MapAreaKm2 = mesh.Width * mesh.Height,
-                LatitudeSouth = config.LatitudeSouth,
+                LatitudeSouth = latitudeSouth,
                 LatitudeNorth = latitudeNorth,
                 MinHeight = -config.MaxSeaDepthMeters,
                 SeaLevelHeight = 0f,

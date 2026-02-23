@@ -55,7 +55,7 @@ namespace EconSim.Tests
     {
         private const string TextureHashBaselineFileRelativePath = "Tests/EditMode/MapTextureRegressionHashBaselines.json";
         private const string UpdateBaselineEnvVar = "M3_UPDATE_TEXTURE_BASELINES";
-        private const float RegressionLatitudeSouth = 30f;
+        private const float RegressionLatitude = 30f;
         private static readonly object BaselineFileLock = new object();
         private static readonly object MapDataCacheLock = new object();
         private static readonly Dictionary<string, MapData> MapDataCache = new Dictionary<string, MapData>();
@@ -196,7 +196,7 @@ namespace EconSim.Tests
 
         private static MapData GetOrCreateMapData(TextureBaselineCase baseline)
         {
-            string key = $"{baseline.Seed}|{baseline.Template}|{baseline.CellCount}|{RegressionLatitudeSouth:0.####}";
+            string key = $"{baseline.Seed}|{baseline.Template}|{baseline.CellCount}|{RegressionLatitude:0.####}";
             lock (MapDataCacheLock)
             {
                 if (MapDataCache.TryGetValue(key, out var cached))
@@ -209,7 +209,7 @@ namespace EconSim.Tests
                 Template = baseline.Template,
                 CellCount = baseline.CellCount,
                 // Keep regression goldens stable when runtime defaults change.
-                LatitudeSouth = RegressionLatitudeSouth
+                Latitude = RegressionLatitude
             };
 
             var mapResult = MapGenPipeline.Generate(config);
