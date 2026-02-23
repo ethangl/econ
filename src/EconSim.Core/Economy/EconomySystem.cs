@@ -179,6 +179,20 @@ namespace EconSim.Core.Economy
             // (InterRealmTradeSystem updates these later, but runs after FiscalSystem)
             Array.Copy(Goods.BasePrice, econ.MarketPrices, Goods.Count);
 
+            // Derive per-county sabbath day from seat cell's religion
+            econ.CountySabbathDay = new int[maxCountyId + 1];
+            for (int i = 0; i <= maxCountyId; i++)
+                econ.CountySabbathDay[i] = 6; // default Sunday
+            foreach (var county in mapData.Counties)
+            {
+                var cell = mapData.CellById[county.SeatCellId];
+                if (cell.ReligionId > 0 && mapData.ReligionById != null
+                    && mapData.ReligionById.TryGetValue(cell.ReligionId, out var religion))
+                {
+                    econ.CountySabbathDay[county.Id] = religion.SabbathDay;
+                }
+            }
+
             // Resolve market county: first realm's capital burg → cell → county
             econ.MarketCountyId = ResolveMarketCounty(mapData, econ);
 
@@ -252,39 +266,36 @@ namespace EconSim.Core.Economy
             var counties = econ.Counties;
             var countyFacilityIndices = econ.CountyFacilityIndices;
             int goodsCount = Goods.Count;
-            bool isRestDay = Calendar.IsSunday(state.CurrentDay);
+            int todayDow = Calendar.DayOfWeek(state.CurrentDay);
 
-            if (!isRestDay)
+            // Compute production capacity per good (structural capacity for price discovery)
+            var productionCap = econ.ProductionCapacity;
+            Array.Clear(productionCap, 0, goodsCount);
+            // Extraction capacity
+            for (int i = 0; i < counties.Length; i++)
             {
-                // Compute production capacity per good (for intermediate price discovery)
-                var productionCap = econ.ProductionCapacity;
-                Array.Clear(productionCap, 0, goodsCount);
-                // Extraction capacity
+                var ce = counties[i];
+                if (ce == null) continue;
+                for (int g = 0; g < goodsCount; g++)
+                    productionCap[g] += ce.Population * ce.Productivity[g];
+            }
+            // Facility labor capacity
+            var allFacilities = econ.Facilities;
+            if (allFacilities != null)
+            {
                 for (int i = 0; i < counties.Length; i++)
                 {
                     var ce = counties[i];
                     if (ce == null) continue;
-                    for (int g = 0; g < goodsCount; g++)
-                        productionCap[g] += ce.Population * ce.Productivity[g];
-                }
-                // Facility labor capacity
-                var allFacilities = econ.Facilities;
-                if (allFacilities != null)
-                {
-                    for (int i = 0; i < counties.Length; i++)
+                    var indices = countyFacilityIndices != null && i < countyFacilityIndices.Length
+                        ? countyFacilityIndices[i] : null;
+                    if (indices == null || indices.Count == 0) continue;
+                    float pop = ce.Population;
+                    for (int fi = 0; fi < indices.Count; fi++)
                     {
-                        var ce = counties[i];
-                        if (ce == null) continue;
-                        var indices = countyFacilityIndices != null && i < countyFacilityIndices.Length
-                            ? countyFacilityIndices[i] : null;
-                        if (indices == null || indices.Count == 0) continue;
-                        float pop = ce.Population;
-                        for (int fi = 0; fi < indices.Count; fi++)
-                        {
-                            var def = allFacilities[indices[fi]].Def;
-                            if (def.LaborPerUnit > 0 && def.OutputAmount > 0f)
-                                productionCap[(int)def.OutputGood] += pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount;
-                        }
+                        var def = allFacilities[indices[fi]].Def;
+                        if (def.LaborPerUnit > 0 && def.OutputAmount > 0f)
+                            productionCap[(int)def.OutputGood] += pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount;
                     }
                 }
             }
@@ -299,6 +310,7 @@ namespace EconSim.Core.Economy
                     ? countyFacilityIndices[i]
                     : null;
 
+                bool isRestDay = todayDow == econ.CountySabbathDay[i];
                 if (isRestDay)
                 {
                     // Sunday: no production, zero out for clean downstream reads

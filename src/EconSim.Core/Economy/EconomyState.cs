@@ -52,6 +52,9 @@ namespace EconSim.Core.Economy
         /// <summary>Total production capacity per good (kg/day). Extraction (pop * Productivity) + facility labor capacity. Updated by EconomySystem each tick.</summary>
         public float[] ProductionCapacity = new float[Goods.Count];
 
+        /// <summary>Per-county sabbath day (0=Monday..6=Sunday), indexed by county ID. Derived from seat cell's religion.</summary>
+        public int[] CountySabbathDay;
+
         /// <summary>County ID hosting the central market. Receives market fees from all trade transactions.</summary>
         public int MarketCountyId = -1;
     }

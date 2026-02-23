@@ -383,6 +383,7 @@ namespace EconSim.Core.Data
         public int Id;
         public string Name;
         public string TypeName;          // ReligionType name (e.g. "Monotheistic")
+        public int SabbathDay;           // 0=Monday .. 6=Sunday
     }
 
     /// <summary>

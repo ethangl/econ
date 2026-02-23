@@ -11,8 +11,6 @@ namespace EconSim.Core.Simulation
 
         // 0=Monday .. 6=Sunday
         public static int DayOfWeek(int day) => (day - 1) % DaysPerWeek;
-        public static bool IsSunday(int day) => DayOfWeek(day) == 6;
-
         public static readonly string[] DayNames = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
     }
 
