@@ -2,6 +2,20 @@ using System;
 
 namespace EconSim.Core.Simulation
 {
+    public static class Calendar
+    {
+        public const int DaysPerWeek = 7;
+        public const int DaysPerMonth = 30;
+        public const int MonthsPerYear = 12;
+        public const int DaysPerYear = DaysPerMonth * MonthsPerYear; // 360
+
+        // 0=Monday .. 6=Sunday
+        public static int DayOfWeek(int day) => (day - 1) % DaysPerWeek;
+        public static bool IsSunday(int day) => DayOfWeek(day) == 6;
+
+        public static readonly string[] DayNames = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
+    }
+
     /// <summary>
     /// Configuration for simulation speed and timing.
     /// </summary>
@@ -27,7 +41,7 @@ namespace EconSim.Core.Simulation
             public const int Daily = 1;
             public const int Weekly = 7;
             public const int Monthly = 30;
-            public const int Yearly = 365;
+            public const int Yearly = Calendar.DaysPerYear;
         }
 
         /// <summary>

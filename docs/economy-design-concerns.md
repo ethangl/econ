@@ -5,13 +5,6 @@ by severity and type.
 
 ## Logical / Structural
 
-### No transport costs in trade
-
-The static transport backbone generates roads for visual rendering, but trade
-is pure pool-matching within each scope tier. A county on one coast trades with
-a county on the opposite coast at the same cost as its neighbor. Distance
-doesn't matter for goods movement, only for road visuals.
-
 ### Single market county collects all market fees
 
 The 2% market fee on all trade at every scope level flows to one county (the
@@ -31,6 +24,8 @@ visible effect except making trade less treasury-constrained. Historically this
 mismatch (quantity theory of money) was a big deal.
 
 ## Realism
+
+### Abstract transport costs
 
 ### No seasonality
 
