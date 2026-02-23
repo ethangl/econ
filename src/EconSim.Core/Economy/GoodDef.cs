@@ -22,6 +22,10 @@ namespace EconSim.Core.Economy
         public readonly bool IsPreciousMetal;
         public readonly float SpoilageRate;
         public readonly float TargetStockPerPop;
+
+        /// <summary>Weight in kg per unit. 1.0 for bulk goods (unit = kg). >1 for durables (unit = item).</summary>
+        public readonly float UnitWeight;
+
         public readonly Dictionary<int, float> BiomeYields;
 
         public GoodDef(
@@ -32,6 +36,7 @@ namespace EconSim.Core.Economy
             float basePrice, float minPrice, float maxPrice,
             bool isTradeable, bool isPreciousMetal,
             float spoilageRate = 0f, float targetStockPerPop = 0f,
+            float unitWeight = 1f,
             Dictionary<int, float> biomeYields = null)
         {
             Type = type;
@@ -49,6 +54,7 @@ namespace EconSim.Core.Economy
             IsPreciousMetal = isPreciousMetal;
             SpoilageRate = spoilageRate;
             TargetStockPerPop = targetStockPerPop;
+            UnitWeight = unitWeight;
             BiomeYields = biomeYields;
         }
     }

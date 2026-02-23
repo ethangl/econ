@@ -461,7 +461,7 @@ namespace EconSim.Core.Economy
                         ? Goods.StapleIdealPerPop[g]
                         : ConsumptionPerPop[g];
 
-                float costPerUnit = price * (1f + tollRate + tariffRate + MarketFeeRate) + transportPerKg;
+                float costPerUnit = price * (1f + tollRate + tariffRate + MarketFeeRate) + transportPerKg * Goods.UnitWeight[g];
 
                 float totalSupply = 0f;
                 float totalDemand = 0f;
@@ -528,7 +528,7 @@ namespace EconSim.Core.Economy
                         float toll = tollRate > 0f ? bought * price * tollRate : 0f;
                         float tariff = tariffRate > 0f ? bought * price * tariffRate : 0f;
                         float marketFee = bought * price * MarketFeeRate;
-                        float transportCost = bought * transportPerKg;
+                        float transportCost = bought * transportPerKg * Goods.UnitWeight[g];
                         ce.Treasury -= goodsCost + toll + tariff + marketFee + transportCost;
                         ce.TransportCostsPaid += transportCost;
 
