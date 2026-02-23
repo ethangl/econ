@@ -48,7 +48,7 @@ namespace PopGen.Core
             AssignCultureReligions(cultures, religions, religionSeedIndices, centroids);
 
             var cellBurgId = new int[cellCount];
-            PopBurg[] burgs = BuildBurgs(mesh, populations, realmIds, capitals, countySeats, cellBurgId, realmCultureIds);
+            PopBurg[] burgs = BuildBurgs(mesh, populations, realmIds, capitals, countySeats, cellBurgId, realmCultureIds, cultures, seed);
             PopProvince[] provinces = BuildProvinces(mesh, populations, realmIds, provinceIds, cellBurgId, realmCultureIds, cultures, config, seed);
             PopRealm[] realms = BuildRealms(mesh, populations, realmIds, provinceIds, capitals, cellBurgId, political.RealmCount, realmCultureIds, cultures, config, seed);
             PopCounty[] counties = BuildCounties(mesh, populations, realmIds, provinceIds, countyIds, countySeats, political.CountyCount, realmCultureIds, cultures, seed);
@@ -127,12 +127,15 @@ namespace PopGen.Core
             int[] capitals,
             int[] countySeats,
             int[] cellBurgId,
-            int[] realmCultureIds)
+            int[] realmCultureIds,
+            PopCulture[] cultures,
+            PopGenSeed seed)
         {
             if (countySeats == null || countySeats.Length == 0)
                 return Array.Empty<PopBurg>();
 
             var capitalCells = new HashSet<int>(capitals ?? Array.Empty<int>());
+            var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var burgs = new List<PopBurg>(countySeats.Length);
             for (int ci = 0; ci < countySeats.Length; ci++)
             {
@@ -143,10 +146,12 @@ namespace PopGen.Core
                 int burgId = ci + 1;
                 int realmId = (uint)cellId < (uint)realmIds.Length ? realmIds[cellId] : 0;
                 int cultureId = (realmId > 0 && realmId < realmCultureIds.Length) ? realmCultureIds[realmId] : 0;
+                CultureType cultureType = GetCultureType(realmId, realmCultureIds, cultures);
+                string name = PopNameGenerator.GenerateBurgName(burgId, realmId, cultureType, seed, usedNames);
                 burgs.Add(new PopBurg
                 {
                     Id = burgId,
-                    Name = $"Town {burgId}",
+                    Name = name,
                     Position = mesh.CellCenters[cellId],
                     CellId = cellId,
                     RealmId = realmId,
@@ -159,6 +164,39 @@ namespace PopGen.Core
                 });
 
                 cellBurgId[cellId] = burgId;
+            }
+
+            // Ensure realm capital cells always have a burg entry
+            if (capitals != null)
+            {
+                for (int ci = 0; ci < capitals.Length; ci++)
+                {
+                    int cellId = capitals[ci];
+                    if ((uint)cellId >= (uint)mesh.CellCount) continue;
+                    if (cellBurgId[cellId] > 0) continue; // already a burg
+
+                    int burgId = burgs.Count + 1;
+                    int realmId = (uint)cellId < (uint)realmIds.Length ? realmIds[cellId] : 0;
+                    int cultureId = (realmId > 0 && realmId < realmCultureIds.Length) ? realmCultureIds[realmId] : 0;
+                    CultureType cultureType = GetCultureType(realmId, realmCultureIds, cultures);
+                    string name = PopNameGenerator.GenerateBurgName(burgId, realmId, cultureType, seed, usedNames);
+                    burgs.Add(new PopBurg
+                    {
+                        Id = burgId,
+                        Name = name,
+                        Position = mesh.CellCenters[cellId],
+                        CellId = cellId,
+                        RealmId = realmId,
+                        CultureId = cultureId,
+                        Population = (uint)cellId < (uint)populations.Length ? populations[cellId] : 0f,
+                        IsCapital = true,
+                        IsPort = false,
+                        Type = "Capital",
+                        Group = "capital"
+                    });
+
+                    cellBurgId[cellId] = burgId;
+                }
             }
 
             return burgs.ToArray();

@@ -1138,7 +1138,7 @@ namespace EconSim.Renderer
             if (realmCapitalMarkerRoot == null)
                 return;
 
-            bool isVisible = showRealmCapitalMarkers && currentMode == MapMode.Political;
+            bool isVisible = showRealmCapitalMarkers && IsPoliticalFamilyMode(currentMode);
             if (realmCapitalMarkerRoot.gameObject.activeSelf != isVisible)
             {
                 realmCapitalMarkerRoot.gameObject.SetActive(isVisible);
