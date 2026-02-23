@@ -45,10 +45,19 @@ There are 26 goods, each belonging to a **need category**:
   fish, iron, charcoal) — intermediate or facility inputs, no direct population
   demand
 
-Each good has a **base price** in Crowns/kg. Market prices float based on
-supply and demand (see Price Discovery below), bounded by a floor (5% of base)
-and a ceiling (20x base). Durables and durable-input goods use fixed base
-pricing instead.
+Each good has a **base price** in Crowns per unit. For bulk goods the unit is
+1 kg; for durables the unit is one item (a pot, a chair, a tool set, an
+outfit). The **unit weight** field records kg per unit (1.0 for bulk, higher
+for durables). Market prices float based on supply and demand (see Price
+Discovery below), bounded by a floor (5% of base) and a ceiling (20x base).
+Durables and durable-input goods use fixed base pricing instead.
+
+| Durable   | Unit Weight | Base Price | Target Stock |
+| --------- | ----------- | ---------- | ------------ |
+| Pottery   | 1.0 kg      | 0.15 Cr    | 3.0 /person  |
+| Furniture | 10.0 kg     | 1.50 Cr    | 0.5 /person  |
+| Tools     | 3.0 kg      | 3.00 Cr    | 1.0 /person  |
+| Clothes   | 2.0 kg      | 2.50 Cr    | 2.0 /person  |
 
 ### Staple Pool
 
@@ -60,11 +69,14 @@ are available, proportional to stock.
 
 ### Durable Goods
 
-Durables (pottery, furniture, tools, clothes) are not consumed daily. Instead
-each person needs a **target stock level** (e.g. 2.0 kg/person for tools).
-Stock degrades at a daily spoilage rate (wear). Production aims to maintain
-stock at the target, with a catch-up rate tied to durability: lower spoilage
-means slower catch-up, preventing overproduction of very durable items.
+Durables (pottery, furniture, tools, clothes) are tracked in abstract units
+(pots, chairs, tool sets, outfits), not kilograms. Each person needs a
+**target stock level** in units (e.g. 1.0 tool set per person). All internal
+accounting — stock, production, consumption, unmet need — uses units. Weight
+only matters for transport cost calculation (see Transport Costs). Stock
+degrades at a daily spoilage rate (wear). Production aims to maintain stock at
+the target, with a catch-up rate tied to durability: lower spoilage means
+slower catch-up, preventing overproduction of very durable items.
 
 ## Initialization (EconomySystem)
 
@@ -408,7 +420,8 @@ to charcoal):
             If surplus < 0: this county is a buyer
                 raw_demand = |surplus|
                 affordable = county_treasury / cost_per_unit
-                    where cost_per_unit = price × (1 + toll_rate + tariff_rate + 2% market_fee) + transport_cost_per_kg
+                    where cost_per_unit = price × (1 + toll_rate + tariff_rate + market_fee_rate) + transport_cost_per_kg × unit_weight
+                    market_fee_rate = 2% for cross-province and cross-realm, 0% for intra-province
                 demand = min(raw_demand, affordable)
 
         If no supply or no demand, skip this good
@@ -427,8 +440,9 @@ to charcoal):
             Pay goods_cost + toll + tariff + market_fee + transport_cost from treasury
             Toll → buyer's province treasury
             Tariff → buyer's realm treasury
-            Market fee → the designated market county's treasury
+            Market fee → the designated market county's treasury (cross-province and cross-realm only)
             Transport cost → destroyed (represents consumed fodder, labor, cart wear)
+                transport_cost = bought × transport_rate_per_kg × unit_weight
 
 #### Transport Costs
 
@@ -438,10 +452,13 @@ Physical transport costs apply per-kg based on trade scope:
 - **Cross-province**: 0.007 Cr/kg
 - **Cross-realm**: 0.021 Cr/kg (3× multiplier)
 
-Transport cost is additive (not multiplicative on price), so it hits cheap bulk goods
-(wheat at 0.03 Cr/kg → +23% cross-province) much harder than expensive goods
-(tools at 1.00 Cr/kg → +0.7%). This naturally localizes bulk commodity trade while
-allowing high-value goods to travel freely.
+The per-kg rate is multiplied by the good's **unit weight**, so transport cost
+reflects actual physical weight. For bulk goods (unit weight 1.0) this changes
+nothing. For durables, one unit of furniture (10 kg) costs 10× as much to
+transport as one kg of wheat. The cost is additive (not multiplicative on
+price), so it hits cheap bulk goods (wheat at 0.03 Cr/kg → +23%
+cross-province) much harder than expensive goods. This naturally localizes bulk
+commodity trade while allowing high-value goods to travel freely.
 
 Transport costs are **destroyed** — they represent real resource consumption (fodder,
 labor, cart wear) and act as a money sink alongside spoilage.
@@ -572,21 +589,24 @@ into refined or finished goods. Each has a recipe (inputs → output), a labor
 requirement, and a max labor fraction (cap on what share of the county
 population can work there).
 
-| Facility        | Inputs                      | Output       | Labor | Max Pop % |
-| --------------- | --------------------------- | ------------ | ----- | --------- |
-| Kiln            | 2.0 clay                    | 1.0 pottery  | 3     | 5%        |
-| Carpenter       | 3.0 timber                  | 2.0 furn.    | 1     | 10%       |
-| Charcoal Burner | 5.0 timber                  | 2.0 charcoal | 1     | 10%       |
-| Smelter         | 3.0 iron ore + 0.4 charcoal | 2.0 iron     | 1     | 5%        |
-| Smithy          | 2.0 iron + 0.2 charcoal     | 4.0 tools    | 1     | 5%        |
-| Weaver          | 3.0 wool                    | 3.0 clothes  | 2     | 10%       |
-| Butcher         | 1.0 pork + 0.2 salt         | 3.0 sausage  | 1     | 15%       |
-| Smokehouse      | 2.0 pork                    | 3.0 bacon    | 1     | 15%       |
-| Cheesemaker     | 3.0 milk + 0.3 salt         | 1.5 cheese   | 1     | 15%       |
-| Salter          | 1.0 fish + 0.5 salt         | 3.0 s.fish   | 1     | 15%       |
-| Drying Rack     | 2.0 fish                    | 1.5 stkfish  | 1     | 10%       |
-| Bakery          | 2.0 wheat + 0.03 salt       | 2.8 bread    | 1     | 15%       |
-| Brewery         | 2.0 barley                  | 4.0 ale      | 1     | 15%       |
+| Facility        | Inputs                      | Output        | Labor | Max Pop % |
+| --------------- | --------------------------- | ------------- | ----- | --------- |
+| Kiln            | 2.0 clay                    | 1 pottery     | 3     | 5%        |
+| Carpenter       | 15.0 timber                 | 1 furniture   | 1     | 10%       |
+| Charcoal Burner | 5.0 timber                  | 2.0 charcoal  | 1     | 10%       |
+| Smelter         | 3.0 iron ore + 0.4 charcoal | 2.0 iron      | 1     | 5%        |
+| Smithy          | 5.0 iron + 0.5 charcoal     | 1 tool set    | 1     | 5%        |
+| Weaver          | 4.0 wool                    | 1 outfit      | 2     | 10%       |
+| Butcher         | 1.0 pork + 0.2 salt         | 3.0 sausage   | 1     | 15%       |
+| Smokehouse      | 2.0 pork                    | 3.0 bacon     | 1     | 15%       |
+| Cheesemaker     | 3.0 milk + 0.3 salt         | 1.5 cheese    | 1     | 15%       |
+| Salter          | 1.0 fish + 0.5 salt         | 3.0 s.fish    | 1     | 15%       |
+| Drying Rack     | 2.0 fish                    | 1.5 stkfish   | 1     | 10%       |
+| Bakery          | 2.0 wheat + 0.03 salt       | 2.8 bread     | 1     | 15%       |
+| Brewery         | 2.0 barley                  | 4.0 ale       | 1     | 15%       |
+
+Durable outputs (pottery, furniture, tools, clothes) are in units; all other
+outputs are in kg.
 
 Throughput is constrained by the minimum of:
 
@@ -609,7 +629,7 @@ Money circulates through:
 - Trade payments (buyer treasury → seller treasury, with fees/tolls/tariffs
   flowing to provinces and realms)
 - Granary requisition payments (province → surplus counties, at 60% of price)
-- Market fees (2% of all trade volume → market county)
+- Market fees (2% of cross-province and cross-realm trade volume → market county)
 
 Money is destroyed through **transport costs**: buyers pay per-kg transport fees
 on cross-province and cross-realm trade. These costs represent consumed fodder,

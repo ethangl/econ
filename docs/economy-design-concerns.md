@@ -7,10 +7,8 @@ by severity and type.
 
 ### Single market county collects all market fees
 
-The 2% market fee on all trade at every scope level flows to one county (the
-first realm's capital). Cross-realm trade between realms B and C still pays
-market fees to realm A's capital. This is a significant wealth concentration
-toward that one county.
+Cross-realm trade between realms B and C still pays market fees to realm A's
+capital. This is a significant wealth concentration toward that one county.
 
 ### Money supply has no drain
 
