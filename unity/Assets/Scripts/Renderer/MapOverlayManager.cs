@@ -1930,8 +1930,9 @@ public class MapOverlayManager
                     Color marketColor = (marketPalette != null && marketId >= 0 && marketId < marketPalette.Length)
                         ? marketPalette[marketId] : LookupPaletteColor(realmPalette, cell.RealmId);
 
-                    // Pack marketId in alpha for shader selection/hover
-                    marketColor.a = marketId / 65535f;
+                    // Pack marketId in alpha for shader selection/hover.
+                    // Resolve texture is RGBA32 (8-bit), so normalize by 255 not 65535.
+                    marketColor.a = marketId / 255f;
                     resolved[i] = marketColor;
                 }
             }
@@ -2002,7 +2003,7 @@ public class MapOverlayManager
                         Color missing = HeatMissingColor;
                         int noMarket = (cellMarketIdById != null && cellId < cellMarketIdById.Length)
                             ? cellMarketIdById[cellId] : 0;
-                        missing.a = noMarket / 65535f;
+                        missing.a = noMarket / 255f;
                         resolved[i] = missing;
                         continue;
                     }
@@ -2012,7 +2013,7 @@ public class MapOverlayManager
 
                     int marketId = (cellMarketIdById != null && cellId < cellMarketIdById.Length)
                         ? cellMarketIdById[cellId] : 0;
-                    heat.a = marketId / 65535f;
+                    heat.a = marketId / 255f;
                     resolved[i] = heat;
                 }
             }
@@ -3249,7 +3250,7 @@ public class MapOverlayManager
             styleMaterial.SetFloat(SelectedRealmIdId, -1f);
             styleMaterial.SetFloat(SelectedProvinceIdId, -1f);
             styleMaterial.SetFloat(SelectedCountyIdId, -1f);
-            float normalizedId = marketId < 0 ? -1f : marketId / 65535f;
+            float normalizedId = marketId < 0 ? -1f : marketId / 255f;
             styleMaterial.SetFloat(SelectedMarketIdId, normalizedId);
         }
 
@@ -3259,7 +3260,7 @@ public class MapOverlayManager
             styleMaterial.SetFloat(HoveredRealmIdId, -1f);
             styleMaterial.SetFloat(HoveredProvinceIdId, -1f);
             styleMaterial.SetFloat(HoveredCountyIdId, -1f);
-            float normalizedId = marketId < 0 ? -1f : marketId / 65535f;
+            float normalizedId = marketId < 0 ? -1f : marketId / 255f;
             styleMaterial.SetFloat(HoveredMarketIdId, normalizedId);
         }
 

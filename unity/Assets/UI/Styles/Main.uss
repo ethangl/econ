@@ -152,6 +152,30 @@
     border-width: 0;
 }
 
+.market-rail {
+    width: 0;
+    min-width: 0;
+    max-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+#market-panel {
+    width: 360px;
+    min-width: 360px;
+    max-width: 360px;
+    min-height: 0;
+    height: 100%;
+    border-width: 0;
+    padding: 12px;
+    overflow: hidden;
+}
+
+#market-hub-value, #market-realm-value, #market-counties-value, #market-pop-total {
+    color: rgb(220, 220, 230);
+    -unity-font-definition: url("../../Fonts/EBGaramond-Bold.ttf");
+}
+
 .panel-header-row {
     flex-direction: row;
     justify-content: space-between;

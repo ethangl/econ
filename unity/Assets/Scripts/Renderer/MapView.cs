@@ -114,11 +114,13 @@ namespace EconSim.Renderer
         private int selectedRealmId = -1;
         private int selectedProvinceId = -1;
         private int selectedCountyId = -1;
+        private int selectedMarketId = -1;
 
         public SelectionScope CurrentSelectionScope => selectionScope;
         public int SelectedRealmId => selectedRealmId;
         public int SelectedProvinceId => selectedProvinceId;
         public int SelectedCountyId => selectedCountyId;
+        public int SelectedMarketId => selectedMarketId;
 
         public enum MapMode
         {
@@ -873,6 +875,7 @@ namespace EconSim.Renderer
                     break;
                 case SelectionScope.Market:
                     int marketId = ResolveMarketIdForCell(cell);
+                    selectedMarketId = marketId;
                     if (marketId > 0)
                         overlayManager.SetSelectedMarket(marketId);
                     break;
@@ -894,6 +897,7 @@ namespace EconSim.Renderer
             selectedRealmId = -1;
             selectedProvinceId = -1;
             selectedCountyId = -1;
+            selectedMarketId = -1;
             SetSelectionActive(false);
             overlayManager?.ClearSelection();
 
