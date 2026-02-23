@@ -131,11 +131,12 @@ namespace EconSim.UI
             // Update date display
             var state = _simulation.GetState();
             int day = state.CurrentDay;
-            int year = day / 360 + 1;
-            int month = (day % 360) / 30 + 1;
-            int dayOfMonth = day % 30 + 1;
+            int year = day / Calendar.DaysPerYear + 1;
+            int month = (day % Calendar.DaysPerYear) / Calendar.DaysPerMonth + 1;
+            int dayOfMonth = day % Calendar.DaysPerMonth + 1;
+            string dayName = Calendar.DayNames[Calendar.DayOfWeek(day)];
 
-            _dateLabel.text = $"Y{year} M{month} D{dayOfMonth}";
+            _dateLabel.text = $"{dayName}, Y{year} M{month} D{dayOfMonth}";
 
             // Update pause button text and panel class
             if (_pauseButton != null)

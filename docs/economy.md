@@ -21,6 +21,7 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 11. Ungated resource extraction + Trading
 12. Remove Quotas and In-kind taxation
 13. Stock-gap production demand for Durables
+14. Transport costs
 
 ### Known Issues and Future Layers
 

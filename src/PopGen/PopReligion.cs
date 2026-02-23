@@ -6,5 +6,6 @@ namespace PopGen.Core
         public string Name;
         public ReligionType Type;
         public string TypeName;
+        public int SabbathDay; // 0=Monday .. 6=Sunday
     }
 }

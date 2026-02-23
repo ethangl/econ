@@ -75,7 +75,7 @@ When the simulation starts, EconomySystem sets up all economic state:
         Compute per-good productivity:
             For each land cell in the county:
                 Look up biome yields for every good (kg/person/day from biome tables)
-                For coastal cells (distance 0/1/2), add a fishing bonus (0.30/0.15/0.05)
+                For coastal cells (distance 0/1/2), add a fishing bonus (0.363/0.182/0.061)
             Average across all land cells in the county
         Seed the county treasury at 1.0 Crowns per person
 
@@ -92,6 +92,14 @@ When the simulation starts, EconomySystem sets up all economic state:
          and brewery — whether they can actually operate depends on input availability)
 
     Initialize province and realm economies (empty treasuries and granaries)
+
+    Derive per-county sabbath day from religion:
+        For each county:
+            Look up the seat cell's religion
+            Store that religion's sabbath day (0=Monday .. 6=Sunday)
+            (Default to Sunday if religion not found)
+        Each religion's sabbath day is assigned randomly during world generation,
+        so neighboring counties of different religions may rest on different days
 
     Seed market prices to base prices (so fiscal calculations work on day 1)
 
@@ -128,7 +136,22 @@ Before the first tick, a road network is generated:
 This system handles production, facility processing, and consumption for every
 county.
 
+### Sabbath (Rest Day)
+
+Each county observes a weekly rest day determined by its religion's sabbath
+(0=Monday .. 6=Sunday). On a county's rest day, production and facility
+processing are skipped — workers rest. Consumption still runs every day.
+
+Because religions have different sabbath days, not all counties rest on the same
+day. This creates emergent economic variation: a county resting on Friday still
+trades with neighbors who are working that day, and vice versa.
+
+    Compute today's day of week: (day - 1) % 7
+
 ### Compute Global Production Capacity
+
+Production capacity is always computed (even on rest days) because it represents
+structural capacity used for price discovery, not actual daily output.
 
     For each county:
         For each good:
@@ -142,6 +165,10 @@ These totals feed into price discovery (in InterRealmTradeSystem).
 ### Per-County Production and Consumption
 
     For each county:
+        If today is this county's sabbath day:
+            Zero out all production, skip extraction and facility processing
+            (Fall through to consumption below)
+
         Compute the workforce fraction available for extraction:
             workforce_fraction = (population - facility_workers) / population
             (facility_workers is from the previous tick; on tick 1 it is zero)
@@ -553,10 +580,10 @@ population can work there).
 | Smelter         | 3.0 iron ore + 0.4 charcoal | 2.0 iron     | 1     | 5%        |
 | Smithy          | 2.0 iron + 0.2 charcoal     | 4.0 tools    | 1     | 5%        |
 | Weaver          | 3.0 wool                    | 3.0 clothes  | 2     | 10%       |
-| Butcher         | 1.0 pork + 0.2 salt         | 3.0 sausage  | 2     | 10%       |
-| Smokehouse      | 2.0 pork                    | 2.0 bacon    | 1     | 10%       |
-| Cheesemaker     | 3.0 milk + 0.3 salt         | 1.0 cheese   | 1     | 10%       |
-| Salter          | 1.0 fish + 0.5 salt         | 2.0 s.fish   | 1     | 10%       |
+| Butcher         | 1.0 pork + 0.2 salt         | 3.0 sausage  | 1     | 15%       |
+| Smokehouse      | 2.0 pork                    | 3.0 bacon    | 1     | 15%       |
+| Cheesemaker     | 3.0 milk + 0.3 salt         | 1.5 cheese   | 1     | 15%       |
+| Salter          | 1.0 fish + 0.5 salt         | 3.0 s.fish   | 1     | 15%       |
 | Drying Rack     | 2.0 fish                    | 1.5 stkfish  | 1     | 10%       |
 | Bakery          | 2.0 wheat + 0.03 salt       | 2.8 bread    | 1     | 15%       |
 | Brewery         | 2.0 barley                  | 4.0 ale      | 1     | 15%       |

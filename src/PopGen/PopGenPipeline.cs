@@ -575,7 +575,8 @@ namespace PopGen.Core
                     Id = i + 1,
                     Name = name,
                     Type = religionType,
-                    TypeName = religionType.ToString()
+                    TypeName = religionType.ToString(),
+                    SabbathDay = ((seed.Value * 31 + i * 17) & 0x7FFFFFFF) % 7
                 };
             }
 

@@ -2,9 +2,8 @@
     <Style src="../Styles/Main.uss" />
     <ui:VisualElement name="root" class="root-container">
         <ui:VisualElement name="top-bar" class="panel">
-            <ui:Label name="top-bar-title" class="top-bar-title" text="EconSim" />
+            <ui:Button name="new-map-button" text="New Map" />
             <ui:VisualElement name="time-control-panel">
-                <ui:Button name="new-map-button" text="New Map" />
                 <ui:Label name="date-label" text="Y1 M1 D1" />
                 <ui:VisualElement name="speed-controls">
                     <ui:Button name="slower-button" text="-" />
