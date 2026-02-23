@@ -2,6 +2,14 @@ using EconSim.Core.Common;
 
 namespace EconSim.Core.Economy
 {
+    public struct MarketInfo
+    {
+        public int Id;            // 1-based, used as palette index
+        public int HubCountyId;   // County hosting the market
+        public int HubCellId;     // Seat cell of hub county (transport cost origin)
+        public int HubRealmId;    // Realm owning hub county (palette color source)
+    }
+
     /// <summary>
     /// Global economy state, initialized from MapData.
     /// </summary>
@@ -57,5 +65,11 @@ namespace EconSim.Core.Economy
 
         /// <summary>County ID hosting the central market. Receives market fees from all trade transactions.</summary>
         public int MarketCountyId = -1;
+
+        /// <summary>Market definitions, indexed by market ID (slot 0 unused).</summary>
+        public MarketInfo[] Markets;
+
+        /// <summary>County ID → market ID lookup.</summary>
+        public int[] CountyToMarket;
     }
 }

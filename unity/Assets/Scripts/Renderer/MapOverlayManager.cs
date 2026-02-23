@@ -37,6 +37,7 @@ public class MapOverlayManager
             RealmBorderDist = 8,
             ProvinceBorderDist = 9,
             CountyBorderDist = 10,
+            MarketBorderDist = 11,
             RiverMask = 12,
             Heightmap = 13,
             RoadMask = 14,
@@ -90,6 +91,10 @@ public class MapOverlayManager
         private static readonly int HoverIntensityId = Shader.PropertyToID("_HoverIntensity");
         private static readonly int SelectionDimmingId = Shader.PropertyToID("_SelectionDimming");
         private static readonly int SelectionDesaturationId = Shader.PropertyToID("_SelectionDesaturation");
+        private static readonly int MarketPaletteTexId = Shader.PropertyToID("_MarketPaletteTex");
+        private static readonly int MarketBorderDistTexId = Shader.PropertyToID("_MarketBorderDistTex");
+        private static readonly int SelectedMarketIdId = Shader.PropertyToID("_SelectedMarketId");
+        private static readonly int HoveredMarketIdId = Shader.PropertyToID("_HoveredMarketId");
 
         // Water layer property IDs
         private static readonly int WaterShallowColorId = Shader.PropertyToID("_WaterShallowColor");
@@ -139,6 +144,13 @@ public class MapOverlayManager
         private int[] cellSoilIdById;
         private int[] cellVegetationTypeById;
         private float[] cellVegetationDensityById;
+
+        // Market overlay data
+        private EconSim.Core.Economy.EconomyState economyState;
+        private EconSim.Core.Transport.TransportGraph transportGraph;
+        private Texture2D marketPaletteTexture;       // 256x1: market zone colors
+        private Texture2D marketBorderDistTexture;    // gridW×gridH R8: distance to nearest market boundary
+        private int[] cellMarketIdById;               // cellId → marketId lookup
 
         // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
         private const int ReliefBlurRadius = 4;
@@ -1689,6 +1701,10 @@ public class MapOverlayManager
             styleMaterial.SetTexture(RealmBorderDistTexId, realmBorderDistTexture);
             styleMaterial.SetTexture(ProvinceBorderDistTexId, provinceBorderDistTexture);
             styleMaterial.SetTexture(CountyBorderDistTexId, countyBorderDistTexture);
+            if (marketPaletteTexture != null)
+                styleMaterial.SetTexture(MarketPaletteTexId, marketPaletteTexture);
+            if (marketBorderDistTexture != null)
+                styleMaterial.SetTexture(MarketBorderDistTexId, marketBorderDistTexture);
 
             // Create road mask texture (initially all-black = no roads, regenerated when road state is set).
             if (roadDistTexture == null)
@@ -1791,7 +1807,9 @@ public class MapOverlayManager
             return mode == MapView.MapMode.Political ||
                    mode == MapView.MapMode.Province ||
                    mode == MapView.MapMode.County ||
-                   mode == MapView.MapMode.TransportCost;
+                   mode == MapView.MapMode.Market ||
+                   mode == MapView.MapMode.TransportCost ||
+                   mode == MapView.MapMode.MarketAccess;
         }
 
         private static MapView.MapMode ResolveCacheKeyForMode(MapView.MapMode mode)
@@ -1889,8 +1907,116 @@ public class MapOverlayManager
             Color[] rivers = riverMaskTexture.GetPixels();
             Color[] realmPalette = realmPaletteTexture.GetPixels();
 
+            bool isMarketMode = currentMapMode == MapView.MapMode.Market;
+            bool isMarketAccessMode = currentMapMode == MapView.MapMode.MarketAccess;
             bool isLocalTransportMode = currentMapMode == MapView.MapMode.TransportCost;
-            if (isLocalTransportMode)
+
+            if (isMarketMode)
+            {
+                Color[] marketPalette = marketPaletteTexture != null ? marketPaletteTexture.GetPixels() : null;
+
+                for (int i = 0; i < size; i++)
+                {
+                    int cellId = spatialGrid[i];
+                    if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
+                        continue;
+
+                    if (!cell.IsLand || rivers[i].r > 0.5f)
+                        continue;
+
+                    int marketId = (cellMarketIdById != null && cellId < cellMarketIdById.Length)
+                        ? cellMarketIdById[cellId] : 0;
+
+                    Color marketColor = (marketPalette != null && marketId >= 0 && marketId < marketPalette.Length)
+                        ? marketPalette[marketId] : LookupPaletteColor(realmPalette, cell.RealmId);
+
+                    // Pack marketId in alpha for shader selection/hover
+                    marketColor.a = marketId / 65535f;
+                    resolved[i] = marketColor;
+                }
+            }
+            else if (isMarketAccessMode)
+            {
+                Color[] marketPalette = marketPaletteTexture != null ? marketPaletteTexture.GetPixels() : null;
+
+                // Compute transport costs from each market hub to all cells in its zone
+                var costValues = new float[size];
+                for (int i = 0; i < size; i++)
+                    costValues[i] = float.NaN;
+
+                float minCost = float.MaxValue;
+                float maxCost = float.MinValue;
+
+                if (economyState?.Markets != null && transportGraph != null)
+                {
+                    // For each market, run Dijkstra from hub and collect costs for assigned cells
+                    for (int m = 1; m < economyState.Markets.Length; m++)
+                    {
+                        var market = economyState.Markets[m];
+                        if (market.HubCellId <= 0)
+                            continue;
+
+                        // Collect all reachable cells from hub
+                        var reachable = transportGraph.FindReachable(market.HubCellId, float.MaxValue);
+
+                        for (int i = 0; i < size; i++)
+                        {
+                            int cellId = spatialGrid[i];
+                            if (cellId < 0) continue;
+                            if (cellId >= cellIsLandById.Length || !cellIsLandById[cellId]) continue;
+                            if (rivers[i].r > 0.5f) continue;
+
+                            int cellMarketId = (cellMarketIdById != null && cellId < cellMarketIdById.Length)
+                                ? cellMarketIdById[cellId] : 0;
+                            if (cellMarketId != m) continue;
+
+                            if (reachable.TryGetValue(cellId, out float cost))
+                            {
+                                costValues[i] = cost;
+                                if (cost < minCost) minCost = cost;
+                                if (cost > maxCost) maxCost = cost;
+                            }
+                        }
+                    }
+                }
+
+                bool minFinite = !float.IsNaN(minCost) && !float.IsInfinity(minCost);
+                bool maxFinite = !float.IsNaN(maxCost) && !float.IsInfinity(maxCost);
+                if (!minFinite || !maxFinite || maxCost <= minCost)
+                {
+                    minCost = 0f;
+                    maxCost = 1f;
+                }
+
+                float range = Mathf.Max(0.0001f, maxCost - minCost);
+                for (int i = 0; i < size; i++)
+                {
+                    int cellId = spatialGrid[i];
+                    if (cellId < 0) continue;
+                    if (cellId >= cellIsLandById.Length || !cellIsLandById[cellId]) continue;
+                    if (rivers[i].r > 0.5f) continue;
+
+                    float cost = costValues[i];
+                    if (float.IsNaN(cost) || float.IsInfinity(cost))
+                    {
+                        Color missing = HeatMissingColor;
+                        int noMarket = (cellMarketIdById != null && cellId < cellMarketIdById.Length)
+                            ? cellMarketIdById[cellId] : 0;
+                        missing.a = noMarket / 65535f;
+                        resolved[i] = missing;
+                        continue;
+                    }
+
+                    float normalized = Mathf.Clamp01((cost - minCost) / range);
+                    Color heat = EvaluateHeatColor(normalized);
+
+                    int marketId = (cellMarketIdById != null && cellId < cellMarketIdById.Length)
+                        ? cellMarketIdById[cellId] : 0;
+                    heat.a = marketId / 65535f;
+                    resolved[i] = heat;
+                }
+            }
+            else if (isLocalTransportMode)
             {
                 var values = new float[size];
                 for (int i = 0; i < size; i++)
@@ -2618,6 +2744,140 @@ public class MapOverlayManager
             }
         }
 
+        /// <summary>
+        /// Set economy state for market mode rendering.
+        /// Builds cellMarketIdById lookup, market palette, and market border distance textures.
+        /// </summary>
+        public void SetEconomyState(EconSim.Core.Economy.EconomyState econ, EconSim.Core.Transport.TransportGraph transport)
+        {
+            economyState = econ;
+            transportGraph = transport;
+
+            if (econ?.CountyToMarket == null || econ.Markets == null || mapData == null)
+                return;
+
+            // Build cellMarketIdById lookup
+            int lookupSize = cellIsLandById != null ? cellIsLandById.Length : 0;
+            cellMarketIdById = new int[lookupSize];
+            for (int cellId = 0; cellId < lookupSize; cellId++)
+            {
+                if (!cellIsLandById[cellId]) continue;
+                int countyId = (cellId < cellCountyIdById.Length) ? cellCountyIdById[cellId] : 0;
+                if (countyId > 0 && countyId < econ.CountyToMarket.Length)
+                    cellMarketIdById[cellId] = econ.CountyToMarket[countyId];
+            }
+
+            // Generate market palette (256x1): each market gets its hub realm's palette color
+            if (marketPaletteTexture != null) DestroyTexture(marketPaletteTexture);
+            marketPaletteTexture = new Texture2D(256, 1, TextureFormat.RGBA32, false);
+            marketPaletteTexture.name = "MarketPaletteTexture";
+            marketPaletteTexture.filterMode = FilterMode.Point;
+            marketPaletteTexture.wrapMode = TextureWrapMode.Clamp;
+
+            Color[] realmPalette = realmPaletteTexture != null ? realmPaletteTexture.GetPixels() : null;
+            var marketPalettePixels = new Color[256];
+            for (int m = 1; m < econ.Markets.Length && m < 256; m++)
+            {
+                var market = econ.Markets[m];
+                marketPalettePixels[m] = LookupPaletteColor(realmPalette, market.HubRealmId);
+            }
+            marketPaletteTexture.SetPixels(marketPalettePixels);
+            marketPaletteTexture.Apply();
+
+            // Generate market border distance texture
+            GenerateMarketBorderDistTexture();
+
+            // Bind textures to material
+            if (styleMaterial != null)
+            {
+                styleMaterial.SetTexture(MarketPaletteTexId, marketPaletteTexture);
+                styleMaterial.SetTexture(MarketBorderDistTexId, marketBorderDistTexture);
+            }
+
+            // Invalidate mode caches for market modes
+            InvalidateModeColorResolveCache(MapView.MapMode.Market);
+            InvalidateModeColorResolveCache(MapView.MapMode.MarketAccess);
+
+            Debug.Log($"MapOverlayManager: Set economy state with {econ.Markets.Length - 1} markets");
+        }
+
+        private void GenerateMarketBorderDistTexture()
+        {
+            if (marketBorderDistTexture != null) DestroyTexture(marketBorderDistTexture);
+            marketBorderDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+            marketBorderDistTexture.name = "MarketBorderDistTexture";
+            marketBorderDistTexture.filterMode = FilterMode.Bilinear;
+            marketBorderDistTexture.wrapMode = TextureWrapMode.Clamp;
+
+            int size = gridWidth * gridHeight;
+
+            // Build market grid from spatial grid
+            int[] marketGrid = new int[size];
+            bool[] isLand = new bool[size];
+
+            for (int i = 0; i < size; i++)
+            {
+                int cellId = spatialGrid[i];
+                if (cellId >= 0 && cellId < cellIsLandById.Length && cellIsLandById[cellId])
+                {
+                    isLand[i] = true;
+                    marketGrid[i] = (cellMarketIdById != null && cellId < cellMarketIdById.Length)
+                        ? cellMarketIdById[cellId] : 0;
+                }
+                else
+                {
+                    marketGrid[i] = -1;
+                    isLand[i] = false;
+                }
+            }
+
+            // Seed boundaries: find pixels adjacent to different market zone
+            float[] marketDist = new float[size];
+            Array.Fill(marketDist, 255f);
+
+            System.Threading.Tasks.Parallel.For(0, gridHeight, y =>
+            {
+                int row = y * gridWidth;
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = row + x;
+                    if (!isLand[idx]) continue;
+
+                    int myMarket = marketGrid[idx];
+                    bool isBoundary = false;
+
+                    for (int dy = -1; dy <= 1 && !isBoundary; dy++)
+                    {
+                        for (int dx = -1; dx <= 1 && !isBoundary; dx++)
+                        {
+                            if (dx == 0 && dy == 0) continue;
+                            int nx = x + dx;
+                            int ny = y + dy;
+                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
+                            int nIdx = ny * gridWidth + nx;
+                            if (!isLand[nIdx]) continue;
+                            if (marketGrid[nIdx] != myMarket)
+                                isBoundary = true;
+                        }
+                    }
+
+                    if (isBoundary)
+                        marketDist[idx] = 0f;
+                }
+            });
+
+            // Chamfer transform
+            RunChamferTransform(marketDist, isLand);
+
+            // Convert to R8
+            byte[] pixels = new byte[size];
+            for (int i = 0; i < size; i++)
+                pixels[i] = (byte)Mathf.Clamp(Mathf.RoundToInt(marketDist[i]), 0, 255);
+
+            marketBorderDistTexture.LoadRawTextureData(pixels);
+            marketBorderDistTexture.Apply();
+        }
+
         public IEnumerator RunDeferredStartupWork()
         {
             // Warm up political hierarchy modes after initial load so first user switch is instant.
@@ -2812,6 +3072,9 @@ public class MapOverlayManager
                 case MapView.MapMode.County:
                     shaderMode = 3;
                     break;
+                case MapView.MapMode.Market:
+                    shaderMode = 4;
+                    break;
                 case MapView.MapMode.Biomes:
                     shaderMode = 6;
                     break;
@@ -2820,6 +3083,9 @@ public class MapOverlayManager
                     break;
                 case MapView.MapMode.TransportCost:
                     shaderMode = 8;
+                    break;
+                case MapView.MapMode.MarketAccess:
+                    shaderMode = 9;
                     break;
                 default:
                     shaderMode = 1;
@@ -2883,6 +3149,7 @@ public class MapOverlayManager
             styleMaterial.SetFloat(SelectedRealmIdId, -1f);
             styleMaterial.SetFloat(SelectedProvinceIdId, -1f);
             styleMaterial.SetFloat(SelectedCountyIdId, -1f);
+            styleMaterial.SetFloat(SelectedMarketIdId, -1f);
         }
 
         /// <summary>
@@ -2934,6 +3201,7 @@ public class MapOverlayManager
             styleMaterial.SetFloat(HoveredRealmIdId, -1f);
             styleMaterial.SetFloat(HoveredProvinceIdId, -1f);
             styleMaterial.SetFloat(HoveredCountyIdId, -1f);
+            styleMaterial.SetFloat(HoveredMarketIdId, -1f);
         }
 
         /// <summary>
@@ -2973,6 +3241,26 @@ public class MapOverlayManager
             styleMaterial.SetFloat(HoveredProvinceIdId, -1f);
             float normalizedId = countyId < 0 ? -1f : countyId / 65535f;
             styleMaterial.SetFloat(HoveredCountyIdId, normalizedId);
+        }
+
+        public void SetSelectedMarket(int marketId)
+        {
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(SelectedRealmIdId, -1f);
+            styleMaterial.SetFloat(SelectedProvinceIdId, -1f);
+            styleMaterial.SetFloat(SelectedCountyIdId, -1f);
+            float normalizedId = marketId < 0 ? -1f : marketId / 65535f;
+            styleMaterial.SetFloat(SelectedMarketIdId, normalizedId);
+        }
+
+        public void SetHoveredMarket(int marketId)
+        {
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(HoveredRealmIdId, -1f);
+            styleMaterial.SetFloat(HoveredProvinceIdId, -1f);
+            styleMaterial.SetFloat(HoveredCountyIdId, -1f);
+            float normalizedId = marketId < 0 ? -1f : marketId / 65535f;
+            styleMaterial.SetFloat(HoveredMarketIdId, normalizedId);
         }
 
         /// <summary>
@@ -3113,6 +3401,8 @@ public class MapOverlayManager
             AddTextureForDestroy(texturesToDestroy, provinceBorderDistTexture);
             AddTextureForDestroy(texturesToDestroy, countyBorderDistTexture);
             AddTextureForDestroy(texturesToDestroy, roadDistTexture);
+            AddTextureForDestroy(texturesToDestroy, marketPaletteTexture);
+            AddTextureForDestroy(texturesToDestroy, marketBorderDistTexture);
             AddTextureForDestroy(texturesToDestroy, modeColorResolveTexture);
             foreach (var cachedResolve in modeColorResolveCacheByMode.Values)
                 AddTextureForDestroy(texturesToDestroy, cachedResolve);
@@ -3139,6 +3429,8 @@ public class MapOverlayManager
             provinceBorderDistTexture = null;
             countyBorderDistTexture = null;
             roadDistTexture = null;
+            marketPaletteTexture = null;
+            marketBorderDistTexture = null;
             modeColorResolveTexture = null;
             riverMaskPixels = null;
         }
