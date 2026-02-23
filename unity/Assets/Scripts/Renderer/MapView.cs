@@ -211,23 +211,19 @@ namespace EconSim.Renderer
                 {
                     MapMode politicalBandMode = ResolveZoomDrivenPoliticalMode();
                     SetMapMode(politicalBandMode);
-                    Debug.Log($"Map mode: {ModeNames[(int)politicalBandMode]} (1, zoom-driven)");
                 }
             }
             else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2))
             {
                 SetMapMode(MapMode.Biomes);
-                Debug.Log("Map mode: Biomes (2)");
             }
             else if (Input.GetKeyDown(KeyCode.Alpha5) || Input.GetKeyDown(KeyCode.Keypad5))
             {
                 SetMapMode(MapMode.TransportCost);
-                Debug.Log("Map mode: Transport Cost (5)");
             }
             else if (Input.GetKeyDown(KeyCode.Alpha0) || Input.GetKeyDown(KeyCode.Keypad0))
             {
                 SetMapMode(MapMode.ChannelInspector);
-                Debug.Log($"Map mode: Channel Inspector (0), view={channelDebugView}");
             }
 
             ApplyZoomDrivenPoliticalMode();

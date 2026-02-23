@@ -10,6 +10,7 @@ namespace PopGen.Core
         public string Name;
         public int TypeIndex;
         public string TypeName;
+        public string NodeId;    // CultureForest node ID, e.g. "norse.danish"
         public int ReligionId;
     }
 }

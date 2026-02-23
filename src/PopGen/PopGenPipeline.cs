@@ -37,7 +37,9 @@ namespace PopGen.Core
             int[] countySeats = political.CountySeats ?? Array.Empty<int>();
 
             // Build cultures before name generation so we can pass CultureType through
-            PopCulture[] cultures = BuildCultures(political.RealmCount, seed);
+            float latS = map.World?.LatitudeSouth ?? -50f;
+            float latN = map.World?.LatitudeNorth ?? 50f;
+            PopCulture[] cultures = BuildCultures(political.RealmCount, latS, latN, seed);
             int[] realmCultureIds = AssignRealmCultures(political.RealmCount, cultures.Length);
 
             // Religion generation
@@ -65,21 +67,35 @@ namespace PopGen.Core
             };
         }
 
-        static PopCulture[] BuildCultures(int realmCount, PopGenSeed seed)
+        static PopCulture[] BuildCultures(int realmCount, float latSouth, float latNorth, PopGenSeed seed)
         {
             int cultureCount = Math.Max(1, realmCount / 2);
             var allTypes = CultureTypes.All;
+            var selected = CultureForest.SelectForLatitudeRange(latSouth, latNorth, cultureCount, seed.Value);
             var cultures = new PopCulture[cultureCount];
             for (int i = 0; i < cultureCount; i++)
             {
-                int typeIndex = i % allTypes.Length;
+                int typeIndex;
+                string nodeId;
+                if (i < selected.Length)
+                {
+                    typeIndex = selected[i].CultureTypeIndex % allTypes.Length;
+                    nodeId = selected[i].Id;
+                }
+                else
+                {
+                    typeIndex = i % allTypes.Length;
+                    nodeId = null;
+                }
+
                 var type = allTypes[typeIndex];
                 cultures[i] = new PopCulture
                 {
                     Id = i + 1,
                     Name = PopNameGenerator.GenerateCultureName(i + 1, type, seed),
                     TypeIndex = typeIndex,
-                    TypeName = type.Name
+                    TypeName = type.Name,
+                    NodeId = nodeId
                 };
             }
 

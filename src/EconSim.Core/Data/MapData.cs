@@ -374,6 +374,7 @@ namespace EconSim.Core.Data
         public int Id;
         public string Name;
         public string TypeName;          // CultureType.Name (e.g. "Generic")
+        public string NodeId;            // CultureForest node ID, e.g. "norse.danish"
         public int ReligionId;
     }
 

@@ -71,6 +71,10 @@ namespace EconSim.Tests
                 Assert.That(culture.Id, Is.GreaterThan(0), "Culture Id must be positive.");
                 Assert.That(string.IsNullOrWhiteSpace(culture.Name), Is.False,
                     $"Culture {culture.Id} has empty name.");
+                Assert.That(string.IsNullOrWhiteSpace(culture.NodeId), Is.False,
+                    $"Culture {culture.Id} has empty NodeId.");
+                Assert.That(CultureForest.GetNode(culture.NodeId), Is.Not.Null,
+                    $"Culture {culture.Id} NodeId '{culture.NodeId}' not found in forest.");
             }
         }
 
