@@ -76,6 +76,13 @@ namespace PopGen.Core
             return core;
         }
 
+        public static string GenerateBurgName(int burgId, int realmId, CultureType culture, PopGenSeed seed, ISet<string> usedNames)
+        {
+            var rng = new PopRandom(DeriveSeed(seed.Value, 0x06u, burgId, realmId));
+            string core = BuildCoreName(ref rng, culture, culture.CountySuffixes);
+            return EnsureUnique(core, burgId, usedNames);
+        }
+
         public static string GenerateReligionName(int religionId, int seedCultureId, CultureType culture, string[] suffixes, PopGenSeed seed)
         {
             var rng = new PopRandom(DeriveSeed(seed.Value, 0x05u, religionId, seedCultureId));
@@ -85,9 +92,10 @@ namespace PopGen.Core
 
         static string BuildCoreName(ref PopRandom rng, CultureType culture, string[] suffixes)
         {
+            // Favor short roots — suffix adds another 1-2 syllables
             int roll = rng.NextInt(100);
-            int syllableCount = roll < 55 ? 2 : (roll < 90 ? 3 : 4);
-            var sb = new StringBuilder(24);
+            int syllableCount = roll < 20 ? 1 : (roll < 75 ? 2 : (roll < 97 ? 3 : 4));
+            var sb = new StringBuilder(16);
 
             sb.Append(culture.LeadingOnsets[rng.NextInt(culture.LeadingOnsets.Length)]);
             for (int i = 0; i < syllableCount; i++)
@@ -96,7 +104,7 @@ namespace PopGen.Core
                     sb.Append(culture.MedialOnsets[rng.NextInt(culture.MedialOnsets.Length)]);
 
                 sb.Append(culture.Vowels[rng.NextInt(culture.Vowels.Length)]);
-                if (rng.NextInt(100) < 66)
+                if (rng.NextInt(100) < culture.CodaChance)
                     sb.Append(culture.Codas[rng.NextInt(culture.Codas.Length)]);
             }
 
@@ -174,11 +182,11 @@ namespace PopGen.Core
 
                 sb.Append(ch);
                 prev = ch;
-                if (sb.Length >= 14)
+                if (sb.Length >= 9)
                     break;
             }
 
-            while (sb.Length < 4)
+            while (sb.Length < 2)
                 sb.Append(culture.Vowels[sb.Length % culture.Vowels.Length][0]);
 
             return sb.ToString();

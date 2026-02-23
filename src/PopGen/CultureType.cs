@@ -10,6 +10,7 @@ namespace PopGen.Core
         public string[] MedialOnsets;
         public string[] Vowels;
         public string[] Codas;
+        public int CodaChance; // 0-100, percentage chance of appending a coda per syllable
         public string[] RealmSuffixes;
         public string[] ProvinceSuffixes;
         public string[] CountySuffixes;
@@ -22,7 +23,7 @@ namespace PopGen.Core
     /// </summary>
     public static class CultureTypes
     {
-        public static readonly CultureType[] All = { Finnish, Icelandic, Danish };
+        public static readonly CultureType[] All = { Finnish, Icelandic, Danish, Welsh };
 
         public static CultureType Finnish => new CultureType
         {
@@ -44,18 +45,19 @@ namespace PopGen.Core
             Vowels = new[]
             {
                 // Finnish has 8 vowels (a, e, i, o, u, y, ä, ö), long vowels, and 18 diphthongs
+                // Single vowels weighted 3x for shorter, more natural place names
                 "a", "e", "i", "o", "u", "y", "ä", "ö",
-                "aa", "ee", "ii", "oo", "uu", "yy", "ää", "öö",
-                "ai", "ei", "oi", "ui", "yi", "äi", "öi",
-                "au", "eu", "iu", "ou",
-                "ie", "uo", "yö",
-                "äy", "öy"
+                "a", "e", "i", "o", "u", "y", "ä", "ö",
+                "a", "e", "i", "o", "u", "y", "ä", "ö",
+                "aa", "ee", "oo", "uu",
+                "ai", "ei", "oi", "au", "ie", "uo"
             },
             Codas = new[]
             {
                 // Finnish syllables often end open (no coda); closed syllables use n, s, l, r, t
                 "", "", "", "", "n", "s", "l", "r", "t", "k"
             },
+            CodaChance = 35, // Finnish strongly favors open syllables
             RealmSuffixes = new[]
             {
                 "maa", "valta", "la", "nia", "sta", "nne", "kka", "sto"
@@ -70,7 +72,7 @@ namespace PopGen.Core
             },
             GovernmentForms = new[]
             {
-                "Kuningaskunta", "Suuriruhtinaskunta", "Ruhtinaskunta", "Tasavalta", "Valtakunta", "Herttua"
+                "Kuningaskunta", "Suuriruhtinaskunta", "Ruhtinaskunta", "Tasavalta", "Valtakunta", "Herttuakunta"
             },
             DirectionalPrefixes = new[]
             {
@@ -109,6 +111,7 @@ namespace PopGen.Core
                 "ur", "ir", "ar",
                 "rn", "rð", "nd", "ng", "ll", "nn", "rr"
             },
+            CodaChance = 55,
             RealmSuffixes = new[]
             {
                 "land", "ríki", "veldi", "heim", "garður", "ey"
@@ -154,12 +157,13 @@ namespace PopGen.Core
             {
                 // Danish has one of the largest vowel inventories in the world (~20+ monophthongs)
                 // Written Danish uses æ, ø, å plus many diphthongs
+                // Single vowels weighted 2x for shorter, more natural place names
                 "a", "e", "i", "o", "u", "y",
                 "æ", "ø", "å",
-                "aa", "ee", "oo",
+                "a", "e", "i", "o", "u", "y",
+                "aa", "ee",
                 "aj", "ej", "øj",
-                "av", "ev", "øv",
-                "iu", "ou"
+                "ou"
             },
             Codas = new[]
             {
@@ -167,6 +171,7 @@ namespace PopGen.Core
                 "", "", "n", "r", "l", "s", "t", "d", "g", "k",
                 "nd", "ng", "nk", "rd", "rk", "rn", "ld", "lk", "ls"
             },
+            CodaChance = 50,
             RealmSuffixes = new[]
             {
                 "mark", "land", "rige", "gård", "holm", "borg"
@@ -186,6 +191,67 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Nord", "Syd", "Øst", "Vest", "Øvre", "Nedre", "Indre", "Ydre"
+            }
+        };
+
+        public static CultureType Welsh => new CultureType
+        {
+            Name = "Welsh",
+            LeadingOnsets = new[]
+            {
+                // Welsh has no j, k, q, v, x, z in native words
+                // f=/v/, ff=/f/, dd=/ð/, ll=voiceless lateral, ch=/x/, rh=voiceless r
+                "b", "c", "d", "f", "ff", "g", "h", "l", "ll", "m", "n", "p", "r", "rh", "s", "t", "w",
+                "br", "cr", "cl", "dr", "gr", "tr", "gl", "gw", "cw", "ch", "th",
+                "c", "g", "ll", "m", "t", "r" // weighted for frequency
+            },
+            MedialOnsets = new[]
+            {
+                // Welsh medial consonants and characteristic digraphs
+                "", "b", "c", "d", "f", "ff", "g", "h", "l", "ll", "m", "n", "p", "r", "rh", "s", "t", "w",
+                "ch", "dd", "th", "ng", "nt", "nd", "rn", "rf", "lw", "nw", "rw"
+            },
+            Vowels = new[]
+            {
+                // Welsh has 7 vowels: a, e, i, o, u, w, y (w and y are full vowels)
+                // Circumflex marks long vowels (â, ô, ŵ, ŷ); less common but authentic
+                // Single vowels weighted 3x for natural place names
+                "a", "e", "i", "o", "u", "w", "y",
+                "a", "e", "i", "o", "u", "w", "y",
+                "a", "e", "i", "o", "u", "w", "y",
+                "â", "ô", "ŵ", "ŷ",
+                "ae", "ai", "au", "aw", "ei", "eu", "ew", "oe", "ow", "wy"
+            },
+            Codas = new[]
+            {
+                // Welsh codas include distinctive digraphs (dd, ff, ll, ch, th)
+                "", "", "n", "r", "l", "s", "t", "d",
+                "th", "dd", "ff", "ch", "ll",
+                "rn", "nt", "nd", "ng"
+            },
+            CodaChance = 50,
+            RealmSuffixes = new[]
+            {
+                // From Welsh kingdoms: Gwynedd, Powys, Dyfed, Gwent, Morgannwg, Ceredigion
+                "edd", "wys", "ed", "ent", "wg", "igion", "arth", "iog"
+            },
+            ProvinceSuffixes = new[]
+            {
+                // Welsh cantref/regional suffixes
+                "lyn", "dwy", "ydd", "on", "wyd", "rog", "ach", "eg", "wch", "ith"
+            },
+            CountySuffixes = new[]
+            {
+                // Welsh settlement elements (tref=town, llan=church, coed=wood, glyn=valley, etc.)
+                "dref", "llan", "wen", "goch", "fach", "fawr", "coed", "glyn", "pwll", "maes", "nant"
+            },
+            GovernmentForms = new[]
+            {
+                "Teyrnas", "Tywysogaeth", "Brenhinaeth", "Arglwyddiaeth", "Gwladwriaeth", "Dugiaeth"
+            },
+            DirectionalPrefixes = new[]
+            {
+                "Gogledd", "De", "Dwyrain", "Gorllewin", "Uchaf", "Isaf", "Mewnol", "Allanol"
             }
         };
     }
