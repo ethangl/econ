@@ -638,9 +638,9 @@ namespace EconSim.Core.Economy
                 // Coast-proximity fishing bonus
                 switch (cell.CoastDistance)
                 {
-                    case 0: output[FishIdx] += 0.30f; break;
-                    case 1: output[FishIdx] += 0.15f; break;
-                    case 2: output[FishIdx] += 0.05f; break;
+                    case 0: output[FishIdx] += 0.363f; break;
+                    case 1: output[FishIdx] += 0.182f; break;
+                    case 2: output[FishIdx] += 0.061f; break;
                 }
             }
 
