@@ -58,6 +58,14 @@ namespace EconSim.Core.Simulation
 
             /// <summary>Day of year for northern-hemisphere summer solstice (peak production).</summary>
             public const int SummerSolsticeDay = 170;
+
+            /// <summary>Period of long-term climate wave in years. Production oscillates
+            /// above/below baseline over this cycle (e.g. medieval warm/cold periods).</summary>
+            public const int ClimateWavePeriodYears = 20;
+
+            /// <summary>Amplitude of long-term climate wave (0 = off). At peak, shifts
+            /// annual-average production by ±(amplitude × sensitivity × latAmplitude).</summary>
+            public const float ClimateWaveAmplitude = 0.1f;
         }
 
         /// <summary>

@@ -80,40 +80,44 @@ slower catch-up, preventing overproduction of very durable items.
 
 ### Seasonal Extraction Modifier
 
-Raw good extraction varies by season. The modifier is centered on 1.0 so that
-the annual average production rate equals the base rate — summer overproduction
-compensates for winter underproduction.
+Raw good extraction varies by season and long-term climate cycles. The combined
+modifier has two components: a fast annual wave and a slow multi-decade wave.
 
     seasonal_wave = cos(2π × (day_of_year - 170) / 360)
         (170 = northern summer solstice; wave = +1 in midsummer, -1 in midwinter)
 
-    For southern-hemisphere counties, wave is negated
+    climate_wave = cos(2π × day / (period_years × 360))
+        (default period = 20 years; wave = +1 at warm peak, -1 at cold peak)
+
+    For southern-hemisphere counties, seasonal_wave is negated
 
     amplitude = |latitude| / 90
         (0 at equator, ~0.56 at 50°N, 1.0 at poles)
 
-    seasonal_modifier = 1 + severity × sensitivity × amplitude × wave × 0.5
+    modifier = 1 + sensitivity × amplitude × (severity × seasonal_wave × 0.5 + climate_amplitude × climate_wave)
 
 - **severity** is a global constant (default 1.0; 0 = no seasons)
+- **climate_amplitude** controls long-term swing (default 0.1)
 - **sensitivity** is per-good (wheat 0.9, barley 0.9, fish 0.3, iron ore 0.05, etc.)
 - At the equator (amplitude = 0), modifier is always 1.0
-- At 50°N with sensitivity 0.9: summer peak 1.25, winter trough 0.75, annual average 1.0
+- The seasonal wave averages to 1.0 annually; the climate wave shifts the
+  annual average above or below 1.0 over decades
 
 The modifier applies to both extraction and production capacity calculations.
 Facility processing is not directly seasonal — it is indirectly affected through
 raw material availability.
 
-| Good      | Sensitivity | 50°N Summer | 50°N Winter |
-| --------- | ----------- | ----------- | ----------- |
-| Wheat     | 0.9         | 1.25×       | 0.75×       |
-| Barley    | 0.9         | 1.25×       | 0.75×       |
-| Milk      | 0.5         | 1.14×       | 0.86×       |
-| Pork      | 0.4         | 1.11×       | 0.89×       |
-| Fish      | 0.3         | 1.08×       | 0.92×       |
-| Wool      | 0.4         | 1.11×       | 0.89×       |
-| Salt      | 0.2         | 1.06×       | 0.94×       |
-| Timber    | 0.1         | 1.03×       | 0.97×       |
-| Iron Ore  | 0.05        | 1.01×       | 0.99×       |
+| Good      | Sensitivity | 50°N Summer | 50°N Winter | Warm Epoch Avg | Cold Epoch Avg |
+| --------- | ----------- | ----------- | ----------- | -------------- | -------------- |
+| Wheat     | 0.9         | 1.25×       | 0.75×       | 1.05×          | 0.95×          |
+| Barley    | 0.9         | 1.25×       | 0.75×       | 1.05×          | 0.95×          |
+| Milk      | 0.5         | 1.14×       | 0.86×       | 1.03×          | 0.97×          |
+| Pork      | 0.4         | 1.11×       | 0.89×       | 1.02×          | 0.98×          |
+| Fish      | 0.3         | 1.08×       | 0.92×       | 1.02×          | 0.98×          |
+| Wool      | 0.4         | 1.11×       | 0.89×       | 1.02×          | 0.98×          |
+| Salt      | 0.2         | 1.06×       | 0.94×       | 1.01×          | 0.99×          |
+| Timber    | 0.1         | 1.03×       | 0.97×       | 1.01×          | 0.99×          |
+| Iron Ore  | 0.05        | 1.01×       | 0.99×       | 1.00×          | 1.00×          |
 
 ## Initialization (EconomySystem)
 
