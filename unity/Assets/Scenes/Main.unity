@@ -434,6 +434,12 @@ MonoBehaviour:
   biomeTerrainMaterial: {fileID: 2100000, guid: 666d97510569454e8bcf9f8620dd0821, type: 2}
   renderLandOnly: 0
   overlayResolutionMultiplier: 6
+  noisyEdgeSampleSpacingPx: 1
+  noisyEdgeMaxSamples: 16
+  noisyEdgeRoughness: 0.5
+  noisyEdgeAmplitudePerResolution: 1
+  noisyEdgeAmplitudeCap: 64
+  noisyEdgeBandPaddingPx: 1
   selectionCamera: {fileID: 0}
   mapCameraController: {fileID: 1070810156}
   selectionDimmingTarget: 0.25

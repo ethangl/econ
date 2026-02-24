@@ -193,12 +193,12 @@ Material:
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0
-    - _HoveredCountyId: -1
+    - _HoverIntensity: 1
+    - _HoveredCountyId: 0.00079346914
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
-    - _MapMode: 4
+    - _MapMode: 3
     - _MarketBorderDarkening: 0.688
     - _MarketBorderWidth: 0.25
     - _Metallic: 0
@@ -225,12 +225,12 @@ Material:
     - _SeaLevel: 0.5
     - _SelectedCellId: -1
     - _SelectedCountyId: -1
-    - _SelectedMarketId: 0.003921569
+    - _SelectedMarketId: -1
     - _SelectedProvinceId: -1
     - _SelectedRealmId: -1
     - _SelectionBorderWidth: 3
-    - _SelectionDesaturation: 0.8
-    - _SelectionDimming: 0.25
+    - _SelectionDesaturation: 0
+    - _SelectionDimming: 1
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
     - _ShowCountyBorders: 0
