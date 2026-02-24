@@ -17,7 +17,7 @@ namespace MapGen.Core
         /// Latitude of the map center in degrees. South/north edges are derived
         /// from this value and the map's height in km.
         /// </summary>
-        public float Latitude = -35f;
+        public float Latitude = 50f;
 
         // Elevation envelope in signed meters (sea level = 0).
         public float MaxElevationMeters = 8000f;

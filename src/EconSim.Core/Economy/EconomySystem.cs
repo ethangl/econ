@@ -97,11 +97,18 @@ namespace EconSim.Core.Economy
             var econ = new EconomyState();
             econ.Counties = new CountyEconomy[maxCountyId + 1];
 
+            var world = mapData.Info.World;
+            float mapHeight = mapData.Info.Height;
+
             foreach (var county in mapData.Counties)
             {
                 var ce = new CountyEconomy();
                 ce.Population = county.TotalPopulation;
                 ComputeCountyProductivity(county, mapData, ce.Productivity);
+
+                // Cache latitude for seasonal calculations
+                float normalizedY = mapHeight > 0 ? county.Centroid.Y / mapHeight : 0.5f;
+                ce.Latitude = world.LatitudeSouth + (world.LatitudeNorth - world.LatitudeSouth) * normalizedY;
 
                 // Durable goods start at zero — built up naturally via production
 
@@ -302,17 +309,29 @@ namespace EconSim.Core.Economy
             var countyIds = _countyIds;
             int goodsCount = Goods.Count;
             int todayDow = Calendar.DayOfWeek(state.CurrentDay);
+            int dayOfYear = (state.CurrentDay - 1) % Calendar.DaysPerYear;
 
             // Compute production capacity per good (structural capacity for price discovery)
             var productionCap = econ.ProductionCapacity;
             Array.Clear(productionCap, 0, goodsCount);
+            // Precompute seasonal wave from day of year (shared across counties)
+            float seasonalWave = (float)Math.Cos(2.0 * Math.PI * (dayOfYear - SimulationConfig.Seasonality.SummerSolsticeDay) / Calendar.DaysPerYear);
+            float globalSeverity = SimulationConfig.Seasonality.GlobalSeverity;
+
             // Extraction capacity
             for (int i = 0; i < countyIds.Length; i++)
             {
                 var ce = counties[countyIds[i]];
                 if (ce == null) continue;
+                float wave = ce.Latitude < 0 ? -seasonalWave : seasonalWave;
+                float amplitude = Math.Abs(ce.Latitude) / 90f;
+                float seasonalBase = 1f - amplitude * (1f - wave) * 0.5f;
                 for (int g = 0; g < goodsCount; g++)
-                    productionCap[g] += ce.Population * ce.Productivity[g];
+                {
+                    float cap = ce.Population * ce.Productivity[g];
+                    float sm = 1f - globalSeverity * Goods.SeasonalSensitivity[g] * (1f - seasonalBase);
+                    productionCap[g] += cap * sm;
+                }
             }
             // Facility labor capacity
             var allFacilities = econ.Facilities;
@@ -346,6 +365,11 @@ namespace EconSim.Core.Economy
                 var indices = countyFacilityIndices != null && countyId < countyFacilityIndices.Length
                     ? countyFacilityIndices[countyId]
                     : null;
+
+                // Compute per-county seasonal base (shared across goods)
+                float countyWave = ce.Latitude < 0 ? -seasonalWave : seasonalWave;
+                float countyAmplitude = Math.Abs(ce.Latitude) / 90f;
+                float countySeasonalBase = 1f - countyAmplitude * (1f - countyWave) * 0.5f;
 
                 bool isRestDay = todayDow == econ.CountySabbathDay[countyId];
                 if (isRestDay)
@@ -424,6 +448,10 @@ namespace EconSim.Core.Economy
                     for (int g = 0; g < goodsCount; g++)
                     {
                         float produced = pop * ce.Productivity[g] * wf;
+
+                        // Seasonal extraction penalty
+                        float sm = 1f - globalSeverity * Goods.SeasonalSensitivity[g] * (1f - countySeasonalBase);
+                        produced *= sm;
 
                         // Stock-ceiling cap for durable-chain raws (demand-driven extraction)
                         if (Goods.IsDurableInput[g])

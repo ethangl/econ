@@ -26,6 +26,9 @@ namespace EconSim.Core.Economy
         /// <summary>Weight in kg per unit. 1.0 for bulk goods (unit = kg). >1 for durables (unit = item).</summary>
         public readonly float UnitWeight;
 
+        /// <summary>Sensitivity to seasonal extraction penalty (0 = unaffected, 1 = fully seasonal).</summary>
+        public readonly float SeasonalSensitivity;
+
         public readonly Dictionary<int, float> BiomeYields;
 
         public GoodDef(
@@ -36,7 +39,7 @@ namespace EconSim.Core.Economy
             float basePrice, float minPrice, float maxPrice,
             bool isTradeable, bool isPreciousMetal,
             float spoilageRate = 0f, float targetStockPerPop = 0f,
-            float unitWeight = 1f,
+            float unitWeight = 1f, float seasonalSensitivity = 0f,
             Dictionary<int, float> biomeYields = null)
         {
             Type = type;
@@ -55,6 +58,7 @@ namespace EconSim.Core.Economy
             SpoilageRate = spoilageRate;
             TargetStockPerPop = targetStockPerPop;
             UnitWeight = unitWeight;
+            SeasonalSensitivity = seasonalSensitivity;
             BiomeYields = biomeYields;
         }
     }
