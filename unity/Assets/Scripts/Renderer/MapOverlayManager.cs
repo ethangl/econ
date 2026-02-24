@@ -215,7 +215,7 @@ public class MapOverlayManager
         private const float DefaultNoisyEdgeAmplitudeCap = 8.0f;
         private const float DefaultNoisyEdgeBandPaddingPx = 1.5f;
 
-        private const int OverlayTextureCacheVersion = 4;
+        private const int OverlayTextureCacheVersion = 5;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
         private const string CacheSpatialGridFile = "spatial_grid.bin";
         private const string CachePoliticalIdsFile = "political_ids.bin";
@@ -1106,6 +1106,64 @@ public class MapOverlayManager
             return Mathf.Lerp(offsets[i0], offsets[i1], frac);
         }
 
+        private List<Vector2> BuildNoisyPolyline(List<Vector2> controlPoints, uint seed, float amplitudeScale = 1f)
+        {
+            if (controlPoints == null || controlPoints.Count < 2)
+                return controlPoints;
+
+            var result = new List<Vector2>(Mathf.Max(controlPoints.Count * 4, controlPoints.Count + 1))
+            {
+                controlPoints[0]
+            };
+
+            for (int i = 0; i < controlPoints.Count - 1; i++)
+            {
+                uint segmentSeed = MixHash(seed, (uint)i);
+                AppendNoisySegment(result, controlPoints[i], controlPoints[i + 1], segmentSeed, amplitudeScale);
+            }
+
+            return result;
+        }
+
+        private void AppendNoisySegment(List<Vector2> output, Vector2 a, Vector2 b, uint seed, float amplitudeScale)
+        {
+            Vector2 delta = b - a;
+            float length = delta.magnitude;
+            if (length < 1e-4f)
+            {
+                output.Add(b);
+                return;
+            }
+
+            Vector2 dir = delta / length;
+            Vector2 normal = new Vector2(-dir.y, dir.x);
+            if (HashSigned(seed, 11, 17, 29) < 0f)
+                normal = -normal;
+
+            int sampleCount = Mathf.Clamp(Mathf.CeilToInt(length / noisyEdgeSampleSpacingPx), 2, noisyEdgeMaxSamples);
+            float maxAmplitude = GetNoisyEdgeBaseAmplitudePixels() * Mathf.Max(0f, amplitudeScale);
+            float amplitude = Mathf.Min(maxAmplitude, length * 0.2f);
+
+            if (amplitude < 0.35f)
+            {
+                output.Add(b);
+                return;
+            }
+
+            var offsets = new float[sampleCount + 1];
+            offsets[0] = 0f;
+            offsets[sampleCount] = 0f;
+            BuildNoisyEdgeOffsets(offsets, 0, sampleCount, amplitude, seed);
+
+            for (int s = 1; s <= sampleCount; s++)
+            {
+                float t = s / (float)sampleCount;
+                Vector2 point = a + dir * (length * t);
+                float offset = s == sampleCount ? 0f : SampleNoisyEdgeOffset(offsets, t);
+                output.Add(point + normal * offset);
+            }
+        }
+
         private static ulong MakeUndirectedEdgeKey(int a, int b)
         {
             uint lo = (uint)Mathf.Min(a, b);
@@ -1530,8 +1588,7 @@ public class MapOverlayManager
                         // Y-up data coords match texture row order directly
                         float x = pt.X * scale;
                         float y = pt.Y * scale;
-                        var (wx, wy) = DomainWarp.Warp(x, y);
-                        pathPoints.Add(new Vector2(wx, wy));
+                        pathPoints.Add(new Vector2(x, y));
                     }
                 }
                 else if (river.CellPath != null && river.CellPath.Count >= 2)
@@ -1542,8 +1599,7 @@ public class MapOverlayManager
                         {
                             float x = cell.Center.X * scale;
                             float y = cell.Center.Y * scale;
-                            var (wx, wy) = DomainWarp.Warp(x, y);
-                            pathPoints.Add(new Vector2(wx, wy));
+                            pathPoints.Add(new Vector2(x, y));
                         }
                     }
                 }
@@ -1551,8 +1607,10 @@ public class MapOverlayManager
                 if (pathPoints.Count < 2)
                     continue;
 
+                uint riverSeed = MixHash((uint)(mapData.Info?.MapGenSeed ?? 0), (uint)river.Id);
+                var noisyPathPoints = BuildNoisyPolyline(pathPoints, riverSeed, amplitudeScale: 1f);
                 // Smooth the path using Catmull-Rom interpolation
-                var smoothedPoints = SmoothPath(pathPoints, 4);
+                var smoothedPoints = SmoothPath(noisyPathPoints, 4);
 
                 // Calculate max width for this river
                 float maxWidth = baseWidth + river.Width * widthScale;
@@ -3242,10 +3300,15 @@ public class MapOverlayManager
             DestroyTexture(politicalIdsTexture);
             DestroyTexture(geographyBaseTexture);
             DestroyTexture(vegetationTexture);
+            DestroyTexture(riverMaskTexture);
+            DestroyTexture(heightmapTexture);
+            DestroyTexture(reliefNormalTexture);
             DestroyTexture(realmBorderDistTexture);
             DestroyTexture(provinceBorderDistTexture);
             DestroyTexture(countyBorderDistTexture);
             GenerateDataTextures();
+            GenerateRiverMaskTexture();
+            GenerateHeightmapTexture();
             GenerateAdministrativeBorderDistTextures();
             GenerateVegetationTexture();
             Profiler.End();
@@ -3265,6 +3328,9 @@ public class MapOverlayManager
                 styleMaterial.SetTexture(PoliticalIdsTexId, politicalIdsTexture);
                 styleMaterial.SetTexture(GeographyBaseTexId, geographyBaseTexture);
                 styleMaterial.SetTexture(VegetationTexId, vegetationTexture);
+                styleMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
+                styleMaterial.SetTexture(HeightmapTexId, heightmapTexture);
+                styleMaterial.SetTexture(ReliefNormalTexId, reliefNormalTexture);
                 styleMaterial.SetTexture(RealmBorderDistTexId, realmBorderDistTexture);
                 styleMaterial.SetTexture(ProvinceBorderDistTexId, provinceBorderDistTexture);
                 styleMaterial.SetTexture(CountyBorderDistTexId, countyBorderDistTexture);
