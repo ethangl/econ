@@ -78,6 +78,43 @@ degrades at a daily spoilage rate (wear). Production aims to maintain stock at
 the target, with a catch-up rate tied to durability: lower spoilage means
 slower catch-up, preventing overproduction of very durable items.
 
+### Seasonal Extraction Modifier
+
+Raw good extraction varies by season. The modifier is centered on 1.0 so that
+the annual average production rate equals the base rate — summer overproduction
+compensates for winter underproduction.
+
+    seasonal_wave = cos(2π × (day_of_year - 170) / 360)
+        (170 = northern summer solstice; wave = +1 in midsummer, -1 in midwinter)
+
+    For southern-hemisphere counties, wave is negated
+
+    amplitude = |latitude| / 90
+        (0 at equator, ~0.56 at 50°N, 1.0 at poles)
+
+    seasonal_modifier = 1 + severity × sensitivity × amplitude × wave × 0.5
+
+- **severity** is a global constant (default 1.0; 0 = no seasons)
+- **sensitivity** is per-good (wheat 0.9, barley 0.9, fish 0.3, iron ore 0.05, etc.)
+- At the equator (amplitude = 0), modifier is always 1.0
+- At 50°N with sensitivity 0.9: summer peak 1.25, winter trough 0.75, annual average 1.0
+
+The modifier applies to both extraction and production capacity calculations.
+Facility processing is not directly seasonal — it is indirectly affected through
+raw material availability.
+
+| Good      | Sensitivity | 50°N Summer | 50°N Winter |
+| --------- | ----------- | ----------- | ----------- |
+| Wheat     | 0.9         | 1.25×       | 0.75×       |
+| Barley    | 0.9         | 1.25×       | 0.75×       |
+| Milk      | 0.5         | 1.14×       | 0.86×       |
+| Pork      | 0.4         | 1.11×       | 0.89×       |
+| Fish      | 0.3         | 1.08×       | 0.92×       |
+| Wool      | 0.4         | 1.11×       | 0.89×       |
+| Salt      | 0.2         | 1.06×       | 0.94×       |
+| Timber    | 0.1         | 1.03×       | 0.97×       |
+| Iron Ore  | 0.05        | 1.01×       | 0.99×       |
+
 ## Initialization (EconomySystem)
 
 When the simulation starts, EconomySystem sets up all economic state:
@@ -167,7 +204,8 @@ structural capacity used for price discovery, not actual daily output.
 
     For each county:
         For each good:
-            Add (population × productivity) to total extraction capacity
+            capacity = population × productivity × seasonal_modifier
+            Add capacity to total extraction capacity
     For each county's facilities:
         For each facility that has labor and output:
             Add its maximum labor-constrained output to total capacity for that output good
@@ -219,7 +257,7 @@ governs demand-driven extraction and trade retain calculations.
 #### Extraction (Raw Good Production)
 
         For each good:
-            produced = population × productivity × workforce_fraction
+            produced = population × productivity × workforce_fraction × seasonal_modifier
 
             If this good is a durable-chain raw input (iron ore, timber for charcoal, etc.):
                 Cap extraction to local facility demand:
