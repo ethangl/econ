@@ -215,7 +215,7 @@ public class MapOverlayManager
         private const float DefaultNoisyEdgeAmplitudeCap = 8.0f;
         private const float DefaultNoisyEdgeBandPaddingPx = 1.5f;
 
-        private const int OverlayTextureCacheVersion = 5;
+        private const int OverlayTextureCacheVersion = 6;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
         private const string CacheSpatialGridFile = "spatial_grid.bin";
         private const string CachePoliticalIdsFile = "political_ids.bin";
@@ -3311,6 +3311,8 @@ public class MapOverlayManager
             GenerateHeightmapTexture();
             GenerateAdministrativeBorderDistTextures();
             GenerateVegetationTexture();
+            if (roadState != null)
+                RegenerateRoadDistTexture();
             Profiler.End();
 
             if (economyState?.CountyToMarket != null && economyState.Markets != null)
@@ -3385,11 +3387,11 @@ public class MapOverlayManager
 
             var roads = roadState.GetAllRoads();
 
-            // Subdivide each road segment and warp every intermediate point
-            // so roads meander through the noise field like random walks
-            const int substeps = 20;
-            const float roadFreq = DomainWarp.Frequency;
-            const float roadAmp = DomainWarp.Amplitude;
+            // Apply the same noisy-edge technique used for zone/rivers.
+            // Roads are slightly straighter than paths.
+            int mapSeed = mapData.Info?.MapGenSeed ?? 0;
+            const float roadAmplitudeScale = 0.65f;
+            const float pathAmplitudeScale = 0.9f;
 
             foreach (var (cellA, cellB, tier) in roads)
             {
@@ -3402,19 +3404,21 @@ public class MapOverlayManager
                 float by = dataB.Center.Y * scale;
 
                 float width = tier == RoadTier.Road ? roadWidth : pathWidth;
-
-                // Warp each substep point independently — creates organic meandering
-                var (prevX, prevY) = DomainWarp.Warp(ax, ay, roadFreq, roadAmp);
-                float dashProgress = 0f;
-                for (int i = 1; i <= substeps; i++)
+                uint roadSeed = MixHash((uint)mapSeed, (uint)Mathf.Min(cellA, cellB));
+                roadSeed = MixHash(roadSeed, (uint)Mathf.Max(cellA, cellB));
+                float amplitudeScale = tier == RoadTier.Road ? roadAmplitudeScale : pathAmplitudeScale;
+                var controlPoints = new List<Vector2>(2)
                 {
-                    float t = i / (float)substeps;
-                    float mx = ax + (bx - ax) * t;
-                    float my = ay + (by - ay) * t;
-                    var (wx, wy) = DomainWarp.Warp(mx, my, roadFreq, roadAmp);
+                    new Vector2(ax, ay),
+                    new Vector2(bx, by)
+                };
+                List<Vector2> noisyPath = BuildNoisyPolyline(controlPoints, roadSeed, amplitudeScale);
 
-                    var start = new Vector2(prevX, prevY);
-                    var end = new Vector2(wx, wy);
+                float dashProgress = 0f;
+                for (int i = 0; i < noisyPath.Count - 1; i++)
+                {
+                    Vector2 start = noisyPath[i];
+                    Vector2 end = noisyPath[i + 1];
                     float segmentLength = Vector2.Distance(start, end);
                     if (segmentLength > 0.001f)
                     {
@@ -3427,9 +3431,6 @@ public class MapOverlayManager
                             patternLength,
                             ref dashProgress);
                     }
-
-                    prevX = wx;
-                    prevY = wy;
                 }
             }
 
