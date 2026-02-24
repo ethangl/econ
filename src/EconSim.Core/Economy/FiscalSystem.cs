@@ -55,6 +55,15 @@ namespace EconSim.Core.Economy
         /// <summary>Buyers pay 2% market fee on all trade (paid to market county treasury).</summary>
         const float MarketFeeRate = 0.02f;
 
+        /// <summary>Fraction of refined gold minted into crowns (rest sold as tradeable goods).</summary>
+        const float GoldMintFraction = 0.95f;
+
+        /// <summary>Fraction of refined silver minted into crowns (rest sold as tradeable goods).</summary>
+        const float SilverMintFraction = 0.75f;
+
+        /// <summary>Premium over mint value when selling refined metal as tradeable goods (smelting labor).</summary>
+        const float SmeltingPremium = 0.05f;
+
         /// <summary>Counties with BasicSatisfaction below this threshold receive feudal relief.</summary>
         const float ReliefSatisfactionThreshold = 0.70f;
 
@@ -113,6 +122,9 @@ namespace EconSim.Core.Economy
 
         /// <summary>County ID hosting the market (receives market fees).</summary>
         int _marketCountyId = -1;
+
+        /// <summary>Realm ID → capital county ID (for depositing tradeable gold/silver).</summary>
+        int[] _realmCapitalCounty;
 
         DeliveryService _delivery;
 
@@ -294,17 +306,38 @@ namespace EconSim.Core.Economy
                 int realmId = _realmIds[r];
                 var re = realms[realmId];
 
-                float gold = re.Stockpile[(int)GoodType.GoldOre];
-                float silver = re.Stockpile[(int)GoodType.SilverOre];
+                float goldOre = re.Stockpile[(int)GoodType.GoldOre];
+                float silverOre = re.Stockpile[(int)GoodType.SilverOre];
                 re.Stockpile[(int)GoodType.GoldOre] = 0f;
                 re.Stockpile[(int)GoodType.SilverOre] = 0f;
 
-                float crowns = gold * Goods.GoldSmeltingYield * Goods.CrownsPerKgGold
-                             + silver * Goods.SilverSmeltingYield * Goods.CrownsPerKgSilver;
+                float refinedGold = goldOre * Goods.GoldSmeltingYield;
+                float refinedSilver = silverOre * Goods.SilverSmeltingYield;
+
+                // Mint portion → crowns
+                float mintGold = refinedGold * GoldMintFraction;
+                float mintSilver = refinedSilver * SilverMintFraction;
+                float crowns = mintGold * Goods.CrownsPerKgGold
+                             + mintSilver * Goods.CrownsPerKgSilver;
+
+                // Sell portion → tradeable goods + crown revenue at premium
+                float sellGold = refinedGold - mintGold;
+                float sellSilver = refinedSilver - mintSilver;
+                crowns += sellGold * Goods.CrownsPerKgGold * (1f + SmeltingPremium)
+                        + sellSilver * Goods.CrownsPerKgSilver * (1f + SmeltingPremium);
+
                 re.Treasury += crowns;
-                re.GoldMinted = gold;
-                re.SilverMinted = silver;
+                re.GoldMinted = goldOre;
+                re.SilverMinted = silverOre;
                 re.CrownsMinted = crowns;
+
+                // Deposit tradeable gold/silver into capital county stock
+                int capitalCounty = _realmCapitalCounty[realmId];
+                if (capitalCounty >= 0 && capitalCounty < counties.Length && counties[capitalCounty] != null)
+                {
+                    counties[capitalCounty].Stock[(int)GoodType.Gold] += sellGold;
+                    counties[capitalCounty].Stock[(int)GoodType.Silver] += sellSilver;
+                }
             }
 
             // ── PHASE 6: Trade passes ───────────────────────────────
@@ -786,6 +819,28 @@ namespace EconSim.Core.Economy
             _surplusBuf = new float[_totalCountyCount];
 
             _marketCountyId = state.Economy.MarketCountyId;
+
+            // Resolve realm capital burg → cell → county
+            _realmCapitalCounty = new int[maxRealmId + 1];
+            for (int i = 0; i < _realmCapitalCounty.Length; i++)
+                _realmCapitalCounty[i] = -1;
+
+            if (mapData.Burgs != null)
+            {
+                foreach (var realm in mapData.Realms)
+                {
+                    Burg burg = null;
+                    foreach (var b in mapData.Burgs)
+                        if (b.Id == realm.CapitalBurgId) { burg = b; break; }
+
+                    if (burg != null && mapData.CellById.TryGetValue(burg.CellId, out var cell)
+                        && cell.CountyId > 0 && cell.CountyId < state.Economy.Counties.Length
+                        && state.Economy.Counties[cell.CountyId] != null)
+                    {
+                        _realmCapitalCounty[realm.Id] = cell.CountyId;
+                    }
+                }
+            }
         }
     }
 }
