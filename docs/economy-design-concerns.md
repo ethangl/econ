@@ -25,12 +25,6 @@ mismatch (quantity theory of money) was a big deal.
 
 ### Abstract transport costs
 
-### No seasonality
-
-Production is constant year-round. Medieval agriculture was intensely seasonal
-— surplus at harvest, scarcity in late winter. This flattens out what was
-historically the most important economic rhythm.
-
 ### No weather, disease, or war shocks
 
 The economy is purely endogenous — nothing external can disrupt it. Historically

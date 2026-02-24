@@ -325,11 +325,10 @@ namespace EconSim.Core.Economy
                 if (ce == null) continue;
                 float wave = ce.Latitude < 0 ? -seasonalWave : seasonalWave;
                 float amplitude = Math.Abs(ce.Latitude) / 90f;
-                float seasonalBase = 1f - amplitude * (1f - wave) * 0.5f;
                 for (int g = 0; g < goodsCount; g++)
                 {
                     float cap = ce.Population * ce.Productivity[g];
-                    float sm = 1f - globalSeverity * Goods.SeasonalSensitivity[g] * (1f - seasonalBase);
+                    float sm = 1f + globalSeverity * Goods.SeasonalSensitivity[g] * amplitude * wave * 0.5f;
                     productionCap[g] += cap * sm;
                 }
             }
@@ -366,10 +365,9 @@ namespace EconSim.Core.Economy
                     ? countyFacilityIndices[countyId]
                     : null;
 
-                // Compute per-county seasonal base (shared across goods)
+                // Compute per-county seasonal modifier inputs (shared across goods)
                 float countyWave = ce.Latitude < 0 ? -seasonalWave : seasonalWave;
                 float countyAmplitude = Math.Abs(ce.Latitude) / 90f;
-                float countySeasonalBase = 1f - countyAmplitude * (1f - countyWave) * 0.5f;
 
                 bool isRestDay = todayDow == econ.CountySabbathDay[countyId];
                 if (isRestDay)
@@ -449,8 +447,8 @@ namespace EconSim.Core.Economy
                     {
                         float produced = pop * ce.Productivity[g] * wf;
 
-                        // Seasonal extraction penalty
-                        float sm = 1f - globalSeverity * Goods.SeasonalSensitivity[g] * (1f - countySeasonalBase);
+                        // Seasonal extraction modifier (centered on 1.0: summer boost, winter penalty)
+                        float sm = 1f + globalSeverity * Goods.SeasonalSensitivity[g] * countyAmplitude * countyWave * 0.5f;
                         produced *= sm;
 
                         // Stock-ceiling cap for durable-chain raws (demand-driven extraction)
