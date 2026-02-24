@@ -407,16 +407,15 @@ namespace EconSim.Core.Economy
                             float targetStock = pop * Goods.TargetStockPerPop[output];
                             float maintenance = ce.Stock[output] * Goods.Defs[output].SpoilageRate;
                             float gap = Math.Max(0f, targetStock - ce.Stock[output]);
-                            float dailyNeed = maintenance + gap * Goods.DurableCatchUpRate[output];
-                            float throughput = Math.Min(maxByLabor, dailyNeed * DurableBufferMultiplier);
+                            float dailyNeed = maintenance + gap * Goods.DurableCatchUpRate[output] * DurableBufferMultiplier;
+                            float throughput = Math.Min(maxByLabor, dailyNeed);
 
                             float scale = throughput / def.OutputAmount;
                             for (int ii = 0; ii < def.Inputs.Length; ii++)
                                 ce.FacilityInputNeed[(int)def.Inputs[ii].Good] += scale * def.Inputs[ii].Amount;
                         }
 
-                        // Pass 2: Remaining facilities — IsDurableInput uses stock-ceiling from pass 1,
-                        // commodity facilities use max labor capacity.
+                        // Pass 2: Remaining facilities — signal input demand based on downstream need.
                         // Note: within this pass, smelter (enum 2) runs before charcoalBurner (enum 4),
                         // so charcoal's FacilityInputNeed includes smelter demand when charcoalBurner reads it.
                         for (int fi = 0; fi < indices.Count; fi++)
@@ -431,13 +430,13 @@ namespace EconSim.Core.Economy
                                 : float.MaxValue;
                             float throughput = maxByLabor;
 
+                            // Demand planning: cap by downstream need, NOT current stock.
+                            // Stock ceilings only apply during actual production — demand
+                            // must flow through the chain even when intermediates are stalled.
                             if (Goods.IsDurableInput[output])
                             {
                                 float downstreamDemand = ce.FacilityInputNeed[output];
-                                const float ChainBufferDays = 7f;
-                                float targetStock = downstreamDemand * ChainBufferDays;
-                                float gap = Math.Max(0f, targetStock - ce.Stock[output]);
-                                throughput = Math.Min(throughput, gap);
+                                throughput = Math.Min(throughput, downstreamDemand);
                             }
 
                             float scale = throughput / def.OutputAmount;
@@ -476,15 +475,21 @@ namespace EconSim.Core.Economy
                         ce.Production[g] = produced;
                     }
 
-                    // Facility processing — input/labor constrained, price-throttled for intermediates
+                    // Facility processing — input/labor constrained, price-throttled for intermediates.
+                    // Two-pass: chain intermediates (IsDurableInput) first so they get priority
+                    // access to shared inputs (e.g. charcoalBurner gets timber before carpenter).
                     if (indices != null && indices.Count > 0)
                     {
                         float totalFacWorkers = 0f;
+                        for (int pass = 0; pass < 2; pass++)
+                        {
                         for (int fi = 0; fi < indices.Count; fi++)
                         {
                             var fac = econ.Facilities[indices[fi]];
                             var def = fac.Def;
                             int output = (int)def.OutputGood;
+                            bool isChain = Goods.IsDurableInput[output];
+                            if ((pass == 0) != isChain) continue;
 
                             // Material constraint: min across all inputs
                             float maxByInput = float.MaxValue;
@@ -509,9 +514,9 @@ namespace EconSim.Core.Economy
                                 float currentStock = ce.Stock[output];
                                 float maintenance = currentStock * Goods.Defs[output].SpoilageRate;
                                 float gap = Math.Max(0f, targetStock - currentStock);
-                                float dailyNeed = maintenance + gap * Goods.DurableCatchUpRate[output];
                                 const float DurableBufferMultiplier = 3.0f;
-                                throughput = Math.Min(throughput, dailyNeed * DurableBufferMultiplier);
+                                float dailyNeed = maintenance + gap * Goods.DurableCatchUpRate[output] * DurableBufferMultiplier;
+                                throughput = Math.Min(throughput, dailyNeed);
                             }
 
                             // Stock-ceiling cap for durable-chain intermediates (iron, charcoal)
@@ -547,6 +552,7 @@ namespace EconSim.Core.Economy
                                 ? throughput / def.OutputAmount * def.LaborPerUnit
                                 : 0f;
                             totalFacWorkers += fac.Workforce;
+                        }
                         }
                         ce.FacilityWorkers = totalFacWorkers;
                     }
