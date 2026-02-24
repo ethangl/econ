@@ -317,6 +317,9 @@ namespace EconSim.Core.Economy
             // Precompute seasonal wave from day of year (shared across counties)
             float seasonalWave = (float)Math.Cos(2.0 * Math.PI * (dayOfYear - SimulationConfig.Seasonality.SummerSolsticeDay) / Calendar.DaysPerYear);
             float globalSeverity = SimulationConfig.Seasonality.GlobalSeverity;
+            // Long-term climate wave: slow oscillation over decades (baseline shift)
+            float climateWave = (float)Math.Cos(2.0 * Math.PI * state.CurrentDay / ((double)SimulationConfig.Seasonality.ClimateWavePeriodYears * Calendar.DaysPerYear));
+            float climateAmplitude = SimulationConfig.Seasonality.ClimateWaveAmplitude;
 
             // Extraction capacity
             for (int i = 0; i < countyIds.Length; i++)
@@ -328,7 +331,8 @@ namespace EconSim.Core.Economy
                 for (int g = 0; g < goodsCount; g++)
                 {
                     float cap = ce.Population * ce.Productivity[g];
-                    float sm = 1f + globalSeverity * Goods.SeasonalSensitivity[g] * amplitude * wave * 0.5f;
+                    float sens = Goods.SeasonalSensitivity[g];
+                    float sm = 1f + sens * amplitude * (globalSeverity * wave * 0.5f + climateAmplitude * climateWave);
                     productionCap[g] += cap * sm;
                 }
             }
@@ -447,8 +451,9 @@ namespace EconSim.Core.Economy
                     {
                         float produced = pop * ce.Productivity[g] * wf;
 
-                        // Seasonal extraction modifier (centered on 1.0: summer boost, winter penalty)
-                        float sm = 1f + globalSeverity * Goods.SeasonalSensitivity[g] * countyAmplitude * countyWave * 0.5f;
+                        // Seasonal + climate extraction modifier (seasonal oscillates around climate-shifted baseline)
+                        float sens = Goods.SeasonalSensitivity[g];
+                        float sm = 1f + sens * countyAmplitude * (globalSeverity * countyWave * 0.5f + climateAmplitude * climateWave);
                         produced *= sm;
 
                         // Stock-ceiling cap for durable-chain raws (demand-driven extraction)

@@ -6,7 +6,7 @@ Build the economy in layers, each adding one mechanism. Every layer must run and
 
 Update the econ debug bridge and `analyze_econ.py` with every change.
 
-### [Completed Layers](./economy-complete.md)
+### [Completed Layers](./economy-algorithms.md)
 
 1. Autarky
 2. Feudal Tax Redistribution
@@ -22,6 +22,7 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 12. Remove Quotas and In-kind taxation
 13. Stock-gap production demand for Durables
 14. Transport costs
+15. Seasonality
 
 ### Known Issues and Future Layers
 
