@@ -155,13 +155,17 @@ public class MapOverlayManager
         // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
         private const int ReliefBlurRadius = 4;
         private const float ReliefBlurCrossClassWeight = 0.25f;
-        private const float ReliefBankErosionRadiusTexels = 7f;
-        private const float ReliefBankErosionStrength = 0.010f;
-        private const float ReliefValleyErosionRadiusTexels = 24f;
-        private const float ReliefValleyErosionStrength = 0.020f;
+        private const float ReliefChannelRadiusTexels = 2.6f;
+        private const float ReliefChannelStrength = 0.022f;
+        private const float ReliefBankErosionRadiusTexels = 6.5f;
+        private const float ReliefBankErosionStrength = 0.015f;
+        private const float ReliefBankSharpness = 2.4f;
+        private const float ReliefValleyErosionRadiusTexels = 22f;
+        private const float ReliefValleyErosionStrength = 0.016f;
+        private const float ReliefValleySharpness = 3.0f;
         private const float ReliefLocalReliefNormalization = 0.02f;
-        private const float ReliefLocalReliefInfluence = 1.15f;
-        private const float ReliefValleyHeightExponent = 0.85f;
+        private const float ReliefLocalReliefInfluence = 1.25f;
+        private const float ReliefValleyHeightExponent = 0.70f;
         private const float ReliefLandMinAboveSea = 0.001f;
         private const int ReliefNormalPreBlurPasses = 1;
         private const float ReliefNormalDerivativeScale = 0.12f;
@@ -215,7 +219,7 @@ public class MapOverlayManager
         private const float DefaultNoisyEdgeAmplitudeCap = 8.0f;
         private const float DefaultNoisyEdgeBandPaddingPx = 1.5f;
 
-        private const int OverlayTextureCacheVersion = 8;
+        private const int OverlayTextureCacheVersion = 9;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
         private const string CacheSpatialGridFile = "spatial_grid.bin";
         private const string CachePoliticalIdsFile = "political_ids.bin";
@@ -1611,16 +1615,19 @@ public class MapOverlayManager
                     if (distance >= ReliefValleyErosionRadiusTexels)
                         continue;
 
+                    float channelT = 1f - Mathf.Clamp01(distance / ReliefChannelRadiusTexels);
+                    float channelCarve = channelT * ReliefChannelStrength;
+
                     float bankT = 1f - Mathf.Clamp01(distance / ReliefBankErosionRadiusTexels);
-                    float bankCarve = bankT * bankT * ReliefBankErosionStrength;
+                    float bankCarve = Mathf.Pow(bankT, ReliefBankSharpness) * ReliefBankErosionStrength;
 
                     float valleyT = 1f - Mathf.Clamp01(distance / ReliefValleyErosionRadiusTexels);
-                    float reliefFactor = 0.35f + 0.65f * Mathf.Clamp01(localRelief[idx] * ReliefLocalReliefInfluence);
+                    float reliefFactor = 0.55f + 0.45f * Mathf.Clamp01(localRelief[idx] * ReliefLocalReliefInfluence);
                     float landHeight01 = Mathf.Clamp01((heightData[idx] - seaLevel01) * invLandSpan);
-                    float heightFactor = 0.25f + 0.75f * Mathf.Pow(landHeight01, ReliefValleyHeightExponent);
-                    float valleyCarve = valleyT * valleyT * valleyT * ReliefValleyErosionStrength * reliefFactor * heightFactor;
+                    float heightFactor = 0.40f + 0.60f * Mathf.Pow(landHeight01, ReliefValleyHeightExponent);
+                    float valleyCarve = Mathf.Pow(valleyT, ReliefValleySharpness) * ReliefValleyErosionStrength * reliefFactor * heightFactor;
 
-                    heightData[idx] = Mathf.Max(minLandHeight, heightData[idx] - (bankCarve + valleyCarve));
+                    heightData[idx] = Mathf.Max(minLandHeight, heightData[idx] - (channelCarve + bankCarve + valleyCarve));
                 }
             });
         }
