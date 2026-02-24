@@ -32,6 +32,10 @@ namespace EconSim.Core.Economy
         Stockfish = 23,
         Bread = 24,
         Ale = 25,
+        Gold = 26,
+        Silver = 27,
+        GoldJewelry = 28,
+        SilverJewelry = 29,
     }
 
     public static class Goods
@@ -143,6 +147,10 @@ namespace EconSim.Core.Economy
             (int)GoodType.IronOre,
             (int)GoodType.Iron,
             (int)GoodType.Charcoal,
+            (int)GoodType.GoldJewelry,
+            (int)GoodType.SilverJewelry,
+            (int)GoodType.Gold,
+            (int)GoodType.Silver,
         };
 
         /// <summary>Buy priority order used by inter-realm trade. Always contains all tradeable goods.</summary>
@@ -285,6 +293,10 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.Stockfish,   "stockfish",  GoodCategory.Finished, NeedCategory.Staple, 0.08f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.001f),
                 new GoodDef(GoodType.Bread, "bread", GoodCategory.Finished, NeedCategory.Comfort, 0.05f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.03f),
                 new GoodDef(GoodType.Ale, "ale", GoodCategory.Finished, NeedCategory.Comfort, 0.05f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.03f),
+                new GoodDef(GoodType.Gold, "gold", GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 1050.0f, 1050.0f, 1050.0f, true, false),
+                new GoodDef(GoodType.Silver, "silver", GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 105.0f, 105.0f, 105.0f, true, false),
+                new GoodDef(GoodType.GoldJewelry, "goldJewelry", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0f, 0.0f, 0.0f, 15.0f, 0.75f, 300.0f, true, false, 0.0005f, 0.2f, unitWeight: 0.05f),
+                new GoodDef(GoodType.SilverJewelry, "silverJewelry", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0f, 0.0f, 0.0f, 8.0f, 0.40f, 160.0f, true, false, 0.0005f, 0.3f, unitWeight: 0.1f),
             };
 
             Count = Defs.Length;
@@ -314,7 +326,7 @@ namespace EconSim.Core.Economy
             {
                 var d = Defs[i];
                 IsDurable[i]           = d.TargetStockPerPop > 0f;
-                IsDurableInput[i]      = d.Name is "ironOre" or "wool" or "clay" or "timber" or "iron" or "charcoal";
+                IsDurableInput[i]      = d.Name is "ironOre" or "wool" or "clay" or "timber" or "iron" or "charcoal" or "gold" or "silver";
                 ConsumptionPerPop[i]   = d.ConsumptionPerPop;
                 Names[i]               = d.Name;
                 BasePrice[i]           = d.BasePrice;
