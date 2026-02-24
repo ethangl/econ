@@ -45,6 +45,13 @@ namespace EconSim.Renderer
         [Header("Shader Overlays")]
         private bool useShaderOverlays = true;
         [SerializeField] [Range(1, 8)] private int overlayResolutionMultiplier = 6;  // Higher = smoother borders, more memory
+        [Header("Noisy Zone Edges")]
+        [SerializeField] [Range(0.5f, 12f)] private float noisyEdgeSampleSpacingPx = 2.5f;
+        [SerializeField] [Range(8, 512)] private int noisyEdgeMaxSamples = 96;
+        [SerializeField] [Range(0.2f, 0.95f)] private float noisyEdgeRoughness = 0.58f;
+        [SerializeField] [Range(0.1f, 4f)] private float noisyEdgeAmplitudePerResolution = 0.9f;
+        [SerializeField] [Range(0.5f, 64f)] private float noisyEdgeAmplitudeCap = 8f;
+        [SerializeField] [Range(0f, 8f)] private float noisyEdgeBandPaddingPx = 1.5f;
 
         // Grid mesh with height displacement (Phase 6c)
         // Non-serialized during development - see CLAUDE.md
@@ -193,6 +200,7 @@ namespace EconSim.Renderer
         {
             // selectionDimmingTarget changes take effect through the animation loop.
             overlayManager?.RefreshPathStyleFromMaterial();
+            RefreshNoisyEdgeStyleFromInspector();
         }
 
         private void OnDestroy()
@@ -211,6 +219,7 @@ namespace EconSim.Renderer
         private void Update()
         {
             overlayManager?.RefreshPathStyleFromMaterial();
+            RefreshNoisyEdgeStyleFromInspector();
 
             // Suppress hotkeys while startup screen is open.
             if (EconSim.UI.StartupScreenPanel.IsOpen) return;
@@ -796,7 +805,23 @@ namespace EconSim.Renderer
             overlayManager.SetMapMode(currentMode);
             overlayManager.SetChannelDebugView(channelDebugView);
             overlayManager.RefreshPathStyleFromMaterial();
+            RefreshNoisyEdgeStyleFromInspector();
             ApplyOverlayForCurrentMode();
+        }
+
+        private void RefreshNoisyEdgeStyleFromInspector()
+        {
+            if (overlayManager == null)
+                return;
+
+            overlayManager.SetNoisyEdgeStyle(
+                noisyEdgeSampleSpacingPx,
+                noisyEdgeMaxSamples,
+                noisyEdgeRoughness,
+                noisyEdgeAmplitudePerResolution,
+                noisyEdgeAmplitudeCap,
+                noisyEdgeBandPaddingPx,
+                rebuildSpatialTextures: true);
         }
 
         /// <summary>
