@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using DelaunatorSharp;
 
 namespace MapGen.Core
@@ -69,15 +68,21 @@ namespace MapGen.Core
         /// <summary>Get adjacent triangles (via opposite half-edges)</summary>
         public int[] AdjacentTriangles(int t)
         {
-            var result = new List<int>(3);
-            for (int i = 0; i < 3; i++)
-            {
-                int e = 3 * t + i;
-                int opposite = Halfedges[e];
-                if (opposite >= 0)
-                    result.Add(TriangleOfEdge(opposite));
-            }
-            return result.ToArray();
+            int e0 = Halfedges[3 * t];
+            int e1 = Halfedges[3 * t + 1];
+            int e2 = Halfedges[3 * t + 2];
+
+            int count = 0;
+            if (e0 >= 0) count++;
+            if (e1 >= 0) count++;
+            if (e2 >= 0) count++;
+
+            var result = new int[count];
+            int idx = 0;
+            if (e0 >= 0) result[idx++] = TriangleOfEdge(e0);
+            if (e1 >= 0) result[idx++] = TriangleOfEdge(e1);
+            if (e2 >= 0) result[idx++] = TriangleOfEdge(e2);
+            return result;
         }
 
         /// <summary>
@@ -86,18 +91,29 @@ namespace MapGen.Core
         /// </summary>
         public int[] EdgesAroundPoint(int start)
         {
-            var result = new List<int>();
+            int count = 0;
             int incoming = start;
 
             do
             {
-                result.Add(incoming);
+                count++;
                 int outgoing = NextHalfedge(incoming);
                 incoming = Halfedges[outgoing];
             }
-            while (incoming >= 0 && incoming != start && result.Count < 100);
+            while (incoming >= 0 && incoming != start && count < 100);
 
-            return result.ToArray();
+            var result = new int[count];
+            incoming = start;
+            int idx = 0;
+            do
+            {
+                result[idx++] = incoming;
+                int outgoing = NextHalfedge(incoming);
+                incoming = Halfedges[outgoing];
+            }
+            while (incoming >= 0 && incoming != start && idx < count);
+
+            return result;
         }
 
         /// <summary>Calculate circumcenter of a triangle</summary>

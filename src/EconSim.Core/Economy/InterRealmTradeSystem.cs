@@ -21,6 +21,7 @@ namespace EconSim.Core.Economy
 
         /// <summary>County ID → Realm ID (for deficit scan).</summary>
         int[] _countyToRealm;
+        int[] _countyIds;
 
         public void Initialize(SimulationState state, MapData mapData)
         {
@@ -40,9 +41,12 @@ namespace EconSim.Core.Economy
             foreach (var county in mapData.Counties)
                 if (county.Id > maxCountyId) maxCountyId = county.Id;
 
+            _countyIds = new int[mapData.Counties.Count];
             _countyToRealm = new int[maxCountyId + 1];
-            foreach (var county in mapData.Counties)
+            for (int i = 0; i < mapData.Counties.Count; i++)
             {
+                var county = mapData.Counties[i];
+                _countyIds[i] = county.Id;
                 int provId = county.ProvinceId;
                 _countyToRealm[county.Id] = provId >= 0 && provId < provinceToRealm.Length
                     ? provinceToRealm[provId]
@@ -55,6 +59,7 @@ namespace EconSim.Core.Economy
             var econ = state.Economy;
             var counties = econ.Counties;
             var realms = econ.Realms;
+            var countyIds = _countyIds;
 
             // Trade accumulators now cleared by FiscalSystem.ResetAccumulators.
 
@@ -67,9 +72,10 @@ namespace EconSim.Core.Economy
                 float durableCatchUpRate = Goods.DurableCatchUpRate[g];
                 if (retainRate <= 0f && targetStockPerPop <= 0f) continue;
 
-                for (int i = 0; i < counties.Length; i++)
+                for (int i = 0; i < countyIds.Length; i++)
                 {
-                    var ce = counties[i];
+                    int countyId = countyIds[i];
+                    var ce = counties[countyId];
                     if (ce == null) continue;
 
                     float shortfall;
@@ -86,7 +92,7 @@ namespace EconSim.Core.Economy
                     }
 
                     if (shortfall > 0f)
-                        realms[_countyToRealm[i]].Deficit[g] += shortfall;
+                        realms[_countyToRealm[countyId]].Deficit[g] += shortfall;
                 }
             }
 
@@ -111,9 +117,9 @@ namespace EconSim.Core.Economy
 
                 float totalDemand = 0f;
                 float totalStock = 0f;
-                for (int i = 0; i < counties.Length; i++)
+                for (int i = 0; i < countyIds.Length; i++)
                 {
-                    var ce = counties[i];
+                    var ce = counties[countyIds[i]];
                     if (ce == null) continue;
                     totalDemand += ce.FacilityInputNeed[g]
                                  + ce.Population * (demandPerPop + replacementPerPop);

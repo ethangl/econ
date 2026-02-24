@@ -38,18 +38,33 @@ namespace EconSim.Core.Economy
         int[] _countyProvinceIds;
         int[] _provinceIds;
         int[] _provinceRealmIds;
+        int[] _idToIndex;
+        float[] _migrationOut;
+        float[] _migrationIn;
 
         public void Initialize(SimulationState state, MapData mapData)
         {
             _countyIds = new int[mapData.Counties.Count];
             _countyRealmIds = new int[mapData.Counties.Count];
             _countyProvinceIds = new int[mapData.Counties.Count];
+            int maxCountyId = 0;
             for (int i = 0; i < mapData.Counties.Count; i++)
             {
-                _countyIds[i] = mapData.Counties[i].Id;
+                int countyId = mapData.Counties[i].Id;
+                _countyIds[i] = countyId;
                 _countyRealmIds[i] = mapData.Counties[i].RealmId;
                 _countyProvinceIds[i] = mapData.Counties[i].ProvinceId;
+                if (countyId > maxCountyId) maxCountyId = countyId;
             }
+
+            _idToIndex = new int[maxCountyId + 1];
+            for (int i = 0; i < _idToIndex.Length; i++)
+                _idToIndex[i] = -1;
+            for (int i = 0; i < _countyIds.Length; i++)
+                _idToIndex[_countyIds[i]] = i;
+
+            _migrationOut = new float[_countyIds.Length];
+            _migrationIn = new float[_countyIds.Length];
 
             _provinceIds = new int[mapData.Provinces.Count];
             _provinceRealmIds = new int[mapData.Provinces.Count];
@@ -102,19 +117,9 @@ namespace EconSim.Core.Economy
             }
 
             // Phase 2: Migration (buffered, atomic)
-            // Buffer: parallel arrays indexed by _countyIds index
-            var migrationOut = new float[_countyIds.Length];
-            var migrationIn = new float[_countyIds.Length];
-
-            // Build reverse index: countyId -> _countyIds index
-            int maxId = 0;
-            for (int i = 0; i < _countyIds.Length; i++)
-                if (_countyIds[i] > maxId) maxId = _countyIds[i];
-            var idToIndex = new int[maxId + 1];
-            for (int i = 0; i < idToIndex.Length; i++)
-                idToIndex[i] = -1;
-            for (int i = 0; i < _countyIds.Length; i++)
-                idToIndex[_countyIds[i]] = i;
+            // Buffers are initialized once; clear and reuse each monthly tick.
+            Array.Clear(_migrationOut, 0, _migrationOut.Length);
+            Array.Clear(_migrationIn, 0, _migrationIn.Length);
 
             for (int i = 0; i < _countyIds.Length; i++)
             {
@@ -138,8 +143,8 @@ namespace EconSim.Core.Economy
                 for (int n = 0; n < neighbors.Length; n++)
                 {
                     int nid = neighbors[n];
-                    if (nid >= idToIndex.Length || idToIndex[nid] < 0) continue;
-                    int nIdx = idToIndex[nid];
+                    if (nid >= _idToIndex.Length || _idToIndex[nid] < 0) continue;
+                    int nIdx = _idToIndex[nid];
 
                     // Same realm only
                     if (_countyRealmIds[nIdx] != realmId) continue;
@@ -165,14 +170,14 @@ namespace EconSim.Core.Economy
 
                 if (migrants <= 0f) continue;
 
-                migrationOut[i] += migrants;
-                migrationIn[bestNeighborIdx] += migrants;
+                _migrationOut[i] += migrants;
+                _migrationIn[bestNeighborIdx] += migrants;
             }
 
             // Apply migration atomically
             for (int i = 0; i < _countyIds.Length; i++)
             {
-                float net = migrationIn[i] - migrationOut[i];
+                float net = _migrationIn[i] - _migrationOut[i];
                 if (net == 0f) continue;
 
                 var ce = counties[_countyIds[i]];
