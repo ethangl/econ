@@ -11,6 +11,9 @@ namespace EconSim.Core.Economy
         /// <summary>County population (cached at init).</summary>
         public float Population;
 
+        /// <summary>Geographic latitude in degrees (cached at init for seasonal calculations).</summary>
+        public float Latitude;
+
         /// <summary>Goods produced per person per day, per good type (set at init from biome).</summary>
         public float[] Productivity = new float[Goods.Count];
 

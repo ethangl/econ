@@ -49,6 +49,18 @@ namespace EconSim.Core.Simulation
         public const int MaxTicksPerFrame = 4;
 
         /// <summary>
+        /// Seasonal extraction penalty parameters.
+        /// </summary>
+        public static class Seasonality
+        {
+            /// <summary>Global severity (0 = off, 1 = full seasonal effect).</summary>
+            public const float GlobalSeverity = 1.0f;
+
+            /// <summary>Day of year for northern-hemisphere summer solstice (peak production).</summary>
+            public const int SummerSolsticeDay = 170;
+        }
+
+        /// <summary>
         /// Configuration for static transport backbone generation.
         /// </summary>
         public static class Roads
