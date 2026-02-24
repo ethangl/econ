@@ -3,7 +3,6 @@
 // Vendored and simplified for MapGen
 
 using System;
-using System.Linq;
 
 namespace DelaunatorSharp
 {
@@ -283,8 +282,15 @@ namespace DelaunatorSharp
 
             hullPrev = hullNext = hullTri = null;
 
-            Triangles = Triangles.Take(trianglesLen).ToArray();
-            Halfedges = Halfedges.Take(trianglesLen).ToArray();
+            if (trianglesLen < Triangles.Length)
+            {
+                var trimmedTriangles = new int[trianglesLen];
+                var trimmedHalfedges = new int[trianglesLen];
+                Array.Copy(Triangles, 0, trimmedTriangles, 0, trianglesLen);
+                Array.Copy(Halfedges, 0, trimmedHalfedges, 0, trianglesLen);
+                Triangles = trimmedTriangles;
+                Halfedges = trimmedHalfedges;
+            }
         }
 
         private int Legalize(int a)

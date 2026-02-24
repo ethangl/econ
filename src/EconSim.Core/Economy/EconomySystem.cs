@@ -31,6 +31,7 @@ namespace EconSim.Core.Economy
         static readonly bool[] ComfortIsDurable; // true = stock/target, false = consumption/need
         const float NeedsWeight = 0.7f;
         const float ComfortWeight = 0.3f;
+        int[] _countyIds;
 
         static EconomySystem()
         {
@@ -82,6 +83,10 @@ namespace EconSim.Core.Economy
 
         public void Initialize(SimulationState state, MapData mapData)
         {
+            _countyIds = new int[mapData.Counties.Count];
+            for (int i = 0; i < mapData.Counties.Count; i++)
+                _countyIds[i] = mapData.Counties[i].Id;
+
             int maxCountyId = 0;
             foreach (var county in mapData.Counties)
             {
@@ -294,6 +299,7 @@ namespace EconSim.Core.Economy
             var econ = state.Economy;
             var counties = econ.Counties;
             var countyFacilityIndices = econ.CountyFacilityIndices;
+            var countyIds = _countyIds;
             int goodsCount = Goods.Count;
             int todayDow = Calendar.DayOfWeek(state.CurrentDay);
 
@@ -301,9 +307,9 @@ namespace EconSim.Core.Economy
             var productionCap = econ.ProductionCapacity;
             Array.Clear(productionCap, 0, goodsCount);
             // Extraction capacity
-            for (int i = 0; i < counties.Length; i++)
+            for (int i = 0; i < countyIds.Length; i++)
             {
-                var ce = counties[i];
+                var ce = counties[countyIds[i]];
                 if (ce == null) continue;
                 for (int g = 0; g < goodsCount; g++)
                     productionCap[g] += ce.Population * ce.Productivity[g];
@@ -312,12 +318,13 @@ namespace EconSim.Core.Economy
             var allFacilities = econ.Facilities;
             if (allFacilities != null)
             {
-                for (int i = 0; i < counties.Length; i++)
+                for (int i = 0; i < countyIds.Length; i++)
                 {
-                    var ce = counties[i];
+                    int countyId = countyIds[i];
+                    var ce = counties[countyId];
                     if (ce == null) continue;
-                    var indices = countyFacilityIndices != null && i < countyFacilityIndices.Length
-                        ? countyFacilityIndices[i] : null;
+                    var indices = countyFacilityIndices != null && countyId < countyFacilityIndices.Length
+                        ? countyFacilityIndices[countyId] : null;
                     if (indices == null || indices.Count == 0) continue;
                     float pop = ce.Population;
                     for (int fi = 0; fi < indices.Count; fi++)
@@ -329,17 +336,18 @@ namespace EconSim.Core.Economy
                 }
             }
 
-            for (int i = 0; i < counties.Length; i++)
+            for (int i = 0; i < countyIds.Length; i++)
             {
-                var ce = counties[i];
+                int countyId = countyIds[i];
+                var ce = counties[countyId];
                 if (ce == null) continue;
 
                 float pop = ce.Population;
-                var indices = countyFacilityIndices != null && i < countyFacilityIndices.Length
-                    ? countyFacilityIndices[i]
+                var indices = countyFacilityIndices != null && countyId < countyFacilityIndices.Length
+                    ? countyFacilityIndices[countyId]
                     : null;
 
-                bool isRestDay = todayDow == econ.CountySabbathDay[i];
+                bool isRestDay = todayDow == econ.CountySabbathDay[countyId];
                 if (isRestDay)
                 {
                     // Sunday: no production, zero out for clean downstream reads
@@ -620,17 +628,16 @@ namespace EconSim.Core.Economy
             // Compute effective demand per pop (used by FiscalSystem)
             var demandPerPop = econ.EffectiveDemandPerPop;
             float totalPop = 0f;
-            for (int i = 0; i < counties.Length; i++)
-                if (counties[i] != null) totalPop += counties[i].Population;
+            for (int i = 0; i < countyIds.Length; i++)
+                totalPop += counties[countyIds[i]].Population;
             for (int g = 0; g < goodsCount; g++)
             {
                 if (Goods.TargetStockPerPop[g] > 0f && totalPop > 0f)
                 {
                     float totalDemand = 0f;
-                    for (int i = 0; i < counties.Length; i++)
+                    for (int i = 0; i < countyIds.Length; i++)
                     {
-                        var c = counties[i];
-                        if (c == null) continue;
+                        var c = counties[countyIds[i]];
                         totalDemand += c.Consumption[g] + c.UnmetNeed[g];
                     }
                     demandPerPop[g] = totalDemand / totalPop;

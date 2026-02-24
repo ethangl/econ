@@ -54,11 +54,17 @@ namespace MapGen.Core
 
                 // Cells adjacent to this vertex = points of the triangle
                 var (p0, p1, p2) = delaunay.PointsOfTriangle(t);
-                var cells = new List<int>();
-                if (p0 < interiorCount) cells.Add(p0);
-                if (p1 < interiorCount) cells.Add(p1);
-                if (p2 < interiorCount) cells.Add(p2);
-                mesh.VertexCells[t] = cells.ToArray();
+                int cellCount = 0;
+                if (p0 < interiorCount) cellCount++;
+                if (p1 < interiorCount) cellCount++;
+                if (p2 < interiorCount) cellCount++;
+
+                var cells = new int[cellCount];
+                int ci = 0;
+                if (p0 < interiorCount) cells[ci++] = p0;
+                if (p1 < interiorCount) cells[ci++] = p1;
+                if (p2 < interiorCount) cells[ci++] = p2;
+                mesh.VertexCells[t] = cells;
 
                 // Neighboring vertices = adjacent triangles
                 mesh.VertexNeighbors[t] = delaunay.AdjacentTriangles(t);
@@ -74,15 +80,6 @@ namespace MapGen.Core
             Array.Copy(delaunay.Points, mesh.CellCenters, interiorCount);
 
             // For each interior point, find its Voronoi cell
-            var cellVertexLists = new List<int>[interiorCount];
-            var cellNeighborLists = new List<int>[interiorCount];
-
-            for (int i = 0; i < interiorCount; i++)
-            {
-                cellVertexLists[i] = new List<int>();
-                cellNeighborLists[i] = new List<int>();
-            }
-
             // Process half-edges to build cell data
             var processedPoints = new bool[delaunay.Points.Length];
 
@@ -97,32 +94,36 @@ namespace MapGen.Core
 
                 // Get all edges around this point
                 var edges = delaunay.EdgesAroundPoint(e);
-                bool isBoundary = false;
+                var cellVertices = new int[edges.Length];
+                int neighborCount = 0;
 
-                foreach (int edge in edges)
+                for (int edgeIndex = 0; edgeIndex < edges.Length; edgeIndex++)
                 {
+                    int edge = edges[edgeIndex];
                     // Vertex = triangle containing this edge
                     int vertex = delaunay.TriangleOfEdge(edge);
-                    cellVertexLists[p].Add(vertex);
+                    cellVertices[edgeIndex] = vertex;
 
                     // Neighbor = point at start of this edge
                     int neighbor = delaunay.Triangles[edge];
                     if (neighbor < interiorCount)
-                    {
-                        cellNeighborLists[p].Add(neighbor);
-                    }
+                        neighborCount++;
+                }
+
+                var cellNeighbors = new int[neighborCount];
+                int neighborIdx = 0;
+                for (int edgeIndex = 0; edgeIndex < edges.Length; edgeIndex++)
+                {
+                    int neighbor = delaunay.Triangles[edges[edgeIndex]];
+                    if (neighbor < interiorCount)
+                        cellNeighbors[neighborIdx++] = neighbor;
                 }
 
                 // Check if cell is on boundary (has fewer neighbors than vertices)
                 // or if loop didn't close
-                if (edges.Length > cellNeighborLists[p].Count)
-                {
-                    isBoundary = true;
-                }
-
-                mesh.CellVertices[p] = cellVertexLists[p].ToArray();
-                mesh.CellNeighbors[p] = cellNeighborLists[p].ToArray();
-                mesh.CellIsBoundary[p] = isBoundary;
+                mesh.CellVertices[p] = cellVertices;
+                mesh.CellNeighbors[p] = cellNeighbors;
+                mesh.CellIsBoundary[p] = edges.Length > neighborCount;
             }
 
             // Build explicit edge list
@@ -137,9 +138,8 @@ namespace MapGen.Core
         /// </summary>
         private static void BuildEdges(CellMesh mesh, Delaunay delaunay, int interiorCount)
         {
-            var edges = new List<(int V0, int V1)>();
-            var edgeCells = new List<(int C0, int C1)>();
-            var edgeIndices = new Dictionary<(int, int), int>();
+            var edges = new List<(int V0, int V1)>(delaunay.Triangles.Length / 2);
+            var edgeCells = new List<(int C0, int C1)>(delaunay.Triangles.Length / 2);
 
             // Cell edge lists
             var cellEdgeLists = new List<int>[interiorCount];
@@ -178,10 +178,6 @@ namespace MapGen.Core
                 int edgeIndex = edges.Count;
                 edges.Add((t0, t1));
                 edgeCells.Add((c0, c1));
-
-                // Track edge → cells mapping
-                var key = t0 < t1 ? (t0, t1) : (t1, t0);
-                edgeIndices[key] = edgeIndex;
 
                 // Add to cell edge lists
                 if (c0 >= 0)
