@@ -52,6 +52,8 @@ namespace EconSim.Renderer
         [SerializeField] [Range(0.1f, 4f)] private float noisyEdgeAmplitudePerResolution = 0.9f;
         [SerializeField] [Range(0.5f, 64f)] private float noisyEdgeAmplitudeCap = 8f;
         [SerializeField] [Range(0f, 8f)] private float noisyEdgeBandPaddingPx = 1.5f;
+        private MapOverlayManager.NoisyEdgeStyle lastAppliedNoisyEdgeStyle;
+        private bool hasLastAppliedNoisyEdgeStyle;
 
         // Grid mesh with height displacement (Phase 6c)
         // Non-serialized during development - see CLAUDE.md
@@ -214,6 +216,7 @@ namespace EconSim.Renderer
 
             // Clean up overlay manager textures
             overlayManager?.Dispose();
+            hasLastAppliedNoisyEdgeStyle = false;
         }
 
         private void Update()
@@ -805,23 +808,33 @@ namespace EconSim.Renderer
             overlayManager.SetMapMode(currentMode);
             overlayManager.SetChannelDebugView(channelDebugView);
             overlayManager.RefreshPathStyleFromMaterial();
-            RefreshNoisyEdgeStyleFromInspector();
+            RefreshNoisyEdgeStyleFromInspector(force: true);
             ApplyOverlayForCurrentMode();
         }
 
-        private void RefreshNoisyEdgeStyleFromInspector()
+        private MapOverlayManager.NoisyEdgeStyle BuildInspectorNoisyEdgeStyle()
         {
-            if (overlayManager == null)
-                return;
-
-            overlayManager.SetNoisyEdgeStyle(
+            return new MapOverlayManager.NoisyEdgeStyle(
                 noisyEdgeSampleSpacingPx,
                 noisyEdgeMaxSamples,
                 noisyEdgeRoughness,
                 noisyEdgeAmplitudePerResolution,
                 noisyEdgeAmplitudeCap,
-                noisyEdgeBandPaddingPx,
-                rebuildSpatialTextures: true);
+                noisyEdgeBandPaddingPx);
+        }
+
+        private void RefreshNoisyEdgeStyleFromInspector(bool force = false)
+        {
+            if (overlayManager == null)
+                return;
+
+            MapOverlayManager.NoisyEdgeStyle inspectorStyle = BuildInspectorNoisyEdgeStyle();
+            if (!force && hasLastAppliedNoisyEdgeStyle && lastAppliedNoisyEdgeStyle.Equals(inspectorStyle))
+                return;
+
+            overlayManager.SetNoisyEdgeStyle(inspectorStyle, rebuildSpatialTextures: true);
+            lastAppliedNoisyEdgeStyle = overlayManager.GetNoisyEdgeStyle();
+            hasLastAppliedNoisyEdgeStyle = true;
         }
 
         /// <summary>

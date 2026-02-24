@@ -167,12 +167,7 @@ public class MapOverlayManager
         private float cachedPathDashLength = -1f;
         private float cachedPathGapLength = -1f;
         private float cachedPathWidth = -1f;
-        private float noisyEdgeSampleSpacingPx = DefaultNoisyEdgeSampleSpacingPx;
-        private int noisyEdgeMaxSamples = DefaultNoisyEdgeMaxSamples;
-        private float noisyEdgeRoughness = DefaultNoisyEdgeRoughness;
-        private float noisyEdgeAmplitudePerResolution = DefaultNoisyEdgeAmplitudePerResolution;
-        private float noisyEdgeAmplitudeCap = DefaultNoisyEdgeAmplitudeCap;
-        private float noisyEdgeBandPaddingPx = DefaultNoisyEdgeBandPaddingPx;
+        private NoisyEdgeStyle noisyEdgeStyle = NoisyEdgeStyle.Default;
         private readonly Dictionary<MapView.MapMode, Texture2D> modeColorResolveCacheByMode = new Dictionary<MapView.MapMode, Texture2D>();
         private readonly Dictionary<MapView.MapMode, int> modeColorResolveCacheRevisionByMode = new Dictionary<MapView.MapMode, int>();
         private readonly Dictionary<MapView.MapMode, int> modeColorResolveRevisionByKey = new Dictionary<MapView.MapMode, int>();
@@ -215,7 +210,7 @@ public class MapOverlayManager
         private const float DefaultNoisyEdgeAmplitudeCap = 8.0f;
         private const float DefaultNoisyEdgeBandPaddingPx = 1.5f;
 
-        private const int OverlayTextureCacheVersion = 6;
+        private const int OverlayTextureCacheVersion = 7;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
         private const string CacheSpatialGridFile = "spatial_grid.bin";
         private const string CachePoliticalIdsFile = "political_ids.bin";
@@ -248,6 +243,70 @@ public class MapOverlayManager
             public float NoisyEdgeAmplitudePerResolution;
             public float NoisyEdgeAmplitudeCap;
             public float NoisyEdgeBandPaddingPx;
+        }
+
+        public readonly struct NoisyEdgeStyle : IEquatable<NoisyEdgeStyle>
+        {
+            public readonly float SampleSpacingPx;
+            public readonly int MaxSamples;
+            public readonly float Roughness;
+            public readonly float AmplitudePerResolution;
+            public readonly float AmplitudeCap;
+            public readonly float BandPaddingPx;
+
+            public NoisyEdgeStyle(
+                float sampleSpacingPx,
+                int maxSamples,
+                float roughness,
+                float amplitudePerResolution,
+                float amplitudeCap,
+                float bandPaddingPx)
+            {
+                SampleSpacingPx = sampleSpacingPx;
+                MaxSamples = maxSamples;
+                Roughness = roughness;
+                AmplitudePerResolution = amplitudePerResolution;
+                AmplitudeCap = amplitudeCap;
+                BandPaddingPx = bandPaddingPx;
+            }
+
+            public static NoisyEdgeStyle Default => new NoisyEdgeStyle(
+                DefaultNoisyEdgeSampleSpacingPx,
+                DefaultNoisyEdgeMaxSamples,
+                DefaultNoisyEdgeRoughness,
+                DefaultNoisyEdgeAmplitudePerResolution,
+                DefaultNoisyEdgeAmplitudeCap,
+                DefaultNoisyEdgeBandPaddingPx);
+
+            public bool Equals(NoisyEdgeStyle other)
+            {
+                return Mathf.Approximately(SampleSpacingPx, other.SampleSpacingPx) &&
+                       MaxSamples == other.MaxSamples &&
+                       Mathf.Approximately(Roughness, other.Roughness) &&
+                       Mathf.Approximately(AmplitudePerResolution, other.AmplitudePerResolution) &&
+                       Mathf.Approximately(AmplitudeCap, other.AmplitudeCap) &&
+                       Mathf.Approximately(BandPaddingPx, other.BandPaddingPx);
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is NoisyEdgeStyle other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    int hash = 17;
+                    hash = hash * 31 + SampleSpacingPx.GetHashCode();
+                    hash = hash * 31 + MaxSamples;
+                    hash = hash * 31 + Roughness.GetHashCode();
+                    hash = hash * 31 + AmplitudePerResolution.GetHashCode();
+                    hash = hash * 31 + AmplitudeCap.GetHashCode();
+                    hash = hash * 31 + BandPaddingPx.GetHashCode();
+                    return hash;
+                }
+            }
         }
 
         private readonly struct SpatialCellInfo
@@ -681,12 +740,12 @@ public class MapOverlayManager
                     LatitudeSouth = mapData?.Info?.World != null ? mapData.Info.World.LatitudeSouth : float.NaN,
                     LatitudeNorth = mapData?.Info?.World != null ? mapData.Info.World.LatitudeNorth : float.NaN,
                     RoadStateHash = cachedRoadStateHash,
-                    NoisyEdgeSampleSpacingPx = noisyEdgeSampleSpacingPx,
-                    NoisyEdgeMaxSamples = noisyEdgeMaxSamples,
-                    NoisyEdgeRoughness = noisyEdgeRoughness,
-                    NoisyEdgeAmplitudePerResolution = noisyEdgeAmplitudePerResolution,
-                    NoisyEdgeAmplitudeCap = noisyEdgeAmplitudeCap,
-                    NoisyEdgeBandPaddingPx = noisyEdgeBandPaddingPx
+                    NoisyEdgeSampleSpacingPx = noisyEdgeStyle.SampleSpacingPx,
+                    NoisyEdgeMaxSamples = noisyEdgeStyle.MaxSamples,
+                    NoisyEdgeRoughness = noisyEdgeStyle.Roughness,
+                    NoisyEdgeAmplitudePerResolution = noisyEdgeStyle.AmplitudePerResolution,
+                    NoisyEdgeAmplitudeCap = noisyEdgeStyle.AmplitudeCap,
+                    NoisyEdgeBandPaddingPx = noisyEdgeStyle.BandPaddingPx
                 };
 
                 string metadataPath = Path.Combine(cacheDirectory, OverlayTextureCacheMetadataFileName);
@@ -733,17 +792,17 @@ public class MapOverlayManager
                     return false;
             }
 
-            if (metadata.NoisyEdgeMaxSamples != noisyEdgeMaxSamples)
+            if (metadata.NoisyEdgeMaxSamples != noisyEdgeStyle.MaxSamples)
                 return false;
-            if (!CacheFloatMatches(metadata.NoisyEdgeSampleSpacingPx, noisyEdgeSampleSpacingPx))
+            if (!CacheFloatMatches(metadata.NoisyEdgeSampleSpacingPx, noisyEdgeStyle.SampleSpacingPx))
                 return false;
-            if (!CacheFloatMatches(metadata.NoisyEdgeRoughness, noisyEdgeRoughness))
+            if (!CacheFloatMatches(metadata.NoisyEdgeRoughness, noisyEdgeStyle.Roughness))
                 return false;
-            if (!CacheFloatMatches(metadata.NoisyEdgeAmplitudePerResolution, noisyEdgeAmplitudePerResolution))
+            if (!CacheFloatMatches(metadata.NoisyEdgeAmplitudePerResolution, noisyEdgeStyle.AmplitudePerResolution))
                 return false;
-            if (!CacheFloatMatches(metadata.NoisyEdgeAmplitudeCap, noisyEdgeAmplitudeCap))
+            if (!CacheFloatMatches(metadata.NoisyEdgeAmplitudeCap, noisyEdgeStyle.AmplitudeCap))
                 return false;
-            if (!CacheFloatMatches(metadata.NoisyEdgeBandPaddingPx, noisyEdgeBandPaddingPx))
+            if (!CacheFloatMatches(metadata.NoisyEdgeBandPaddingPx, noisyEdgeStyle.BandPaddingPx))
                 return false;
 
             return true;
@@ -994,9 +1053,8 @@ public class MapOverlayManager
                     var p1 = mapData.Vertices[ev1];
                     Vector2 edgeV0 = new Vector2(p0.X * scale, p0.Y * scale);
                     Vector2 edgeV1 = new Vector2(p1.X * scale, p1.Y * scale);
-                    uint edgeSeed = MixHash(MixHash((uint)seed, (uint)pending.CellId), (uint)cell.Id);
-                    edgeSeed = MixHash(edgeSeed, (uint)Mathf.Min(ev0, ev1));
-                    edgeSeed = MixHash(edgeSeed, (uint)Mathf.Max(ev0, ev1));
+                    uint edgeSeed = BuildUnorderedPairSeed((uint)seed, pending.CellId, cell.Id);
+                    edgeSeed = BuildUnorderedPairSeed(edgeSeed, ev0, ev1);
 
                     sharedEdges.Add(new SharedVoronoiEdge(
                         pending.CellId,
@@ -1033,13 +1091,13 @@ public class MapOverlayManager
             if (amplitude < 0.75f)
                 return;
 
-            int sampleCount = Mathf.Clamp(Mathf.CeilToInt(length / noisyEdgeSampleSpacingPx), 4, noisyEdgeMaxSamples);
+            int sampleCount = Mathf.Clamp(Mathf.CeilToInt(length / noisyEdgeStyle.SampleSpacingPx), 4, noisyEdgeStyle.MaxSamples);
             var offsets = new float[sampleCount + 1];
             offsets[0] = 0f;
             offsets[sampleCount] = 0f;
             BuildNoisyEdgeOffsets(offsets, 0, sampleCount, amplitude, edge.Seed);
 
-            float band = amplitude + noisyEdgeBandPaddingPx;
+            float band = amplitude + noisyEdgeStyle.BandPaddingPx;
             int minX = Mathf.Max(0, Mathf.FloorToInt(Mathf.Min(edge.V0.x, edge.V1.x) - band));
             int maxX = Mathf.Min(gridWidth - 1, Mathf.CeilToInt(Mathf.Max(edge.V0.x, edge.V1.x) + band));
             int minY = Mathf.Max(0, Mathf.FloorToInt(Mathf.Min(edge.V0.y, edge.V1.y) - band));
@@ -1075,7 +1133,7 @@ public class MapOverlayManager
 
         private float GetNoisyEdgeBaseAmplitudePixels()
         {
-            return Mathf.Min(noisyEdgeAmplitudeCap, Mathf.Max(1.0f, resolutionMultiplier * noisyEdgeAmplitudePerResolution));
+            return Mathf.Min(noisyEdgeStyle.AmplitudeCap, Mathf.Max(1.0f, resolutionMultiplier * noisyEdgeStyle.AmplitudePerResolution));
         }
 
         private void BuildNoisyEdgeOffsets(float[] offsets, int start, int end, float amplitude, uint seed)
@@ -1088,7 +1146,7 @@ public class MapOverlayManager
             float jitter = HashSigned(seed, start, mid, end) * amplitude;
             offsets[mid] = center + jitter;
 
-            float nextAmplitude = amplitude * noisyEdgeRoughness;
+            float nextAmplitude = amplitude * noisyEdgeStyle.Roughness;
             BuildNoisyEdgeOffsets(offsets, start, mid, nextAmplitude, seed);
             BuildNoisyEdgeOffsets(offsets, mid, end, nextAmplitude, seed);
         }
@@ -1118,11 +1176,27 @@ public class MapOverlayManager
 
             for (int i = 0; i < controlPoints.Count - 1; i++)
             {
-                uint segmentSeed = MixHash(seed, (uint)i);
+                uint segmentSeed = BuildSegmentSeed(seed, i);
                 AppendNoisySegment(result, controlPoints[i], controlPoints[i + 1], segmentSeed, amplitudeScale);
             }
 
             return result;
+        }
+
+        private List<Vector2> BuildNoisyRasterPath(
+            List<Vector2> controlPoints,
+            uint seed,
+            float amplitudeScale,
+            int smoothSamplesPerSegment)
+        {
+            List<Vector2> noisyPath = BuildNoisyPolyline(controlPoints, seed, amplitudeScale);
+            if (noisyPath == null || noisyPath.Count < 2)
+                return noisyPath;
+
+            if (smoothSamplesPerSegment <= 0)
+                return noisyPath;
+
+            return SmoothPath(noisyPath, smoothSamplesPerSegment);
         }
 
         private void AppendNoisySegment(List<Vector2> output, Vector2 a, Vector2 b, uint seed, float amplitudeScale)
@@ -1140,7 +1214,7 @@ public class MapOverlayManager
             if (HashSigned(seed, 11, 17, 29) < 0f)
                 normal = -normal;
 
-            int sampleCount = Mathf.Clamp(Mathf.CeilToInt(length / noisyEdgeSampleSpacingPx), 2, noisyEdgeMaxSamples);
+            int sampleCount = Mathf.Clamp(Mathf.CeilToInt(length / noisyEdgeStyle.SampleSpacingPx), 2, noisyEdgeStyle.MaxSamples);
             float maxAmplitude = GetNoisyEdgeBaseAmplitudePixels() * Mathf.Max(0f, amplitudeScale);
             float amplitude = Mathf.Min(maxAmplitude, length * 0.2f);
 
@@ -1162,6 +1236,23 @@ public class MapOverlayManager
                 float offset = s == sampleCount ? 0f : SampleNoisyEdgeOffset(offsets, t);
                 output.Add(point + normal * offset);
             }
+        }
+
+        private uint BuildMapSeed(int entityId)
+        {
+            return MixHash((uint)(mapData.Info?.MapGenSeed ?? 0), (uint)entityId);
+        }
+
+        private static uint BuildSegmentSeed(uint baseSeed, int segmentIndex)
+        {
+            return MixHash(baseSeed, (uint)segmentIndex);
+        }
+
+        private static uint BuildUnorderedPairSeed(uint rootSeed, int a, int b)
+        {
+            uint lo = (uint)Mathf.Min(a, b);
+            uint hi = (uint)Mathf.Max(a, b);
+            return MixHash(MixHash(rootSeed, lo), hi);
         }
 
         private static ulong MakeUndirectedEdgeKey(int a, int b)
@@ -1579,56 +1670,50 @@ public class MapOverlayManager
 
             foreach (var river in mapData.Rivers)
             {
-                // Get river path points from vertex positions or cell centers
-                var pathPoints = new List<Vector2>();
-                if (river.Points != null && river.Points.Count >= 2)
-                {
-                    foreach (var pt in river.Points)
-                    {
-                        // Y-up data coords match texture row order directly
-                        float x = pt.X * scale;
-                        float y = pt.Y * scale;
-                        pathPoints.Add(new Vector2(x, y));
-                    }
-                }
-                else if (river.CellPath != null && river.CellPath.Count >= 2)
-                {
-                    foreach (int cellId in river.CellPath)
-                    {
-                        if (mapData.CellById.TryGetValue(cellId, out var cell))
-                        {
-                            float x = cell.Center.X * scale;
-                            float y = cell.Center.Y * scale;
-                            pathPoints.Add(new Vector2(x, y));
-                        }
-                    }
-                }
-
+                List<Vector2> pathPoints = BuildRiverControlPoints(river, scale);
                 if (pathPoints.Count < 2)
                     continue;
 
-                uint riverSeed = MixHash((uint)(mapData.Info?.MapGenSeed ?? 0), (uint)river.Id);
-                var noisyPathPoints = BuildNoisyPolyline(pathPoints, riverSeed, amplitudeScale: 1f);
-                // Smooth the path using Catmull-Rom interpolation
-                var smoothedPoints = SmoothPath(noisyPathPoints, 4);
+                uint riverSeed = BuildMapSeed(river.Id);
+                var smoothedPoints = BuildNoisyRasterPath(pathPoints, riverSeed, amplitudeScale: 1f, smoothSamplesPerSegment: 4);
+                if (smoothedPoints == null || smoothedPoints.Count < 2)
+                    continue;
 
                 // Calculate max width for this river
                 float maxWidth = baseWidth + river.Width * widthScale;
 
-                // Draw the river as a series of thick line segments
-                for (int i = 0; i < smoothedPoints.Count - 1; i++)
-                {
-                    // Width tapers from 30% at source to 100% at mouth
-                    float t = (float)i / (smoothedPoints.Count - 1);
-                    float width = maxWidth * (0.3f + 0.7f * t);
-
-                    DrawThickLine(pixels, smoothedPoints[i], smoothedPoints[i + 1], width);
-                }
-
-
+                // Width tapers from 30% at source to 100% at mouth.
+                RasterizeSolidPath(
+                    pixels,
+                    smoothedPoints,
+                    (segmentIndex, segmentCount) =>
+                    {
+                        float t = segmentCount <= 0 ? 1f : (float)segmentIndex / segmentCount;
+                        return maxWidth * (0.3f + 0.7f * t);
+                    });
             }
 
             return pixels;
+        }
+
+        private List<Vector2> BuildRiverControlPoints(River river, float scale)
+        {
+            var pathPoints = new List<Vector2>();
+            if (river.Points != null && river.Points.Count >= 2)
+            {
+                foreach (var pt in river.Points)
+                    pathPoints.Add(new Vector2(pt.X * scale, pt.Y * scale));
+            }
+            else if (river.CellPath != null && river.CellPath.Count >= 2)
+            {
+                foreach (int cellId in river.CellPath)
+                {
+                    if (mapData.CellById.TryGetValue(cellId, out var cell))
+                        pathPoints.Add(new Vector2(cell.Center.X * scale, cell.Center.Y * scale));
+                }
+            }
+
+            return pathPoints;
         }
 
         /// <summary>
@@ -1998,16 +2083,30 @@ public class MapOverlayManager
         }
 
         /// <summary>
-        /// Apply all textures and initial settings to the terrain material.
+        /// Ensure the road mask texture exists before binding.
         /// </summary>
-        private void ApplyTexturesToMaterial()
+        private void EnsureRoadMaskTexture()
         {
-            if (styleMaterial == null) return;
+            if (roadDistTexture != null)
+                return;
+
+            roadDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+            roadDistTexture.name = "RoadMaskTexture";
+            roadDistTexture.filterMode = FilterMode.Bilinear;
+            roadDistTexture.anisoLevel = 8;
+            roadDistTexture.wrapMode = TextureWrapMode.Clamp;
+            // R8 textures initialize to 0 (black = no roads), just apply.
+            roadDistTexture.Apply();
+        }
+
+        private void BindGeneratedTexturesToMaterial()
+        {
+            if (styleMaterial == null)
+                return;
 
             styleMaterial.SetTexture(PoliticalIdsTexId, politicalIdsTexture);
             styleMaterial.SetTexture(GeographyBaseTexId, geographyBaseTexture);
             styleMaterial.SetTexture(VegetationTexId, vegetationTexture);
-            styleMaterial.SetTexture(OverlayTexId, politicalIdsTexture);
             styleMaterial.SetTexture(HeightmapTexId, heightmapTexture);
             styleMaterial.SetTexture(ReliefNormalTexId, reliefNormalTexture);
             styleMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
@@ -2016,23 +2115,21 @@ public class MapOverlayManager
             styleMaterial.SetTexture(RealmBorderDistTexId, realmBorderDistTexture);
             styleMaterial.SetTexture(ProvinceBorderDistTexId, provinceBorderDistTexture);
             styleMaterial.SetTexture(CountyBorderDistTexId, countyBorderDistTexture);
-            if (marketPaletteTexture != null)
-                styleMaterial.SetTexture(MarketPaletteTexId, marketPaletteTexture);
-            if (marketBorderDistTexture != null)
-                styleMaterial.SetTexture(MarketBorderDistTexId, marketBorderDistTexture);
-
-            // Create road mask texture (initially all-black = no roads, regenerated when road state is set).
-            if (roadDistTexture == null)
-            {
-                roadDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
-                roadDistTexture.name = "RoadMaskTexture";
-                roadDistTexture.filterMode = FilterMode.Bilinear;
-                roadDistTexture.anisoLevel = 8;
-                roadDistTexture.wrapMode = TextureWrapMode.Clamp;
-                // R8 textures initialize to 0 (black = no roads), just apply.
-                roadDistTexture.Apply();
-            }
             styleMaterial.SetTexture(RoadMaskTexId, roadDistTexture);
+            styleMaterial.SetTexture(MarketPaletteTexId, marketPaletteTexture);
+            styleMaterial.SetTexture(MarketBorderDistTexId, marketBorderDistTexture);
+        }
+
+        /// <summary>
+        /// Apply all textures and initial settings to the terrain material.
+        /// </summary>
+        private void ApplyTexturesToMaterial()
+        {
+            if (styleMaterial == null) return;
+
+            EnsureRoadMaskTexture();
+            BindGeneratedTexturesToMaterial();
+            styleMaterial.SetTexture(OverlayTexId, politicalIdsTexture);
             styleMaterial.SetFloat(SeaLevelId, Elevation.NormalizeAbsolute01(Elevation.ResolveSeaLevel(mapData.Info), mapData.Info));
             overlayOpacity = Mathf.Clamp01(GetMaterialFloatOr(OverlayOpacityId, DefaultOverlayOpacity));
             styleMaterial.SetFloat(OverlayOpacityId, overlayOpacity);
@@ -3245,49 +3342,43 @@ public class MapOverlayManager
             float bandPaddingPx,
             bool rebuildSpatialTextures = true)
         {
-            float clampedSampleSpacing = Mathf.Clamp(sampleSpacingPx, 0.5f, 12f);
-            int clampedMaxSamples = Mathf.Clamp(maxSamples, 8, 512);
-            float clampedRoughness = Mathf.Clamp(roughness, 0.2f, 0.95f);
-            float clampedAmplitudePerResolution = Mathf.Clamp(amplitudePerResolution, 0.1f, 4f);
-            float clampedAmplitudeCap = Mathf.Clamp(amplitudeCap, 0.5f, 64f);
-            float clampedBandPadding = Mathf.Clamp(bandPaddingPx, 0f, 8f);
+            SetNoisyEdgeStyle(
+                new NoisyEdgeStyle(
+                    sampleSpacingPx,
+                    maxSamples,
+                    roughness,
+                    amplitudePerResolution,
+                    amplitudeCap,
+                    bandPaddingPx),
+                rebuildSpatialTextures);
+        }
 
-            bool changed =
-                !Mathf.Approximately(noisyEdgeSampleSpacingPx, clampedSampleSpacing) ||
-                noisyEdgeMaxSamples != clampedMaxSamples ||
-                !Mathf.Approximately(noisyEdgeRoughness, clampedRoughness) ||
-                !Mathf.Approximately(noisyEdgeAmplitudePerResolution, clampedAmplitudePerResolution) ||
-                !Mathf.Approximately(noisyEdgeAmplitudeCap, clampedAmplitudeCap) ||
-                !Mathf.Approximately(noisyEdgeBandPaddingPx, clampedBandPadding);
-
-            if (!changed)
+        public void SetNoisyEdgeStyle(NoisyEdgeStyle style, bool rebuildSpatialTextures = true)
+        {
+            NoisyEdgeStyle clampedStyle = ClampNoisyEdgeStyle(style);
+            if (noisyEdgeStyle.Equals(clampedStyle))
                 return;
 
-            noisyEdgeSampleSpacingPx = clampedSampleSpacing;
-            noisyEdgeMaxSamples = clampedMaxSamples;
-            noisyEdgeRoughness = clampedRoughness;
-            noisyEdgeAmplitudePerResolution = clampedAmplitudePerResolution;
-            noisyEdgeAmplitudeCap = clampedAmplitudeCap;
-            noisyEdgeBandPaddingPx = clampedBandPadding;
+            noisyEdgeStyle = clampedStyle;
 
             if (rebuildSpatialTextures)
                 RebuildSpatialTexturesForNoisyEdgeStyle();
         }
 
-        public void GetNoisyEdgeStyle(
-            out float sampleSpacingPx,
-            out int maxSamples,
-            out float roughness,
-            out float amplitudePerResolution,
-            out float amplitudeCap,
-            out float bandPaddingPx)
+        public NoisyEdgeStyle GetNoisyEdgeStyle()
         {
-            sampleSpacingPx = noisyEdgeSampleSpacingPx;
-            maxSamples = noisyEdgeMaxSamples;
-            roughness = noisyEdgeRoughness;
-            amplitudePerResolution = noisyEdgeAmplitudePerResolution;
-            amplitudeCap = noisyEdgeAmplitudeCap;
-            bandPaddingPx = noisyEdgeBandPaddingPx;
+            return noisyEdgeStyle;
+        }
+
+        private static NoisyEdgeStyle ClampNoisyEdgeStyle(NoisyEdgeStyle style)
+        {
+            return new NoisyEdgeStyle(
+                Mathf.Clamp(style.SampleSpacingPx, 0.5f, 12f),
+                Mathf.Clamp(style.MaxSamples, 8, 512),
+                Mathf.Clamp(style.Roughness, 0.2f, 0.95f),
+                Mathf.Clamp(style.AmplitudePerResolution, 0.1f, 4f),
+                Mathf.Clamp(style.AmplitudeCap, 0.5f, 64f),
+                Mathf.Clamp(style.BandPaddingPx, 0f, 8f));
         }
 
         private void RebuildSpatialTexturesForNoisyEdgeStyle()
@@ -3327,17 +3418,8 @@ public class MapOverlayManager
 
             if (styleMaterial != null)
             {
-                styleMaterial.SetTexture(PoliticalIdsTexId, politicalIdsTexture);
-                styleMaterial.SetTexture(GeographyBaseTexId, geographyBaseTexture);
-                styleMaterial.SetTexture(VegetationTexId, vegetationTexture);
-                styleMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
-                styleMaterial.SetTexture(HeightmapTexId, heightmapTexture);
-                styleMaterial.SetTexture(ReliefNormalTexId, reliefNormalTexture);
-                styleMaterial.SetTexture(RealmBorderDistTexId, realmBorderDistTexture);
-                styleMaterial.SetTexture(ProvinceBorderDistTexId, provinceBorderDistTexture);
-                styleMaterial.SetTexture(CountyBorderDistTexId, countyBorderDistTexture);
-                if (marketBorderDistTexture != null)
-                    styleMaterial.SetTexture(MarketBorderDistTexId, marketBorderDistTexture);
+                EnsureRoadMaskTexture();
+                BindGeneratedTexturesToMaterial();
             }
 
             InvalidateModeColorResolveCache(MapView.MapMode.Political);
@@ -3389,7 +3471,7 @@ public class MapOverlayManager
 
             // Apply the same noisy-edge technique used for zone/rivers.
             // Roads are slightly straighter than paths.
-            int mapSeed = mapData.Info?.MapGenSeed ?? 0;
+            uint roadNetworkSeed = BuildMapSeed(911);
             const float roadAmplitudeScale = 0.65f;
             const float pathAmplitudeScale = 0.9f;
 
@@ -3404,37 +3486,59 @@ public class MapOverlayManager
                 float by = dataB.Center.Y * scale;
 
                 float width = tier == RoadTier.Road ? roadWidth : pathWidth;
-                uint roadSeed = MixHash((uint)mapSeed, (uint)Mathf.Min(cellA, cellB));
-                roadSeed = MixHash(roadSeed, (uint)Mathf.Max(cellA, cellB));
+                uint roadSeed = BuildUnorderedPairSeed(roadNetworkSeed, cellA, cellB);
                 float amplitudeScale = tier == RoadTier.Road ? roadAmplitudeScale : pathAmplitudeScale;
                 var controlPoints = new List<Vector2>(2)
                 {
                     new Vector2(ax, ay),
                     new Vector2(bx, by)
                 };
-                List<Vector2> noisyPath = BuildNoisyPolyline(controlPoints, roadSeed, amplitudeScale);
-
-                float dashProgress = 0f;
-                for (int i = 0; i < noisyPath.Count - 1; i++)
-                {
-                    Vector2 start = noisyPath[i];
-                    Vector2 end = noisyPath[i + 1];
-                    float segmentLength = Vector2.Distance(start, end);
-                    if (segmentLength > 0.001f)
-                    {
-                        DrawDashedSegment(
-                            pixels,
-                            start,
-                            end,
-                            width,
-                            dashLength,
-                            patternLength,
-                            ref dashProgress);
-                    }
-                }
+                List<Vector2> noisyPath = BuildNoisyRasterPath(controlPoints, roadSeed, amplitudeScale, smoothSamplesPerSegment: 0);
+                RasterizeDashedPath(pixels, noisyPath, width, dashLength, patternLength);
             }
 
             return pixels;
+        }
+
+        private void RasterizeSolidPath(byte[] pixels, List<Vector2> path, Func<int, int, float> widthForSegment)
+        {
+            if (pixels == null || path == null || path.Count < 2 || widthForSegment == null)
+                return;
+
+            int segmentCount = path.Count - 1;
+            for (int i = 0; i < segmentCount; i++)
+            {
+                float width = widthForSegment(i, segmentCount);
+                if (width <= 0f)
+                    continue;
+
+                DrawThickLine(pixels, path[i], path[i + 1], width);
+            }
+        }
+
+        private void RasterizeDashedPath(byte[] pixels, List<Vector2> path, float width, float dashLength, float patternLength)
+        {
+            if (pixels == null || path == null || path.Count < 2 || width <= 0f)
+                return;
+
+            float dashProgress = 0f;
+            for (int i = 0; i < path.Count - 1; i++)
+            {
+                Vector2 start = path[i];
+                Vector2 end = path[i + 1];
+                float segmentLength = Vector2.Distance(start, end);
+                if (segmentLength <= 0.001f)
+                    continue;
+
+                DrawDashedSegment(
+                    pixels,
+                    start,
+                    end,
+                    width,
+                    dashLength,
+                    patternLength,
+                    ref dashProgress);
+            }
         }
 
         private void DrawDashedSegment(
