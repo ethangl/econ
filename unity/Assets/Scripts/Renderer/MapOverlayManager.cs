@@ -396,12 +396,14 @@ public class MapOverlayManager
             Material styleMaterial,
             int resolutionMultiplier = 2,
             string overlayTextureCacheDirectory = null,
-            bool preferCachedOverlayTextures = false)
+            bool preferCachedOverlayTextures = false,
+            NoisyEdgeStyle? initialNoisyEdgeStyle = null)
         {
             this.mapData = mapData;
             this.styleMaterial = styleMaterial;
             this.resolutionMultiplier = Mathf.Clamp(resolutionMultiplier, 1, 8);
             this.overlayTextureCacheDirectory = overlayTextureCacheDirectory;
+            noisyEdgeStyle = ClampNoisyEdgeStyle(initialNoisyEdgeStyle ?? NoisyEdgeStyle.Default);
 
             baseWidth = mapData.Info.Width;
             baseHeight = mapData.Info.Height;

@@ -797,7 +797,8 @@ namespace EconSim.Renderer
                 mat,
                 overlayResolutionMultiplier,
                 overlayTextureCacheDirectory,
-                preferCachedOverlayTextures);
+                preferCachedOverlayTextures,
+                BuildInspectorNoisyEdgeStyle());
 
             // Height displacement follows grid-mesh mode with map-mode-specific scale.
             overlayManager.SetHeightDisplacementEnabled(useGridMesh);
