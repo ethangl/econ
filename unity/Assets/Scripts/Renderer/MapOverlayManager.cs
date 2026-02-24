@@ -155,8 +155,13 @@ public class MapOverlayManager
         // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
         private const int ReliefBlurRadius = 4;
         private const float ReliefBlurCrossClassWeight = 0.25f;
-        private const float ReliefErosionRadiusTexels = 7f;
-        private const float ReliefErosionStrength = 0.012f;
+        private const float ReliefBankErosionRadiusTexels = 7f;
+        private const float ReliefBankErosionStrength = 0.010f;
+        private const float ReliefValleyErosionRadiusTexels = 24f;
+        private const float ReliefValleyErosionStrength = 0.020f;
+        private const float ReliefLocalReliefNormalization = 0.02f;
+        private const float ReliefLocalReliefInfluence = 1.15f;
+        private const float ReliefValleyHeightExponent = 0.85f;
         private const float ReliefLandMinAboveSea = 0.001f;
         private const int ReliefNormalPreBlurPasses = 1;
         private const float ReliefNormalDerivativeScale = 0.12f;
@@ -210,7 +215,7 @@ public class MapOverlayManager
         private const float DefaultNoisyEdgeAmplitudeCap = 8.0f;
         private const float DefaultNoisyEdgeBandPaddingPx = 1.5f;
 
-        private const int OverlayTextureCacheVersion = 7;
+        private const int OverlayTextureCacheVersion = 8;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
         private const string CacheSpatialGridFile = "spatial_grid.bin";
         private const string CachePoliticalIdsFile = "political_ids.bin";
@@ -1416,7 +1421,7 @@ public class MapOverlayManager
             float seaLevel01 = Elevation.NormalizeAbsolute01(Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
             float[] riverDistance = BuildRiverDistanceField(isLand);
             float[] heightData = ApplyLandAwareGaussianBlur(baseHeightData, isLand);
-            ApplyRiverBankErosion(heightData, isLand, riverDistance, seaLevel01);
+            ApplyFluvialErosion(heightData, isLand, riverDistance, seaLevel01);
 
             Parallel.For(0, heightData.Length, i =>
             {
@@ -1584,12 +1589,15 @@ public class MapOverlayManager
             return output;
         }
 
-        private void ApplyRiverBankErosion(float[] heightData, bool[] isLand, float[] riverDistance, float seaLevel01)
+        private void ApplyFluvialErosion(float[] heightData, bool[] isLand, float[] riverDistance, float seaLevel01)
         {
             if (riverDistance == null || riverDistance.Length != heightData.Length)
                 return;
 
+            float[] localRelief = BuildLocalReliefField(heightData, isLand);
             float minLandHeight = seaLevel01 + ReliefLandMinAboveSea;
+            float invLandSpan = 1f / Mathf.Max(0.0001f, 1f - seaLevel01);
+
             Parallel.For(0, gridHeight, y =>
             {
                 int row = y * gridWidth;
@@ -1600,14 +1608,65 @@ public class MapOverlayManager
                         continue;
 
                     float distance = riverDistance[idx];
-                    if (distance >= ReliefErosionRadiusTexels)
+                    if (distance >= ReliefValleyErosionRadiusTexels)
                         continue;
 
-                    float t = 1f - Mathf.Clamp01(distance / ReliefErosionRadiusTexels);
-                    float carve = t * t * ReliefErosionStrength;
-                    heightData[idx] = Mathf.Max(minLandHeight, heightData[idx] - carve);
+                    float bankT = 1f - Mathf.Clamp01(distance / ReliefBankErosionRadiusTexels);
+                    float bankCarve = bankT * bankT * ReliefBankErosionStrength;
+
+                    float valleyT = 1f - Mathf.Clamp01(distance / ReliefValleyErosionRadiusTexels);
+                    float reliefFactor = 0.35f + 0.65f * Mathf.Clamp01(localRelief[idx] * ReliefLocalReliefInfluence);
+                    float landHeight01 = Mathf.Clamp01((heightData[idx] - seaLevel01) * invLandSpan);
+                    float heightFactor = 0.25f + 0.75f * Mathf.Pow(landHeight01, ReliefValleyHeightExponent);
+                    float valleyCarve = valleyT * valleyT * valleyT * ReliefValleyErosionStrength * reliefFactor * heightFactor;
+
+                    heightData[idx] = Mathf.Max(minLandHeight, heightData[idx] - (bankCarve + valleyCarve));
                 }
             });
+        }
+
+        private float[] BuildLocalReliefField(float[] heightData, bool[] isLand)
+        {
+            int size = heightData.Length;
+            var localRelief = new float[size];
+
+            Parallel.For(0, gridHeight, y =>
+            {
+                int row = y * gridWidth;
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = row + x;
+                    if (!isLand[idx])
+                    {
+                        localRelief[idx] = 0f;
+                        continue;
+                    }
+
+                    float minH = heightData[idx];
+                    float maxH = minH;
+
+                    for (int oy = -1; oy <= 1; oy++)
+                    {
+                        int sy = Mathf.Clamp(y + oy, 0, gridHeight - 1);
+                        int sRow = sy * gridWidth;
+                        for (int ox = -1; ox <= 1; ox++)
+                        {
+                            int sx = Mathf.Clamp(x + ox, 0, gridWidth - 1);
+                            int sampleIdx = sRow + sx;
+                            if (!isLand[sampleIdx])
+                                continue;
+
+                            float sampleH = heightData[sampleIdx];
+                            if (sampleH < minH) minH = sampleH;
+                            if (sampleH > maxH) maxH = sampleH;
+                        }
+                    }
+
+                    localRelief[idx] = Mathf.Clamp01((maxH - minH) / ReliefLocalReliefNormalization);
+                }
+            });
+
+            return localRelief;
         }
 
         private float[] BuildRiverDistanceField(bool[] isLand)
