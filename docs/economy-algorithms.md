@@ -33,15 +33,15 @@ prevent stalls when running at high speed.
 
 ## Goods
 
-There are 34 goods, each belonging to a **need category**:
+There are 35 goods, each belonging to a **need category**:
 
 - **Staple** (wheat, sausage, cheese, salted fish, stockfish, ale) — pooled
   food budget, starvation if unmet
 - **Basic** (salt, barley) — individually consumed, contributes to basic
   satisfaction
-- **Comfort** (bread, wine, mead, bacon, honey, pottery, furniture, tools,
-  clothes, gold jewelry, silver jewelry) — grouped into 8 substitute categories;
-  drives migration pull
+- **Comfort** (bread, wine, mead, bacon, honey, butter, pottery, furniture,
+  tools, clothes, gold jewelry, silver jewelry) — grouped into 8 substitute
+  categories; drives migration pull
 - **None** (timber, iron ore, gold ore, silver ore, stone, clay, wool, pork,
   milk, fish, gold, silver, iron, charcoal, grapes) — intermediate or facility
   inputs, no direct population demand
@@ -74,7 +74,7 @@ target faster.
 | ------------- | ----------------------- | ------------- | ----------- |
 | Alcohol       | Wine, Mead              | 0.05 kg/day   | consumption |
 | Prepared Food | Bread, Bacon            | 0.10 kg/day   | consumption |
-| Pantry        | Honey                   | 0.02 kg/day   | consumption |
+| Pantry        | Honey, Butter           | 0.02 kg/day   | consumption |
 | Pottery       | Pottery                 | 3.0 units     | stock       |
 | Furniture     | Furniture               | 0.5 units     | stock       |
 | Tools         | Tools                   | 1.0 units     | stock       |
@@ -190,8 +190,8 @@ When the simulation starts, EconomySystem sets up all economic state:
     Place one of every facility type in every county:
         (Every county gets a kiln, carpenter, smelter, smithy, charcoal burner,
          weaver, butcher, smokehouse, cheesemaker, salter, drying rack, bakery,
-         brewery, gold jeweler, silver jeweler, winery, and meadery — whether
-         they can actually operate depends on input availability)
+         brewery, gold jeweler, silver jeweler, winery, meadery, and churn —
+         whether they can actually operate depends on input availability)
 
     Initialize province and realm economies (empty treasuries and granaries)
 
@@ -702,7 +702,7 @@ EconomySystem). The monthly retention factor is (1 - daily_spoilage)^30.
 
     For each perishable good (wheat, barley, timber, wool, pork, milk, fish,
                               sausage, bacon, cheese, salted fish, stockfish,
-                              bread, ale, grapes, wine, honey, mead):
+                              bread, ale, grapes, wine, honey, mead, butter):
         For each county:  stock *= monthly_retention
         For each province: granary_stock *= monthly_retention
         For each realm:    stockpile *= monthly_retention
@@ -733,6 +733,7 @@ population can work there).
 | Silver Jeweler  | 0.05 silver                 | 1 s.jewelry   | 1     | 2%        |
 | Winery          | 2.0 grapes                  | 1.5 wine      | 1     | 10%       |
 | Meadery         | 2.0 honey                   | 2.0 mead      | 1     | 10%       |
+| Churn           | 3.0 milk                    | 1.0 butter    | 1     | 10%       |
 
 Durable outputs (pottery, furniture, tools, clothes, gold jewelry, silver
 jewelry) are in units; all other outputs are in kg.

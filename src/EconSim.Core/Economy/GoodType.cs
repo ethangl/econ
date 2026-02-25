@@ -40,6 +40,7 @@ namespace EconSim.Core.Economy
         Wine = 31,
         Honey = 32,
         Mead = 33,
+        Butter = 34,
     }
 
     public static class Goods
@@ -172,6 +173,7 @@ namespace EconSim.Core.Economy
             (int)GoodType.Charcoal,
             (int)GoodType.Honey,
             (int)GoodType.Mead,
+            (int)GoodType.Butter,
             (int)GoodType.GoldJewelry,
             (int)GoodType.SilverJewelry,
             (int)GoodType.Gold,
@@ -300,13 +302,13 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.Bacon,      "bacon",     GoodCategory.Finished, NeedCategory.Comfort, 0.1f, 0.0f, 0.0f, 0.0f, 0.25f, 0.0125f, 5.0f, true, false, 0.02f, comfortCategory: ComfortCategory.PreparedFood),
                 new GoodDef(GoodType.Milk, "milk", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.025f, 0.00125f, 0.5f, true, false, 0.05f, 0f, seasonalSensitivity: 0.5f, minTemperature: -5f, maxTemperature: 35f,
                     biomeYields: new Dictionary<int, float> {
-                        { (int)BiomeId.Tundra, 0.022f }, { (int)BiomeId.CoastalMarsh, 0.055f },
-                        { (int)BiomeId.MountainShrub, 0.11f }, { (int)BiomeId.Floodplain, 0.275f },
-                        { (int)BiomeId.Wetland, 0.088f }, { (int)BiomeId.HotDesert, 0.035f },
-                        { (int)BiomeId.ColdDesert, 0.022f }, { (int)BiomeId.Scrubland, 0.11f },
-                        { (int)BiomeId.TropicalDryForest, 0.13f }, { (int)BiomeId.Savanna, 0.22f },
-                        { (int)BiomeId.BorealForest, 0.055f }, { (int)BiomeId.TemperateForest, 0.11f },
-                        { (int)BiomeId.Grassland, 0.33f }, { (int)BiomeId.Woodland, 0.165f },
+                        { (int)BiomeId.Tundra, 0.033f }, { (int)BiomeId.CoastalMarsh, 0.083f },
+                        { (int)BiomeId.MountainShrub, 0.165f }, { (int)BiomeId.Floodplain, 0.413f },
+                        { (int)BiomeId.Wetland, 0.132f }, { (int)BiomeId.HotDesert, 0.053f },
+                        { (int)BiomeId.ColdDesert, 0.033f }, { (int)BiomeId.Scrubland, 0.165f },
+                        { (int)BiomeId.TropicalDryForest, 0.195f }, { (int)BiomeId.Savanna, 0.33f },
+                        { (int)BiomeId.BorealForest, 0.083f }, { (int)BiomeId.TemperateForest, 0.165f },
+                        { (int)BiomeId.Grassland, 0.495f }, { (int)BiomeId.Woodland, 0.248f },
                     }),
                 new GoodDef(GoodType.Cheese,     "cheese",    GoodCategory.Finished, NeedCategory.Staple, 0.07f, 0.0f, 0.0f, 0.0f, 0.15f, 0.0075f, 3.0f, true, false, 0.003f),
                 new GoodDef(GoodType.Fish, "fish", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.05f, 0.0025f, 1.0f, true, false, 0.10f, 0f, seasonalSensitivity: 0.3f,
@@ -337,6 +339,7 @@ namespace EconSim.Core.Economy
                         { (int)BiomeId.TropicalDryForest, 0.03f }, { (int)BiomeId.MountainShrub, 0.02f },
                     }),
                 new GoodDef(GoodType.Mead, "mead", GoodCategory.Finished, NeedCategory.Comfort, 0.03f, 0.0f, 0.0f, 0.0f, 0.10f, 0.005f, 2.0f, true, false, 0.005f, comfortCategory: ComfortCategory.Alcohol),
+                new GoodDef(GoodType.Butter, "butter", GoodCategory.Finished, NeedCategory.Comfort, 0.02f, 0.0f, 0.0f, 0.0f, 0.15f, 0.0075f, 3.0f, true, false, 0.02f, comfortCategory: ComfortCategory.Pantry),
             };
 
             Count = Defs.Length;
