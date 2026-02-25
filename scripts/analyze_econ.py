@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 _FALLBACK_GOODS = ["wheat", "timber", "ironOre", "goldOre", "silverOre", "salt", "wool", "stone", "barley", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish", "bread", "ale", "gold", "silver", "goldJewelry", "silverJewelry", "grapes", "wine", "honey", "mead"]
-_STAPLE_GOODS = {"wheat", "sausage", "cheese", "saltedFish", "stockfish"}
+_STAPLE_GOODS = {"wheat", "sausage", "cheese", "saltedFish", "stockfish", "ale"}
 _FALLBACK_BASE_PRICES = [0.03, 0.02, 0.15, 0.0, 0.0, 0.10, 0.80, 0.01, 0.025, 0.005, 0.15, 1.50, 0.50, 3.00, 0.06, 2.50, 0.08, 0.20, 0.25, 0.025, 0.15, 0.05, 0.12, 0.08, 0.04, 0.04, 1050.0, 105.0, 15.0, 8.0, 0.04, 0.08, 0.12, 0.10]
 _FALLBACK_TRADEABLE = {"wheat", "timber", "ironOre", "salt", "wool", "stone", "barley", "clay", "pottery", "furniture", "iron", "tools", "charcoal", "clothes", "pork", "sausage", "bacon", "milk", "cheese", "fish", "saltedFish", "stockfish", "bread", "ale", "gold", "silver", "goldJewelry", "silverJewelry", "grapes", "wine", "honey", "mead"}
 

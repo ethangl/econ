@@ -35,11 +35,11 @@ prevent stalls when running at high speed.
 
 There are 34 goods, each belonging to a **need category**:
 
-- **Staple** (wheat, sausage, cheese, salted fish, stockfish) — pooled food
-  budget, starvation if unmet
+- **Staple** (wheat, sausage, cheese, salted fish, stockfish, ale) — pooled
+  food budget, starvation if unmet
 - **Basic** (salt, barley) — individually consumed, contributes to basic
   satisfaction
-- **Comfort** (bread, ale, wine, mead, bacon, honey, pottery, furniture, tools,
+- **Comfort** (bread, wine, mead, bacon, honey, pottery, furniture, tools,
   clothes, gold jewelry, silver jewelry) — grouped into 8 substitute categories;
   drives migration pull
 - **None** (timber, iron ore, gold ore, silver ore, stone, clay, wool, pork,
@@ -72,7 +72,7 @@ target faster.
 
 | Category      | Goods                   | Target/person | Measurement |
 | ------------- | ----------------------- | ------------- | ----------- |
-| Alcohol       | Ale, Wine, Mead         | 0.05 kg/day   | consumption |
+| Alcohol       | Wine, Mead              | 0.05 kg/day   | consumption |
 | Prepared Food | Bread, Bacon            | 0.10 kg/day   | consumption |
 | Pantry        | Honey                   | 0.02 kg/day   | consumption |
 | Pottery       | Pottery                 | 3.0 units     | stock       |
@@ -88,9 +88,9 @@ Overall comfort = average across all 8 categories.
 
 All staple goods contribute to a shared daily food budget of **1.0 kg per
 person**. Each staple has a nominal consumption rate (e.g. wheat 0.50, sausage
-0.21, cheese 0.07). These rates determine each staple's **ideal share** of the
-pool, normalized so the shares sum to 1.0 kg. People eat from whatever staples
-are available, proportional to stock.
+0.21, cheese 0.07, ale 0.05). These rates determine each staple's **ideal
+share** of the pool, normalized so the shares sum to 1.0 kg. People eat and
+drink from whatever staples are available, proportional to stock.
 
 ### Durable Goods
 
@@ -574,11 +574,12 @@ labor, cart wear) and act as a money sink alongside spoilage.
 
 ### Phase 7: Ducal Granary Requisition
 
-The duke (province) maintains an emergency food reserve by buying staples from
-surplus counties.
+The duke (province) maintains an emergency food reserve by buying grain from
+surplus counties. Only shelf-stable grain (wheat) is eligible — perishable
+staples like ale, sausage, and cheese are not stored.
 
     For each province:
-        For each staple good:
+        For each granary-eligible good (wheat):
             target = 7 days × province_pop × ideal_per_pop
             gap = target - current_granary_stock
             If no gap, skip
@@ -594,9 +595,9 @@ surplus counties.
 
 ### Phase 8: Emergency Relief
 
-After trade and granary filling, distribute food to distressed counties.
+After trade and granary filling, distribute grain to distressed counties.
 
-    For each staple good:
+    For each granary-eligible good (wheat):
         Identify distressed counties (BasicSatisfaction < 0.70):
             deficit = (population × ideal_per_pop) - stock, floored at 0
 

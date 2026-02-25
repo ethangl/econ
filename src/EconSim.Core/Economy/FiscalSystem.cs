@@ -370,8 +370,8 @@ namespace EconSim.Core.Economy
                     CrossProvTollRate, CrossMarketTariffRate, provinces, realms, TradeScope.CrossMarket);
 
             // ── PHASE 7: Ducal granary requisition ──────────────────
-            // Duke buys preserved staples from surplus counties at a discount.
-            var stapleGoods = Goods.StapleGoods;
+            // Duke buys shelf-stable grain from surplus counties at a discount.
+            var granaryGoods = Goods.GranaryGoods;
             for (int p = 0; p < _provinceIds.Length; p++)
             {
                 int provId = _provinceIds[p];
@@ -379,9 +379,9 @@ namespace EconSim.Core.Economy
                 var countyIds = _provinceCounties[provId];
                 float provPop = _provincePop[provId];
 
-                for (int si = 0; si < stapleGoods.Length; si++)
+                for (int si = 0; si < granaryGoods.Length; si++)
                 {
-                    int g = stapleGoods[si];
+                    int g = granaryGoods[si];
                     float target = GranaryDaysBuffer * provPop * Goods.StapleIdealPerPop[g];
                     float gap = target - pe.Stockpile[g];
                     if (gap <= 0f) continue;
@@ -437,10 +437,10 @@ namespace EconSim.Core.Economy
             }
 
             // ── PHASE 8: Relief pass ────────────────────────────────
-            // Emergency backstop AFTER trade: staple goods only, distressed counties only.
-            for (int si = 0; si < stapleGoods.Length; si++)
+            // Emergency backstop AFTER trade: distribute granary grain to distressed counties.
+            for (int si = 0; si < granaryGoods.Length; si++)
             {
-                int g = stapleGoods[si];
+                int g = granaryGoods[si];
                 float retainPerPop = Goods.StapleIdealPerPop[g];
 
                 BuildRetainDeficitsForGood(g, retainPerPop, counties, retainTargetsReady: false);

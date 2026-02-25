@@ -135,6 +135,9 @@ namespace EconSim.Core.Economy
         /// <summary>Normalized ideal share of the staple budget per good (indexed by GoodType). Zero for non-staples.</summary>
         public static readonly float[] StapleIdealPerPop;
 
+        /// <summary>Staple goods eligible for ducal granary storage (grains only — low spoilage, long shelf life).</summary>
+        public static readonly int[] GranaryGoods;
+
         /// <summary>Comfort category definitions — one per category, defines satisfaction target.</summary>
         public static readonly ComfortCategoryDef[] ComfortCategories;
 
@@ -262,15 +265,15 @@ namespace EconSim.Core.Economy
                         { (int)BiomeId.TemperateForest, 0.05f }, { (int)BiomeId.Grassland, 0.02f },
                         { (int)BiomeId.Woodland, 0.05f },
                     }),
-                new GoodDef(GoodType.Barley, "barley", GoodCategory.Raw, NeedCategory.Basic, 0.15f, 0.0f, 0.0f, 0.0f, 0.025f, 0.00125f, 0.5f, true, false, 0.001f, 0f, seasonalSensitivity: 0.9f, minTemperature: 3f, maxTemperature: 30f,
+                new GoodDef(GoodType.Barley, "barley", GoodCategory.Raw, NeedCategory.Basic, 0.30f, 0.0f, 0.0f, 0.0f, 0.025f, 0.00125f, 0.5f, true, false, 0.001f, 0f, seasonalSensitivity: 0.9f, minTemperature: 3f, maxTemperature: 30f,
                     biomeYields: new Dictionary<int, float> {
-                        { (int)BiomeId.Tundra, 0.10f }, { (int)BiomeId.CoastalMarsh, 0.04f },
-                        { (int)BiomeId.MountainShrub, 0.08f }, { (int)BiomeId.Floodplain, 0.40f },
-                        { (int)BiomeId.Wetland, 0.08f }, { (int)BiomeId.HotDesert, 0.04f },
-                        { (int)BiomeId.ColdDesert, 0.06f }, { (int)BiomeId.Scrubland, 0.04f },
-                        { (int)BiomeId.TropicalDryForest, 0.08f }, { (int)BiomeId.Savanna, 0.22f },
-                        { (int)BiomeId.BorealForest, 0.04f }, { (int)BiomeId.TemperateForest, 0.14f },
-                        { (int)BiomeId.Grassland, 0.36f }, { (int)BiomeId.Woodland, 0.12f },
+                        { (int)BiomeId.Tundra, 0.15f }, { (int)BiomeId.CoastalMarsh, 0.06f },
+                        { (int)BiomeId.MountainShrub, 0.12f }, { (int)BiomeId.Floodplain, 0.60f },
+                        { (int)BiomeId.Wetland, 0.12f }, { (int)BiomeId.HotDesert, 0.06f },
+                        { (int)BiomeId.ColdDesert, 0.09f }, { (int)BiomeId.Scrubland, 0.06f },
+                        { (int)BiomeId.TropicalDryForest, 0.12f }, { (int)BiomeId.Savanna, 0.33f },
+                        { (int)BiomeId.BorealForest, 0.06f }, { (int)BiomeId.TemperateForest, 0.21f },
+                        { (int)BiomeId.Grassland, 0.54f }, { (int)BiomeId.Woodland, 0.18f },
                     }),
                 new GoodDef(GoodType.Clay, "clay", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.005f, 0.00025f, 0.1f, true, false, 0f, 0f, seasonalSensitivity: 0.15f,
                     biomeYields: new Dictionary<int, float> {
@@ -314,7 +317,7 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.SaltedFish,  "saltedFish", GoodCategory.Finished, NeedCategory.Staple, 0.14f, 0.0f, 0.0f, 0.0f, 0.12f, 0.006f, 2.4f, true, false, 0.003f),
                 new GoodDef(GoodType.Stockfish,   "stockfish",  GoodCategory.Finished, NeedCategory.Staple, 0.08f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.001f),
                 new GoodDef(GoodType.Bread, "bread", GoodCategory.Finished, NeedCategory.Comfort, 0.05f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.03f, comfortCategory: ComfortCategory.PreparedFood),
-                new GoodDef(GoodType.Ale, "ale", GoodCategory.Finished, NeedCategory.Comfort, 0.05f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.03f, comfortCategory: ComfortCategory.Alcohol),
+                new GoodDef(GoodType.Ale, "ale", GoodCategory.Finished, NeedCategory.Staple, 0.05f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.03f),
                 new GoodDef(GoodType.Gold, "gold", GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 1050.0f, 1050.0f, 1050.0f, true, false),
                 new GoodDef(GoodType.Silver, "silver", GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 105.0f, 105.0f, 105.0f, true, false),
                 new GoodDef(GoodType.GoldJewelry, "goldJewelry", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0f, 0.0f, 0.0f, 15.0f, 0.75f, 300.0f, true, false, 0.0005f, 0.2f, unitWeight: 0.05f, comfortCategory: ComfortCategory.Jewelry),
@@ -427,6 +430,9 @@ namespace EconSim.Core.Economy
                     StapleIdealPerPop[g] = ConsumptionPerPop[g] / totalStapleWeight * StapleBudgetPerPop;
                 }
             }
+
+            // Granary-eligible staples: grains only (low spoilage, long shelf life)
+            GranaryGoods = new[] { (int)GoodType.Wheat };
 
             // Build comfort category definitions and good-index arrays
             var catDefs = new ComfortCategoryDef[]
