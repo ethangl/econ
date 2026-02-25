@@ -64,14 +64,14 @@ namespace EconSim.Core.Economy
         public float TotalTradeTollsPaid;
         public float TotalTradeTollsCollected;
 
-        // Cross-realm trade (Layer 9 Phase C)
-        public float[] TotalCrossRealmTradeBoughtByGood;
-        public float[] TotalCrossRealmTradeSoldByGood;
-        public float TotalCrossRealmTradeSpending;
-        public float TotalCrossRealmTradeRevenue;
-        public float TotalCrossRealmTollsPaid;
-        public float TotalCrossRealmTariffsPaid;
-        public float TotalCrossRealmTariffsCollected;
+        // Cross-market trade (Layer 9 Phase C)
+        public float[] TotalCrossMarketTradeBoughtByGood;
+        public float[] TotalCrossMarketTradeSoldByGood;
+        public float TotalCrossMarketTradeSpending;
+        public float TotalCrossMarketTradeRevenue;
+        public float TotalCrossMarketTollsPaid;
+        public float TotalCrossMarketTariffsPaid;
+        public float TotalCrossMarketTariffsCollected;
 
         // Market fees (Layer 10)
         public float TotalMarketFeesCollected;
@@ -79,8 +79,9 @@ namespace EconSim.Core.Economy
         // Transport costs (destroyed money)
         public float TotalTransportCostsPaid;
 
-        // Inter-realm trade (Layer 4 Phase C)
+        // Market prices (Layer 4 Phase C)
         public float[] MarketPrices;
+        public float[][] PerMarketPrices;
         public float[] TotalTradeImportsByGood;
         public float[] TotalTradeExportsByGood;
         public float[] TotalRealmDeficitByGood;

@@ -8,7 +8,7 @@ namespace EconSim.Core.Economy
     /// <summary>
     /// Runs daily AFTER FiscalSystem. Two jobs:
     /// 1. Post-relief county deficit scan — feeds realm-level trade in FiscalSystem Phase C.
-    /// 2. Price discovery for all produced goods — supply-side stock throttle.
+    /// 2. Per-market price discovery — supply-side stock throttle.
     /// </summary>
     public class InterRealmTradeSystem : ITickSystem
     {
@@ -17,16 +17,22 @@ namespace EconSim.Core.Economy
 
         static readonly float[] ConsumptionPerPop = Goods.ConsumptionPerPop;
 
-        float[] _prices;
-
         /// <summary>County ID → Realm ID (for deficit scan).</summary>
         int[] _countyToRealm;
         int[] _countyIds;
 
+        /// <summary>County IDs partitioned by market. [marketId] → county ID array.</summary>
+        int[][] _marketCountyIds;
+
+        /// <summary>Number of markets (1-indexed).</summary>
+        int _marketCount;
+
+        /// <summary>Per-market production capacity scratch. [marketId][goodId].</summary>
+        float[][] _marketProductionCap;
+
         public void Initialize(SimulationState state, MapData mapData)
         {
-            _prices = new float[Goods.Count];
-            Array.Copy(Goods.BasePrice, _prices, Goods.Count);
+            var econ = state.Economy;
 
             // Build county → realm mapping for deficit scan
             int maxProvId = 0;
@@ -52,6 +58,31 @@ namespace EconSim.Core.Economy
                     ? provinceToRealm[provId]
                     : 0;
             }
+
+            // Build per-market county partitions
+            _marketCount = econ.Markets != null ? econ.Markets.Length - 1 : 0;
+            _marketCountyIds = new int[_marketCount + 1][];
+            if (_marketCount > 0)
+            {
+                var lists = new System.Collections.Generic.List<int>[_marketCount + 1];
+                for (int m = 1; m <= _marketCount; m++)
+                    lists[m] = new System.Collections.Generic.List<int>();
+
+                foreach (var county in mapData.Counties)
+                {
+                    int marketId = econ.CountyToMarket[county.Id];
+                    if (marketId >= 1 && marketId <= _marketCount)
+                        lists[marketId].Add(county.Id);
+                }
+
+                for (int m = 1; m <= _marketCount; m++)
+                    _marketCountyIds[m] = lists[m].ToArray();
+            }
+
+            // Per-market production capacity scratch
+            _marketProductionCap = new float[_marketCount + 1][];
+            for (int m = 1; m <= _marketCount; m++)
+                _marketProductionCap[m] = new float[Goods.Count];
         }
 
         public void Tick(SimulationState state, MapData mapData)
@@ -63,7 +94,7 @@ namespace EconSim.Core.Economy
 
             // Trade accumulators now cleared by FiscalSystem.ResetAccumulators.
 
-            // Phase 8: Post-relief county deficit scan — record remaining unmet pop consumption per realm
+            // Post-relief county deficit scan — record remaining unmet pop consumption per realm
             for (int g = 0; g < Goods.Count; g++)
             {
                 float targetStockPerPop = Goods.TargetStockPerPop[g];
@@ -96,44 +127,118 @@ namespace EconSim.Core.Economy
                 }
             }
 
-            // Price discovery for all produced goods.
+            // Per-market price discovery.
             // Demand = steady-state need (consumption + admin + durable replacement + facility input).
             // Supply = production capacity + stock / buffer. Stock-based throttling is supply-side only.
             const float StockBufferDays = 7f;
+
+            // Compute per-market production capacity from global capacity
+            // (approximate: partition global capacity proportional to county count)
+            var globalCap = econ.ProductionCapacity;
+            for (int m = 1; m <= _marketCount; m++)
+                Array.Clear(_marketProductionCap[m], 0, Goods.Count);
+
+            // Accumulate per-market capacity from county extraction + facility labor
+            for (int m = 1; m <= _marketCount; m++)
+            {
+                var mCountyIds = _marketCountyIds[m];
+                var mCap = _marketProductionCap[m];
+                for (int i = 0; i < mCountyIds.Length; i++)
+                {
+                    int countyId = mCountyIds[i];
+                    var ce = counties[countyId];
+                    if (ce == null) continue;
+
+                    // Extraction capacity (approximation — exact seasonal modifiers already applied in EconomySystem)
+                    for (int g = 0; g < Goods.Count; g++)
+                        mCap[g] += ce.Population * ce.Productivity[g];
+
+                    // Facility labor capacity
+                    var indices = econ.CountyFacilityIndices != null && countyId < econ.CountyFacilityIndices.Length
+                        ? econ.CountyFacilityIndices[countyId] : null;
+                    if (indices != null && econ.Facilities != null)
+                    {
+                        for (int fi = 0; fi < indices.Count; fi++)
+                        {
+                            var def = econ.Facilities[indices[fi]].Def;
+                            if (def.LaborPerUnit > 0 && def.OutputAmount > 0f)
+                                mCap[(int)def.OutputGood] += ce.Population * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount;
+                        }
+                    }
+                }
+            }
+
+            // Per-market price computation
+            float totalPop = 0f;
+            for (int i = 0; i < countyIds.Length; i++)
+            {
+                var ce = counties[countyIds[i]];
+                if (ce != null) totalPop += ce.Population;
+            }
+
+            float[] marketPop = new float[_marketCount + 1];
+            for (int m = 1; m <= _marketCount; m++)
+            {
+                var mCountyIds = _marketCountyIds[m];
+                for (int i = 0; i < mCountyIds.Length; i++)
+                {
+                    var ce = counties[mCountyIds[i]];
+                    if (ce != null) marketPop[m] += ce.Population;
+                }
+            }
+
             for (int g = 0; g < Goods.Count; g++)
             {
                 if (Goods.IsDurable[g] || Goods.IsDurableInput[g])
                 {
-                    _prices[g] = Goods.BasePrice[g];
+                    float bp = Goods.BasePrice[g];
+                    for (int m = 1; m <= _marketCount; m++)
+                        econ.PerMarketPrices[m][g] = bp;
+                    econ.MarketPrices[g] = bp;
                     continue;
                 }
 
-                float capacity = econ.ProductionCapacity[g];
-                if (capacity <= 0f) continue;
-
-                float demandPerPop = ConsumptionPerPop[g]
-                                   + Goods.CountyAdminPerPop[g];
+                float demandPerPop = ConsumptionPerPop[g] + Goods.CountyAdminPerPop[g];
                 float replacementPerPop = Goods.TargetStockPerPop[g] * Goods.Defs[g].SpoilageRate;
 
-                float totalDemand = 0f;
-                float totalStock = 0f;
-                for (int i = 0; i < countyIds.Length; i++)
+                float weightedPriceSum = 0f;
+
+                for (int m = 1; m <= _marketCount; m++)
                 {
-                    var ce = counties[countyIds[i]];
-                    if (ce == null) continue;
-                    totalDemand += ce.FacilityInputNeed[g]
+                    float capacity = _marketProductionCap[m][g];
+                    if (capacity <= 0f)
+                    {
+                        econ.PerMarketPrices[m][g] = Goods.MaxPrice[g];
+                        weightedPriceSum += Goods.MaxPrice[g] * marketPop[m];
+                        continue;
+                    }
+
+                    var mCountyIds = _marketCountyIds[m];
+                    float mDemand = 0f;
+                    float mStock = 0f;
+                    for (int i = 0; i < mCountyIds.Length; i++)
+                    {
+                        var ce = counties[mCountyIds[i]];
+                        if (ce == null) continue;
+                        mDemand += ce.FacilityInputNeed[g]
                                  + ce.Population * (demandPerPop + replacementPerPop);
-                    totalStock += ce.Stock[g];
+                        mStock += ce.Stock[g];
+                    }
+
+                    float supply = capacity + mStock / StockBufferDays;
+                    float rawPrice = mDemand > 0f
+                        ? Goods.BasePrice[g] * mDemand / supply
+                        : Goods.MinPrice[g];
+                    float price = Math.Max(Goods.MinPrice[g], Math.Min(rawPrice, Goods.MaxPrice[g]));
+                    econ.PerMarketPrices[m][g] = price;
+                    weightedPriceSum += price * marketPop[m];
                 }
 
-                float supply = capacity + totalStock / StockBufferDays;
-                float rawPrice = totalDemand > 0f
-                    ? Goods.BasePrice[g] * totalDemand / supply
-                    : Goods.MinPrice[g];
-                _prices[g] = Math.Max(Goods.MinPrice[g], Math.Min(rawPrice, Goods.MaxPrice[g]));
+                // Population-weighted average for global MarketPrices
+                econ.MarketPrices[g] = totalPop > 0f
+                    ? weightedPriceSum / totalPop
+                    : Goods.BasePrice[g];
             }
-
-            Array.Copy(_prices, state.Economy.MarketPrices, Goods.Count);
         }
     }
 }

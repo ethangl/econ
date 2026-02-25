@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
+using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Simulation;
 using EconSim.Core.Simulation.Systems;
 
 namespace EconSim.Core.Economy
 {
-    enum TradeScope { IntraProvince, CrossProvince, CrossRealm }
+    enum TradeScope { IntraProvince, CrossProvince, CrossMarket }
 
     /// <summary>
     /// Monetary taxation with ducal granary. Runs daily AFTER EconomySystem.
@@ -16,7 +17,7 @@ namespace EconSim.Core.Economy
     /// Phase 3: Monetary taxation (county → province production tax, province → realm revenue share)
     /// Phase 4: Admin wages (province + realm spend on admin, wages flow to counties)
     /// Phase 5: Minting (precious metals → crowns)
-    /// Phase 6: Trade passes (intra-prov, cross-prov, cross-realm with fees)
+    /// Phase 6: Trade passes (intra-prov, cross-prov, cross-market with fees)
     /// Phase 7: Ducal granary requisition (duke buys preserved staples from surplus counties)
     /// Phase 8: Emergency relief (duke distributes granary to distressed counties)
     /// </summary>
@@ -49,8 +50,8 @@ namespace EconSim.Core.Economy
         /// <summary>Buyers pay 5% toll on cross-province trade (paid to own province treasury).</summary>
         const float CrossProvTollRate = 0.05f;
 
-        /// <summary>Buyers pay 10% tariff on cross-realm trade (paid to own realm treasury).</summary>
-        const float CrossRealmTariffRate = 0.10f;
+        /// <summary>Buyers pay 10% tariff on cross-market trade (paid to own realm treasury).</summary>
+        const float CrossMarketTariffRate = 0.10f;
 
         /// <summary>Buyers pay 2% market fee on all trade (paid to market county treasury).</summary>
         const float MarketFeeRate = 0.02f;
@@ -105,7 +106,7 @@ namespace EconSim.Core.Economy
         /// <summary>Realm ID → array of all county IDs in that realm.</summary>
         int[][] _realmCounties;
 
-        /// <summary>All county IDs (for cross-realm trade global pool).</summary>
+        /// <summary>All county IDs (for cross-market trade global pool).</summary>
         int[] _allCountyIds;
 
         /// <summary>Total county count.</summary>
@@ -120,8 +121,11 @@ namespace EconSim.Core.Economy
         /// <summary>County ID → Realm ID (for deficit ledger).</summary>
         int[] _countyToRealm;
 
-        /// <summary>County ID hosting the market (receives market fees).</summary>
-        int _marketCountyId = -1;
+        /// <summary>County ID → Market ID (for per-market fee routing).</summary>
+        int[] _countyToMarket;
+
+        /// <summary>Market hub county IDs, indexed by market ID (slot 0 unused).</summary>
+        int[] _marketHubCounty;
 
         /// <summary>Realm ID → capital county ID (for depositing tradeable gold/silver).</summary>
         int[] _realmCapitalCounty;
@@ -360,10 +364,10 @@ namespace EconSim.Core.Economy
                     CrossProvTollRate, 0f, provinces, realms, TradeScope.CrossProvince);
             }
 
-            // Cross-realm: all counties globally
+            // Cross-market: all counties globally
             if (_realmIds.Length > 1)
                 ExecuteTradePass(counties, _allCountyIds, _surplusBuf, prices,
-                    CrossProvTollRate, CrossRealmTariffRate, provinces, realms, TradeScope.CrossRealm);
+                    CrossProvTollRate, CrossMarketTariffRate, provinces, realms, TradeScope.CrossMarket);
 
             // ── PHASE 7: Ducal granary requisition ──────────────────
             // Duke buys preserved staples from surplus counties at a discount.
@@ -546,9 +550,9 @@ namespace EconSim.Core.Economy
                                 ce.CrossProvTradeSold[g] += sold;
                                 ce.CrossProvTradeCrownsEarned += earned;
                                 break;
-                            case TradeScope.CrossRealm:
-                                ce.CrossRealmTradeSold[g] += sold;
-                                ce.CrossRealmTradeCrownsEarned += earned;
+                            case TradeScope.CrossMarket:
+                                ce.CrossMarketTradeSold[g] += sold;
+                                ce.CrossMarketTradeCrownsEarned += earned;
                                 int sellerRealmId = _countyToRealm[countyId];
                                 realms[sellerRealmId].TradeExports[g] += sold;
                                 realms[sellerRealmId].TradeRevenue += earned;
@@ -580,11 +584,11 @@ namespace EconSim.Core.Economy
                                 provinces[_countyToProvince[countyId]].TradeTollsCollected += toll;
                                 provinces[_countyToProvince[countyId]].Treasury += toll;
                                 break;
-                            case TradeScope.CrossRealm:
-                                ce.CrossRealmTradeBought[g] += bought;
-                                ce.CrossRealmTradeCrownsSpent += goodsCost;
-                                ce.CrossRealmTollsPaid += toll;
-                                ce.CrossRealmTariffsPaid += tariff;
+                            case TradeScope.CrossMarket:
+                                ce.CrossMarketTradeBought[g] += bought;
+                                ce.CrossMarketTradeCrownsSpent += goodsCost;
+                                ce.CrossMarketTollsPaid += toll;
+                                ce.CrossMarketTariffsPaid += tariff;
                                 int provId = _countyToProvince[countyId];
                                 provinces[provId].TradeTollsCollected += toll;
                                 provinces[provId].Treasury += toll;
@@ -596,10 +600,17 @@ namespace EconSim.Core.Economy
                                 break;
                         }
 
-                        if (_marketCountyId >= 0)
+                        if (marketFee > 0f && _countyToMarket != null)
                         {
-                            counties[_marketCountyId].Treasury += marketFee;
-                            counties[_marketCountyId].MarketFeesReceived += marketFee;
+                            int buyerMarketId = countyId < _countyToMarket.Length
+                                ? _countyToMarket[countyId] : 0;
+                            int hubCounty = buyerMarketId > 0 && buyerMarketId < _marketHubCounty.Length
+                                ? _marketHubCounty[buyerMarketId] : -1;
+                            if (hubCounty >= 0 && hubCounty < counties.Length && counties[hubCounty] != null)
+                            {
+                                counties[hubCounty].Treasury += marketFee;
+                                counties[hubCounty].MarketFeesReceived += marketFee;
+                            }
                         }
                     }
                 }
@@ -678,12 +689,12 @@ namespace EconSim.Core.Economy
                     ce.CrossProvTradeCrownsSpent = 0f;
                     ce.CrossProvTradeCrownsEarned = 0f;
                     ce.TradeTollsPaid = 0f;
-                    Array.Clear(ce.CrossRealmTradeBought, 0, ce.CrossRealmTradeBought.Length);
-                    Array.Clear(ce.CrossRealmTradeSold, 0, ce.CrossRealmTradeSold.Length);
-                    ce.CrossRealmTradeCrownsSpent = 0f;
-                    ce.CrossRealmTradeCrownsEarned = 0f;
-                    ce.CrossRealmTollsPaid = 0f;
-                    ce.CrossRealmTariffsPaid = 0f;
+                    Array.Clear(ce.CrossMarketTradeBought, 0, ce.CrossMarketTradeBought.Length);
+                    Array.Clear(ce.CrossMarketTradeSold, 0, ce.CrossMarketTradeSold.Length);
+                    ce.CrossMarketTradeCrownsSpent = 0f;
+                    ce.CrossMarketTradeCrownsEarned = 0f;
+                    ce.CrossMarketTollsPaid = 0f;
+                    ce.CrossMarketTariffsPaid = 0f;
                     ce.MarketFeesReceived = 0f;
                     ce.TransportCostsPaid = 0f;
                 }
@@ -810,7 +821,7 @@ namespace EconSim.Core.Economy
                 _realmCounties[realm.Id] = allCounties.ToArray();
             }
 
-            // All county IDs for cross-realm trade
+            // All county IDs for cross-market trade
             var allCountyList = new List<int>(mapData.Counties.Count);
             foreach (var county in mapData.Counties)
                 allCountyList.Add(county.Id);
@@ -818,7 +829,60 @@ namespace EconSim.Core.Economy
             _totalCountyCount = _allCountyIds.Length;
             _surplusBuf = new float[_totalCountyCount];
 
-            _marketCountyId = state.Economy.MarketCountyId;
+            // Cache county → market lookup and market hub county IDs
+            _countyToMarket = state.Economy.CountyToMarket;
+            var markets = state.Economy.Markets;
+            if (markets != null)
+            {
+                _marketHubCounty = new int[markets.Length];
+                for (int m = 0; m < markets.Length; m++)
+                    _marketHubCounty[m] = markets[m].HubCountyId;
+            }
+            else
+            {
+                _marketHubCounty = new int[0];
+            }
+
+            // Compute average cross-market hub-to-hub transport rate
+            var hubCost = state.Economy.HubToHubCost;
+            if (hubCost != null)
+            {
+                int marketCount = markets != null ? markets.Length - 1 : 0;
+                float costSum = 0f;
+                int pairs = 0;
+                float popSum = 0f;
+                for (int m1 = 1; m1 <= marketCount; m1++)
+                {
+                    for (int m2 = m1 + 1; m2 <= marketCount; m2++)
+                    {
+                        float pop1 = 0f, pop2 = 0f;
+                        // Population-weighted average
+                        for (int i = 0; i < _allCountyIds.Length; i++)
+                        {
+                            int cid = _allCountyIds[i];
+                            if (cid < _countyToMarket.Length)
+                            {
+                                int mid = _countyToMarket[cid];
+                                var ce = state.Economy.Counties[cid];
+                                if (ce == null) continue;
+                                if (mid == m1) pop1 += ce.Population;
+                                else if (mid == m2) pop2 += ce.Population;
+                            }
+                        }
+                        float w = pop1 * pop2;
+                        costSum += hubCost[m1][m2] * w;
+                        popSum += w;
+                        pairs++;
+                    }
+                }
+
+                // Convert path cost to Cr/kg transport rate
+                // Calibrate so median hub-to-hub distance ≈ current 0.021 Cr/kg (was 0.007 * 3)
+                const float CostNormFactor = 0.00003f;
+                float avgCost = popSum > 0f ? costSum / popSum : 0f;
+                _delivery.AvgCrossMarketTransport = avgCost * CostNormFactor;
+                SimLog.Log("trade", $"Cross-market transport: avgDijkstra={avgCost:F1} normFactor={CostNormFactor} rate={_delivery.AvgCrossMarketTransport:F4} Cr/kg (total={0.007f + _delivery.AvgCrossMarketTransport:F4})");
+            }
 
             // Resolve realm capital burg → cell → county
             _realmCapitalCounty = new int[maxRealmId + 1];

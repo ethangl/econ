@@ -32,6 +32,7 @@ namespace EconSim.Core.Economy
         const float NeedsWeight = 0.7f;
         const float ComfortWeight = 0.3f;
         int[] _countyIds;
+        int[] _countyToMarket;
 
         static EconomySystem()
         {
@@ -205,39 +206,13 @@ namespace EconSim.Core.Economy
                 }
             }
 
-            // Resolve market county: first realm's capital burg → cell → county
-            econ.MarketCountyId = ResolveMarketCounty(mapData, econ);
-
-            // Populate market data (single market for now — all counties map to market 1)
-            econ.CountyToMarket = new int[maxCountyId + 1];
-            foreach (var county in mapData.Counties)
-                econ.CountyToMarket[county.Id] = 1;
-
-            int hubCellId = 0;
-            int hubRealmId = 0;
-            if (econ.MarketCountyId > 0)
-            {
-                foreach (var county in mapData.Counties)
-                {
-                    if (county.Id == econ.MarketCountyId)
-                    {
-                        hubCellId = county.SeatCellId;
-                        hubRealmId = county.RealmId;
-                        break;
-                    }
-                }
-            }
-
-            econ.Markets = new MarketInfo[2]; // slot 0 unused
-            econ.Markets[1] = new MarketInfo
-            {
-                Id = 1,
-                HubCountyId = econ.MarketCountyId,
-                HubCellId = hubCellId,
-                HubRealmId = hubRealmId
-            };
+            // One market per realm — hub at realm capital burg's county
+            InitializeMarkets(mapData, econ, maxCountyId, state);
 
             state.Economy = econ;
+
+            // Cache county → market for local price lookups in Tick
+            _countyToMarket = econ.CountyToMarket;
         }
 
         static void ComputePopulationCaches(EconomyState econ, MapData mapData)
@@ -369,6 +344,13 @@ namespace EconSim.Core.Economy
                     ? countyFacilityIndices[countyId]
                     : null;
 
+                // Local market prices for this county's market zone
+                int countyMarketId = _countyToMarket != null && countyId < _countyToMarket.Length
+                    ? _countyToMarket[countyId] : 0;
+                var localPrices = econ.PerMarketPrices != null
+                    && countyMarketId > 0 && countyMarketId < econ.PerMarketPrices.Length
+                    ? econ.PerMarketPrices[countyMarketId] : econ.MarketPrices;
+
                 // Compute per-county seasonal modifier inputs (shared across goods)
                 float countyWave = ce.Latitude < 0 ? -seasonalWave : seasonalWave;
                 float countyAmplitude = Math.Abs(ce.Latitude) / 90f;
@@ -467,7 +449,7 @@ namespace EconSim.Core.Economy
                         // Price-based extraction throttle for commodity intermediates
                         else if (!Goods.HasDirectDemand[g] && Goods.BasePrice[g] > 0f)
                         {
-                            float priceRatio = econ.MarketPrices[g] / Goods.BasePrice[g];
+                            float priceRatio = localPrices[g] / Goods.BasePrice[g];
                             if (priceRatio < 1f) produced *= priceRatio;
                         }
 
@@ -532,7 +514,7 @@ namespace EconSim.Core.Economy
                             // Price-based facility throttle (skip durables and durable inputs — they use stock caps above)
                             if (Goods.BasePrice[output] > 0f && !Goods.IsDurable[output] && !Goods.IsDurableInput[output])
                             {
-                                float priceRatio = econ.MarketPrices[output] / Goods.BasePrice[output];
+                                float priceRatio = localPrices[output] / Goods.BasePrice[output];
                                 if (priceRatio < 1f) throughput *= priceRatio;
                             }
 
@@ -731,38 +713,134 @@ namespace EconSim.Core.Economy
             }
         }
 
-        static int ResolveMarketCounty(MapData mapData, EconomyState econ)
+        static void InitializeMarkets(MapData mapData, EconomyState econ, int maxCountyId, SimulationState state)
         {
-            // Try first realm's capital burg → cell → county
-            if (mapData.Realms != null && mapData.Realms.Count > 0 && mapData.Burgs != null)
-            {
-                var realm = mapData.Realms[0];
-                Burg burg = null;
-                foreach (var b in mapData.Burgs)
-                    if (b.Id == realm.CapitalBurgId) { burg = b; break; }
+            // Build realm → capital county/cell mapping
+            int maxRealmId = 0;
+            foreach (var realm in mapData.Realms)
+                if (realm.Id > maxRealmId) maxRealmId = realm.Id;
 
-                if (burg != null)
+            var realmCapitalCounty = new int[maxRealmId + 1];
+            var realmCapitalCell = new int[maxRealmId + 1];
+            for (int i = 0; i <= maxRealmId; i++)
+            {
+                realmCapitalCounty[i] = -1;
+                realmCapitalCell[i] = -1;
+            }
+
+            if (mapData.Burgs != null)
+            {
+                foreach (var realm in mapData.Realms)
                 {
-                    var cell = mapData.CellById[burg.CellId];
-                    if (cell.CountyId > 0 && cell.CountyId < econ.Counties.Length
+                    Burg burg = null;
+                    foreach (var b in mapData.Burgs)
+                        if (b.Id == realm.CapitalBurgId) { burg = b; break; }
+
+                    if (burg != null && mapData.CellById.TryGetValue(burg.CellId, out var cell)
+                        && cell.CountyId > 0 && cell.CountyId < econ.Counties.Length
                         && econ.Counties[cell.CountyId] != null)
-                        return cell.CountyId;
+                    {
+                        realmCapitalCounty[realm.Id] = cell.CountyId;
+                        realmCapitalCell[realm.Id] = burg.CellId;
+                    }
                 }
             }
 
-            // Fallback: county with highest population
-            int bestId = -1;
-            float bestPop = -1f;
-            for (int i = 0; i < econ.Counties.Length; i++)
+            // Fallback: if a realm has no valid capital, pick highest-pop county in realm
+            foreach (var realm in mapData.Realms)
             {
-                var ce = econ.Counties[i];
-                if (ce != null && ce.Population > bestPop)
+                if (realmCapitalCounty[realm.Id] >= 0) continue;
+                int bestId = -1;
+                float bestPop = -1f;
+                foreach (var county in mapData.Counties)
                 {
-                    bestPop = ce.Population;
-                    bestId = i;
+                    if (county.RealmId != realm.Id) continue;
+                    var ce = econ.Counties[county.Id];
+                    if (ce != null && ce.Population > bestPop)
+                    {
+                        bestPop = ce.Population;
+                        bestId = county.Id;
+                    }
+                }
+                if (bestId >= 0)
+                {
+                    realmCapitalCounty[realm.Id] = bestId;
+                    foreach (var county in mapData.Counties)
+                    {
+                        if (county.Id == bestId)
+                        {
+                            realmCapitalCell[realm.Id] = county.SeatCellId;
+                            break;
+                        }
+                    }
                 }
             }
-            return bestId;
+
+            // Create one MarketInfo per realm. Market IDs are 1-based, assigned in realm order.
+            int marketCount = mapData.Realms.Count;
+            econ.Markets = new MarketInfo[marketCount + 1]; // slot 0 unused
+            var realmIdToMarketId = new int[maxRealmId + 1];
+
+            for (int m = 0; m < mapData.Realms.Count; m++)
+            {
+                var realm = mapData.Realms[m];
+                int marketId = m + 1;
+                realmIdToMarketId[realm.Id] = marketId;
+                econ.Markets[marketId] = new MarketInfo
+                {
+                    Id = marketId,
+                    HubCountyId = realmCapitalCounty[realm.Id],
+                    HubCellId = realmCapitalCell[realm.Id],
+                    HubRealmId = realm.Id
+                };
+            }
+
+            // CountyToMarket: each county maps to its own realm's market
+            econ.CountyToMarket = new int[maxCountyId + 1];
+            foreach (var county in mapData.Counties)
+            {
+                int realmId = county.RealmId;
+                if (realmId >= 0 && realmId < realmIdToMarketId.Length)
+                    econ.CountyToMarket[county.Id] = realmIdToMarketId[realmId];
+                else
+                    econ.CountyToMarket[county.Id] = 1; // fallback to first market
+            }
+
+            // Allocate and seed PerMarketPrices
+            econ.PerMarketPrices = new float[marketCount + 1][];
+            for (int m = 1; m <= marketCount; m++)
+            {
+                econ.PerMarketPrices[m] = new float[Goods.Count];
+                Array.Copy(Goods.BasePrice, econ.PerMarketPrices[m], Goods.Count);
+            }
+
+            // Allocate empty MarketEmbargoes
+            econ.MarketEmbargoes = new System.Collections.Generic.HashSet<int>[marketCount + 1];
+            for (int m = 1; m <= marketCount; m++)
+                econ.MarketEmbargoes[m] = new System.Collections.Generic.HashSet<int>();
+
+            // Compute hub-to-hub transport cost matrix
+            econ.HubToHubCost = new float[marketCount + 1][];
+            for (int m = 1; m <= marketCount; m++)
+                econ.HubToHubCost[m] = new float[marketCount + 1];
+
+            if (state.Transport != null)
+            {
+                for (int m1 = 1; m1 <= marketCount; m1++)
+                {
+                    int cell1 = econ.Markets[m1].HubCellId;
+                    if (cell1 < 0) continue;
+                    for (int m2 = m1 + 1; m2 <= marketCount; m2++)
+                    {
+                        int cell2 = econ.Markets[m2].HubCellId;
+                        if (cell2 < 0) continue;
+                        float cost = state.Transport.GetTransportCost(cell1, cell2);
+                        if (cost == float.MaxValue) cost = 1000f; // no path — large penalty
+                        econ.HubToHubCost[m1][m2] = cost;
+                        econ.HubToHubCost[m2][m1] = cost;
+                    }
+                }
+            }
         }
 
         static EconomySnapshot BuildSnapshot(int day, EconomyState econ)
@@ -783,8 +861,8 @@ namespace EconSim.Core.Economy
             snap.TotalIntraProvTradeSoldByGood = new float[Goods.Count];
             snap.TotalCrossProvTradeBoughtByGood = new float[Goods.Count];
             snap.TotalCrossProvTradeSoldByGood = new float[Goods.Count];
-            snap.TotalCrossRealmTradeBoughtByGood = new float[Goods.Count];
-            snap.TotalCrossRealmTradeSoldByGood = new float[Goods.Count];
+            snap.TotalCrossMarketTradeBoughtByGood = new float[Goods.Count];
+            snap.TotalCrossMarketTradeSoldByGood = new float[Goods.Count];
 
             int countyCount = 0;
             snap.MinBasicSatisfaction = float.MaxValue;
@@ -817,18 +895,18 @@ namespace EconSim.Core.Economy
                     snap.TotalIntraProvTradeSoldByGood[g] += ce.TradeSold[g];
                     snap.TotalCrossProvTradeBoughtByGood[g] += ce.CrossProvTradeBought[g];
                     snap.TotalCrossProvTradeSoldByGood[g] += ce.CrossProvTradeSold[g];
-                    snap.TotalCrossRealmTradeBoughtByGood[g] += ce.CrossRealmTradeBought[g];
-                    snap.TotalCrossRealmTradeSoldByGood[g] += ce.CrossRealmTradeSold[g];
+                    snap.TotalCrossMarketTradeBoughtByGood[g] += ce.CrossMarketTradeBought[g];
+                    snap.TotalCrossMarketTradeSoldByGood[g] += ce.CrossMarketTradeSold[g];
                 }
                 snap.TotalIntraProvTradeSpending += ce.TradeCrownsSpent;
                 snap.TotalIntraProvTradeRevenue += ce.TradeCrownsEarned;
                 snap.TotalCrossProvTradeSpending += ce.CrossProvTradeCrownsSpent;
                 snap.TotalCrossProvTradeRevenue += ce.CrossProvTradeCrownsEarned;
                 snap.TotalTradeTollsPaid += ce.TradeTollsPaid;
-                snap.TotalCrossRealmTradeSpending += ce.CrossRealmTradeCrownsSpent;
-                snap.TotalCrossRealmTradeRevenue += ce.CrossRealmTradeCrownsEarned;
-                snap.TotalCrossRealmTollsPaid += ce.CrossRealmTollsPaid;
-                snap.TotalCrossRealmTariffsPaid += ce.CrossRealmTariffsPaid;
+                snap.TotalCrossMarketTradeSpending += ce.CrossMarketTradeCrownsSpent;
+                snap.TotalCrossMarketTradeRevenue += ce.CrossMarketTradeCrownsEarned;
+                snap.TotalCrossMarketTollsPaid += ce.CrossMarketTollsPaid;
+                snap.TotalCrossMarketTariffsPaid += ce.CrossMarketTariffsPaid;
 
                 float foodStock = ce.Stock[Food];
                 if (foodStock < snap.MinStock) snap.MinStock = foodStock;
@@ -935,7 +1013,7 @@ namespace EconSim.Core.Economy
                     snap.TotalCrownsMinted += re.CrownsMinted;
                     snap.TotalTradeSpending += re.TradeSpending;
                     snap.TotalTradeRevenue += re.TradeRevenue;
-                    snap.TotalCrossRealmTariffsCollected += re.TradeTariffsCollected;
+                    snap.TotalCrossMarketTariffsCollected += re.TradeTariffsCollected;
                 }
             }
 
@@ -947,6 +1025,20 @@ namespace EconSim.Core.Economy
             {
                 snap.MarketPrices = new float[Goods.Count];
                 Array.Copy(econ.MarketPrices, snap.MarketPrices, Goods.Count);
+            }
+
+            // Per-market prices snapshot
+            if (econ.PerMarketPrices != null)
+            {
+                snap.PerMarketPrices = new float[econ.PerMarketPrices.Length][];
+                for (int m = 1; m < econ.PerMarketPrices.Length; m++)
+                {
+                    if (econ.PerMarketPrices[m] != null)
+                    {
+                        snap.PerMarketPrices[m] = new float[Goods.Count];
+                        Array.Copy(econ.PerMarketPrices[m], snap.PerMarketPrices[m], Goods.Count);
+                    }
+                }
             }
 
             // Backward-compat scalars = food values
