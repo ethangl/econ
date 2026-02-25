@@ -40,8 +40,8 @@ There are 32 goods, each belonging to a **need category**:
 - **Basic** (salt, barley) — individually consumed, contributes to basic
   satisfaction
 - **Comfort** (bread, ale, wine, bacon, pottery, furniture, tools, clothes,
-  gold jewelry, silver jewelry) — drives migration pull; durables measured by
-  stock level, consumables by flow
+  gold jewelry, silver jewelry) — grouped into 7 substitute categories; drives
+  migration pull
 - **None** (timber, iron ore, gold ore, silver ore, stone, clay, wool, pork,
   milk, fish, gold, silver, iron, charcoal, grapes) — intermediate or facility
   inputs, no direct population demand
@@ -61,6 +61,27 @@ Durables and durable-input goods use fixed base pricing instead.
 | Clothes        | 2.0 kg      | 2.50 Cr    | 2.0 /person  |
 | Gold Jewelry   | 0.05 kg     | 15.00 Cr   | 0.2 /person  |
 | Silver Jewelry | 0.10 kg     | 8.00 Cr    | 0.3 /person  |
+
+### Comfort Categories
+
+Comfort goods are grouped into **substitute categories**. Within each category,
+goods are fungible — their stock or consumption is summed against a single
+category-level target. This means a county producing only ale can fully satisfy
+the Alcohol category, while a county producing both ale and wine reaches the
+target faster.
+
+| Category      | Goods                   | Target/person | Measurement |
+| ------------- | ----------------------- | ------------- | ----------- |
+| Alcohol       | Ale, Wine               | 0.05 kg/day   | consumption |
+| Prepared Food | Bread, Bacon            | 0.10 kg/day   | consumption |
+| Pottery       | Pottery                 | 3.0 units     | stock       |
+| Furniture     | Furniture               | 0.5 units     | stock       |
+| Tools         | Tools                   | 1.0 units     | stock       |
+| Clothing      | Clothes                 | 2.0 units     | stock       |
+| Jewelry       | Gold Jewelry, Silver J. | 0.2 units     | stock       |
+
+Category fulfillment = min(1, sum of member goods / (population × target)).
+Overall comfort = average across all 7 categories.
 
 ### Staple Pool
 
@@ -391,10 +412,12 @@ Two satisfaction metrics are computed as 30-day exponential moving averages
 **Satisfaction** (drives migration):
 
         Compute comfort fulfillment:
-            For each comfort good:
-                If durable: ratio = min(1, stock / target_stock)
-                Else: ratio = min(1, consumed / needed)
-            comfort_average = mean of all comfort ratios
+            For each comfort category (7 categories):
+                Sum actual values across all member goods:
+                    If durable category: actual = sum of stock across member goods
+                    Else: actual = sum of consumption across member goods
+                category_ratio = min(1, actual / (population × category_target))
+            comfort_average = mean of all 7 category ratios
 
         Blended satisfaction = 0.70 × needs_score + 0.30 × comfort_average
         Satisfaction += 0.065 × (blended - Satisfaction)

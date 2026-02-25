@@ -4,6 +4,21 @@ namespace EconSim.Core.Economy
 {
     public enum GoodCategory { Raw, Refined, Finished }
     public enum NeedCategory { None, Staple, Basic, Comfort, Luxury }
+    public enum ComfortCategory { None, Alcohol, PreparedFood, Pottery, Furniture, Tools, Clothing, Jewelry }
+
+    public readonly struct ComfortCategoryDef
+    {
+        public readonly ComfortCategory Category;
+        public readonly float TargetPerPop;
+        public readonly bool IsDurable;
+
+        public ComfortCategoryDef(ComfortCategory category, float targetPerPop, bool isDurable)
+        {
+            Category = category;
+            TargetPerPop = targetPerPop;
+            IsDurable = isDurable;
+        }
+    }
 
     public readonly struct GoodDef
     {
@@ -26,6 +41,9 @@ namespace EconSim.Core.Economy
         /// <summary>Weight in kg per unit. 1.0 for bulk goods (unit = kg). >1 for durables (unit = item).</summary>
         public readonly float UnitWeight;
 
+        /// <summary>Comfort category for substitute grouping (None = not a comfort good).</summary>
+        public readonly ComfortCategory Comfort;
+
         /// <summary>Sensitivity to seasonal extraction penalty (0 = unaffected, 1 = fully seasonal).</summary>
         public readonly float SeasonalSensitivity;
 
@@ -45,7 +63,8 @@ namespace EconSim.Core.Economy
             float basePrice, float minPrice, float maxPrice,
             bool isTradeable, bool isPreciousMetal,
             float spoilageRate = 0f, float targetStockPerPop = 0f,
-            float unitWeight = 1f, float seasonalSensitivity = 0f,
+            float unitWeight = 1f, ComfortCategory comfortCategory = ComfortCategory.None,
+            float seasonalSensitivity = 0f,
             float minTemperature = float.NegativeInfinity, float maxTemperature = float.PositiveInfinity,
             Dictionary<int, float> biomeYields = null)
         {
@@ -65,6 +84,7 @@ namespace EconSim.Core.Economy
             SpoilageRate = spoilageRate;
             TargetStockPerPop = targetStockPerPop;
             UnitWeight = unitWeight;
+            Comfort = comfortCategory;
             SeasonalSensitivity = seasonalSensitivity;
             MinTemperature = minTemperature;
             MaxTemperature = maxTemperature;

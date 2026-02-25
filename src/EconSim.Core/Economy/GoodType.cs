@@ -133,6 +133,12 @@ namespace EconSim.Core.Economy
         /// <summary>Normalized ideal share of the staple budget per good (indexed by GoodType). Zero for non-staples.</summary>
         public static readonly float[] StapleIdealPerPop;
 
+        /// <summary>Comfort category definitions — one per category, defines satisfaction target.</summary>
+        public static readonly ComfortCategoryDef[] ComfortCategories;
+
+        /// <summary>Good indices belonging to each comfort category, parallel to ComfortCategories.</summary>
+        public static readonly int[][] ComfortCategoryGoods;
+
         /// <summary>
         /// Preferred buy-priority prefix. Any remaining tradeable goods are appended automatically.
         /// </summary>
@@ -267,12 +273,12 @@ namespace EconSim.Core.Economy
                         { (int)BiomeId.CoastalMarsh, 0.2f }, { (int)BiomeId.Floodplain, 0.3f },
                         { (int)BiomeId.Wetland, 0.15f }, { (int)BiomeId.Scrubland, 0.05f },
                     }),
-                new GoodDef(GoodType.Pottery,    "pottery",   GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.001f, 0.0005f, 0.0005f, 0.15f, 0.0075f, 3.0f, true, false, 0.002f, 3.0f, unitWeight: 1.0f),
-                new GoodDef(GoodType.Furniture,  "furniture", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0f, 0.0f, 1.50f, 0.075f, 30.0f, true, false, 0.001f, 0.5f, unitWeight: 10.0f),
+                new GoodDef(GoodType.Pottery,    "pottery",   GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.001f, 0.0005f, 0.0005f, 0.15f, 0.0075f, 3.0f, true, false, 0.002f, 3.0f, unitWeight: 1.0f, comfortCategory: ComfortCategory.Pottery),
+                new GoodDef(GoodType.Furniture,  "furniture", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0f, 0.0f, 1.50f, 0.075f, 30.0f, true, false, 0.001f, 0.5f, unitWeight: 10.0f, comfortCategory: ComfortCategory.Furniture),
                 new GoodDef(GoodType.Iron,       "iron",      GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.50f, 0.025f, 10.0f, true, false),
-                new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0005f, 0.001f, 3.00f, 0.15f, 60.0f, true, false, 0.001f, 1.0f, unitWeight: 3.0f),
+                new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0005f, 0.001f, 3.00f, 0.15f, 60.0f, true, false, 0.001f, 1.0f, unitWeight: 3.0f, comfortCategory: ComfortCategory.Tools),
                 new GoodDef(GoodType.Charcoal,   "charcoal",  GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.06f, 0.003f, 1.2f, true, false),
-                new GoodDef(GoodType.Clothes,    "clothes",   GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0f, 0.002f, 2.50f, 0.125f, 50.0f, true, false, 0.002f, 2.0f, unitWeight: 2.0f),
+                new GoodDef(GoodType.Clothes,    "clothes",   GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0f, 0.002f, 2.50f, 0.125f, 50.0f, true, false, 0.002f, 2.0f, unitWeight: 2.0f, comfortCategory: ComfortCategory.Clothing),
                 new GoodDef(GoodType.Pork, "pork", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.02f, 0f, seasonalSensitivity: 0.4f, minTemperature: -5f, maxTemperature: 35f,
                     biomeYields: new Dictionary<int, float> {
                         { (int)BiomeId.Tundra, 0.02f }, { (int)BiomeId.CoastalMarsh, 0.08f },
@@ -284,7 +290,7 @@ namespace EconSim.Core.Economy
                         { (int)BiomeId.Woodland, 0.30f },
                     }),
                 new GoodDef(GoodType.Sausage,    "sausage",   GoodCategory.Finished, NeedCategory.Staple, 0.21f, 0.0f, 0.0f, 0.0f, 0.20f, 0.01f, 4.0f, true, false, 0.002f),
-                new GoodDef(GoodType.Bacon,      "bacon",     GoodCategory.Finished, NeedCategory.Comfort, 0.1f, 0.0f, 0.0f, 0.0f, 0.25f, 0.0125f, 5.0f, true, false, 0.02f),
+                new GoodDef(GoodType.Bacon,      "bacon",     GoodCategory.Finished, NeedCategory.Comfort, 0.1f, 0.0f, 0.0f, 0.0f, 0.25f, 0.0125f, 5.0f, true, false, 0.02f, comfortCategory: ComfortCategory.PreparedFood),
                 new GoodDef(GoodType.Milk, "milk", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.025f, 0.00125f, 0.5f, true, false, 0.05f, 0f, seasonalSensitivity: 0.5f, minTemperature: -5f, maxTemperature: 35f,
                     biomeYields: new Dictionary<int, float> {
                         { (int)BiomeId.Tundra, 0.022f }, { (int)BiomeId.CoastalMarsh, 0.055f },
@@ -303,19 +309,19 @@ namespace EconSim.Core.Economy
                     }),
                 new GoodDef(GoodType.SaltedFish,  "saltedFish", GoodCategory.Finished, NeedCategory.Staple, 0.14f, 0.0f, 0.0f, 0.0f, 0.12f, 0.006f, 2.4f, true, false, 0.003f),
                 new GoodDef(GoodType.Stockfish,   "stockfish",  GoodCategory.Finished, NeedCategory.Staple, 0.08f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.001f),
-                new GoodDef(GoodType.Bread, "bread", GoodCategory.Finished, NeedCategory.Comfort, 0.05f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.03f),
-                new GoodDef(GoodType.Ale, "ale", GoodCategory.Finished, NeedCategory.Comfort, 0.05f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.03f),
+                new GoodDef(GoodType.Bread, "bread", GoodCategory.Finished, NeedCategory.Comfort, 0.05f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.03f, comfortCategory: ComfortCategory.PreparedFood),
+                new GoodDef(GoodType.Ale, "ale", GoodCategory.Finished, NeedCategory.Comfort, 0.05f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.03f, comfortCategory: ComfortCategory.Alcohol),
                 new GoodDef(GoodType.Gold, "gold", GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 1050.0f, 1050.0f, 1050.0f, true, false),
                 new GoodDef(GoodType.Silver, "silver", GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 105.0f, 105.0f, 105.0f, true, false),
-                new GoodDef(GoodType.GoldJewelry, "goldJewelry", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0f, 0.0f, 0.0f, 15.0f, 0.75f, 300.0f, true, false, 0.0005f, 0.2f, unitWeight: 0.05f),
-                new GoodDef(GoodType.SilverJewelry, "silverJewelry", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0f, 0.0f, 0.0f, 8.0f, 0.40f, 160.0f, true, false, 0.0005f, 0.3f, unitWeight: 0.1f),
+                new GoodDef(GoodType.GoldJewelry, "goldJewelry", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0f, 0.0f, 0.0f, 15.0f, 0.75f, 300.0f, true, false, 0.0005f, 0.2f, unitWeight: 0.05f, comfortCategory: ComfortCategory.Jewelry),
+                new GoodDef(GoodType.SilverJewelry, "silverJewelry", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0f, 0.0f, 0.0f, 8.0f, 0.40f, 160.0f, true, false, 0.0005f, 0.3f, unitWeight: 0.1f, comfortCategory: ComfortCategory.Jewelry),
                 new GoodDef(GoodType.Grapes, "grapes", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.02f, 0f, seasonalSensitivity: 0.95f, minTemperature: 12f,
                     biomeYields: new Dictionary<int, float> {
                         { (int)BiomeId.Woodland, 0.25f }, { (int)BiomeId.Scrubland, 0.20f },
                         { (int)BiomeId.Grassland, 0.15f }, { (int)BiomeId.TemperateForest, 0.10f },
                         { (int)BiomeId.MountainShrub, 0.05f }, { (int)BiomeId.Savanna, 0.08f },
                     }),
-                new GoodDef(GoodType.Wine, "wine", GoodCategory.Finished, NeedCategory.Comfort, 0.03f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.005f),
+                new GoodDef(GoodType.Wine, "wine", GoodCategory.Finished, NeedCategory.Comfort, 0.03f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.005f, comfortCategory: ComfortCategory.Alcohol),
             };
 
             Count = Defs.Length;
@@ -408,6 +414,28 @@ namespace EconSim.Core.Economy
                     int g = StapleGoods[s];
                     StapleIdealPerPop[g] = ConsumptionPerPop[g] / totalStapleWeight * StapleBudgetPerPop;
                 }
+            }
+
+            // Build comfort category definitions and good-index arrays
+            var catDefs = new ComfortCategoryDef[]
+            {
+                new ComfortCategoryDef(ComfortCategory.Alcohol,      0.05f, false),
+                new ComfortCategoryDef(ComfortCategory.PreparedFood, 0.10f, false),
+                new ComfortCategoryDef(ComfortCategory.Pottery,      3.0f,  true),
+                new ComfortCategoryDef(ComfortCategory.Furniture,    0.5f,  true),
+                new ComfortCategoryDef(ComfortCategory.Tools,        1.0f,  true),
+                new ComfortCategoryDef(ComfortCategory.Clothing,     2.0f,  true),
+                new ComfortCategoryDef(ComfortCategory.Jewelry,      0.2f,  true),
+            };
+            ComfortCategories = catDefs;
+            ComfortCategoryGoods = new int[catDefs.Length][];
+            for (int c = 0; c < catDefs.Length; c++)
+            {
+                var members = new List<int>();
+                for (int i = 0; i < Count; i++)
+                    if (Defs[i].Comfort == catDefs[c].Category)
+                        members.Add(i);
+                ComfortCategoryGoods[c] = members.ToArray();
             }
 
             // Build flat biome yield array from per-good BiomeYields dictionaries
