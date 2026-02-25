@@ -33,15 +33,15 @@ prevent stalls when running at high speed.
 
 ## Goods
 
-There are 32 goods, each belonging to a **need category**:
+There are 34 goods, each belonging to a **need category**:
 
 - **Staple** (wheat, sausage, cheese, salted fish, stockfish) — pooled food
   budget, starvation if unmet
 - **Basic** (salt, barley) — individually consumed, contributes to basic
   satisfaction
-- **Comfort** (bread, ale, wine, bacon, pottery, furniture, tools, clothes,
-  gold jewelry, silver jewelry) — grouped into 7 substitute categories; drives
-  migration pull
+- **Comfort** (bread, ale, wine, mead, bacon, honey, pottery, furniture, tools,
+  clothes, gold jewelry, silver jewelry) — grouped into 8 substitute categories;
+  drives migration pull
 - **None** (timber, iron ore, gold ore, silver ore, stone, clay, wool, pork,
   milk, fish, gold, silver, iron, charcoal, grapes) — intermediate or facility
   inputs, no direct population demand
@@ -72,8 +72,9 @@ target faster.
 
 | Category      | Goods                   | Target/person | Measurement |
 | ------------- | ----------------------- | ------------- | ----------- |
-| Alcohol       | Ale, Wine               | 0.05 kg/day   | consumption |
+| Alcohol       | Ale, Wine, Mead         | 0.05 kg/day   | consumption |
 | Prepared Food | Bread, Bacon            | 0.10 kg/day   | consumption |
+| Pantry        | Honey                   | 0.02 kg/day   | consumption |
 | Pottery       | Pottery                 | 3.0 units     | stock       |
 | Furniture     | Furniture               | 0.5 units     | stock       |
 | Tools         | Tools                   | 1.0 units     | stock       |
@@ -81,7 +82,7 @@ target faster.
 | Jewelry       | Gold Jewelry, Silver J. | 0.2 units     | stock       |
 
 Category fulfillment = min(1, sum of member goods / (population × target)).
-Overall comfort = average across all 7 categories.
+Overall comfort = average across all 8 categories.
 
 ### Staple Pool
 
@@ -136,6 +137,7 @@ raw material availability.
 | Grapes    | 0.95        | 1.27×       | 0.73×       | 1.05×          | 0.95×          |
 | Wheat     | 0.9         | 1.25×       | 0.75×       | 1.05×          | 0.95×          |
 | Barley    | 0.9         | 1.25×       | 0.75×       | 1.05×          | 0.95×          |
+| Honey     | 0.6         | 1.17×       | 0.83×       | 1.03×          | 0.97×          |
 | Milk      | 0.5         | 1.14×       | 0.86×       | 1.03×          | 0.97×          |
 | Pork      | 0.4         | 1.11×       | 0.89×       | 1.02×          | 0.98×          |
 | Fish      | 0.3         | 1.08×       | 0.92×       | 1.02×          | 0.98×          |
@@ -153,6 +155,7 @@ range, that cell contributes zero yield for that good.
 | Good      | Min Temp | Max Temp |
 | --------- | -------- | -------- |
 | Grapes    | 12°C     | —        |
+| Honey     | 8°C      | —        |
 | Wheat     | 5°C      | 35°C     |
 | Barley    | 3°C      | 30°C     |
 | Wool      | -10°C    | 30°C     |
@@ -187,8 +190,8 @@ When the simulation starts, EconomySystem sets up all economic state:
     Place one of every facility type in every county:
         (Every county gets a kiln, carpenter, smelter, smithy, charcoal burner,
          weaver, butcher, smokehouse, cheesemaker, salter, drying rack, bakery,
-         brewery, gold jeweler, silver jeweler, and winery — whether they can
-         actually operate depends on input availability)
+         brewery, gold jeweler, silver jeweler, winery, and meadery — whether
+         they can actually operate depends on input availability)
 
     Initialize province and realm economies (empty treasuries and granaries)
 
@@ -412,12 +415,12 @@ Two satisfaction metrics are computed as 30-day exponential moving averages
 **Satisfaction** (drives migration):
 
         Compute comfort fulfillment:
-            For each comfort category (7 categories):
+            For each comfort category (8 categories):
                 Sum actual values across all member goods:
                     If durable category: actual = sum of stock across member goods
                     Else: actual = sum of consumption across member goods
                 category_ratio = min(1, actual / (population × category_target))
-            comfort_average = mean of all 7 category ratios
+            comfort_average = mean of all 8 category ratios
 
         Blended satisfaction = 0.70 × needs_score + 0.30 × comfort_average
         Satisfaction += 0.065 × (blended - Satisfaction)
@@ -698,7 +701,7 @@ EconomySystem). The monthly retention factor is (1 - daily_spoilage)^30.
 
     For each perishable good (wheat, barley, timber, wool, pork, milk, fish,
                               sausage, bacon, cheese, salted fish, stockfish,
-                              bread, ale, grapes, wine):
+                              bread, ale, grapes, wine, honey, mead):
         For each county:  stock *= monthly_retention
         For each province: granary_stock *= monthly_retention
         For each realm:    stockpile *= monthly_retention
@@ -728,6 +731,7 @@ population can work there).
 | Gold Jeweler    | 0.01 gold                   | 1 g.jewelry   | 1     | 2%        |
 | Silver Jeweler  | 0.05 silver                 | 1 s.jewelry   | 1     | 2%        |
 | Winery          | 2.0 grapes                  | 1.5 wine      | 1     | 10%       |
+| Meadery         | 2.0 honey                   | 2.0 mead      | 1     | 10%       |
 
 Durable outputs (pottery, furniture, tools, clothes, gold jewelry, silver
 jewelry) are in units; all other outputs are in kg.

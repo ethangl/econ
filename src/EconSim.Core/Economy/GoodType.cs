@@ -38,6 +38,8 @@ namespace EconSim.Core.Economy
         SilverJewelry = 29,
         Grapes = 30,
         Wine = 31,
+        Honey = 32,
+        Mead = 33,
     }
 
     public static class Goods
@@ -165,6 +167,8 @@ namespace EconSim.Core.Economy
             (int)GoodType.IronOre,
             (int)GoodType.Iron,
             (int)GoodType.Charcoal,
+            (int)GoodType.Honey,
+            (int)GoodType.Mead,
             (int)GoodType.GoldJewelry,
             (int)GoodType.SilverJewelry,
             (int)GoodType.Gold,
@@ -322,6 +326,14 @@ namespace EconSim.Core.Economy
                         { (int)BiomeId.MountainShrub, 0.05f }, { (int)BiomeId.Savanna, 0.08f },
                     }),
                 new GoodDef(GoodType.Wine, "wine", GoodCategory.Finished, NeedCategory.Comfort, 0.03f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.005f, comfortCategory: ComfortCategory.Alcohol),
+                new GoodDef(GoodType.Honey, "honey", GoodCategory.Raw, NeedCategory.Comfort, 0.02f, 0.0f, 0.0f, 0.0f, 0.12f, 0.006f, 2.4f, true, false, 0.001f, comfortCategory: ComfortCategory.Pantry, seasonalSensitivity: 0.6f, minTemperature: 8f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.Grassland, 0.08f }, { (int)BiomeId.Woodland, 0.06f },
+                        { (int)BiomeId.Floodplain, 0.06f }, { (int)BiomeId.Savanna, 0.05f },
+                        { (int)BiomeId.TemperateForest, 0.04f }, { (int)BiomeId.Scrubland, 0.03f },
+                        { (int)BiomeId.TropicalDryForest, 0.03f }, { (int)BiomeId.MountainShrub, 0.02f },
+                    }),
+                new GoodDef(GoodType.Mead, "mead", GoodCategory.Finished, NeedCategory.Comfort, 0.03f, 0.0f, 0.0f, 0.0f, 0.10f, 0.005f, 2.0f, true, false, 0.005f, comfortCategory: ComfortCategory.Alcohol),
             };
 
             Count = Defs.Length;
@@ -426,6 +438,7 @@ namespace EconSim.Core.Economy
                 new ComfortCategoryDef(ComfortCategory.Tools,        1.0f,  true),
                 new ComfortCategoryDef(ComfortCategory.Clothing,     2.0f,  true),
                 new ComfortCategoryDef(ComfortCategory.Jewelry,      0.2f,  true),
+                new ComfortCategoryDef(ComfortCategory.Pantry,       0.02f, false),
             };
             ComfortCategories = catDefs;
             ComfortCategoryGoods = new int[catDefs.Length][];
