@@ -29,6 +29,12 @@ namespace EconSim.Core.Economy
         /// <summary>Sensitivity to seasonal extraction penalty (0 = unaffected, 1 = fully seasonal).</summary>
         public readonly float SeasonalSensitivity;
 
+        /// <summary>Minimum cell temperature (°C) for extraction. float.NegativeInfinity = no lower bound.</summary>
+        public readonly float MinTemperature;
+
+        /// <summary>Maximum cell temperature (°C) for extraction. float.PositiveInfinity = no upper bound.</summary>
+        public readonly float MaxTemperature;
+
         public readonly Dictionary<int, float> BiomeYields;
 
         public GoodDef(
@@ -40,6 +46,7 @@ namespace EconSim.Core.Economy
             bool isTradeable, bool isPreciousMetal,
             float spoilageRate = 0f, float targetStockPerPop = 0f,
             float unitWeight = 1f, float seasonalSensitivity = 0f,
+            float minTemperature = float.NegativeInfinity, float maxTemperature = float.PositiveInfinity,
             Dictionary<int, float> biomeYields = null)
         {
             Type = type;
@@ -59,6 +66,8 @@ namespace EconSim.Core.Economy
             TargetStockPerPop = targetStockPerPop;
             UnitWeight = unitWeight;
             SeasonalSensitivity = seasonalSensitivity;
+            MinTemperature = minTemperature;
+            MaxTemperature = maxTemperature;
             BiomeYields = biomeYields;
         }
     }

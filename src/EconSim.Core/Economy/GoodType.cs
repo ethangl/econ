@@ -84,6 +84,15 @@ namespace EconSim.Core.Economy
         /// <summary>Sensitivity to seasonal extraction penalty (0-1), indexed by GoodType.</summary>
         public static readonly float[] SeasonalSensitivity;
 
+        /// <summary>Minimum cell temperature (°C) for extraction. NegativeInfinity = no lower bound.</summary>
+        public static readonly float[] MinTemperature;
+
+        /// <summary>Maximum cell temperature (°C) for extraction. PositiveInfinity = no upper bound.</summary>
+        public static readonly float[] MaxTemperature;
+
+        /// <summary>True if the good has any temperature constraint (min or max).</summary>
+        public static readonly bool[] HasTemperatureGate;
+
         /// <summary>
         /// Daily durable stock-gap catch-up rate (0-1), indexed by GoodType.
         /// More durable goods (lower spoilage) refill more slowly.
@@ -177,7 +186,7 @@ namespace EconSim.Core.Economy
             //                            Type                Name        Category            Need             Cons    CAdmin  PAdmin  RAdmin  Base   Min    Max    Trade  Prec  Spoil  TgtStk  BiomeYields
             Defs = new[]
             {
-                new GoodDef(GoodType.Wheat, "wheat", GoodCategory.Raw, NeedCategory.Staple, 0.50f, 0.0f, 0.0f, 0.02f, 0.03f, 0.0015f, 0.6f, true, false, 0.001f, 0f, seasonalSensitivity: 0.9f,
+                new GoodDef(GoodType.Wheat, "wheat", GoodCategory.Raw, NeedCategory.Staple, 0.50f, 0.0f, 0.0f, 0.02f, 0.03f, 0.0015f, 0.6f, true, false, 0.001f, 0f, seasonalSensitivity: 0.9f, minTemperature: 5f, maxTemperature: 35f,
                     biomeYields: new Dictionary<int, float> {
                         { (int)BiomeId.Tundra, 0.18f }, { (int)BiomeId.SaltFlat, 0.09f },
                         { (int)BiomeId.CoastalMarsh, 0.69f }, { (int)BiomeId.AlpineBarren, 0.18f },
@@ -221,7 +230,7 @@ namespace EconSim.Core.Economy
                         { (int)BiomeId.SaltFlat, 0.9f }, { (int)BiomeId.CoastalMarsh, 0.70f },
                         { (int)BiomeId.Wetland, 0.15f },
                     }),
-                new GoodDef(GoodType.Wool, "wool", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.80f, 0.04f, 16.0f, true, false, 0.001f, 0f, seasonalSensitivity: 0.4f,
+                new GoodDef(GoodType.Wool, "wool", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.80f, 0.04f, 16.0f, true, false, 0.001f, 0f, seasonalSensitivity: 0.4f, minTemperature: -10f, maxTemperature: 30f,
                     biomeYields: new Dictionary<int, float> {
                         { (int)BiomeId.Tundra, 0.05f }, { (int)BiomeId.MountainShrub, 0.15f },
                         { (int)BiomeId.Floodplain, 0.1f }, { (int)BiomeId.ColdDesert, 0.05f },
@@ -240,7 +249,7 @@ namespace EconSim.Core.Economy
                         { (int)BiomeId.TemperateForest, 0.05f }, { (int)BiomeId.Grassland, 0.02f },
                         { (int)BiomeId.Woodland, 0.05f },
                     }),
-                new GoodDef(GoodType.Barley, "barley", GoodCategory.Raw, NeedCategory.Basic, 0.15f, 0.0f, 0.0f, 0.0f, 0.025f, 0.00125f, 0.5f, true, false, 0.001f, 0f, seasonalSensitivity: 0.9f,
+                new GoodDef(GoodType.Barley, "barley", GoodCategory.Raw, NeedCategory.Basic, 0.15f, 0.0f, 0.0f, 0.0f, 0.025f, 0.00125f, 0.5f, true, false, 0.001f, 0f, seasonalSensitivity: 0.9f, minTemperature: 3f, maxTemperature: 30f,
                     biomeYields: new Dictionary<int, float> {
                         { (int)BiomeId.Tundra, 0.10f }, { (int)BiomeId.CoastalMarsh, 0.04f },
                         { (int)BiomeId.MountainShrub, 0.08f }, { (int)BiomeId.Floodplain, 0.40f },
@@ -261,7 +270,7 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0005f, 0.001f, 3.00f, 0.15f, 60.0f, true, false, 0.001f, 1.0f, unitWeight: 3.0f),
                 new GoodDef(GoodType.Charcoal,   "charcoal",  GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.06f, 0.003f, 1.2f, true, false),
                 new GoodDef(GoodType.Clothes,    "clothes",   GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0f, 0.002f, 2.50f, 0.125f, 50.0f, true, false, 0.002f, 2.0f, unitWeight: 2.0f),
-                new GoodDef(GoodType.Pork, "pork", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.02f, 0f, seasonalSensitivity: 0.4f,
+                new GoodDef(GoodType.Pork, "pork", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.02f, 0f, seasonalSensitivity: 0.4f, minTemperature: -5f, maxTemperature: 35f,
                     biomeYields: new Dictionary<int, float> {
                         { (int)BiomeId.Tundra, 0.02f }, { (int)BiomeId.CoastalMarsh, 0.08f },
                         { (int)BiomeId.MountainShrub, 0.08f }, { (int)BiomeId.Floodplain, 0.15f },
@@ -273,7 +282,7 @@ namespace EconSim.Core.Economy
                     }),
                 new GoodDef(GoodType.Sausage,    "sausage",   GoodCategory.Finished, NeedCategory.Staple, 0.21f, 0.0f, 0.0f, 0.0f, 0.20f, 0.01f, 4.0f, true, false, 0.002f),
                 new GoodDef(GoodType.Bacon,      "bacon",     GoodCategory.Finished, NeedCategory.Comfort, 0.1f, 0.0f, 0.0f, 0.0f, 0.25f, 0.0125f, 5.0f, true, false, 0.02f),
-                new GoodDef(GoodType.Milk, "milk", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.025f, 0.00125f, 0.5f, true, false, 0.05f, 0f, seasonalSensitivity: 0.5f,
+                new GoodDef(GoodType.Milk, "milk", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.025f, 0.00125f, 0.5f, true, false, 0.05f, 0f, seasonalSensitivity: 0.5f, minTemperature: -5f, maxTemperature: 35f,
                     biomeYields: new Dictionary<int, float> {
                         { (int)BiomeId.Tundra, 0.022f }, { (int)BiomeId.CoastalMarsh, 0.055f },
                         { (int)BiomeId.MountainShrub, 0.11f }, { (int)BiomeId.Floodplain, 0.275f },
@@ -286,8 +295,8 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.Cheese,     "cheese",    GoodCategory.Finished, NeedCategory.Staple, 0.07f, 0.0f, 0.0f, 0.0f, 0.15f, 0.0075f, 3.0f, true, false, 0.003f),
                 new GoodDef(GoodType.Fish, "fish", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.05f, 0.0025f, 1.0f, true, false, 0.10f, 0f, seasonalSensitivity: 0.3f,
                     biomeYields: new Dictionary<int, float> {
-                        { (int)BiomeId.CoastalMarsh, 0.097f }, { (int)BiomeId.Floodplain, 0.121f },
-                        { (int)BiomeId.Wetland, 0.061f },
+                        { (int)BiomeId.CoastalMarsh, 0.12f }, { (int)BiomeId.Floodplain, 0.15f },
+                        { (int)BiomeId.Wetland, 0.08f },
                     }),
                 new GoodDef(GoodType.SaltedFish,  "saltedFish", GoodCategory.Finished, NeedCategory.Staple, 0.14f, 0.0f, 0.0f, 0.0f, 0.12f, 0.006f, 2.4f, true, false, 0.003f),
                 new GoodDef(GoodType.Stockfish,   "stockfish",  GoodCategory.Finished, NeedCategory.Staple, 0.08f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.001f),
@@ -314,6 +323,9 @@ namespace EconSim.Core.Economy
             TargetStockPerPop   = new float[Count];
             UnitWeight          = new float[Count];
             SeasonalSensitivity = new float[Count];
+            MinTemperature      = new float[Count];
+            MaxTemperature      = new float[Count];
+            HasTemperatureGate  = new bool[Count];
             DurableCatchUpRate  = new float[Count];
             DurableRetainPerPop = new float[Count];
             HasDirectDemand     = new bool[Count];
@@ -339,6 +351,10 @@ namespace EconSim.Core.Economy
                 TargetStockPerPop[i]   = d.TargetStockPerPop;
                 UnitWeight[i]          = d.UnitWeight;
                 SeasonalSensitivity[i] = d.SeasonalSensitivity;
+                MinTemperature[i]      = d.MinTemperature;
+                MaxTemperature[i]      = d.MaxTemperature;
+                HasTemperatureGate[i]  = !float.IsNegativeInfinity(d.MinTemperature)
+                                       || !float.IsPositiveInfinity(d.MaxTemperature);
                 if (d.TargetStockPerPop > 0f)
                 {
                     // Tie refill speed to durability: lower spoilage => slower catch-up.
