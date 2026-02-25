@@ -17,6 +17,7 @@ namespace EconSim.Core.Economy
         Brewery = 12,
         GoldJeweler = 13,
         SilverJeweler = 14,
+        Winery = 15,
     }
 
     public readonly struct RecipeInput
@@ -122,6 +123,9 @@ namespace EconSim.Core.Economy
                 new FacilityDef(FacilityType.SilverJeweler, "silverJeweler",
                     new[] { new RecipeInput(GoodType.Silver, 0.05f) },
                     GoodType.SilverJewelry, 1.0f, 1, 0.02f, 0.1f),
+                new FacilityDef(FacilityType.Winery, "winery",
+                    new[] { new RecipeInput(GoodType.Grapes, 2.0f) },
+                    GoodType.Wine, 1.5f, 1, 0.10f, 1.5f),
             };
 
             Count = Defs.Length;

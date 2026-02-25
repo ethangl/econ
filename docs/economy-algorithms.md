@@ -33,17 +33,18 @@ prevent stalls when running at high speed.
 
 ## Goods
 
-There are 26 goods, each belonging to a **need category**:
+There are 32 goods, each belonging to a **need category**:
 
 - **Staple** (wheat, sausage, cheese, salted fish, stockfish) — pooled food
   budget, starvation if unmet
 - **Basic** (salt, barley) — individually consumed, contributes to basic
   satisfaction
-- **Comfort** (bread, ale, bacon, pottery, furniture, tools, clothes) — drives
-  migration pull; durables measured by stock level, consumables by flow
-- **None** (timber, iron ore, gold, silver, stone, clay, wool, pork, milk,
-  fish, iron, charcoal) — intermediate or facility inputs, no direct population
-  demand
+- **Comfort** (bread, ale, wine, bacon, pottery, furniture, tools, clothes,
+  gold jewelry, silver jewelry) — drives migration pull; durables measured by
+  stock level, consumables by flow
+- **None** (timber, iron ore, gold ore, silver ore, stone, clay, wool, pork,
+  milk, fish, gold, silver, iron, charcoal, grapes) — intermediate or facility
+  inputs, no direct population demand
 
 Each good has a **base price** in Crowns per unit. For bulk goods the unit is
 1 kg; for durables the unit is one item (a pot, a chair, a tool set, an
@@ -52,12 +53,14 @@ for durables). Market prices float based on supply and demand (see Price
 Discovery below), bounded by a floor (5% of base) and a ceiling (20x base).
 Durables and durable-input goods use fixed base pricing instead.
 
-| Durable   | Unit Weight | Base Price | Target Stock |
-| --------- | ----------- | ---------- | ------------ |
-| Pottery   | 1.0 kg      | 0.15 Cr    | 3.0 /person  |
-| Furniture | 10.0 kg     | 1.50 Cr    | 0.5 /person  |
-| Tools     | 3.0 kg      | 3.00 Cr    | 1.0 /person  |
-| Clothes   | 2.0 kg      | 2.50 Cr    | 2.0 /person  |
+| Durable        | Unit Weight | Base Price | Target Stock |
+| -------------- | ----------- | ---------- | ------------ |
+| Pottery        | 1.0 kg      | 0.15 Cr    | 3.0 /person  |
+| Furniture      | 10.0 kg     | 1.50 Cr    | 0.5 /person  |
+| Tools          | 3.0 kg      | 3.00 Cr    | 1.0 /person  |
+| Clothes        | 2.0 kg      | 2.50 Cr    | 2.0 /person  |
+| Gold Jewelry   | 0.05 kg     | 15.00 Cr   | 0.2 /person  |
+| Silver Jewelry | 0.10 kg     | 8.00 Cr    | 0.3 /person  |
 
 ### Staple Pool
 
@@ -109,6 +112,7 @@ raw material availability.
 
 | Good      | Sensitivity | 50°N Summer | 50°N Winter | Warm Epoch Avg | Cold Epoch Avg |
 | --------- | ----------- | ----------- | ----------- | -------------- | -------------- |
+| Grapes    | 0.95        | 1.27×       | 0.73×       | 1.05×          | 0.95×          |
 | Wheat     | 0.9         | 1.25×       | 0.75×       | 1.05×          | 0.95×          |
 | Barley    | 0.9         | 1.25×       | 0.75×       | 1.05×          | 0.95×          |
 | Milk      | 0.5         | 1.14×       | 0.86×       | 1.03×          | 0.97×          |
@@ -118,6 +122,26 @@ raw material availability.
 | Salt      | 0.2         | 1.06×       | 0.94×       | 1.01×          | 0.99×          |
 | Timber    | 0.1         | 1.03×       | 0.97×       | 1.01×          | 0.99×          |
 | Iron Ore  | 0.05        | 1.01×       | 0.99×       | 1.00×          | 1.00×          |
+
+### Temperature Gating
+
+Some goods require minimum or maximum cell temperatures for extraction. During
+productivity initialization, if a cell's temperature falls outside a good's
+range, that cell contributes zero yield for that good.
+
+| Good      | Min Temp | Max Temp |
+| --------- | -------- | -------- |
+| Grapes    | 12°C     | —        |
+| Wheat     | 5°C      | 35°C     |
+| Barley    | 3°C      | 30°C     |
+| Wool      | -10°C    | 30°C     |
+| Pork      | -5°C     | 35°C     |
+| Milk      | -5°C     | 35°C     |
+
+This creates geographic specialization: grapes only grow in warm climates,
+wheat fails in extreme cold or heat, and livestock tolerates a wider range.
+Counties with cells outside the temperature range have zero productivity for
+that good, forcing trade dependence.
 
 ## Initialization (EconomySystem)
 
@@ -142,7 +166,8 @@ When the simulation starts, EconomySystem sets up all economic state:
     Place one of every facility type in every county:
         (Every county gets a kiln, carpenter, smelter, smithy, charcoal burner,
          weaver, butcher, smokehouse, cheesemaker, salter, drying rack, bakery,
-         and brewery — whether they can actually operate depends on input availability)
+         brewery, gold jeweler, silver jeweler, and winery — whether they can
+         actually operate depends on input availability)
 
     Initialize province and realm economies (empty treasuries and granaries)
 
@@ -619,7 +644,7 @@ EconomySystem). The monthly retention factor is (1 - daily_spoilage)^30.
 
     For each perishable good (wheat, barley, timber, wool, pork, milk, fish,
                               sausage, bacon, cheese, salted fish, stockfish,
-                              bread, ale):
+                              bread, ale, grapes, wine):
         For each county:  stock *= monthly_retention
         For each province: granary_stock *= monthly_retention
         For each realm:    stockpile *= monthly_retention
@@ -646,9 +671,12 @@ population can work there).
 | Drying Rack     | 2.0 fish                    | 1.5 stkfish   | 1     | 10%       |
 | Bakery          | 2.0 wheat + 0.03 salt       | 2.8 bread     | 1     | 15%       |
 | Brewery         | 2.0 barley                  | 4.0 ale       | 1     | 15%       |
+| Gold Jeweler    | 0.01 gold                   | 1 g.jewelry   | 1     | 2%        |
+| Silver Jeweler  | 0.05 silver                 | 1 s.jewelry   | 1     | 2%        |
+| Winery          | 2.0 grapes                  | 1.5 wine      | 1     | 10%       |
 
-Durable outputs (pottery, furniture, tools, clothes) are in units; all other
-outputs are in kg.
+Durable outputs (pottery, furniture, tools, clothes, gold jewelry, silver
+jewelry) are in units; all other outputs are in kg.
 
 Throughput is constrained by the minimum of:
 
@@ -661,7 +689,9 @@ Throughput is constrained by the minimum of:
 
 Crowns enter the economy through **minting**: realms confiscate all gold and
 silver ore produced by counties, smelt it (1% yield for gold, 5% for silver),
-and mint coins (1000 Cr/kg gold, 100 Cr/kg silver).
+and mint coins (1000 Cr/kg gold, 100 Cr/kg silver). The refined gold and silver
+(post-smelting) are also used by jewelers to produce gold and silver jewelry
+(comfort durables), creating a tension between minting and luxury production.
 
 Money circulates through:
 

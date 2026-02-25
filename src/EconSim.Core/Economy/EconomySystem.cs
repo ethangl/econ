@@ -705,15 +705,22 @@ namespace EconSim.Core.Economy
                 var cell = mapData.CellById[cellId];
                 if (!cell.IsLand) continue;
                 landCells++;
+                float cellTemp = cell.Temperature;
                 for (int g = 0; g < Goods.Count; g++)
-                    output[g] += Goods.BiomeYield[cell.BiomeId, g];
+                {
+                    float y = Goods.BiomeYield[cell.BiomeId, g];
+                    if (y > 0f && Goods.HasTemperatureGate[g]
+                        && (cellTemp < Goods.MinTemperature[g] || cellTemp > Goods.MaxTemperature[g]))
+                        continue;
+                    output[g] += y;
+                }
 
                 // Coast-proximity fishing bonus
                 switch (cell.CoastDistance)
                 {
-                    case 0: output[FishIdx] += 0.363f; break;
-                    case 1: output[FishIdx] += 0.182f; break;
-                    case 2: output[FishIdx] += 0.061f; break;
+                    case 0: output[FishIdx] += 0.45f; break;
+                    case 1: output[FishIdx] += 0.22f; break;
+                    case 2: output[FishIdx] += 0.08f; break;
                 }
             }
 
