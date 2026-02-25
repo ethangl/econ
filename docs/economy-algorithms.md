@@ -33,15 +33,15 @@ prevent stalls when running at high speed.
 
 ## Goods
 
-There are 32 goods, each belonging to a **need category**:
+There are 35 goods, each belonging to a **need category**:
 
-- **Staple** (wheat, sausage, cheese, salted fish, stockfish) — pooled food
-  budget, starvation if unmet
+- **Staple** (wheat, sausage, cheese, salted fish, stockfish, ale) — pooled
+  food budget, starvation if unmet
 - **Basic** (salt, barley) — individually consumed, contributes to basic
   satisfaction
-- **Comfort** (bread, ale, wine, bacon, pottery, furniture, tools, clothes,
-  gold jewelry, silver jewelry) — drives migration pull; durables measured by
-  stock level, consumables by flow
+- **Comfort** (bread, wine, mead, bacon, honey, butter, pottery, furniture,
+  tools, clothes, gold jewelry, silver jewelry) — grouped into 8 substitute
+  categories; drives migration pull
 - **None** (timber, iron ore, gold ore, silver ore, stone, clay, wool, pork,
   milk, fish, gold, silver, iron, charcoal, grapes) — intermediate or facility
   inputs, no direct population demand
@@ -62,13 +62,35 @@ Durables and durable-input goods use fixed base pricing instead.
 | Gold Jewelry   | 0.05 kg     | 15.00 Cr   | 0.2 /person  |
 | Silver Jewelry | 0.10 kg     | 8.00 Cr    | 0.3 /person  |
 
+### Comfort Categories
+
+Comfort goods are grouped into **substitute categories**. Within each category,
+goods are fungible — their stock or consumption is summed against a single
+category-level target. This means a county producing only ale can fully satisfy
+the Alcohol category, while a county producing both ale and wine reaches the
+target faster.
+
+| Category      | Goods                   | Target/person | Measurement |
+| ------------- | ----------------------- | ------------- | ----------- |
+| Alcohol       | Wine, Mead              | 0.05 kg/day   | consumption |
+| Prepared Food | Bread, Bacon            | 0.10 kg/day   | consumption |
+| Pantry        | Honey, Butter           | 0.02 kg/day   | consumption |
+| Pottery       | Pottery                 | 3.0 units     | stock       |
+| Furniture     | Furniture               | 0.5 units     | stock       |
+| Tools         | Tools                   | 1.0 units     | stock       |
+| Clothing      | Clothes                 | 2.0 units     | stock       |
+| Jewelry       | Gold Jewelry, Silver J. | 0.2 units     | stock       |
+
+Category fulfillment = min(1, sum of member goods / (population × target)).
+Overall comfort = average across all 8 categories.
+
 ### Staple Pool
 
 All staple goods contribute to a shared daily food budget of **1.0 kg per
 person**. Each staple has a nominal consumption rate (e.g. wheat 0.50, sausage
-0.21, cheese 0.07). These rates determine each staple's **ideal share** of the
-pool, normalized so the shares sum to 1.0 kg. People eat from whatever staples
-are available, proportional to stock.
+0.21, cheese 0.07, ale 0.05). These rates determine each staple's **ideal
+share** of the pool, normalized so the shares sum to 1.0 kg. People eat and
+drink from whatever staples are available, proportional to stock.
 
 ### Durable Goods
 
@@ -115,6 +137,7 @@ raw material availability.
 | Grapes    | 0.95        | 1.27×       | 0.73×       | 1.05×          | 0.95×          |
 | Wheat     | 0.9         | 1.25×       | 0.75×       | 1.05×          | 0.95×          |
 | Barley    | 0.9         | 1.25×       | 0.75×       | 1.05×          | 0.95×          |
+| Honey     | 0.6         | 1.17×       | 0.83×       | 1.03×          | 0.97×          |
 | Milk      | 0.5         | 1.14×       | 0.86×       | 1.03×          | 0.97×          |
 | Pork      | 0.4         | 1.11×       | 0.89×       | 1.02×          | 0.98×          |
 | Fish      | 0.3         | 1.08×       | 0.92×       | 1.02×          | 0.98×          |
@@ -132,6 +155,7 @@ range, that cell contributes zero yield for that good.
 | Good      | Min Temp | Max Temp |
 | --------- | -------- | -------- |
 | Grapes    | 12°C     | —        |
+| Honey     | 8°C      | —        |
 | Wheat     | 5°C      | 35°C     |
 | Barley    | 3°C      | 30°C     |
 | Wool      | -10°C    | 30°C     |
@@ -166,8 +190,8 @@ When the simulation starts, EconomySystem sets up all economic state:
     Place one of every facility type in every county:
         (Every county gets a kiln, carpenter, smelter, smithy, charcoal burner,
          weaver, butcher, smokehouse, cheesemaker, salter, drying rack, bakery,
-         brewery, gold jeweler, silver jeweler, and winery — whether they can
-         actually operate depends on input availability)
+         brewery, gold jeweler, silver jeweler, winery, meadery, and churn —
+         whether they can actually operate depends on input availability)
 
     Initialize province and realm economies (empty treasuries and granaries)
 
@@ -391,10 +415,12 @@ Two satisfaction metrics are computed as 30-day exponential moving averages
 **Satisfaction** (drives migration):
 
         Compute comfort fulfillment:
-            For each comfort good:
-                If durable: ratio = min(1, stock / target_stock)
-                Else: ratio = min(1, consumed / needed)
-            comfort_average = mean of all comfort ratios
+            For each comfort category (8 categories):
+                Sum actual values across all member goods:
+                    If durable category: actual = sum of stock across member goods
+                    Else: actual = sum of consumption across member goods
+                category_ratio = min(1, actual / (population × category_target))
+            comfort_average = mean of all 8 category ratios
 
         Blended satisfaction = 0.70 × needs_score + 0.30 × comfort_average
         Satisfaction += 0.065 × (blended - Satisfaction)
@@ -548,11 +574,12 @@ labor, cart wear) and act as a money sink alongside spoilage.
 
 ### Phase 7: Ducal Granary Requisition
 
-The duke (province) maintains an emergency food reserve by buying staples from
-surplus counties.
+The duke (province) maintains an emergency food reserve by buying grain from
+surplus counties. Only shelf-stable grain (wheat) is eligible — perishable
+staples like ale, sausage, and cheese are not stored.
 
     For each province:
-        For each staple good:
+        For each granary-eligible good (wheat):
             target = 7 days × province_pop × ideal_per_pop
             gap = target - current_granary_stock
             If no gap, skip
@@ -568,9 +595,9 @@ surplus counties.
 
 ### Phase 8: Emergency Relief
 
-After trade and granary filling, distribute food to distressed counties.
+After trade and granary filling, distribute grain to distressed counties.
 
-    For each staple good:
+    For each granary-eligible good (wheat):
         Identify distressed counties (BasicSatisfaction < 0.70):
             deficit = (population × ideal_per_pop) - stock, floored at 0
 
@@ -675,7 +702,7 @@ EconomySystem). The monthly retention factor is (1 - daily_spoilage)^30.
 
     For each perishable good (wheat, barley, timber, wool, pork, milk, fish,
                               sausage, bacon, cheese, salted fish, stockfish,
-                              bread, ale, grapes, wine):
+                              bread, ale, grapes, wine, honey, mead, butter):
         For each county:  stock *= monthly_retention
         For each province: granary_stock *= monthly_retention
         For each realm:    stockpile *= monthly_retention
@@ -705,6 +732,8 @@ population can work there).
 | Gold Jeweler    | 0.01 gold                   | 1 g.jewelry   | 1     | 2%        |
 | Silver Jeweler  | 0.05 silver                 | 1 s.jewelry   | 1     | 2%        |
 | Winery          | 2.0 grapes                  | 1.5 wine      | 1     | 10%       |
+| Meadery         | 2.0 honey                   | 2.0 mead      | 1     | 10%       |
+| Churn           | 3.0 milk                    | 1.0 butter    | 1     | 10%       |
 
 Durable outputs (pottery, furniture, tools, clothes, gold jewelry, silver
 jewelry) are in units; all other outputs are in kg.

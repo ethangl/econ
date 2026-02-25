@@ -26,9 +26,6 @@ namespace EconSim.Core.Economy
         static readonly float[] IndividualBasicWeights; // ConsumptionPerPop[g] / TotalSatisfactionDenom
         static readonly float StapleSatisfactionWeight; // StapleBudgetPerPop / TotalSatisfactionDenom
 
-        // Comfort goods for blended satisfaction (migration pull)
-        static readonly int[] ComfortGoods;
-        static readonly bool[] ComfortIsDurable; // true = stock/target, false = consumption/need
         const float NeedsWeight = 0.7f;
         const float ComfortWeight = 0.3f;
         int[] _countyIds;
@@ -63,23 +60,6 @@ namespace EconSim.Core.Economy
                 }
             }
 
-            // Build comfort goods list
-            int comfortCount = 0;
-            for (int g = 0; g < Goods.Count; g++)
-                if (Goods.Defs[g].Need == NeedCategory.Comfort) comfortCount++;
-
-            ComfortGoods = new int[comfortCount];
-            ComfortIsDurable = new bool[comfortCount];
-            idx = 0;
-            for (int g = 0; g < Goods.Count; g++)
-            {
-                if (Goods.Defs[g].Need == NeedCategory.Comfort)
-                {
-                    ComfortGoods[idx] = g;
-                    ComfortIsDurable[idx] = Goods.TargetStockPerPop[g] > 0f;
-                    idx++;
-                }
-            }
         }
 
         public void Initialize(SimulationState state, MapData mapData)
@@ -621,23 +601,24 @@ namespace EconSim.Core.Economy
                 }
                 ce.BasicSatisfaction += 0.065f * (dailyNeeds - ce.BasicSatisfaction);
 
-                // Comfort fulfillment — equal-weighted average across comfort goods
+                // Comfort fulfillment — average across categories, sum within each category
+                var comfortCats = Goods.ComfortCategories;
+                var comfortCatGoods = Goods.ComfortCategoryGoods;
                 float comfortSum = 0f;
-                for (int c = 0; c < ComfortGoods.Length; c++)
+                for (int cat = 0; cat < comfortCats.Length; cat++)
                 {
-                    int g = ComfortGoods[c];
-                    if (ComfortIsDurable[c])
+                    var catDef = comfortCats[cat];
+                    float catTarget = pop * catDef.TargetPerPop;
+                    float catActual = 0f;
+                    var members = comfortCatGoods[cat];
+                    for (int j = 0; j < members.Length; j++)
                     {
-                        float target = pop * Goods.TargetStockPerPop[g];
-                        comfortSum += target > 0f ? Math.Min(1f, ce.Stock[g] / target) : 1f;
+                        int g = members[j];
+                        catActual += catDef.IsDurable ? ce.Stock[g] : ce.Consumption[g];
                     }
-                    else
-                    {
-                        float needed = pop * ConsumptionPerPop[g];
-                        comfortSum += needed > 0f ? Math.Min(1f, ce.Consumption[g] / needed) : 1f;
-                    }
+                    comfortSum += catTarget > 0f ? Math.Min(1f, catActual / catTarget) : 1f;
                 }
-                float comfortFulfillment = ComfortGoods.Length > 0 ? comfortSum / ComfortGoods.Length : 1f;
+                float comfortFulfillment = comfortCats.Length > 0 ? comfortSum / comfortCats.Length : 1f;
 
                 // Blended satisfaction: needs + comfort — drives migration
                 float dailySatisfaction = NeedsWeight * dailyNeeds + ComfortWeight * comfortFulfillment;
