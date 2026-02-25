@@ -36,6 +36,8 @@ namespace EconSim.Core.Economy
         Silver = 27,
         GoldJewelry = 28,
         SilverJewelry = 29,
+        Grapes = 30,
+        Wine = 31,
     }
 
     public static class Goods
@@ -140,6 +142,7 @@ namespace EconSim.Core.Economy
             (int)GoodType.Bread,
             (int)GoodType.Barley,
             (int)GoodType.Ale,
+            (int)GoodType.Wine,
             (int)GoodType.Sausage,
             (int)GoodType.SaltedFish,
             (int)GoodType.Stockfish,
@@ -306,6 +309,13 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.Silver, "silver", GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 105.0f, 105.0f, 105.0f, true, false),
                 new GoodDef(GoodType.GoldJewelry, "goldJewelry", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0f, 0.0f, 0.0f, 15.0f, 0.75f, 300.0f, true, false, 0.0005f, 0.2f, unitWeight: 0.05f),
                 new GoodDef(GoodType.SilverJewelry, "silverJewelry", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0f, 0.0f, 0.0f, 8.0f, 0.40f, 160.0f, true, false, 0.0005f, 0.3f, unitWeight: 0.1f),
+                new GoodDef(GoodType.Grapes, "grapes", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.02f, 0f, seasonalSensitivity: 0.95f, minTemperature: 12f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.Woodland, 0.25f }, { (int)BiomeId.Scrubland, 0.20f },
+                        { (int)BiomeId.Grassland, 0.15f }, { (int)BiomeId.TemperateForest, 0.10f },
+                        { (int)BiomeId.MountainShrub, 0.05f }, { (int)BiomeId.Savanna, 0.08f },
+                    }),
+                new GoodDef(GoodType.Wine, "wine", GoodCategory.Finished, NeedCategory.Comfort, 0.03f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.005f),
             };
 
             Count = Defs.Length;
