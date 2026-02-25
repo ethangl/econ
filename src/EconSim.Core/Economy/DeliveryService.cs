@@ -9,14 +9,16 @@ namespace EconSim.Core.Economy
     public class DeliveryService
     {
         const float TransportRatePerKg = 0.007f;
-        const float CrossRealmMultiplier = 3f;
+
+        /// <summary>Average cross-market hub-to-hub transport premium. Set by FiscalSystem at init.</summary>
+        internal float AvgCrossMarketTransport;
 
         internal float GetTransportCost(TradeScope scope)
         {
             switch (scope)
             {
                 case TradeScope.CrossProvince: return TransportRatePerKg;
-                case TradeScope.CrossRealm:   return TransportRatePerKg * CrossRealmMultiplier;
+                case TradeScope.CrossMarket:   return TransportRatePerKg + AvgCrossMarketTransport;
                 default:                       return 0f;
             }
         }

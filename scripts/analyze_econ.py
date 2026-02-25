@@ -294,9 +294,9 @@ def print_trade_snapshot(data: dict):
 
     # Market fees
     market_fees = t.get("marketFeesCollected", 0)
-    market_county = t.get("marketCountyId", -1)
+    market_count = t.get("marketCount", 0)
     print()
-    print(f"  Market fees collected: {fmt(market_fees)} (county {market_county})")
+    print(f"  Market fees collected: {fmt(market_fees)} ({market_count} markets)")
 
     # Per-realm breakdown
     print()
@@ -488,33 +488,33 @@ def print_cross_province_trade(data: dict):
         print(f"  Toll revenue trend:   {fmt(early_toll)}/day -> {fmt(late_toll)}/day")
 
 
-def print_cross_realm_trade(data: dict):
-    section("CROSS-REALM TRADE")
+def print_cross_market_trade(data: dict):
+    section("CROSS-MARKET TRADE")
     ts = data["economy"]["timeSeries"]
     last = ts[-1]
 
     # Time series data
-    bought = last.get("crossRealmTradeBoughtByGood")
-    sold = last.get("crossRealmTradeSoldByGood")
-    spending = last.get("crossRealmTradeSpending", 0)
-    revenue = last.get("crossRealmTradeRevenue", 0)
-    tolls_paid = last.get("crossRealmTollsPaid", 0)
-    tariffs_paid = last.get("crossRealmTariffsPaid", 0)
-    tariffs_collected = last.get("crossRealmTariffsCollected", 0)
+    bought = last.get("crossMarketTradeBoughtByGood")
+    sold = last.get("crossMarketTradeSoldByGood")
+    spending = last.get("crossMarketTradeSpending", 0)
+    revenue = last.get("crossMarketTradeRevenue", 0)
+    tolls_paid = last.get("crossMarketTollsPaid", 0)
+    tariffs_paid = last.get("crossMarketTariffsPaid", 0)
+    tariffs_collected = last.get("crossMarketTariffsCollected", 0)
 
     if not bought and not sold:
         # Try trade section (end-of-sim snapshot)
         t = data.get("trade", {})
-        bought_map = t.get("crossRealmTradeBoughtByGood", {})
-        sold_map = t.get("crossRealmTradeSoldByGood", {})
-        spending = t.get("crossRealmTradeSpending", 0)
-        revenue = t.get("crossRealmTradeRevenue", 0)
-        tolls_paid = t.get("crossRealmTollsPaid", 0)
-        tariffs_paid = t.get("crossRealmTariffsPaid", 0)
+        bought_map = t.get("crossMarketTradeBoughtByGood", {})
+        sold_map = t.get("crossMarketTradeSoldByGood", {})
+        spending = t.get("crossMarketTradeSpending", 0)
+        revenue = t.get("crossMarketTradeRevenue", 0)
+        tolls_paid = t.get("crossMarketTollsPaid", 0)
+        tariffs_paid = t.get("crossMarketTariffsPaid", 0)
         tariffs_collected = t.get("tradeTariffsCollected", 0)
 
         if not bought_map and not sold_map:
-            print("  No cross-realm trade data")
+            print("  No cross-market trade data")
             return
 
         print(f"  {'Good':12s}  {'Bought':>10s}  {'Sold':>10s}")
@@ -553,10 +553,10 @@ def print_cross_realm_trade(data: dict):
     if len(ts) >= 20:
         early = ts[4:14]
         late = ts[-10:]
-        early_sp = sum(t.get("crossRealmTradeSpending", 0) for t in early) / len(early)
-        late_sp = sum(t.get("crossRealmTradeSpending", 0) for t in late) / len(late)
-        early_tar = sum(t.get("crossRealmTariffsPaid", 0) for t in early) / len(early)
-        late_tar = sum(t.get("crossRealmTariffsPaid", 0) for t in late) / len(late)
+        early_sp = sum(t.get("crossMarketTradeSpending", 0) for t in early) / len(early)
+        late_sp = sum(t.get("crossMarketTradeSpending", 0) for t in late) / len(late)
+        early_tar = sum(t.get("crossMarketTariffsPaid", 0) for t in early) / len(early)
+        late_tar = sum(t.get("crossMarketTariffsPaid", 0) for t in late) / len(late)
         print()
         print(f"  Trade spending trend:  {fmt(early_sp)}/day -> {fmt(late_sp)}/day")
         print(f"  Tariff revenue trend:  {fmt(early_tar)}/day -> {fmt(late_tar)}/day")
@@ -568,10 +568,10 @@ def print_market_fees(data: dict):
     last = ts[-1]
 
     fees = last.get("marketFeesCollected", 0)
-    market_county = data.get("trade", {}).get("marketCountyId",
-                     data.get("summary", {}).get("marketCountyId", -1))
+    market_count = data.get("trade", {}).get("marketCount",
+                     data.get("summary", {}).get("marketCount", 0))
 
-    print(f"  Market county ID:     {market_county}")
+    print(f"  Market count:         {market_count}")
     print(f"  Daily fees (latest):  {fmt(fees)} Crowns")
 
     # Trend over time
@@ -637,6 +637,36 @@ def print_inter_realm_trade(data: dict):
         ratio = f"{p/bp:.2f}x" if bp > 0 else "n/a"
         ul = unit_label(g)
         print(f"    {GOODS[g]:8s}  {fmt(p, 2):>10s}  {fmt(bp, 2):>8s}  {ratio:>8s}  {ul:>6s}")
+
+    # Per-market price divergence
+    pmp = last.get("perMarketPrices")
+    if pmp and len(pmp) > 1:
+        market_ids = sorted(pmp.keys(), key=lambda k: int(k))
+        # Show divergence: for each tradeable good, show min/max/spread across markets
+        print()
+        print("  Per-Market Price Divergence:")
+        print(f"    {'Good':8s}  {'Global':>8s}  {'Min':>8s}  {'Max':>8s}  {'Spread':>8s}  {'MinMkt':>6s}  {'MaxMkt':>6s}")
+        print(f"    {'-'*8}  {'-'*8}  {'-'*8}  {'-'*8}  {'-'*8}  {'-'*6}  {'-'*6}")
+        for g in TRADEABLE_IDX:
+            bp = BASE_PRICES[g]
+            if bp <= 0:
+                continue
+            gp = prices[g]
+            mp_vals = {}
+            for mid in market_ids:
+                mp_arr = pmp[mid]
+                if g < len(mp_arr):
+                    mp_vals[mid] = mp_arr[g]
+            if not mp_vals:
+                continue
+            min_mid = min(mp_vals, key=lambda k: mp_vals[k])
+            max_mid = max(mp_vals, key=lambda k: mp_vals[k])
+            min_p = mp_vals[min_mid]
+            max_p = mp_vals[max_mid]
+            spread = (max_p - min_p) / bp if bp > 0 else 0
+            if spread < 0.01:
+                continue  # skip goods with negligible divergence
+            print(f"    {GOODS[g]:8s}  {fmt(gp,2):>8s}  {fmt(min_p,2):>8s}  {fmt(max_p,2):>8s}  {spread:>7.0%}  {min_mid:>6s}  {max_mid:>6s}")
 
     # Trade volumes
     n = len(GOODS)
@@ -970,7 +1000,7 @@ def main():
     print_treasury(data)
     print_intra_province_trade(data)
     print_cross_province_trade(data)
-    print_cross_realm_trade(data)
+    print_cross_market_trade(data)
     print_market_fees(data)
     print_transport_costs(data)
     print_inter_realm_trade(data)

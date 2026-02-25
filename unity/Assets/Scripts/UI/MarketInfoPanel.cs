@@ -208,14 +208,59 @@ namespace EconSim.UI
             }
             SetLabel(_popTotal, totalPop.ToString("N0"));
 
-            // Goods section - placeholder for now
+            // Per-market prices
             if (_goodsList != null)
             {
                 _goodsList.Clear();
-                var placeholder = new Label("(coming soon)");
-                placeholder.style.color = new Color(0.5f, 0.5f, 0.5f);
-                placeholder.style.fontSize = 13;
-                _goodsList.Add(placeholder);
+
+                float[] localPrices = null;
+                if (econ.PerMarketPrices != null && _selectedMarketId < econ.PerMarketPrices.Length)
+                    localPrices = econ.PerMarketPrices[_selectedMarketId];
+
+                if (localPrices != null)
+                {
+                    var goodDefs = EconSim.Core.Economy.Goods.Defs;
+                    var basePrices = EconSim.Core.Economy.Goods.BasePrice;
+                    for (int g = 0; g < goodDefs.Length; g++)
+                    {
+                        if (!goodDefs[g].IsTradeable || basePrices[g] <= 0f) continue;
+                        float price = localPrices[g];
+                        float ratio = price / basePrices[g];
+                        string ratioStr = ratio >= 10f ? $"{ratio:F0}x" : $"{ratio:F2}x";
+
+                        var row = new VisualElement();
+                        row.style.flexDirection = FlexDirection.Row;
+                        row.style.justifyContent = Justify.SpaceBetween;
+                        row.style.paddingLeft = 4;
+                        row.style.paddingRight = 4;
+
+                        var nameLabel = new Label(goodDefs[g].Name);
+                        nameLabel.style.fontSize = 12;
+                        nameLabel.style.width = 100;
+                        row.Add(nameLabel);
+
+                        var priceLabel = new Label($"{price:F3}");
+                        priceLabel.style.fontSize = 12;
+                        priceLabel.style.width = 60;
+                        priceLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+                        row.Add(priceLabel);
+
+                        var ratioLabel = new Label(ratioStr);
+                        ratioLabel.style.fontSize = 12;
+                        ratioLabel.style.width = 50;
+                        ratioLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+                        // Color code: green if above base, red if below
+                        if (ratio > 1.05f)
+                            ratioLabel.style.color = new Color(0.3f, 0.8f, 0.3f);
+                        else if (ratio < 0.95f)
+                            ratioLabel.style.color = new Color(0.8f, 0.3f, 0.3f);
+                        else
+                            ratioLabel.style.color = new Color(0.7f, 0.7f, 0.7f);
+                        row.Add(ratioLabel);
+
+                        _goodsList.Add(row);
+                    }
+                }
             }
         }
 

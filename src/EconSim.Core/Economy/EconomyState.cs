@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using EconSim.Core.Common;
 
 namespace EconSim.Core.Economy
@@ -36,8 +37,17 @@ namespace EconSim.Core.Economy
         /// <summary>When true, EconomySystem records daily snapshots into TimeSeries.</summary>
         public bool CaptureSnapshots;
 
-        /// <summary>Current inter-realm market prices (Crowns/kg), indexed by GoodType. Set by InterRealmTradeSystem.</summary>
+        /// <summary>Population-weighted average market prices (Crowns/kg), indexed by GoodType. Set by InterRealmTradeSystem.</summary>
         public float[] MarketPrices = new float[Goods.Count];
+
+        /// <summary>Per-market prices (Crowns/kg). [marketId][goodId], 1-indexed (slot 0 unused). Set by InterRealmTradeSystem.</summary>
+        public float[][] PerMarketPrices;
+
+        /// <summary>Transport cost between market hubs. [marketId][marketId]. Computed once at init.</summary>
+        public float[][] HubToHubCost;
+
+        /// <summary>Per-market embargo lists. [marketId] → set of blocked realm IDs. Empty by default.</summary>
+        public HashSet<int>[] MarketEmbargoes;
 
         /// <summary>County adjacency graph. countyId → array of adjacent county IDs. Built once at init.</summary>
         public int[][] CountyAdjacency;
@@ -62,9 +72,6 @@ namespace EconSim.Core.Economy
 
         /// <summary>Per-county sabbath day (0=Monday..6=Sunday), indexed by county ID. Derived from seat cell's religion.</summary>
         public int[] CountySabbathDay;
-
-        /// <summary>County ID hosting the central market. Receives market fees from all trade transactions.</summary>
-        public int MarketCountyId = -1;
 
         /// <summary>Market definitions, indexed by market ID (slot 0 unused).</summary>
         public MarketInfo[] Markets;

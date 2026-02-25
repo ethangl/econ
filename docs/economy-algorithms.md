@@ -181,9 +181,17 @@ When the simulation starts, EconomySystem sets up all economic state:
 
     Seed market prices to base prices (so fiscal calculations work on day 1)
 
-    Resolve the market county:
-        Try the first realm's capital burg's cell's county
-        Fallback: the county with the highest population
+    Initialize markets (one per realm):
+        For each realm:
+            Create a MarketInfo with hub at the realm capital burg's county
+            Assign all counties in that realm to this market (CountyToMarket[])
+            Seed per-market prices (PerMarketPrices[marketId][]) to base prices
+        Compute hub-to-hub transport cost matrix:
+            For each pair of markets, run Dijkstra between hub cells
+            Store as HubToHubCost[m1][m2]
+        Compute average cross-market transport premium:
+            Population-weighted average of hub-to-hub costs × normalization factor
+            (Calibrated so the effective cross-market rate ≈ 0.02 Cr/kg)
 
 ## Static Transport Backbone
 
@@ -294,10 +302,11 @@ governs demand-driven extraction and trade retain calculations.
                     produced = min(produced, max(0, target_stock - current_stock))
 
             Else if this good has no direct population demand and has a base price:
-                Price-throttle extraction:
-                    price_ratio = market_price / base_price
+                Price-throttle extraction (uses local market price):
+                    price_ratio = local_market_price / base_price
                     If ratio < 1: produced *= ratio
-                    (When prices are depressed, workers produce less)
+                    (When prices are depressed, workers produce less;
+                     local_market_price = PerMarketPrices[county's market][good])
 
             Add produced to county stock
 
@@ -320,7 +329,7 @@ governs demand-driven extraction and trade retain calculations.
                 Cap throughput by downstream demand (same formula as Pass 2)
 
             If output is a normal commodity (not durable, not durable-input):
-                Price-throttle: if market_price / base_price < 1, scale down throughput
+                Price-throttle: if local_market_price / base_price < 1, scale down throughput
 
             Consume input goods proportionally to throughput
             Add output to county stock
@@ -469,9 +478,11 @@ All counties within the same realm re-enter a single pool (including those that
 already traded locally). After pass 1 consumed some surplus, remaining stock is
 re-evaluated. Buyers pay a 5% toll (to their own province).
 
-**Pass 3 — Cross-realm trade:**
-All counties globally re-enter a single pool. Buyers pay a 5% toll (to
-province) and a 10% tariff (to realm).
+**Pass 3 — Cross-market trade:**
+All counties globally re-enter a single pool. Since each realm has its own
+market, this pass handles trade across market zones. Buyers pay a 5% toll (to
+province) and a 10% tariff (to realm). Transport cost includes a hub-to-hub
+distance premium based on the precomputed average cross-market transport rate.
 
 All three passes use the same matching algorithm, iterated in **buy priority
 order** (wheat first, then bread, barley, ale, sausage, salted fish, ... down
@@ -507,7 +518,7 @@ to charcoal):
             Pay goods_cost + toll + tariff + market_fee + transport_cost from treasury
             Toll → buyer's province treasury
             Tariff → buyer's realm treasury
-            Market fee → the designated market county's treasury (cross-province and cross-realm only)
+            Market fee → buyer's market hub county treasury (cross-province and cross-market only)
             Transport cost → destroyed (represents consumed fodder, labor, cart wear)
                 transport_cost = bought × transport_rate_per_kg × unit_weight
 
@@ -517,7 +528,12 @@ Physical transport costs apply per-kg based on trade scope:
 
 - **Intra-province**: free (0 Cr/kg)
 - **Cross-province**: 0.007 Cr/kg
-- **Cross-realm**: 0.021 Cr/kg (3× multiplier)
+- **Cross-market**: 0.007 + avg_cross_market_premium Cr/kg (typically ~0.02 total)
+
+The cross-market premium is derived from the hub-to-hub Dijkstra cost matrix at
+initialization: a population-weighted average of all market-pair distances,
+scaled by a normalization factor. This means maps with more spread-out realms
+have higher cross-market transport costs than compact maps.
 
 The per-kg rate is multiplied by the good's **unit weight**, so transport cost
 reflects actual physical weight. For bulk goods (unit weight 1.0) this changes
@@ -564,7 +580,8 @@ After trade and granary filling, distribute food to distressed counties.
 
 ## InterRealmTradeSystem (Daily)
 
-Runs after FiscalSystem. Two jobs: deficit scanning and price discovery.
+Runs after FiscalSystem. Two jobs: deficit scanning and per-market price
+discovery.
 
 ### Deficit Scan
 
@@ -577,25 +594,39 @@ Runs after FiscalSystem. Two jobs: deficit scanning and price discovery.
             If shortfall > 0:
                 Add to that county's realm's deficit tally
 
-### Price Discovery
+### Per-Market Price Discovery
 
 Prices float daily for all non-durable, non-durable-input goods. Durables and
-their exclusive inputs use fixed base prices.
+their exclusive inputs use fixed base prices. Prices are computed independently
+per market zone, creating geographic price variation.
 
-    For each eligible good:
-        Compute total demand:
-            For each county:
-                demand += facility_input_need
-                demand += population × (consumption_per_pop + county_admin_per_pop)
-                demand += population × target_stock_per_pop × spoilage_rate  (replacement)
+    For each market zone:
+        Compute per-market production capacity:
+            For each county in this market:
+                Add extraction capacity and facility output capacity
 
-        Compute supply:
-            supply = production_capacity + total_stock / 7 days
+        For each eligible good:
+            Compute demand (from counties in this market only):
+                For each county in the market:
+                    demand += facility_input_need
+                    demand += population × (consumption_per_pop + county_admin_per_pop)
+                    demand += population × target_stock_per_pop × spoilage_rate
 
-        Raw price = base_price × (demand / supply)
-        Clamp to [min_price, max_price]
+            Compute supply (from counties in this market only):
+                supply = market_production_capacity + market_total_stock / 7 days
 
-    Publish prices to shared MarketPrices array
+            Per-market price = base_price × (demand / supply)
+            Clamp to [min_price, max_price]
+            Write to PerMarketPrices[marketId][good]
+
+    Compute global average prices (population-weighted across markets):
+        For each eligible good:
+            MarketPrices[good] = Σ(market_pop × market_price) / Σ(market_pop)
+
+    EconomySystem reads PerMarketPrices for local production throttle decisions
+    (extraction and facility throughput respond to the county's own market price,
+    not the global average). FiscalSystem's cross-market trade pass uses the
+    global average price for pool fill/sell math.
 
 ## PopulationSystem (Monthly, every 30 days)
 
@@ -701,7 +732,8 @@ Money circulates through:
 - Trade payments (buyer treasury → seller treasury, with fees/tolls/tariffs
   flowing to provinces and realms)
 - Granary requisition payments (province → surplus counties, at 60% of price)
-- Market fees (2% of cross-province and cross-realm trade volume → market county)
+- Market fees (2% of cross-province and cross-market trade volume → buyer's
+  market hub county; each realm's market hub collects fees from its own zone)
 
 Money is destroyed through **transport costs**: buyers pay per-kg transport fees
 on cross-province and cross-realm trade. These costs represent consumed fodder,

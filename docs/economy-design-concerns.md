@@ -5,11 +5,6 @@ by severity and type.
 
 ## Logical / Structural
 
-### Single market county collects all market fees
-
-Cross-realm trade between realms B and C still pays market fees to realm A's
-capital. This is a significant wealth concentration toward that one county.
-
 ### Money supply has no drain
 
 Minting creates crowns. Admin wages recirculate to counties. Tolls and tariffs

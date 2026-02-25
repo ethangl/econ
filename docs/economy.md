@@ -23,6 +23,7 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 13. Stock-gap production demand for Durables
 14. Transport costs
 15. Seasonality
+16. Multiple Markets
 
 ### Known Issues and Future Layers
 

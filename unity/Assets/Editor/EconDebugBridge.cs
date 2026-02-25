@@ -496,7 +496,7 @@ namespace EconSim.Editor
             j.KV("totalCounties", mapData?.Counties?.Count ?? 0);
             j.KV("totalProvinces", mapData?.Provinces?.Count ?? 0);
             j.KV("totalRealms", mapData?.Realms?.Count ?? 0);
-            j.KV("marketCountyId", st.Economy?.MarketCountyId ?? -1);
+            j.KV("marketCount", st.Economy?.Markets != null ? st.Economy.Markets.Length - 1 : 0);
 
             // Road stats
             if (st.Roads != null)
@@ -678,11 +678,11 @@ namespace EconSim.Editor
                 j.KV("crossProvTradeRevenue", snap.TotalCrossProvTradeRevenue);
                 j.KV("tradeTollsPaid", snap.TotalTradeTollsPaid);
                 j.KV("tradeTollsCollected", snap.TotalTradeTollsCollected);
-                j.KV("crossRealmTradeSpending", snap.TotalCrossRealmTradeSpending);
-                j.KV("crossRealmTradeRevenue", snap.TotalCrossRealmTradeRevenue);
-                j.KV("crossRealmTollsPaid", snap.TotalCrossRealmTollsPaid);
-                j.KV("crossRealmTariffsPaid", snap.TotalCrossRealmTariffsPaid);
-                j.KV("crossRealmTariffsCollected", snap.TotalCrossRealmTariffsCollected);
+                j.KV("crossMarketTradeSpending", snap.TotalCrossMarketTradeSpending);
+                j.KV("crossMarketTradeRevenue", snap.TotalCrossMarketTradeRevenue);
+                j.KV("crossMarketTollsPaid", snap.TotalCrossMarketTollsPaid);
+                j.KV("crossMarketTariffsPaid", snap.TotalCrossMarketTariffsPaid);
+                j.KV("crossMarketTariffsCollected", snap.TotalCrossMarketTariffsCollected);
                 j.KV("marketFeesCollected", snap.TotalMarketFeesCollected);
                 j.KV("transportCostsPaid", snap.TotalTransportCostsPaid);
 
@@ -704,6 +704,19 @@ namespace EconSim.Editor
                     for (int g = 0; g < snap.MarketPrices.Length; g++)
                         j.Val(snap.MarketPrices[g]);
                     j.ArrClose();
+                }
+                if (snap.PerMarketPrices != null)
+                {
+                    j.Key("perMarketPrices"); j.ObjOpen();
+                    for (int m = 1; m < snap.PerMarketPrices.Length; m++)
+                    {
+                        if (snap.PerMarketPrices[m] == null) continue;
+                        j.Key(m.ToString()); j.ArrOpen();
+                        for (int g = 0; g < snap.PerMarketPrices[m].Length; g++)
+                            j.Val(snap.PerMarketPrices[m][g]);
+                        j.ArrClose();
+                    }
+                    j.ObjClose();
                 }
                 if (snap.TotalTradeImportsByGood != null)
                 {
@@ -772,18 +785,18 @@ namespace EconSim.Editor
                     j.ArrClose();
                 }
 
-                if (snap.TotalCrossRealmTradeBoughtByGood != null)
+                if (snap.TotalCrossMarketTradeBoughtByGood != null)
                 {
-                    j.Key("crossRealmTradeBoughtByGood"); j.ArrOpen();
-                    for (int g = 0; g < snap.TotalCrossRealmTradeBoughtByGood.Length; g++)
-                        j.Val(snap.TotalCrossRealmTradeBoughtByGood[g]);
+                    j.Key("crossMarketTradeBoughtByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalCrossMarketTradeBoughtByGood.Length; g++)
+                        j.Val(snap.TotalCrossMarketTradeBoughtByGood[g]);
                     j.ArrClose();
                 }
-                if (snap.TotalCrossRealmTradeSoldByGood != null)
+                if (snap.TotalCrossMarketTradeSoldByGood != null)
                 {
-                    j.Key("crossRealmTradeSoldByGood"); j.ArrOpen();
-                    for (int g = 0; g < snap.TotalCrossRealmTradeSoldByGood.Length; g++)
-                        j.Val(snap.TotalCrossRealmTradeSoldByGood[g]);
+                    j.Key("crossMarketTradeSoldByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalCrossMarketTradeSoldByGood.Length; g++)
+                        j.Val(snap.TotalCrossMarketTradeSoldByGood[g]);
                     j.ArrClose();
                 }
 
@@ -895,18 +908,18 @@ namespace EconSim.Editor
                     totalTradeSold[g] += ce2.TradeSold[g];
                     totalCPTradeBought[g] += ce2.CrossProvTradeBought[g];
                     totalCPTradeSold[g] += ce2.CrossProvTradeSold[g];
-                    totalCRTradeBought[g] += ce2.CrossRealmTradeBought[g];
-                    totalCRTradeSold[g] += ce2.CrossRealmTradeSold[g];
+                    totalCRTradeBought[g] += ce2.CrossMarketTradeBought[g];
+                    totalCRTradeSold[g] += ce2.CrossMarketTradeSold[g];
                 }
                 totalTradeSpending += ce2.TradeCrownsSpent;
                 totalTradeRevenue += ce2.TradeCrownsEarned;
                 totalCPTradeSpending += ce2.CrossProvTradeCrownsSpent;
                 totalCPTradeRevenue += ce2.CrossProvTradeCrownsEarned;
                 totalTollsPaid += ce2.TradeTollsPaid;
-                totalCRTradeSpending += ce2.CrossRealmTradeCrownsSpent;
-                totalCRTradeRevenue += ce2.CrossRealmTradeCrownsEarned;
-                totalCRTollsPaid += ce2.CrossRealmTollsPaid;
-                totalCRTariffsPaid += ce2.CrossRealmTariffsPaid;
+                totalCRTradeSpending += ce2.CrossMarketTradeCrownsSpent;
+                totalCRTradeRevenue += ce2.CrossMarketTradeCrownsEarned;
+                totalCRTollsPaid += ce2.CrossMarketTollsPaid;
+                totalCRTariffsPaid += ce2.CrossMarketTariffsPaid;
                 totalMarketFeesCollected += ce2.MarketFeesReceived;
                 totalTransportCostsPaid += ce2.TransportCostsPaid;
             }
@@ -961,19 +974,19 @@ namespace EconSim.Editor
             }
             j.KV("tradeTollsCollected", totalTollsCollected);
 
-            // Cross-realm trade per-good
-            j.Key("crossRealmTradeBoughtByGood"); j.ObjOpen();
+            // Cross-market trade per-good
+            j.Key("crossMarketTradeBoughtByGood"); j.ObjOpen();
             for (int g = 0; g < Goods.Count; g++)
                 j.KV(goodNames[g], totalCRTradeBought[g]);
             j.ObjClose();
-            j.Key("crossRealmTradeSoldByGood"); j.ObjOpen();
+            j.Key("crossMarketTradeSoldByGood"); j.ObjOpen();
             for (int g = 0; g < Goods.Count; g++)
                 j.KV(goodNames[g], totalCRTradeSold[g]);
             j.ObjClose();
-            j.KV("crossRealmTradeSpending", totalCRTradeSpending);
-            j.KV("crossRealmTradeRevenue", totalCRTradeRevenue);
-            j.KV("crossRealmTollsPaid", totalCRTollsPaid);
-            j.KV("crossRealmTariffsPaid", totalCRTariffsPaid);
+            j.KV("crossMarketTradeSpending", totalCRTradeSpending);
+            j.KV("crossMarketTradeRevenue", totalCRTradeRevenue);
+            j.KV("crossMarketTollsPaid", totalCRTollsPaid);
+            j.KV("crossMarketTariffsPaid", totalCRTariffsPaid);
 
             // Realm tariff revenue
             float totalTariffsCollected = 0f;
@@ -988,7 +1001,7 @@ namespace EconSim.Editor
             j.KV("tradeTariffsCollected", totalTariffsCollected);
             j.KV("marketFeesCollected", totalMarketFeesCollected);
             j.KV("totalTransportCostsPaid", totalTransportCostsPaid);
-            j.KV("marketCountyId", econ.MarketCountyId);
+            j.KV("marketCount", econ.Markets != null ? econ.Markets.Length - 1 : 0);
 
             // Per-province summary (granary + monetary)
             j.Key("provinces"); j.ArrOpen();
