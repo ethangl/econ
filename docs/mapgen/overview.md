@@ -1,7 +1,7 @@
 # Philosophy & Overview
 
-See also: [Startup Performance Notes](./STARTUP_PERFORMANCE.md)
-See also: [Render Performance Baseline](./debug/RENDER_PERFORMANCE_BASELINE.md)
+See also: [Startup Performance Notes](../debug/STARTUP_PERFORMANCE.md)
+See also: [Render Performance Baseline](../debug/RENDER_PERFORMANCE_BASELINE.md)
 
 ## Goals
 
