@@ -95,7 +95,9 @@ namespace PopGen.Core
                     Name = PopNameGenerator.GenerateCultureName(i + 1, type, seed),
                     TypeIndex = typeIndex,
                     TypeName = type.Name,
-                    NodeId = nodeId
+                    NodeId = nodeId,
+                    SuccessionLaw = i < selected.Length ? selected[i].SuccessionLaw : SuccessionLaw.Primogeniture,
+                    GenderLaw = i < selected.Length ? selected[i].GenderLaw : GenderLaw.Agnatic
                 };
             }
 

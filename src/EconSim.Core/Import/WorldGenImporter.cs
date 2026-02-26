@@ -271,7 +271,9 @@ namespace EconSim.Core.Import
                     Name = c.Name,
                     TypeName = c.TypeName ?? "Generic",
                     NodeId = c.NodeId,
-                    ReligionId = c.ReligionId
+                    ReligionId = c.ReligionId,
+                    SuccessionLaw = (int)c.SuccessionLaw,
+                    GenderLaw = (int)c.GenderLaw
                 });
             }
 

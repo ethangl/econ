@@ -262,34 +262,34 @@ namespace PopGen.Core
         {
             return new[]
             {
-                // Norse family (polar)
-                new CultureNode { Id = "norse", DisplayName = "Norse", ParentId = null, CultureTypeIndex = 1, EquatorProximity = 0.15f, IsLeaf = false },
-                new CultureNode { Id = "norse.icelandic", DisplayName = "Icelandic", ParentId = "norse", CultureTypeIndex = 1, EquatorProximity = 0.15f, IsLeaf = true },
-                new CultureNode { Id = "norse.danish", DisplayName = "Danish", ParentId = "norse", CultureTypeIndex = 2, EquatorProximity = 0.15f, IsLeaf = true },
-                new CultureNode { Id = "norse.finnish", DisplayName = "Finnish", ParentId = "norse", CultureTypeIndex = 0, EquatorProximity = 0.15f, IsLeaf = true },
+                // Norse family (polar) — Partition + Cognatic
+                new CultureNode { Id = "norse", DisplayName = "Norse", ParentId = null, CultureTypeIndex = 1, EquatorProximity = 0.15f, IsLeaf = false, SuccessionLaw = SuccessionLaw.Partition, GenderLaw = GenderLaw.Cognatic },
+                new CultureNode { Id = "norse.icelandic", DisplayName = "Icelandic", ParentId = "norse", CultureTypeIndex = 1, EquatorProximity = 0.15f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Partition, GenderLaw = GenderLaw.Cognatic },
+                new CultureNode { Id = "norse.danish", DisplayName = "Danish", ParentId = "norse", CultureTypeIndex = 2, EquatorProximity = 0.15f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Primogeniture, GenderLaw = GenderLaw.Cognatic },
+                new CultureNode { Id = "norse.finnish", DisplayName = "Finnish", ParentId = "norse", CultureTypeIndex = 0, EquatorProximity = 0.15f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Partition, GenderLaw = GenderLaw.Cognatic },
 
-                // Celtic family
-                new CultureNode { Id = "celtic", DisplayName = "Celtic", ParentId = null, CultureTypeIndex = 3, EquatorProximity = 0.30f, IsLeaf = false },
-                new CultureNode { Id = "celtic.welsh", DisplayName = "Welsh", ParentId = "celtic", CultureTypeIndex = 3, EquatorProximity = 0.30f, IsLeaf = true },
-                new CultureNode { Id = "celtic.gaelic", DisplayName = "Gaelic", ParentId = "celtic", CultureTypeIndex = 4, EquatorProximity = 0.30f, IsLeaf = true },
-                new CultureNode { Id = "celtic.brythonic", DisplayName = "Brythonic", ParentId = "celtic", CultureTypeIndex = 5, EquatorProximity = 0.30f, IsLeaf = true },
+                // Celtic family — Elective + Cognatic
+                new CultureNode { Id = "celtic", DisplayName = "Celtic", ParentId = null, CultureTypeIndex = 3, EquatorProximity = 0.30f, IsLeaf = false, SuccessionLaw = SuccessionLaw.Elective, GenderLaw = GenderLaw.Cognatic },
+                new CultureNode { Id = "celtic.welsh", DisplayName = "Welsh", ParentId = "celtic", CultureTypeIndex = 3, EquatorProximity = 0.30f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Elective, GenderLaw = GenderLaw.Cognatic },
+                new CultureNode { Id = "celtic.gaelic", DisplayName = "Gaelic", ParentId = "celtic", CultureTypeIndex = 4, EquatorProximity = 0.30f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Elective, GenderLaw = GenderLaw.Cognatic },
+                new CultureNode { Id = "celtic.brythonic", DisplayName = "Brythonic", ParentId = "celtic", CultureTypeIndex = 5, EquatorProximity = 0.30f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Partition, GenderLaw = GenderLaw.Cognatic },
 
-                // Germanic family
-                new CultureNode { Id = "germanic", DisplayName = "Germanic", ParentId = null, CultureTypeIndex = 6, EquatorProximity = 0.40f, IsLeaf = false },
-                new CultureNode { Id = "germanic.lowland", DisplayName = "Lowland", ParentId = "germanic", CultureTypeIndex = 6, EquatorProximity = 0.40f, IsLeaf = true },
-                new CultureNode { Id = "germanic.highland", DisplayName = "Highland", ParentId = "germanic", CultureTypeIndex = 7, EquatorProximity = 0.40f, IsLeaf = true },
-                new CultureNode { Id = "germanic.coastal", DisplayName = "Coastal", ParentId = "germanic", CultureTypeIndex = 8, EquatorProximity = 0.40f, IsLeaf = true },
+                // Germanic family — Primogeniture + Agnatic
+                new CultureNode { Id = "germanic", DisplayName = "Germanic", ParentId = null, CultureTypeIndex = 6, EquatorProximity = 0.40f, IsLeaf = false, SuccessionLaw = SuccessionLaw.Primogeniture, GenderLaw = GenderLaw.Agnatic },
+                new CultureNode { Id = "germanic.lowland", DisplayName = "Lowland", ParentId = "germanic", CultureTypeIndex = 6, EquatorProximity = 0.40f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Primogeniture, GenderLaw = GenderLaw.Agnatic },
+                new CultureNode { Id = "germanic.highland", DisplayName = "Highland", ParentId = "germanic", CultureTypeIndex = 7, EquatorProximity = 0.40f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Primogeniture, GenderLaw = GenderLaw.Agnatic },
+                new CultureNode { Id = "germanic.coastal", DisplayName = "Coastal", ParentId = "germanic", CultureTypeIndex = 8, EquatorProximity = 0.40f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Primogeniture, GenderLaw = GenderLaw.Agnatic },
 
-                // Uralic family (cold)
-                new CultureNode { Id = "uralic", DisplayName = "Uralic", ParentId = null, CultureTypeIndex = 0, EquatorProximity = 0.20f, IsLeaf = false },
-                new CultureNode { Id = "uralic.western", DisplayName = "Western Uralic", ParentId = "uralic", CultureTypeIndex = 0, EquatorProximity = 0.20f, IsLeaf = true },
-                new CultureNode { Id = "uralic.eastern", DisplayName = "Eastern Uralic", ParentId = "uralic", CultureTypeIndex = 12, EquatorProximity = 0.20f, IsLeaf = true },
+                // Uralic family (cold) — Seniority + Cognatic
+                new CultureNode { Id = "uralic", DisplayName = "Uralic", ParentId = null, CultureTypeIndex = 0, EquatorProximity = 0.20f, IsLeaf = false, SuccessionLaw = SuccessionLaw.Seniority, GenderLaw = GenderLaw.Cognatic },
+                new CultureNode { Id = "uralic.western", DisplayName = "Western Uralic", ParentId = "uralic", CultureTypeIndex = 0, EquatorProximity = 0.20f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Seniority, GenderLaw = GenderLaw.Cognatic },
+                new CultureNode { Id = "uralic.eastern", DisplayName = "Eastern Uralic", ParentId = "uralic", CultureTypeIndex = 12, EquatorProximity = 0.20f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Seniority, GenderLaw = GenderLaw.Cognatic },
 
-                // Balto-Slavic family (temperate)
-                new CultureNode { Id = "balto-slavic", DisplayName = "Balto-Slavic", ParentId = null, CultureTypeIndex = 9, EquatorProximity = 0.50f, IsLeaf = false },
-                new CultureNode { Id = "balto-slavic.northern", DisplayName = "Northern Slavic", ParentId = "balto-slavic", CultureTypeIndex = 9, EquatorProximity = 0.50f, IsLeaf = true },
-                new CultureNode { Id = "balto-slavic.southern", DisplayName = "Southern Slavic", ParentId = "balto-slavic", CultureTypeIndex = 10, EquatorProximity = 0.50f, IsLeaf = true },
-                new CultureNode { Id = "balto-slavic.coastal", DisplayName = "Baltic", ParentId = "balto-slavic", CultureTypeIndex = 11, EquatorProximity = 0.50f, IsLeaf = true },
+                // Balto-Slavic family (temperate) — Partition + Agnatic
+                new CultureNode { Id = "balto-slavic", DisplayName = "Balto-Slavic", ParentId = null, CultureTypeIndex = 9, EquatorProximity = 0.50f, IsLeaf = false, SuccessionLaw = SuccessionLaw.Partition, GenderLaw = GenderLaw.Agnatic },
+                new CultureNode { Id = "balto-slavic.northern", DisplayName = "Northern Slavic", ParentId = "balto-slavic", CultureTypeIndex = 9, EquatorProximity = 0.50f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Partition, GenderLaw = GenderLaw.Agnatic },
+                new CultureNode { Id = "balto-slavic.southern", DisplayName = "Southern Slavic", ParentId = "balto-slavic", CultureTypeIndex = 10, EquatorProximity = 0.50f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Partition, GenderLaw = GenderLaw.Agnatic },
+                new CultureNode { Id = "balto-slavic.coastal", DisplayName = "Baltic", ParentId = "balto-slavic", CultureTypeIndex = 11, EquatorProximity = 0.50f, IsLeaf = true, SuccessionLaw = SuccessionLaw.Seniority, GenderLaw = GenderLaw.Agnatic },
             };
         }
     }
