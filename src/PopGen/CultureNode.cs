@@ -13,5 +13,7 @@ namespace PopGen.Core
         public int CultureTypeIndex;    // index into CultureTypes.All
         public float EquatorProximity;  // 0.0=polar, 1.0=equatorial (meaningful on roots)
         public bool IsLeaf;             // only leaves are assigned to realms
+        public SuccessionLaw SuccessionLaw;
+        public GenderLaw GenderLaw;
     }
 }

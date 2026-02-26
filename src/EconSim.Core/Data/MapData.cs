@@ -377,6 +377,8 @@ namespace EconSim.Core.Data
         public string TypeName;          // CultureType.Name (e.g. "Generic")
         public string NodeId;            // CultureForest node ID, e.g. "norse.danish"
         public int ReligionId;
+        public int SuccessionLaw;        // PopGen.Core.SuccessionLaw ordinal
+        public int GenderLaw;            // PopGen.Core.GenderLaw ordinal
     }
 
     [Serializable]
