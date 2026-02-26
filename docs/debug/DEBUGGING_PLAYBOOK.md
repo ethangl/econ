@@ -8,8 +8,7 @@ Use this as the first stop when a bug appears in map generation, rendering, econ
 
 For rendering/shader-specific deep dives, see:
 
-- `docs/debug/SHADER_OVERLAY_DEBUGGING.md`
-- `docs/debug/ECON_CHAIN_DIAGNOSIS.md` (systemic vs chain-level economy diagnosis)
+- `SHADER_OVERLAY_DEBUGGING.md`
 
 ---
 
