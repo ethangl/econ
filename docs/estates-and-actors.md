@@ -482,42 +482,14 @@ contested.
 
 ## Culture
 
-### Structure
+See **[Culture](culture.md)** for the full design document.
 
-Cultures are organized as a **forest** (multiple root cultures), already
-implemented in MapGen via `AssignByTransportFrontier`. Sibling cultures
-share heritage and have **baseline affinity** — the closer the relationship
-in the tree, the more mutual recognition and ease of interaction.
-
-### Traditions
-
-Cultures carry **traditions** — inherited behavioral rules that shape how
-actors of that culture behave by default. Succession law is a tradition
-(see Inheritance & Succession above). Traditions are slow-moving and
-expensive to change, requiring enormous social currency expenditure.
-
-Sibling cultures share many traditions (inherited from a common ancestor)
-with drift over time. A cultural split may itself be a tradition
-divergence — one branch adopts primogeniture while the other keeps
-partition.
-
-Tradition categories (TBD — to be fleshed out as needed):
-
-- Succession law
-- Gender roles (inheritance, office-holding)
-- Warfare conventions
-- Economic customs
-- Kinship structure
-
-### Interaction with Other Systems
-
-- **Opinions** — sibling cultures have baseline affinity; distant cultures
-  are more foreign
-- **Social currencies** — culture scopes currency pools alongside religion
-- **Traditions** — gate actor behavior and impose social currency costs for
-  deviation
-- **Contracts** — cultural expectations shape what contract terms are
-  considered normal or outrageous
+**Summary:** Cultures are a forest with sibling affinity (inverse of
+religion's sibling hostility). Already partially implemented — 5 root
+families, ~15 leaves, phonetic name generation, transport-frontier
+spread. Needs expansion: traditions (succession law, gender roles, etc.)
+as the behavioral dimension, peerage labels per culture, actor name
+generation, and runtime cultural evolution (assimilation, drift, splits).
 
 ## Religion
 
@@ -617,6 +589,8 @@ Layer 7: Conflict (depends on Layers 4-6)
 
 ## Related Design Documents
 
+- **[Culture](culture.md)** — culture forest, traditions, naming, spread
+- **[Religion](religion.md)** — religion forest, doctrines, clergy, schisms
 - **[Warfare](warfare.md)** (TBD) — levies, combat, sieges, occupation,
   peace terms. Wars are initiated through ambitions, funded by social
   currencies, fought with levied manpower from contracts, and resolved by
