@@ -636,7 +636,7 @@ namespace EconSim.Core.Economy
             // Replenish stock and update prices for all traded goods
             foreach (int g in vm.TradedGoods)
             {
-                vm.Stock[g] = Math.Min(vm.Stock[g] + vm.ReplenishRate[g], vm.MaxStock[g]);
+                vm.Stock[g] = Math.Max(0f, Math.Min(vm.Stock[g] + vm.ReplenishRate[g], vm.MaxStock[g]));
                 float ratio = vm.TargetStock[g] / Math.Max(vm.Stock[g], 1f);
                 vm.SellPrice[g] = Math.Max(Goods.MinPrice[g],
                     Math.Min(Goods.BasePrice[g] * ratio, Goods.MaxPrice[g]));

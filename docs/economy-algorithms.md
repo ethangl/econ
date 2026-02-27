@@ -33,14 +33,14 @@ prevent stalls when running at high speed.
 
 ## Goods
 
-There are 37 goods, each belonging to a **need category**:
+There are 38 goods, each belonging to a **need category**:
 
 - **Staple** (wheat, sausage, cheese, salted fish, stockfish, ale) — pooled
   food budget, starvation if unmet
 - **Basic** (salt, barley) — individually consumed, contributes to basic
   satisfaction
 - **Comfort** (bread, wine, mead, bacon, honey, butter, pottery, furniture,
-  tools, clothes, silver jewelry) — grouped into 8 substitute categories;
+  tools, clothes, fur, silver jewelry) — grouped into 8 substitute categories;
   drives migration pull
 - **Luxury** (gold jewelry, spices, spiced wine) — consumed only by upper
   estates (nobility, clergy); no comfort satisfaction effect yet, but creates
@@ -68,6 +68,7 @@ Durables and durable-input goods use fixed base pricing instead.
 | Furniture      | 10.0 kg     | 1.50 Cr    | 0.5 /person  |
 | Tools          | 3.0 kg      | 3.00 Cr    | 1.0 /person  |
 | Clothes        | 2.0 kg      | 2.50 Cr    | 2.0 /person  |
+| Fur            | 2.0 kg      | 4.00 Cr    | 1.0 /person  |
 | Gold Jewelry   | 0.05 kg     | 15.00 Cr   | 0.2 /person  |
 | Silver Jewelry | 0.10 kg     | 8.00 Cr    | 0.3 /person  |
 
@@ -87,7 +88,7 @@ target faster.
 | Pottery       | Pottery                 | 3.0 units     | stock       |
 | Furniture     | Furniture               | 0.5 units     | stock       |
 | Tools         | Tools                   | 1.0 units     | stock       |
-| Clothing      | Clothes                 | 2.0 units     | stock       |
+| Clothing      | Clothes, Fur            | 2.0 units     | stock       |
 | Jewelry       | Gold Jewelry, Silver J. | 0.2 units     | stock       |
 
 Category fulfillment = min(1, sum of member goods / (population × target)).
@@ -186,6 +187,7 @@ raw material availability.
 | Pork      | 0.4         | 1.11×       | 0.89×       | 1.02×          | 0.98×          |
 | Fish      | 0.3         | 1.08×       | 0.92×       | 1.02×          | 0.98×          |
 | Wool      | 0.4         | 1.11×       | 0.89×       | 1.02×          | 0.98×          |
+| Fur       | 0.2         | 1.06×       | 0.94×       | 1.01×          | 0.99×          |
 | Salt      | 0.2         | 1.06×       | 0.94×       | 1.01×          | 0.99×          |
 | Timber    | 0.1         | 1.03×       | 0.97×       | 1.01×          | 0.99×          |
 | Iron Ore  | 0.05        | 1.01×       | 0.99×       | 1.00×          | 1.00×          |
@@ -200,6 +202,7 @@ range, that cell contributes zero yield for that good.
 | --------- | -------- | -------- |
 | Spices    | 18°C     | —        |
 | Grapes    | 12°C     | —        |
+| Fur       | —        | 12°C     |
 | Honey     | 8°C      | —        |
 | Wheat     | 5°C      | 35°C     |
 | Barley    | 3°C      | 30°C     |
@@ -266,7 +269,7 @@ When the simulation starts, EconomySystem sets up all economic state:
             (Calibrated so the effective cross-market rate ≈ 0.02 Cr/kg)
 
     Initialize virtual overseas market:
-        Configure salt and spices as traded goods (see Virtual Overseas Market)
+        Configure salt, spices, and fur as traded goods (see Virtual Overseas Market)
         Precompute per-county port costs via Dijkstra to nearest coast cells
         Seed VM stock at target levels, prices at base
 
@@ -576,8 +579,8 @@ distance premium based on the precomputed average cross-market transport rate.
 
 **Pass 4 — Virtual overseas market:**
 Counties trade with an abstract foreign market representing Silk Road, spice
-trade, and salt routes. Only geographically scarce goods (salt, spices) are
-traded. See Virtual Overseas Market below.
+trade, salt routes, and the northern fur trade. Only geographically scarce
+goods (salt, spices, fur) are traded. See Virtual Overseas Market below.
 
 All three passes use the same matching algorithm, iterated in **buy priority
 order** (wheat first, then bread, barley, ale, sausage, salted fish, ... down
@@ -644,25 +647,29 @@ labor, cart wear) and act as a money sink alongside spoilage.
 #### Virtual Overseas Market
 
 The virtual overseas market (VM) is an abstract foreign trade partner
-representing Silk Road, spice trade, and salt routes. It has no counties,
-population, or backing economy — just stock that replenishes daily and
-stock-responsive prices. Counties can import from and export to it, paying
-transport costs based on their distance to the coast.
+representing Silk Road, spice trade, salt routes, and the northern fur trade.
+It has no counties, population, or backing economy — just stock that changes
+daily (replenished or drained) and stock-responsive prices. Counties can
+import from and export to it, paying transport costs based on their distance
+to the coast.
 
-**Traded goods:** Salt and spices. These are geographically scarce — salt only
-grows in salt flats, coastal marshes, and wetlands; spices require tropical
-heat (≥18°C). On many map seeds, large regions have no access to either good.
+**Traded goods:** Salt, spices, and fur. These are geographically scarce —
+salt only grows in salt flats, coastal marshes, and wetlands; spices require
+tropical heat (≥18°C); fur requires cold climates (≤12°C). On many map seeds,
+large regions have no access to one or more of these goods.
 
 **Initialization** (during EconomySystem setup):
 
     Create VM state with per-good configuration:
 
-    | Good   | Target Stock | Replenish Rate | Max Stock | Base Price |
-    | ------ | ------------ | -------------- | --------- | ---------- |
-    | Salt   | 5,000 kg     | 50 kg/day      | 10,000 kg | 0.10 Cr/kg |
-    | Spices | 10,000 kg    | 500 kg/day     | 25,000 kg | 2.00 Cr/kg |
+    | Good   | Target Stock  | Replenish Rate  | Max Stock   | Base Price   |
+    | ------ | ------------- | --------------- | ----------- | ------------ |
+    | Salt   | 5,000 kg      | +50 kg/day      | 10,000 kg   | 0.10 Cr/kg   |
+    | Spices | 10,000 kg     | +500 kg/day     | 25,000 kg   | 2.00 Cr/kg   |
+    | Fur    | 5,000 units   | -500 units/day  | 10,000 units| 4.00 Cr/unit |
 
-    Seed stock at target, prices at base
+    Salt/spices: seed stock at target, prices at base (supply goods)
+    Fur: start at zero stock (demand-only — foreign consumption absorbs exports)
 
     Precompute per-county port cost (Cr/kg):
         Find all coast cells (land cells with CoastDistance = 1)
@@ -676,7 +683,7 @@ heat (≥18°C). On many map seeds, large regions have no access to either good.
 **Price model** — stock-responsive, updated daily before trade:
 
     For each traded good:
-        stock = min(stock + replenish_rate, max_stock)
+        stock = clamp(stock + replenish_rate, 0, max_stock)
         ratio = target_stock / max(stock, 1)
         sell_price = clamp(base_price × ratio, min_price, max_price)
         buy_price = sell_price × (1 - spread)
@@ -742,8 +749,10 @@ heat (≥18°C). On many map seeds, large regions have no access to either good.
 - **Exports** inject crowns into the domestic economy (revenue comes from
   overseas, minus transport destroyed)
 - Net effect: if a map imports more than it exports (typical for spices), the
-  VM is a net crown drain. Salt-rich maps may export surplus salt, partially
-  offsetting the spice outflow.
+  VM is a net crown drain. Salt-rich maps may export surplus salt, and cold
+  maps export fur, partially offsetting the spice outflow. Fur is demand-only:
+  the negative replenish rate drains VM stock daily, representing foreign
+  consumption, which creates perpetual export demand for cold-climate counties.
 
 ### Phase 7: Ducal Granary Requisition
 
@@ -952,6 +961,7 @@ money sink that scales with trade volume, counterbalancing minting.
 The **virtual overseas market** also affects the money supply. Import payments
 (goods cost) leave the economy entirely — they go overseas. Export revenue
 enters the economy from overseas. Import tariffs (10%) stay domestic, flowing
-to the buyer's realm treasury. On most maps, spice imports exceed salt exports,
-making the VM a net crown drain that scales with how much the map depends on
-foreign goods.
+to the buyer's realm treasury. On most maps, spice imports exceed salt and fur
+exports, making the VM a net crown drain that scales with how much the map
+depends on foreign goods. Maps with significant cold territory may partially
+offset this through fur export revenue.

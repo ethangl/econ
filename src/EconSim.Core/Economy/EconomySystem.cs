@@ -858,6 +858,17 @@ namespace EconSim.Core.Economy
             vm.SellPrice[spicesIdx] = Goods.BasePrice[spicesIdx];
             vm.BuyPrice[spicesIdx] = Goods.BasePrice[spicesIdx] * 0.75f;
 
+            // Fur: demand-only (foreign consumption absorbs domestic surplus)
+            // Negative replenish = foreign buyers consuming stock over time
+            int furIdx = (int)GoodType.Fur;
+            vm.TradedGoods.Add(furIdx);
+            vm.TargetStock[furIdx] = 5000f;
+            vm.ReplenishRate[furIdx] = -500f;   // foreign consumption drain
+            vm.MaxStock[furIdx] = 10000f;
+            vm.Stock[furIdx] = 0f;              // starts empty — demand only
+            vm.SellPrice[furIdx] = Goods.BasePrice[furIdx];
+            vm.BuyPrice[furIdx] = Goods.BasePrice[furIdx] * 0.75f;
+
             vm.OverseasSurcharge = 0.02f;
 
             // Precompute per-county port cost via Dijkstra to nearest coast cell
