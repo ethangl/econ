@@ -3,7 +3,8 @@
     "rootNamespace": "EconSim.Tests",
     "references": [
         "EconSim",
-        "MapGen"
+        "MapGen",
+        "WorldGen"
     ],
     "includePlatforms": [
         "Editor"
