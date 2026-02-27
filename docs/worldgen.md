@@ -6,7 +6,7 @@ Inspiration: https://civilization.2k.com/civ-vii/from-the-devs/map-generation/ a
 
 ## Process
 
-1. Generate a coarse voronoi sphere with perhaps 400 cells
+1. Generate a coarse voronoi sphere with perhaps 500 cells
 2. Select cells to seed plates
 3. Grow plates by adding adjacent cells to plates
 4. Once complete, raise some plates to form continental shelves
@@ -24,25 +24,51 @@ Standalone library at `src/WorldGen/` generating a `SphereMesh` — the spherica
 
 **Files:**
 
-| File                         | Purpose                                                                         |
-| ---------------------------- | ------------------------------------------------------------------------------- |
-| `Vec3.cs`                    | 3D vector struct (mirrors MapGen's `Vec2`, adds `Cross`)                        |
-| `FibonacciSphere.cs`         | Golden-spiral point distribution on unit sphere                                 |
-| `ConvexHull.cs`              | Incremental 3D convex hull, half-edge output matching `Delaunay.cs` conventions |
-| `SphereMesh.cs`              | Core data model: cell centers/vertices/neighbors/edges, spherical excess areas  |
-| `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells                              |
-| `WorldGenPipeline.cs`        | Entry point: points -> hull -> Voronoi -> areas -> `SphereMesh`                 |
-| `WorldGenConfig.cs`          | Config: `CellCount`, `Seed`, `Radius`, `Jitter`                                 |
+| File                         | Purpose                                                                          |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| `Vec3.cs`                    | 3D vector struct (mirrors MapGen's `Vec2`, adds `Cross`)                         |
+| `FibonacciSphere.cs`         | Golden-spiral point distribution on unit sphere                                  |
+| `ConvexHull.cs`              | Incremental 3D convex hull, half-edge output matching `Delaunay.cs` conventions  |
+| `SphereMesh.cs`              | Core data model: cell centers/vertices/neighbors/edges, spherical excess areas   |
+| `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells                               |
+| `WorldGenPipeline.cs`        | Entry point: points -> hull -> Voronoi -> areas -> tectonics -> `WorldGenResult` |
+| `WorldGenResult.cs`          | Composite result: `SphereMesh` + `TectonicData`                                  |
+| `WorldGenConfig.cs`          | Config: `CellCount`, `Seed`, `Radius`, `Jitter`, `PlateCount`                    |
 
 **Performance:** 10,000 cells in ~5s (incremental hull is O(n^2)). Fine for the coarse tectonic mesh. The dense 100k mesh in step 5 may need a faster algorithm (Quickhull or divide-and-conquer).
 
 **Unity wiring:** Symlinked at `unity/Assets/Scripts/WorldGen`, assembly def with `noEngineReferences: true`.
 
+## Step 2: Tectonic Plates (DONE)
+
+Seeds 20 plates on the 500-cell sphere, grows them via flood-fill, assigns drift vectors, and classifies boundaries.
+
+**Algorithm:**
+
+1. **Seeding** — Farthest-point heuristic: first seed random, each subsequent seed maximizes min-distance to existing seeds. Produces well-separated plate origins.
+2. **Growth** — Multi-source BFS: all seeds enqueued simultaneously, first plate to reach a cell claims it. Sphere connectivity guarantees full coverage.
+3. **Drift** — Per plate: random 3D direction projected onto the tangent plane at the seed, normalized. Represents plate motion direction.
+4. **Boundary classification** — For each edge between different plates: project both drift vectors onto the edge direction. If convergence dominates shear → Convergent/Divergent (by sign); otherwise → Transform.
+
+**Data model (`TectonicData`):**
+
+- `CellPlate[cellIndex]` — plate ID (0-based)
+- `PlateSeeds[plateId]` — seed cell index
+- `PlateDrift[plateId]` — tangent drift vector
+- `EdgeBoundary[edgeIndex]` — `None | Convergent | Divergent | Transform`
+- `EdgeConvergence[edgeIndex]` — signed scalar (positive = convergent)
+
+**Files:**
+
+| File                | Purpose                                               |
+| ------------------- | ----------------------------------------------------- |
+| `TectonicData.cs`   | Data model: plate assignments, drift, boundaries      |
+| `TectonicOps.cs`    | Seeding, BFS growth, drift generation, classification |
+| `WorldGenResult.cs` | Composite result: `SphereMesh` + `TectonicData`       |
+
+**Visualization:** `SphereView` colors cells by plate using an evenly-spaced HSV palette (saturation 0.6, value 0.8).
+
 ## Next Steps
-
-### Step 2: Tectonic Plates
-
-Seed N plates (8–12) on the coarse ~400-cell sphere. Flood-fill to assign every cell to a plate. Each plate gets a drift vector (random direction on sphere surface). Classify plate boundaries by relative motion: convergent, divergent, or transform.
 
 ### Step 3: Elevation from Tectonics
 

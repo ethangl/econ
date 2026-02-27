@@ -4,14 +4,14 @@ namespace WorldGen.Core
 {
     /// <summary>
     /// Entry point for spherical world generation.
-    /// Generates points → convex hull → Voronoi → SphereMesh.
+    /// Generates points → convex hull → Voronoi → SphereMesh → tectonics.
     /// </summary>
     public static class WorldGenPipeline
     {
         /// <summary>
-        /// Generate a SphereMesh from configuration.
+        /// Generate a WorldGenResult from configuration.
         /// </summary>
-        public static SphereMesh Generate(WorldGenConfig config)
+        public static WorldGenResult Generate(WorldGenConfig config)
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
             if (config.CellCount < 4)
@@ -29,7 +29,14 @@ namespace WorldGen.Core
             // 4. Compute cell areas
             mesh.ComputeAreas();
 
-            return mesh;
+            // 5. Generate tectonic plates
+            TectonicData tectonics = TectonicOps.Generate(mesh, config.PlateCount, config.Seed);
+
+            return new WorldGenResult
+            {
+                Mesh = mesh,
+                Tectonics = tectonics,
+            };
         }
     }
 }

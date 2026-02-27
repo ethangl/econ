@@ -16,5 +16,8 @@ namespace WorldGen.Core
 
         /// <summary>Jitter for point distribution (0-1). Higher values give more irregular cells.</summary>
         public float Jitter { get; set; } = 0f;
+
+        /// <summary>Number of tectonic plates</summary>
+        public int PlateCount { get; set; } = 20;
     }
 }

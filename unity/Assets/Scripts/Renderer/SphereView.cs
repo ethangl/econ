@@ -5,26 +5,27 @@ using WorldGen.Core;
 namespace EconSim.Renderer
 {
     /// <summary>
-    /// Generates a Unity mesh from a SphereMesh Voronoi tessellation.
-    /// Each cell gets a random vertex color from a deterministic palette.
+    /// Generates a Unity mesh from a WorldGenResult Voronoi tessellation.
+    /// Colors cells by tectonic plate assignment.
     /// </summary>
     public class SphereView : MonoBehaviour
     {
         private MeshFilter meshFilter;
         private UnityEngine.MeshRenderer meshRenderer;
-        private SphereMesh sphereMesh;
+        private WorldGenResult result;
 
-        public float Radius => sphereMesh?.Radius ?? 0f;
+        public float Radius => result?.Mesh?.Radius ?? 0f;
 
         public void Generate(WorldGenConfig config)
         {
-            sphereMesh = WorldGenPipeline.Generate(config);
+            result = WorldGenPipeline.Generate(config);
             BuildMesh();
         }
 
         private void BuildMesh()
         {
-            if (sphereMesh == null) return;
+            if (result?.Mesh == null) return;
+            var mesh = result.Mesh;
 
             if (meshFilter == null)
                 meshFilter = GetComponent<MeshFilter>();
@@ -37,23 +38,27 @@ namespace EconSim.Renderer
                 meshRenderer.sharedMaterial = new Material(Shader.Find("EconSim/VertexColorUnlit"));
             }
 
+            // Build plate color palette
+            Color32[] platePalette = BuildPlatePalette(result.Tectonics.PlateCount);
+
             // Build vertex/triangle/color lists
             var vertices = new List<Vector3>();
             var triangles = new List<int>();
             var colors = new List<Color32>();
 
-            int cellCount = sphereMesh.CellCount;
+            int cellCount = mesh.CellCount;
 
             for (int c = 0; c < cellCount; c++)
             {
-                int[] cellVerts = sphereMesh.CellVertices[c];
+                int[] cellVerts = mesh.CellVertices[c];
                 if (cellVerts == null || cellVerts.Length < 3)
                     continue;
 
-                Color32 color = CellColor(c);
+                int plateId = result.Tectonics.CellPlate[c];
+                Color32 color = platePalette[plateId];
 
                 // Center vertex
-                Vec3 center = sphereMesh.CellCenters[c];
+                Vec3 center = mesh.CellCenters[c];
                 int centerIdx = vertices.Count;
                 vertices.Add(new Vector3(center.X, center.Y, center.Z));
                 colors.Add(color);
@@ -62,7 +67,7 @@ namespace EconSim.Renderer
                 int polyStart = vertices.Count;
                 for (int i = 0; i < cellVerts.Length; i++)
                 {
-                    Vec3 v = sphereMesh.Vertices[cellVerts[i]];
+                    Vec3 v = mesh.Vertices[cellVerts[i]];
                     vertices.Add(new Vector3(v.X, v.Y, v.Z));
                     colors.Add(color);
                 }
@@ -78,40 +83,35 @@ namespace EconSim.Renderer
                 }
             }
 
-            var mesh = new Mesh();
-            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-            mesh.SetVertices(vertices);
-            mesh.SetTriangles(triangles, 0);
-            mesh.SetColors(colors);
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
+            var unityMesh = new Mesh();
+            unityMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            unityMesh.SetVertices(vertices);
+            unityMesh.SetTriangles(triangles, 0);
+            unityMesh.SetColors(colors);
+            unityMesh.RecalculateNormals();
+            unityMesh.RecalculateBounds();
 
-            meshFilter.mesh = mesh;
-            Debug.Log($"SphereView: built mesh with {cellCount} cells, {vertices.Count} vertices, {triangles.Count / 3} triangles");
+            meshFilter.mesh = unityMesh;
+            Debug.Log($"SphereView: built mesh with {cellCount} cells, {result.Tectonics.PlateCount} plates, {vertices.Count} vertices, {triangles.Count / 3} triangles");
         }
 
         /// <summary>
-        /// Deterministic pastel color from cell index.
+        /// Build a palette of evenly-spaced hues for plate coloring.
         /// </summary>
-        private static Color32 CellColor(int cellIndex)
+        private static Color32[] BuildPlatePalette(int plateCount)
         {
-            // Simple hash for deterministic but varied colors
-            uint h = (uint)cellIndex;
-            h = ((h >> 16) ^ h) * 0x45d9f3b;
-            h = ((h >> 16) ^ h) * 0x45d9f3b;
-            h = (h >> 16) ^ h;
-
-            float hue = (h & 0xFFFF) / 65535f;
-            float sat = 0.4f + ((h >> 16) & 0xFF) / 255f * 0.3f;
-            float val = 0.6f + ((h >> 8) & 0xFF) / 255f * 0.3f;
-
-            Color c = Color.HSVToRGB(hue, sat, val);
-            return new Color32(
-                (byte)(c.r * 255),
-                (byte)(c.g * 255),
-                (byte)(c.b * 255),
-                255
-            );
+            var palette = new Color32[plateCount];
+            for (int i = 0; i < plateCount; i++)
+            {
+                Color c = Color.HSVToRGB((float)i / plateCount, 0.6f, 0.8f);
+                palette[i] = new Color32(
+                    (byte)(c.r * 255),
+                    (byte)(c.g * 255),
+                    (byte)(c.b * 255),
+                    255
+                );
+            }
+            return palette;
         }
     }
 }

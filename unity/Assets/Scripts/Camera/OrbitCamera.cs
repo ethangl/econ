@@ -13,7 +13,7 @@ namespace EconSim.Camera
         private float elevation = 20f;
         private float minDistance = 1f;
         private float maxDistance = 50000f;
-        private float rotationSensitivity = 0.3f;
+        private float rotationSensitivity = 0.6f;
         private float zoomFactor = 0.1f;
 
         private bool isDragging;
