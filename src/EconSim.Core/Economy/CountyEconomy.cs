@@ -116,5 +116,20 @@ namespace EconSim.Core.Economy
 
         /// <summary>Transport costs paid this tick (destroyed). Reset daily.</summary>
         public float TransportCostsPaid;
+
+        /// <summary>Virtual market: kg bought per good this tick (reset daily).</summary>
+        public float[] VirtualMarketBought = new float[Goods.Count];
+
+        /// <summary>Virtual market: kg sold per good this tick (reset daily).</summary>
+        public float[] VirtualMarketSold = new float[Goods.Count];
+
+        /// <summary>Virtual market: total crowns spent buying this tick (reset daily).</summary>
+        public float VirtualMarketCrownsSpent;
+
+        /// <summary>Virtual market: total crowns earned selling this tick (reset daily).</summary>
+        public float VirtualMarketCrownsEarned;
+
+        /// <summary>Virtual market: tariff crowns paid to own realm this tick (reset daily).</summary>
+        public float VirtualMarketTariffsPaid;
     }
 }

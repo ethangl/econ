@@ -78,5 +78,8 @@ namespace EconSim.Core.Economy
 
         /// <summary>County ID → market ID lookup.</summary>
         public int[] CountyToMarket;
+
+        /// <summary>Virtual overseas market state. Null if not initialized.</summary>
+        public VirtualMarketState VirtualMarket;
     }
 }

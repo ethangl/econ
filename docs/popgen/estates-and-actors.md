@@ -539,8 +539,8 @@ Layer 0: Foundations (no dependencies)
 └── Religion (new: forest, doctrines)
 
 Layer 1: Population (depends on Layer 0)
-└── Estate populations (split existing pop into 6 pools,
-    bootstrap percentages from culture/religion)
+├── Estate populations (split existing pop into 6 pools)
+└── Bootstrap percentages from culture/religion
 
 Layer 2: Social Fabric (depends on Layers 0-1)
 ├── Opinions (actor + pool opinion system, scoped by culture/religion)

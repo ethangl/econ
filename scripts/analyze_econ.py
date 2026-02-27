@@ -614,6 +614,98 @@ def print_transport_costs(data: dict):
         print(f"  As % of total minted:            {pct:.1f}%")
 
 
+def print_virtual_market(data: dict):
+    section("VIRTUAL OVERSEAS MARKET")
+    vm = data.get("trade", {}).get("virtualMarket", {})
+    if not vm or not vm.get("enabled"):
+        print("  Virtual market not enabled")
+        return
+
+    traded = vm.get("tradedGoods", [])
+    print(f"  Traded goods:        {', '.join(traded)}")
+    print(f"  Overseas surcharge:  {vm.get('overseasSurcharge', 0):.3f} Cr/kg")
+
+    # Port cost distribution
+    reach = vm.get("reachableCounties", 0)
+    print(f"  Reachable counties:  {reach}")
+    if reach > 0:
+        print(f"  Port cost range:     {fmt(vm.get('minPortCost', 0), 3)} - {fmt(vm.get('maxPortCost', 0), 3)} Cr/kg")
+        print(f"  Port cost avg:       {fmt(vm.get('avgPortCost', 0), 3)} Cr/kg")
+
+    # Current VM state
+    stock = vm.get("stockByGood", {})
+    sell = vm.get("sellPriceByGood", {})
+    buy = vm.get("buyPriceByGood", {})
+    target = vm.get("targetStockByGood", {})
+    replenish = vm.get("replenishRateByGood", {})
+    max_stock = vm.get("maxStockByGood", {})
+
+    print()
+    print("  VM State (end of run):")
+    print(f"    {'Good':8s}  {'Stock':>10s}  {'Target':>10s}  {'Max':>10s}  {'Replenish':>10s}  {'SellPx':>8s}  {'BuyPx':>8s}")
+    print(f"    {'-'*8}  {'-'*10}  {'-'*10}  {'-'*10}  {'-'*10}  {'-'*8}  {'-'*8}")
+    for g in traded:
+        print(f"    {g:8s}  {fmt(stock.get(g, 0)):>10s}  {fmt(target.get(g, 0)):>10s}  {fmt(max_stock.get(g, 0)):>10s}  {fmt(replenish.get(g, 0)):>10s}  {fmt(sell.get(g, 0), 3):>8s}  {fmt(buy.get(g, 0), 3):>8s}")
+
+    # Latest-day trade volumes
+    imported = vm.get("importedByGood", {})
+    exported = vm.get("exportedByGood", {})
+    imp_spend = vm.get("importSpending", 0)
+    exp_rev = vm.get("exportRevenue", 0)
+    tariffs = vm.get("tariffsPaid", 0)
+
+    print()
+    print("  Trade Volumes (latest day):")
+    print(f"    {'Good':8s}  {'Imported':>10s}  {'Exported':>10s}  {'Net':>10s}")
+    print(f"    {'-'*8}  {'-'*10}  {'-'*10}  {'-'*10}")
+    for g in traded:
+        imp = imported.get(g, 0)
+        exp = exported.get(g, 0)
+        net = imp - exp
+        sign = "+" if net >= 0 else ""
+        print(f"    {g:8s}  {fmt(imp):>10s}  {fmt(exp):>10s}  {sign}{fmt(net):>9s}")
+
+    print()
+    print(f"  Import spending:     {fmt(imp_spend)} Crowns")
+    print(f"  Export revenue:      {fmt(exp_rev)} Crowns")
+    print(f"  Tariffs paid:        {fmt(tariffs)} Crowns")
+    net_flow = exp_rev - imp_spend
+    sign = "+" if net_flow >= 0 else ""
+    print(f"  Net crown flow:      {sign}{fmt(net_flow)} Crowns ({'inflow' if net_flow >= 0 else 'outflow'})")
+
+    # Time series trends
+    ts = data.get("economy", {}).get("timeSeries", [])
+    if len(ts) >= 20:
+        early = ts[4:14]
+        late = ts[-10:]
+        for g in traded:
+            gi = GOOD_IDX.get(g)
+            if gi is None:
+                continue
+            early_imp = sum(t["vmImportedByGood"][gi] for t in early if "vmImportedByGood" in t) / max(1, sum(1 for t in early if "vmImportedByGood" in t))
+            late_imp = sum(t["vmImportedByGood"][gi] for t in late if "vmImportedByGood" in t) / max(1, sum(1 for t in late if "vmImportedByGood" in t))
+            early_exp = sum(t["vmExportedByGood"][gi] for t in early if "vmExportedByGood" in t) / max(1, sum(1 for t in early if "vmExportedByGood" in t))
+            late_exp = sum(t["vmExportedByGood"][gi] for t in late if "vmExportedByGood" in t) / max(1, sum(1 for t in late if "vmExportedByGood" in t))
+            early_stock = [t["vmStockByGood"][gi] for t in early if "vmStockByGood" in t]
+            late_stock = [t["vmStockByGood"][gi] for t in late if "vmStockByGood" in t]
+            print()
+            print(f"  {g} trends (early avg -> late avg):")
+            print(f"    Imports:  {fmt(early_imp)}/day -> {fmt(late_imp)}/day")
+            print(f"    Exports:  {fmt(early_exp)}/day -> {fmt(late_exp)}/day")
+            if early_stock and late_stock:
+                print(f"    VM stock: {fmt(sum(early_stock)/len(early_stock))} -> {fmt(sum(late_stock)/len(late_stock))}")
+
+        # Crown flow trend
+        early_spend = sum(t.get("vmImportSpending", 0) for t in early) / len(early)
+        late_spend = sum(t.get("vmImportSpending", 0) for t in late) / len(late)
+        early_rev = sum(t.get("vmExportRevenue", 0) for t in early) / len(early)
+        late_rev = sum(t.get("vmExportRevenue", 0) for t in late) / len(late)
+        print()
+        print(f"  Crown flow trend:")
+        print(f"    Import spending: {fmt(early_spend)}/day -> {fmt(late_spend)}/day")
+        print(f"    Export revenue:  {fmt(early_rev)}/day -> {fmt(late_rev)}/day")
+
+
 def print_inter_realm_trade(data: dict):
     section("INTER-REALM TRADE")
     ts = data["economy"]["timeSeries"]
@@ -1003,6 +1095,7 @@ def main():
     print_cross_market_trade(data)
     print_market_fees(data)
     print_transport_costs(data)
+    print_virtual_market(data)
     print_inter_realm_trade(data)
     print_roads(data)
     print_facilities(data)

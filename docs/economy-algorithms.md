@@ -33,18 +33,27 @@ prevent stalls when running at high speed.
 
 ## Goods
 
-There are 35 goods, each belonging to a **need category**:
+There are 37 goods, each belonging to a **need category**:
 
 - **Staple** (wheat, sausage, cheese, salted fish, stockfish, ale) — pooled
   food budget, starvation if unmet
 - **Basic** (salt, barley) — individually consumed, contributes to basic
   satisfaction
 - **Comfort** (bread, wine, mead, bacon, honey, butter, pottery, furniture,
-  tools, clothes, gold jewelry, silver jewelry) — grouped into 8 substitute
-  categories; drives migration pull
+  tools, clothes, silver jewelry) — grouped into 8 substitute categories;
+  drives migration pull
+- **Luxury** (gold jewelry, spices, spiced wine) — consumed only by upper
+  estates (nobility, clergy); no comfort satisfaction effect yet, but creates
+  trade-driven economic activity
 - **None** (timber, iron ore, gold ore, silver ore, stone, clay, wool, pork,
   milk, fish, gold, silver, iron, charcoal, grapes) — intermediate or facility
   inputs, no direct population demand
+
+Demand for each good is driven by **effective population** (see Estates below),
+not raw headcount. Staples and basics use effective population ≈ actual
+population. Comfort goods see amplified demand from nobility and clergy.
+Luxury goods are consumed only by upper estates — lower commoners and lower
+clergy have zero luxury demand.
 
 Each good has a **base price** in Crowns per unit. For bulk goods the unit is
 1 kg; for durables the unit is one item (a pot, a chair, a tool set, an
@@ -92,6 +101,40 @@ person**. Each staple has a nominal consumption rate (e.g. wheat 0.50, sausage
 share** of the pool, normalized so the shares sum to 1.0 kg. People eat and
 drink from whatever staples are available, proportional to stock.
 
+### Estates and Effective Population
+
+Population is divided into **6 estates** that determine consumption behavior.
+Each estate has a fixed share of the total population and a per-need-category
+consumption multiplier. The multipliers create **effective population** — a
+weighted sum that replaces raw headcount in all consumption and demand formulas.
+
+| Estate          | Share  | Staple | Basic | Comfort | Luxury |
+| --------------- | ------ | ------ | ----- | ------- | ------ |
+| Lower Commoner  | 91.0%  | 1.0×   | 1.0×  | 0.5×    | 0.0×   |
+| Upper Commoner  | 5.0%   | 1.0×   | 1.0×  | 2.0×    | 0.5×   |
+| Lower Nobility  | 1.8%   | 1.0×   | 1.0×  | 3.0×    | 1.0×   |
+| Upper Nobility  | 0.2%   | 1.0×   | 1.0×  | 5.0×    | 3.0×   |
+| Lower Clergy    | 1.8%   | 1.0×   | 1.0×  | 1.0×    | 0.0×   |
+| Upper Clergy    | 0.2%   | 1.0×   | 1.0×  | 3.0×    | 1.0×   |
+
+For a county of 1,000 people the effective populations are:
+
+- **Staple/Basic**: 1,000 (everyone eats equally)
+- **Comfort**: 910×0.5 + 50×2 + 18×3 + 2×5 + 18×1 + 2×3 = **635**
+- **Luxury**: 910×0 + 50×0.5 + 18×1 + 2×3 + 18×0 + 2×1 = **51**
+
+Key effects:
+
+- Comfort demand is ~64% of raw population (lower commoners consume at half
+  rate, but nobility amplifies)
+- Luxury demand is ~5% of raw population (only upper estates consume)
+- Staple and basic demand are unchanged from raw population
+- Estate populations are recomputed monthly when total population changes
+
+    For each county:
+        For each need category (Staple, Basic, Comfort, Luxury, None):
+            effPop[need] = Σ(estatePop[e] × multiplier[e][need])
+
 ### Durable Goods
 
 Durables (pottery, furniture, tools, clothes) are tracked in abstract units
@@ -137,6 +180,7 @@ raw material availability.
 | Grapes    | 0.95        | 1.27×       | 0.73×       | 1.05×          | 0.95×          |
 | Wheat     | 0.9         | 1.25×       | 0.75×       | 1.05×          | 0.95×          |
 | Barley    | 0.9         | 1.25×       | 0.75×       | 1.05×          | 0.95×          |
+| Spices    | 0.7         | 1.20×       | 0.80×       | 1.04×          | 0.96×          |
 | Honey     | 0.6         | 1.17×       | 0.83×       | 1.03×          | 0.97×          |
 | Milk      | 0.5         | 1.14×       | 0.86×       | 1.03×          | 0.97×          |
 | Pork      | 0.4         | 1.11×       | 0.89×       | 1.02×          | 0.98×          |
@@ -154,6 +198,7 @@ range, that cell contributes zero yield for that good.
 
 | Good      | Min Temp | Max Temp |
 | --------- | -------- | -------- |
+| Spices    | 18°C     | —        |
 | Grapes    | 12°C     | —        |
 | Honey     | 8°C      | —        |
 | Wheat     | 5°C      | 35°C     |
@@ -162,10 +207,10 @@ range, that cell contributes zero yield for that good.
 | Pork      | -5°C     | 35°C     |
 | Milk      | -5°C     | 35°C     |
 
-This creates geographic specialization: grapes only grow in warm climates,
-wheat fails in extreme cold or heat, and livestock tolerates a wider range.
-Counties with cells outside the temperature range have zero productivity for
-that good, forcing trade dependence.
+This creates geographic specialization: spices require tropical heat (≥18°C),
+grapes only grow in warm climates, wheat fails in extreme cold or heat, and
+livestock tolerates a wider range. Counties with cells outside the temperature
+range have zero productivity for that good, forcing trade dependence.
 
 ## Initialization (EconomySystem)
 
@@ -173,6 +218,8 @@ When the simulation starts, EconomySystem sets up all economic state:
 
     For each county on the map:
         Set initial population from map generation data
+        Compute estate populations (population × default share for each estate)
+        Compute effective population per need category (from estate multipliers)
         Compute per-good productivity:
             For each land cell in the county:
                 Look up biome yields for every good (kg/person/day from biome tables)
@@ -190,8 +237,9 @@ When the simulation starts, EconomySystem sets up all economic state:
     Place one of every facility type in every county:
         (Every county gets a kiln, carpenter, smelter, smithy, charcoal burner,
          weaver, butcher, smokehouse, cheesemaker, salter, drying rack, bakery,
-         brewery, gold jeweler, silver jeweler, winery, meadery, and churn —
-         whether they can actually operate depends on input availability)
+         brewery, gold jeweler, silver jeweler, winery, meadery, churn, and
+         spice blender — whether they can actually operate depends on input
+         availability)
 
     Initialize province and realm economies (empty treasuries and granaries)
 
@@ -216,6 +264,11 @@ When the simulation starts, EconomySystem sets up all economic state:
         Compute average cross-market transport premium:
             Population-weighted average of hub-to-hub costs × normalization factor
             (Calibrated so the effective cross-market rate ≈ 0.02 Cr/kg)
+
+    Initialize virtual overseas market:
+        Configure salt and spices as traded goods (see Virtual Overseas Market)
+        Precompute per-county port costs via Dijkstra to nearest coast cells
+        Seed VM stock at target levels, prices at base
 
 ## Static Transport Backbone
 
@@ -362,22 +415,32 @@ governs demand-driven extraction and trade retain calculations.
 
 #### Consumption
 
+Consumption uses **effective population** per need category (see Estates above).
+Each good's need category determines which effective population drives its
+demand. This means comfort and luxury goods see different demand levels than
+staples, even within the same county.
+
+    Compute effective population per need category:
+        effPop[need] = Σ(estatePop[e] × multiplier[e][need])
+
 **Non-staple goods:**
 
         For each good that is not a Staple:
+            pop = effPop[good's need category]
             If it is a durable (has target stock per pop):
+                target_stock = pop × target_stock_per_pop
                 Wear: replacement = current_stock × spoilage_rate
                 Remove min(stock, replacement) from stock
                 Unmet need = max(0, target_stock - post_wear_stock) × catch_up_rate
-            Else (consumable — salt, barley, bread, ale, bacon):
-                needed = population × consumption_per_pop
+            Else (consumable — salt, barley, bread, bacon, spices, spiced wine, etc.):
+                needed = pop × consumption_per_pop
                 consumed = min(stock, needed)
                 Remove consumed from stock
                 Unmet need = needed - consumed
 
 **Staple pool (pooled food consumption):**
 
-        staple_budget = population × 1.0 kg/day
+        staple_budget = effPop[Staple] × 1.0 kg/day
         total_staple_available = sum of stock across all staple goods
 
         If enough food (total_available >= budget):
@@ -405,6 +468,7 @@ Two satisfaction metrics are computed as 30-day exponential moving averages
         Compute weighted needs score:
             score = staple_weight × staple_fulfillment
             For each individual basic good (salt, barley):
+                needed = effPop[Basic] × consumption_per_pop
                 ratio = min(1, consumed / needed)
                 score += basic_weight × ratio
             (weights are normalized so staple_weight + sum(basic_weights) = 1)
@@ -419,7 +483,7 @@ Two satisfaction metrics are computed as 30-day exponential moving averages
                 Sum actual values across all member goods:
                     If durable category: actual = sum of stock across member goods
                     Else: actual = sum of consumption across member goods
-                category_ratio = min(1, actual / (population × category_target))
+                category_ratio = min(1, actual / (effPop[Comfort] × category_target))
             comfort_average = mean of all 8 category ratios
 
         Blended satisfaction = 0.70 × needs_score + 0.30 × comfort_average
@@ -491,9 +555,9 @@ treasuries back down to county populations.
                    + silver × 5% smelting yield × 100 Cr/kg
         Add crowns to realm treasury
 
-### Phase 6: Trade (Three Cascading Passes)
+### Phase 6: Trade (Four Cascading Passes)
 
-Trade runs in three passes of increasing scope. Each pass clears local surplus
+Trade runs in four passes of increasing scope. Each pass clears local surplus
 before the wider pass runs, so local needs are met first.
 
 **Pass 1 — Intra-province trade:**
@@ -509,6 +573,11 @@ All counties globally re-enter a single pool. Since each realm has its own
 market, this pass handles trade across market zones. Buyers pay a 5% toll (to
 province) and a 10% tariff (to realm). Transport cost includes a hub-to-hub
 distance premium based on the precomputed average cross-market transport rate.
+
+**Pass 4 — Virtual overseas market:**
+Counties trade with an abstract foreign market representing Silk Road, spice
+trade, and salt routes. Only geographically scarce goods (salt, spices) are
+traded. See Virtual Overseas Market below.
 
 All three passes use the same matching algorithm, iterated in **buy priority
 order** (wheat first, then bread, barley, ale, sausage, salted fish, ... down
@@ -571,6 +640,110 @@ commodity trade while allowing high-value goods to travel freely.
 
 Transport costs are **destroyed** — they represent real resource consumption (fodder,
 labor, cart wear) and act as a money sink alongside spoilage.
+
+#### Virtual Overseas Market
+
+The virtual overseas market (VM) is an abstract foreign trade partner
+representing Silk Road, spice trade, and salt routes. It has no counties,
+population, or backing economy — just stock that replenishes daily and
+stock-responsive prices. Counties can import from and export to it, paying
+transport costs based on their distance to the coast.
+
+**Traded goods:** Salt and spices. These are geographically scarce — salt only
+grows in salt flats, coastal marshes, and wetlands; spices require tropical
+heat (≥18°C). On many map seeds, large regions have no access to either good.
+
+**Initialization** (during EconomySystem setup):
+
+    Create VM state with per-good configuration:
+
+    | Good   | Target Stock | Replenish Rate | Max Stock | Base Price |
+    | ------ | ------------ | -------------- | --------- | ---------- |
+    | Salt   | 5,000 kg     | 50 kg/day      | 10,000 kg | 0.10 Cr/kg |
+    | Spices | 10,000 kg    | 500 kg/day     | 25,000 kg | 2.00 Cr/kg |
+
+    Seed stock at target, prices at base
+
+    Precompute per-county port cost (Cr/kg):
+        Find all coast cells (land cells with CoastDistance = 1)
+        For each county:
+            Find the 5 nearest coast cells by Euclidean distance to county seat
+            Run Dijkstra to each candidate
+            port_cost = min(dijkstra_costs) × 0.00003 + overseas_surcharge
+            (overseas_surcharge = 0.02 Cr/kg)
+        Counties with no reachable coast cell get port_cost = ∞ (cannot trade)
+
+**Price model** — stock-responsive, updated daily before trade:
+
+    For each traded good:
+        stock = min(stock + replenish_rate, max_stock)
+        ratio = target_stock / max(stock, 1)
+        sell_price = clamp(base_price × ratio, min_price, max_price)
+        buy_price = sell_price × (1 - spread)
+        (spread = 25%)
+
+    When stock is low, sell price rises (up to max_price). When stock
+    exceeds target, sell price drops below base. This creates self-correcting
+    price signals: high demand drains stock → prices rise → fewer counties
+    can afford imports → stock recovers.
+
+**Import pass** (VM sells to counties):
+
+    For each traded good (if VM has stock):
+        retain_per_pop = same formula as domestic trade passes
+
+        For each county:
+            If port_cost = ∞: skip (landlocked/unreachable)
+            deficit = population × retain_per_pop + facility_input_need - stock
+            If deficit ≤ 0: skip (no need)
+            cost_per_unit = sell_price × (1 + tariff_rate) + port_cost × unit_weight
+            demand = min(deficit, treasury / cost_per_unit)
+
+        fill_ratio = min(1, vm_stock / total_demand)
+
+        For each buyer:
+            bought = demand × fill_ratio
+            goods_cost = bought × sell_price
+            tariff = goods_cost × 10%
+            transport = bought × port_cost × unit_weight
+            county.stock += bought; vm.stock -= bought
+            county.treasury -= goods_cost + tariff + transport
+            buyer's realm.treasury += tariff
+            (transport cost is destroyed)
+
+**Export pass** (counties sell surplus to VM):
+
+    For each traded good:
+        vm_demand = max_stock - vm_stock
+        If vm_demand ≤ 0: skip (VM is full)
+
+        For each county:
+            If port_cost = ∞: skip
+            surplus = stock - population × retain_per_pop - facility_input_need
+            If surplus ≤ 0: skip
+            net_revenue = buy_price - port_cost × unit_weight
+            If net_revenue ≤ 0: skip (unprofitable to ship)
+
+        sell_ratio = min(1, vm_demand / total_supply)
+
+        For each seller:
+            sold = surplus × sell_ratio
+            revenue = sold × buy_price
+            transport = sold × port_cost × unit_weight
+            earned = revenue - transport
+            county.stock -= sold; vm.stock += sold
+            county.treasury += earned
+            (transport cost is destroyed)
+
+**Money flows:**
+
+- **Imports** drain crowns from the domestic economy (goods cost goes overseas,
+  tariff stays in buyer's realm treasury, transport is destroyed)
+- **Exports** inject crowns into the domestic economy (revenue comes from
+  overseas, minus transport destroyed)
+- Net effect: if a map imports more than it exports (typical for spices), the
+  VM is a net crown drain. Salt-rich maps may export surplus salt, partially
+  offsetting the spice outflow.
 
 ### Phase 7: Ducal Granary Requisition
 
@@ -635,9 +808,10 @@ per market zone, creating geographic price variation.
         For each eligible good:
             Compute demand (from counties in this market only):
                 For each county in the market:
+                    pop = effPop[good's need category]
                     demand += facility_input_need
-                    demand += population × (consumption_per_pop + county_admin_per_pop)
-                    demand += population × target_stock_per_pop × spoilage_rate
+                    demand += pop × (consumption_per_pop + county_admin_per_pop)
+                    demand += pop × target_stock_per_pop × spoilage_rate
 
             Compute supply (from counties in this market only):
                 supply = market_production_capacity + market_total_stock / 7 days
@@ -669,6 +843,10 @@ per market zone, creating geographic price variation.
 
         population = population + births - deaths
         (Floored at 10 people — counties never fully die)
+
+    Recompute estate populations:
+        For each county:
+            estatePop[e] = population × default_share[e]
 
 ### Phase 2: Migration (buffered, atomic)
 
@@ -702,7 +880,8 @@ EconomySystem). The monthly retention factor is (1 - daily_spoilage)^30.
 
     For each perishable good (wheat, barley, timber, wool, pork, milk, fish,
                               sausage, bacon, cheese, salted fish, stockfish,
-                              bread, ale, grapes, wine, honey, mead, butter):
+                              bread, ale, grapes, wine, honey, mead, butter,
+                              spices, spiced wine):
         For each county:  stock *= monthly_retention
         For each province: granary_stock *= monthly_retention
         For each realm:    stockpile *= monthly_retention
@@ -734,6 +913,7 @@ population can work there).
 | Winery          | 2.0 grapes                  | 1.5 wine      | 1     | 10%       |
 | Meadery         | 2.0 honey                   | 2.0 mead      | 1     | 10%       |
 | Churn           | 3.0 milk                    | 1.0 butter    | 1     | 10%       |
+| Spice Blender   | 2.0 wine + 0.1 spices       | 2.0 sp.wine   | 1     | 5%        |
 
 Durable outputs (pottery, furniture, tools, clothes, gold jewelry, silver
 jewelry) are in units; all other outputs are in kg.
@@ -768,3 +948,10 @@ Money is destroyed through **transport costs**: buyers pay per-kg transport fees
 on cross-province and cross-realm trade. These costs represent consumed fodder,
 labor, and cart wear — they leave the economy entirely. This creates a natural
 money sink that scales with trade volume, counterbalancing minting.
+
+The **virtual overseas market** also affects the money supply. Import payments
+(goods cost) leave the economy entirely — they go overseas. Export revenue
+enters the economy from overseas. Import tariffs (10%) stay domestic, flowing
+to the buyer's realm treasury. On most maps, spice imports exceed salt exports,
+making the VM a net crown drain that scales with how much the map depends on
+foreign goods.

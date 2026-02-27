@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using EconSim.Core.Common;
 using EconSim.Core.Data;
 using EconSim.Core.Simulation;
 using EconSim.Core.Simulation.Systems;
@@ -190,6 +191,9 @@ namespace EconSim.Core.Economy
 
             // One market per realm — hub at realm capital burg's county
             InitializeMarkets(mapData, econ, maxCountyId, state);
+
+            // Virtual overseas market for geographically scarce goods (salt, spices)
+            InitializeVirtualMarket(mapData, econ, maxCountyId, state);
 
             state.Economy = econ;
 
@@ -828,6 +832,115 @@ namespace EconSim.Core.Economy
             }
         }
 
+        static void InitializeVirtualMarket(MapData mapData, EconomyState econ, int maxCountyId, SimulationState state)
+        {
+            var vm = new VirtualMarketState(Goods.Count, maxCountyId);
+
+            // Configure traded goods: salt and spices
+            int saltIdx = (int)GoodType.Salt;
+            int spicesIdx = (int)GoodType.Spices;
+            vm.TradedGoods.Add(saltIdx);
+            vm.TradedGoods.Add(spicesIdx);
+
+            // Salt: abundant foreign supply
+            vm.TargetStock[saltIdx] = 5000f;
+            vm.ReplenishRate[saltIdx] = 50f;
+            vm.MaxStock[saltIdx] = 10000f;
+            vm.Stock[saltIdx] = vm.TargetStock[saltIdx];
+            vm.SellPrice[saltIdx] = Goods.BasePrice[saltIdx];
+            vm.BuyPrice[saltIdx] = Goods.BasePrice[saltIdx] * 0.75f;
+
+            // Spices: scarce luxury import
+            vm.TargetStock[spicesIdx] = 10000f;
+            vm.ReplenishRate[spicesIdx] = 500f;
+            vm.MaxStock[spicesIdx] = 25000f;
+            vm.Stock[spicesIdx] = vm.TargetStock[spicesIdx];
+            vm.SellPrice[spicesIdx] = Goods.BasePrice[spicesIdx];
+            vm.BuyPrice[spicesIdx] = Goods.BasePrice[spicesIdx] * 0.75f;
+
+            vm.OverseasSurcharge = 0.02f;
+
+            // Precompute per-county port cost via Dijkstra to nearest coast cell
+            // Coast cells: land cells adjacent to water (CoastDistance == 1)
+            const float CostNormFactor = 0.00003f;
+            const int CandidateCount = 5;
+
+            var coastCells = new List<Cell>();
+            foreach (var cell in mapData.Cells)
+            {
+                if (cell.IsLand && cell.CoastDistance == 1)
+                    coastCells.Add(cell);
+            }
+
+            if (coastCells.Count > 0 && state.Transport != null)
+            {
+                int reachable = 0;
+                int unreachable = 0;
+
+                foreach (var county in mapData.Counties)
+                {
+                    int seatCellId = county.SeatCellId;
+                    if (!mapData.CellById.TryGetValue(seatCellId, out var seatCell))
+                    {
+                        unreachable++;
+                        continue;
+                    }
+
+                    // Find nearest ~N coast cells by Euclidean distance
+                    // Sort coast cells by distance to seat, take top N candidates
+                    float bestCost = float.MaxValue;
+
+                    // Simple O(coastCells) scan for nearest candidates
+                    // Use a small buffer to track top-N by Euclidean distance
+                    var candidates = new (int cellId, float eucDist)[Math.Min(CandidateCount, coastCells.Count)];
+                    for (int i = 0; i < candidates.Length; i++)
+                        candidates[i] = (-1, float.MaxValue);
+
+                    for (int i = 0; i < coastCells.Count; i++)
+                    {
+                        float dist = Vec2.Distance(seatCell.Center, coastCells[i].Center);
+                        // Insert into sorted candidates if closer
+                        int worstIdx = 0;
+                        for (int j = 1; j < candidates.Length; j++)
+                        {
+                            if (candidates[j].eucDist > candidates[worstIdx].eucDist)
+                                worstIdx = j;
+                        }
+                        if (dist < candidates[worstIdx].eucDist)
+                            candidates[worstIdx] = (coastCells[i].Id, dist);
+                    }
+
+                    // Dijkstra to each candidate, take minimum
+                    for (int i = 0; i < candidates.Length; i++)
+                    {
+                        if (candidates[i].cellId < 0) continue;
+                        float cost = state.Transport.GetTransportCost(seatCellId, candidates[i].cellId);
+                        if (cost < bestCost)
+                            bestCost = cost;
+                    }
+
+                    if (bestCost < float.MaxValue)
+                    {
+                        vm.CountyPortCost[county.Id] = bestCost * CostNormFactor + vm.OverseasSurcharge;
+                        reachable++;
+                    }
+                    else
+                    {
+                        unreachable++;
+                    }
+                }
+
+                SimLog.Log("trade", $"Virtual market init: {coastCells.Count} coast cells, " +
+                    $"{reachable} counties reachable, {unreachable} landlocked/unreachable");
+            }
+            else
+            {
+                SimLog.Log("trade", "Virtual market init: no coast cells or transport graph — VM disabled");
+            }
+
+            econ.VirtualMarket = vm;
+        }
+
         static EconomySnapshot BuildSnapshot(int day, EconomyState econ)
         {
             var snap = new EconomySnapshot();
@@ -848,6 +961,8 @@ namespace EconSim.Core.Economy
             snap.TotalCrossProvTradeSoldByGood = new float[Goods.Count];
             snap.TotalCrossMarketTradeBoughtByGood = new float[Goods.Count];
             snap.TotalCrossMarketTradeSoldByGood = new float[Goods.Count];
+            snap.TotalVMImportedByGood = new float[Goods.Count];
+            snap.TotalVMExportedByGood = new float[Goods.Count];
 
             int countyCount = 0;
             snap.MinBasicSatisfaction = float.MaxValue;
@@ -882,6 +997,8 @@ namespace EconSim.Core.Economy
                     snap.TotalCrossProvTradeSoldByGood[g] += ce.CrossProvTradeSold[g];
                     snap.TotalCrossMarketTradeBoughtByGood[g] += ce.CrossMarketTradeBought[g];
                     snap.TotalCrossMarketTradeSoldByGood[g] += ce.CrossMarketTradeSold[g];
+                    snap.TotalVMImportedByGood[g] += ce.VirtualMarketBought[g];
+                    snap.TotalVMExportedByGood[g] += ce.VirtualMarketSold[g];
                 }
                 snap.TotalIntraProvTradeSpending += ce.TradeCrownsSpent;
                 snap.TotalIntraProvTradeRevenue += ce.TradeCrownsEarned;
@@ -892,6 +1009,9 @@ namespace EconSim.Core.Economy
                 snap.TotalCrossMarketTradeRevenue += ce.CrossMarketTradeCrownsEarned;
                 snap.TotalCrossMarketTollsPaid += ce.CrossMarketTollsPaid;
                 snap.TotalCrossMarketTariffsPaid += ce.CrossMarketTariffsPaid;
+                snap.TotalVMImportSpending += ce.VirtualMarketCrownsSpent;
+                snap.TotalVMExportRevenue += ce.VirtualMarketCrownsEarned;
+                snap.TotalVMTariffsPaid += ce.VirtualMarketTariffsPaid;
 
                 float foodStock = ce.Stock[Food];
                 if (foodStock < snap.MinStock) snap.MinStock = foodStock;
@@ -1032,6 +1152,16 @@ namespace EconSim.Core.Economy
             snap.TotalRoyalStockpile = snap.TotalRoyalStockpileByGood[Food];
 
             snap.MedianProductivity = econ.MedianProductivity[Food];
+
+            // Virtual market state snapshot
+            var vm = econ.VirtualMarket;
+            if (vm != null)
+            {
+                snap.VMStock = new float[Goods.Count];
+                snap.VMSellPrice = new float[Goods.Count];
+                Array.Copy(vm.Stock, snap.VMStock, Goods.Count);
+                Array.Copy(vm.SellPrice, snap.VMSellPrice, Goods.Count);
+            }
 
             return snap;
         }

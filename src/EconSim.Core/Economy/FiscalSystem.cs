@@ -56,6 +56,12 @@ namespace EconSim.Core.Economy
         /// <summary>Buyers pay 2% market fee on all trade (paid to market county treasury).</summary>
         const float MarketFeeRate = 0.02f;
 
+        /// <summary>Tariff rate on virtual market imports (paid to buyer's realm).</summary>
+        const float VirtualMarketTariffRate = 0.10f;
+
+        /// <summary>Bid-ask spread for virtual market (buy price = sell * (1 - spread)).</summary>
+        const float VirtualMarketSpread = 0.25f;
+
         /// <summary>Fraction of refined gold minted into crowns (rest sold as tradeable goods).</summary>
         const float GoldMintFraction = 0.95f;
 
@@ -163,6 +169,7 @@ namespace EconSim.Core.Economy
 
             // Reset per-tick accumulators
             ResetAccumulators(counties, provinces, realms);
+            state.Economy.VirtualMarket?.ResetAccumulators();
 
             // ── PHASE 1: County admin consumption ───────────────────
             for (int g = 0; g < Goods.Count; g++)
@@ -368,6 +375,11 @@ namespace EconSim.Core.Economy
             if (_realmIds.Length > 1)
                 ExecuteTradePass(counties, _allCountyIds, _surplusBuf, prices,
                     CrossProvTollRate, CrossMarketTariffRate, provinces, realms, TradeScope.CrossMarket);
+
+            // Virtual overseas market: import/export pass for scarce goods
+            var vm = state.Economy.VirtualMarket;
+            if (vm != null)
+                ExecuteVirtualMarketPass(counties, _allCountyIds, _surplusBuf, vm, realms);
 
             // ── PHASE 7: Ducal granary requisition ──────────────────
             // Duke buys shelf-stable grain from surplus counties at a discount.
@@ -617,6 +629,173 @@ namespace EconSim.Core.Economy
             }
         }
 
+        void ExecuteVirtualMarketPass(
+            CountyEconomy[] counties, int[] countyIds, float[] surplusBuf,
+            VirtualMarketState vm, RealmEconomy[] realms)
+        {
+            // Replenish stock and update prices for all traded goods
+            foreach (int g in vm.TradedGoods)
+            {
+                vm.Stock[g] = Math.Min(vm.Stock[g] + vm.ReplenishRate[g], vm.MaxStock[g]);
+                float ratio = vm.TargetStock[g] / Math.Max(vm.Stock[g], 1f);
+                vm.SellPrice[g] = Math.Max(Goods.MinPrice[g],
+                    Math.Min(Goods.BasePrice[g] * ratio, Goods.MaxPrice[g]));
+                vm.BuyPrice[g] = vm.SellPrice[g] * (1f - VirtualMarketSpread);
+            }
+
+            // ── IMPORT PASS: counties buy from VM ──
+            foreach (int g in vm.TradedGoods)
+            {
+                if (vm.Stock[g] <= 0f) continue;
+
+                float retainPerPop = Goods.DurableRetainPerPop[g] > 0f
+                    ? Goods.DurableRetainPerPop[g]
+                    : Goods.Defs[g].Need == NeedCategory.Staple
+                        ? Goods.StapleIdealPerPop[g]
+                        : Goods.ConsumptionPerPop[g];
+
+                float totalDemand = 0f;
+
+                for (int c = 0; c < countyIds.Length; c++)
+                {
+                    int countyId = countyIds[c];
+                    float portCost = vm.CountyPortCost[countyId];
+                    if (portCost >= float.MaxValue)
+                    {
+                        surplusBuf[c] = 0f;
+                        continue;
+                    }
+
+                    var ce = counties[countyId];
+                    float deficit = ce.Population * retainPerPop + ce.FacilityInputNeed[g] - ce.Stock[g];
+                    if (deficit <= 0f)
+                    {
+                        surplusBuf[c] = 0f;
+                        continue;
+                    }
+
+                    float costPerUnit = vm.SellPrice[g] * (1f + VirtualMarketTariffRate)
+                        + portCost * Goods.UnitWeight[g];
+                    float affordable = costPerUnit > 0f ? ce.Treasury / costPerUnit : 0f;
+                    float demand = Math.Min(deficit, affordable);
+                    if (demand <= 0f)
+                    {
+                        surplusBuf[c] = 0f;
+                        continue;
+                    }
+
+                    surplusBuf[c] = demand;
+                    totalDemand += demand;
+                }
+
+                if (totalDemand <= 0f) continue;
+
+                float fillRatio = Math.Min(1f, vm.Stock[g] / totalDemand);
+
+                for (int c = 0; c < countyIds.Length; c++)
+                {
+                    if (surplusBuf[c] <= 0f) continue;
+                    int countyId = countyIds[c];
+                    var ce = counties[countyId];
+                    float portCost = vm.CountyPortCost[countyId];
+
+                    float bought = surplusBuf[c] * fillRatio;
+                    float goodsCost = bought * vm.SellPrice[g];
+                    float tariff = bought * vm.SellPrice[g] * VirtualMarketTariffRate;
+                    float transport = bought * portCost * Goods.UnitWeight[g];
+
+                    ce.Stock[g] += bought;
+                    vm.Stock[g] -= bought;
+                    ce.Treasury -= goodsCost + tariff + transport;
+                    ce.TransportCostsPaid += transport;
+
+                    // Tariff goes to buyer's realm
+                    int realmId = _countyToRealm[countyId];
+                    realms[realmId].Treasury += tariff;
+
+                    // Record
+                    ce.VirtualMarketBought[g] += bought;
+                    ce.VirtualMarketCrownsSpent += goodsCost + tariff + transport;
+                    ce.VirtualMarketTariffsPaid += tariff;
+                    vm.TotalImported[g] += bought;
+                    vm.TotalImportSpending += goodsCost;
+                    vm.TotalTariffCollected += tariff;
+                }
+            }
+
+            // ── EXPORT PASS: counties sell surplus to VM ──
+            foreach (int g in vm.TradedGoods)
+            {
+                float vmDemand = vm.MaxStock[g] - vm.Stock[g];
+                if (vmDemand <= 0f) continue;
+
+                float retainPerPop = Goods.DurableRetainPerPop[g] > 0f
+                    ? Goods.DurableRetainPerPop[g]
+                    : Goods.Defs[g].Need == NeedCategory.Staple
+                        ? Goods.StapleIdealPerPop[g]
+                        : Goods.ConsumptionPerPop[g];
+
+                float totalSupply = 0f;
+
+                for (int c = 0; c < countyIds.Length; c++)
+                {
+                    int countyId = countyIds[c];
+                    float portCost = vm.CountyPortCost[countyId];
+                    if (portCost >= float.MaxValue)
+                    {
+                        surplusBuf[c] = 0f;
+                        continue;
+                    }
+
+                    var ce = counties[countyId];
+                    float surplus = ce.Stock[g] - ce.Population * retainPerPop - ce.FacilityInputNeed[g];
+                    if (surplus <= 0f)
+                    {
+                        surplusBuf[c] = 0f;
+                        continue;
+                    }
+
+                    float netRevenue = vm.BuyPrice[g] - portCost * Goods.UnitWeight[g];
+                    if (netRevenue <= 0f)
+                    {
+                        surplusBuf[c] = 0f;
+                        continue; // unprofitable to ship
+                    }
+
+                    surplusBuf[c] = surplus;
+                    totalSupply += surplus;
+                }
+
+                if (totalSupply <= 0f) continue;
+
+                float sellRatio = Math.Min(1f, vmDemand / totalSupply);
+
+                for (int c = 0; c < countyIds.Length; c++)
+                {
+                    if (surplusBuf[c] <= 0f) continue;
+                    int countyId = countyIds[c];
+                    var ce = counties[countyId];
+                    float portCost = vm.CountyPortCost[countyId];
+
+                    float sold = surplusBuf[c] * sellRatio;
+                    float revenue = sold * vm.BuyPrice[g];
+                    float transport = sold * portCost * Goods.UnitWeight[g];
+                    float earned = revenue - transport;
+
+                    ce.Stock[g] -= sold;
+                    vm.Stock[g] += sold;
+                    ce.Treasury += earned;
+                    ce.TransportCostsPaid += transport;
+
+                    // Record
+                    ce.VirtualMarketSold[g] += sold;
+                    ce.VirtualMarketCrownsEarned += earned;
+                    vm.TotalExported[g] += sold;
+                    vm.TotalExportRevenue += revenue;
+                }
+            }
+        }
+
         void BuildRetainDeficitsForGood(
             int goodIdx, float retainPerPop, CountyEconomy[] counties, bool retainTargetsReady)
         {
@@ -697,6 +876,11 @@ namespace EconSim.Core.Economy
                     ce.CrossMarketTariffsPaid = 0f;
                     ce.MarketFeesReceived = 0f;
                     ce.TransportCostsPaid = 0f;
+                    Array.Clear(ce.VirtualMarketBought, 0, ce.VirtualMarketBought.Length);
+                    Array.Clear(ce.VirtualMarketSold, 0, ce.VirtualMarketSold.Length);
+                    ce.VirtualMarketCrownsSpent = 0f;
+                    ce.VirtualMarketCrownsEarned = 0f;
+                    ce.VirtualMarketTariffsPaid = 0f;
                 }
             }
 
