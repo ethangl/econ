@@ -68,11 +68,40 @@ Seeds 20 plates on the 500-cell sphere, grows them via flood-fill, assigns drift
 
 **Visualization:** `SphereView` colors cells by plate using an evenly-spaced HSV palette (saturation 0.6, value 0.8).
 
+## Step 3: Elevation from Tectonics (DONE)
+
+Assigns each plate as continental or oceanic, computes base elevation, applies boundary effects, propagates inward, and smooths.
+
+**Algorithm:**
+
+1. **Plate types** — Fisher-Yates shuffle of plate indices, first `floor(plateCount * oceanFraction)` marked oceanic (default 60%).
+2. **Base elevation** — Oceanic cells get 0.2, continental cells get 0.6. Implicit sea level ~0.4.
+3. **Boundary effects** — For each boundary edge, compute effect from type (convergent +0.25, divergent -0.15, transform +0.05) scaled by `min(|convergence| / 2, 1)`. Both adjacent cells receive the effect (max-abs-wins for overlaps at triple junctions).
+4. **BFS propagation** — Effects propagate 3 hops inward from boundary cells with linear decay. Source effect preserved across hops so decay is relative to the original boundary magnitude.
+5. **Smoothing** — 2 passes of Laplacian smoothing (0.3 neighbor pull weight).
+6. **Clamp** — Final values clamped to [0, 1].
+
+**Data model additions:**
+
+- `TectonicData.PlateIsOceanic[plateId]` — true for oceanic plates
+- `TectonicData.CellElevation[cellIndex]` — normalized 0-1 elevation
+- `WorldGenConfig.OceanFraction` — fraction of plates that are oceanic (default 0.6)
+
+**Visualization:** `SphereView` supports two modes toggled with Tab:
+- **Plates** — HSV palette by plate (same as before)
+- **Elevation** — Color ramp: deep blue (0.0) → medium blue (0.4/sea level) → green (0.4) → brown (0.7) → white (1.0)
+
+Vertex colors are rebuilt without regenerating mesh geometry.
+
+**Files:**
+
+| File                | Purpose                                          |
+| ------------------- | ------------------------------------------------ |
+| `ElevationOps.cs`   | Full elevation pipeline (plate types → smooth)   |
+| `TectonicData.cs`   | Added `PlateIsOceanic`, `CellElevation`          |
+| `WorldGenConfig.cs` | Added `OceanFraction`                            |
+
 ## Next Steps
-
-### Step 3: Elevation from Tectonics
-
-Assign base elevation per plate (continental vs oceanic). Modify elevation at boundaries — convergent boundaries push up mountain ridges, divergent boundaries create rifts/ocean ridges, transform boundaries get minor uplift. Smooth the result across neighboring cells.
 
 ### Step 4: Dense Sphere + Terrain Transfer
 

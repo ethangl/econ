@@ -30,5 +30,11 @@ namespace WorldGen.Core
 
         /// <summary>Signed convergence scalar per edge (positive=convergent, negative=divergent)</summary>
         public float[] EdgeConvergence;
+
+        /// <summary>Per plate: true=oceanic, false=continental</summary>
+        public bool[] PlateIsOceanic;
+
+        /// <summary>Normalized elevation per cell (0-1). Sea level ~0.4.</summary>
+        public float[] CellElevation;
     }
 }

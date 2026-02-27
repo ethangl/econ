@@ -19,5 +19,8 @@ namespace WorldGen.Core
 
         /// <summary>Number of tectonic plates</summary>
         public int PlateCount { get; set; } = 20;
+
+        /// <summary>Fraction of plates that are oceanic (0-1)</summary>
+        public float OceanFraction { get; set; } = 0.6f;
     }
 }
