@@ -23,7 +23,7 @@ namespace WorldGen.Core
             Vec3[] points = FibonacciSphere.Generate(config.CoarseCellCount, config.Jitter, config.Seed);
 
             // 2. Build convex hull (= spherical Delaunay triangulation)
-            ConvexHull hull = ConvexHullBuilder.Build(points);
+            ConvexHull hull = ConvexHull.Build(points, config.HullAlgorithm);
 
             // 3. Build Voronoi dual
             SphereMesh mesh = SphericalVoronoiBuilder.Build(hull, config.Radius);

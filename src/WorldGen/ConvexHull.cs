@@ -73,6 +73,19 @@ namespace WorldGen.Core
         }
 
         /// <summary>
+        /// Build a convex hull using the specified algorithm.
+        /// </summary>
+        public static ConvexHull Build(Vec3[] points, ConvexHullAlgorithm algorithm)
+        {
+            return algorithm switch
+            {
+                ConvexHullAlgorithm.Quickhull => QuickhullBuilder.Build(points),
+                ConvexHullAlgorithm.Incremental => ConvexHullBuilder.Build(points),
+                _ => throw new ArgumentException($"Unknown algorithm: {algorithm}"),
+            };
+        }
+
+        /// <summary>
         /// Circumcenter of a hull triangle = outward face normal, normalized to unit sphere.
         /// This is the Voronoi vertex on the sphere.
         /// </summary>

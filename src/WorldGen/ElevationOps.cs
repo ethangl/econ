@@ -9,11 +9,11 @@ namespace WorldGen.Core
     /// </summary>
     public static class ElevationOps
     {
-        const float OceanicBase = 0.2f;
-        const float ContinentalBase = 0.7f;
-        const float ConvergentLift = 0.25f;
-        const float DivergentDrop = -0.25f;
-        const float TransformLift = 0.125f;
+        const float OceanicBase = 0.15f;
+        const float ContinentalBase = 0.65f;
+        const float ConvergentLift = 0.4f;
+        const float DivergentDrop = -0.4f;
+        const float TransformLift = 0.4f;
         const int PropagationDepth = 3;
         const int SmoothingPasses = 2;
         const float SmoothingWeight = 0.2f;
@@ -21,7 +21,7 @@ namespace WorldGen.Core
         /// <summary>
         /// Run the full elevation pipeline. Populates tectonics.PlateIsOceanic and tectonics.CellElevation.
         /// </summary>
-        const int MaxSubcontinents = 2;
+        const int MaxSubcontinents = 8;
 
         public static void Generate(SphereMesh mesh, TectonicData tectonics, float oceanFraction, int seed)
         {

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using NUnit.Framework;
 using WorldGen.Core;
 
@@ -34,24 +35,26 @@ namespace EconSim.Tests
             }
         }
 
-        [Test]
-        public void EulerFormula_HullFaces()
+        [TestCase(ConvexHullAlgorithm.Quickhull)]
+        [TestCase(ConvexHullAlgorithm.Incremental)]
+        public void EulerFormula_HullFaces(ConvexHullAlgorithm algorithm)
         {
             // For convex hull of N points on sphere: faces = 2*N - 4
             int cellCount = 1000;
             var points = FibonacciSphere.Generate(cellCount);
-            var hull = ConvexHullBuilder.Build(points);
+            var hull = ConvexHull.Build(points, algorithm);
 
             int expectedFaces = 2 * cellCount - 4;
             Assert.AreEqual(expectedFaces, hull.TriangleCount,
                 $"Euler formula: expected {expectedFaces} faces, got {hull.TriangleCount}");
         }
 
-        [Test]
-        public void AllHalfedges_HaveValidOpposites()
+        [TestCase(ConvexHullAlgorithm.Quickhull)]
+        [TestCase(ConvexHullAlgorithm.Incremental)]
+        public void AllHalfedges_HaveValidOpposites(ConvexHullAlgorithm algorithm)
         {
             var points = FibonacciSphere.Generate(1000);
-            var hull = ConvexHullBuilder.Build(points);
+            var hull = ConvexHull.Build(points, algorithm);
 
             for (int e = 0; e < hull.Halfedges.Length; e++)
             {
@@ -62,6 +65,52 @@ namespace EconSim.Tests
                 Assert.AreEqual(e, hull.Halfedges[opp],
                     $"Half-edge symmetry broken: halfedges[halfedges[{e}]] != {e}");
             }
+        }
+
+        [TestCase(ConvexHullAlgorithm.Quickhull)]
+        [TestCase(ConvexHullAlgorithm.Incremental)]
+        public void OutwardNormals_PointAwayFromOrigin(ConvexHullAlgorithm algorithm)
+        {
+            var points = FibonacciSphere.Generate(1000);
+            var hull = ConvexHull.Build(points, algorithm);
+
+            for (int t = 0; t < hull.TriangleCount; t++)
+            {
+                var (p0, p1, p2) = hull.PointsOfTriangle(t);
+                Vec3 a = hull.Points[p0], b = hull.Points[p1], c = hull.Points[p2];
+                Vec3 normal = Vec3.Cross(b - a, c - a);
+                Vec3 centroid = (a + b + c) * (1f / 3f);
+
+                Assert.Greater(Vec3.Dot(normal, centroid), 0f,
+                    $"Triangle {t} normal points inward");
+            }
+        }
+
+        [TestCase(ConvexHullAlgorithm.Quickhull)]
+        [TestCase(ConvexHullAlgorithm.Incremental)]
+        public void AllPoints_UsedInHull(ConvexHullAlgorithm algorithm)
+        {
+            int cellCount = 500;
+            var points = FibonacciSphere.Generate(cellCount);
+            var hull = ConvexHull.Build(points, algorithm);
+
+            var used = new bool[cellCount];
+            for (int i = 0; i < hull.Triangles.Length; i++)
+                used[hull.Triangles[i]] = true;
+
+            for (int i = 0; i < cellCount; i++)
+                Assert.IsTrue(used[i], $"Point {i} not used in any triangle");
+        }
+
+        [Test]
+        public void BothAlgorithms_ProduceSameFaceCount()
+        {
+            var points = FibonacciSphere.Generate(2000);
+            var quickhull = ConvexHull.Build(points, ConvexHullAlgorithm.Quickhull);
+            var incremental = ConvexHull.Build(points, ConvexHullAlgorithm.Incremental);
+
+            Assert.AreEqual(incremental.TriangleCount, quickhull.TriangleCount,
+                "Quickhull and Incremental should produce same face count");
         }
 
         [Test]
@@ -134,6 +183,30 @@ namespace EconSim.Tests
                 Assert.IsNotNull(mesh.CellNeighbors[c], $"Cell {c} has null neighbors");
                 Assert.GreaterOrEqual(mesh.CellNeighbors[c].Length, 3,
                     $"Cell {c} has fewer than 3 neighbors");
+            }
+        }
+
+        [Test]
+        [Explicit("Performance comparison — run manually")]
+        public void Performance_QuickhullVsIncremental()
+        {
+            foreach (int n in new[] { 2000, 20000 })
+            {
+                var points = FibonacciSphere.Generate(n);
+
+                var sw = Stopwatch.StartNew();
+                ConvexHull.Build(points, ConvexHullAlgorithm.Quickhull);
+                sw.Stop();
+                long quickMs = sw.ElapsedMilliseconds;
+
+                sw.Restart();
+                ConvexHull.Build(points, ConvexHullAlgorithm.Incremental);
+                sw.Stop();
+                long incrMs = sw.ElapsedMilliseconds;
+
+                float speedup = incrMs > 0 ? (float)incrMs / quickMs : 0;
+                UnityEngine.Debug.Log(
+                    $"[ConvexHull {n} pts] Quickhull: {quickMs}ms, Incremental: {incrMs}ms, Speedup: {speedup:F1}x");
             }
         }
     }

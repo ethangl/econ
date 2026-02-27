@@ -6,11 +6,11 @@ Inspiration: https://civilization.2k.com/civ-vii/from-the-devs/map-generation/ a
 
 ## Process
 
-1. Generate a coarse voronoi sphere with perhaps 500 cells
+1. Generate a coarse voronoi sphere with ~2000 cells
 2. Select cells to seed plates
 3. Grow plates by adding adjacent cells to plates
 4. Once complete, raise some plates to form continental shelves
-5. Generate a denser voronoi sphere with perhaps 10,000 cells "on top" of the tectonic plates
+5. Generate a denser voronoi sphere with ~20,000 cells "on top" of the tectonic plates
 6. Use the tectonic layer to influence terrain generated on the denser sphere — add ridges on plate edges, etc.
 7. Extract a rectangular region from the globe into the existing flat-map pipeline
 
@@ -18,35 +18,36 @@ Inspiration: https://civilization.2k.com/civ-vii/from-the-devs/map-generation/ a
 
 Standalone library at `src/WorldGen/` generating a `SphereMesh` — the spherical analog of MapGen's `CellMesh`.
 
-**Algorithm:** Fibonacci spiral distributes N points on a unit sphere. Their 3D convex hull gives the spherical Delaunay triangulation (incremental algorithm, half-edge output). The Voronoi diagram is the dual — each triangle's circumcenter (outward face normal, normalized) becomes a Voronoi vertex.
+**Algorithm:** Fibonacci spiral distributes N points on a unit sphere. Their 3D convex hull gives the spherical Delaunay triangulation (half-edge output). Two algorithms available: **Quickhull** (default, O(n log n) average via conflict lists) and **Incremental** (O(n²), scans all faces per point). The Voronoi diagram is the dual — each triangle's circumcenter (outward face normal, normalized) becomes a Voronoi vertex.
 
 **Key difference from MapGen:** A sphere has no boundary edges. Every cell is interior, every half-edge has a valid opposite. This simplifies the Voronoi builder vs the flat-map version.
 
 **Files:**
 
-| File                         | Purpose                                                                                                                               |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `Vec3.cs`                    | 3D vector struct (mirrors MapGen's `Vec2`, adds `Cross`)                                                                              |
-| `FibonacciSphere.cs`         | Golden-spiral point distribution on unit sphere                                                                                       |
-| `ConvexHull.cs`              | Incremental 3D convex hull, half-edge output matching `Delaunay.cs` conventions                                                       |
-| `SphereMesh.cs`              | Core data model: cell centers/vertices/neighbors/edges, spherical excess areas                                                        |
-| `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells                                                                                    |
-| `WorldGenPipeline.cs`        | Entry point: points -> hull -> Voronoi -> areas -> tectonics -> `WorldGenResult`                                                      |
-| `WorldGenResult.cs`          | Composite result: `SphereMesh` + `TectonicData`                                                                                       |
-| `WorldGenConfig.cs`          | Config: `CoarseCellCount`, `DenseCellCount`, `Seed`, `Radius`, `Jitter`, `MajorPlateCount`, `MinorPlateCount`, `MajorHeadStartRounds` |
+| File                         | Purpose                                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Vec3.cs`                    | 3D vector struct (mirrors MapGen's `Vec2`, adds `Cross`)                                                                                               |
+| `FibonacciSphere.cs`         | Golden-spiral point distribution on unit sphere                                                                                                        |
+| `ConvexHull.cs`              | Hull data model + `Build()` factory dispatching to Quickhull or Incremental; `ConvexHullBuilder` (incremental O(n²))                                   |
+| `QuickhullBuilder.cs`        | Quickhull 3D algorithm with conflict lists (O(n log n) average)                                                                                        |
+| `SphereMesh.cs`              | Core data model: cell centers/vertices/neighbors/edges, spherical excess areas                                                                         |
+| `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells                                                                                                     |
+| `WorldGenPipeline.cs`        | Entry point: points -> hull -> Voronoi -> areas -> tectonics -> `WorldGenResult`                                                                       |
+| `WorldGenResult.cs`          | Composite result: `SphereMesh` + `TectonicData`                                                                                                        |
+| `WorldGenConfig.cs`          | Config: `CoarseCellCount`, `DenseCellCount`, `Seed`, `Radius`, `Jitter`, `MajorPlateCount`, `MinorPlateCount`, `MajorHeadStartRounds`, `HullAlgorithm` |
 
-**Performance:** 10,000 cells in ~5s (incremental hull is O(n^2)). Fine for the coarse tectonic mesh. The dense 100k mesh in step 5 may need a faster algorithm (Quickhull or divide-and-conquer).
+**Performance:** Quickhull (default) handles 20k cells efficiently. Incremental is O(n²) — fine for ≤2k cells but slow for dense meshes. Set `WorldGenConfig.HullAlgorithm` to switch between them.
 
 **Unity wiring:** Symlinked at `unity/Assets/Scripts/WorldGen`, assembly def with `noEngineReferences: true`.
 
 ## Step 2: Tectonic Plates (DONE)
 
-Seeds 7 major and 14 minor plates on the 1000-cell sphere with a two-phase growth strategy, assigns drift vectors, and classifies boundaries.
+Seeds 8 major and 40 minor plates on the 2000-cell sphere with a two-phase growth strategy, assigns drift vectors, and classifies boundaries.
 
 **Algorithm:**
 
 1. **Major seeding** — Farthest-point heuristic: first seed random, each subsequent seed maximizes min-distance to existing seeds. Produces well-separated plate origins for major plates.
-2. **Head-start growth** — Major plates grow via level-synchronous BFS for `MajorHeadStartRounds` (default 4) before any minor plates exist.
+2. **Head-start growth** — Major plates grow via level-synchronous BFS for `MajorHeadStartRounds` (default 3) before any minor plates exist.
 3. **Minor seeding** — Farthest-point heuristic among unclaimed cells, measuring distance to all existing seeds (major + already-placed minor).
 4. **Final growth** — All plates (major + minor) continue standard BFS until every cell is claimed. Major plates are naturally larger due to their head start.
 5. **Drift** — Per plate: random 3D direction projected onto the tangent plane at the seed, normalized. Represents plate motion direction.
@@ -80,24 +81,26 @@ Assigns each plate as continental or oceanic, computes base elevation, applies b
 **Algorithm:**
 
 1. **Plate types** — Fisher-Yates shuffle of plate indices, first `floor(plateCount * oceanFraction)` marked oceanic (default 60%).
-2. **Base elevation** — Oceanic cells get 0.2, continental cells get 0.6. Sea level at 0.5.
-3. **Boundary effects** — For each boundary edge, compute effect from type (convergent +0.25, divergent -0.15, transform +0.05) scaled by `min(|convergence| / 2, 1)`. Both adjacent cells receive the effect (max-abs-wins for overlaps at triple junctions).
-4. **BFS propagation** — Effects propagate 3 hops inward from boundary cells with linear decay. Source effect preserved across hops so decay is relative to the original boundary magnitude.
-5. **Smoothing** — 2 passes of Laplacian smoothing (0.3 neighbor pull weight).
-6. **Clamp** — Final values clamped to [0, 1].
+2. **Subcontinent promotion** — Build plate adjacency graph from boundary edges. Minor oceanic plates whose neighbors are all oceanic are candidates; up to `MaxSubcontinents` (default 8) are randomly promoted to continental, creating island sub-continents.
+3. **Base elevation** — Oceanic cells get 0.2, continental cells get 0.7. Sea level at 0.5.
+4. **Boundary effects** — For each boundary edge, compute effect from type (convergent +0.25, divergent -0.25, transform +0.125) scaled by `min(|convergence| / 2, 1)`. Both adjacent cells receive the effect (max-abs-wins for overlaps at triple junctions).
+5. **BFS propagation** — Effects propagate 3 hops inward from boundary cells with linear decay. Source effect preserved across hops so decay is relative to the original boundary magnitude.
+6. **Smoothing** — 2 passes of Laplacian smoothing (0.2 neighbor pull weight).
+7. **Clamp** — Final values clamped to [0, 1].
 
 **Constants (`ElevationOps`):**
 
 | Constant           | Value | Purpose                                                                         |
 | ------------------ | ----- | ------------------------------------------------------------------------------- |
-| `OceanicBase`      | 0.2   | Starting elevation for cells on oceanic plates                                  |
-| `ContinentalBase`  | 0.7   | Starting elevation for cells on continental plates                              |
-| `ConvergentLift`   | +0.25 | Elevation boost at convergent boundaries (mountain ranges)                      |
-| `DivergentDrop`    | -0.25 | Elevation drop at divergent boundaries (rifts)                                  |
-| `TransformLift`    | +0.05 | Small uplift at transform boundaries (plates sliding past each other)           |
+| `OceanicBase`      | 0.15  | Starting elevation for cells on oceanic plates                                  |
+| `ContinentalBase`  | 0.65  | Starting elevation for cells on continental plates                              |
+| `ConvergentLift`   | +0.4  | Elevation boost at convergent boundaries (mountain ranges)                      |
+| `DivergentDrop`    | -0.4  | Elevation drop at divergent boundaries (rifts)                                  |
+| `TransformLift`    | +0.4  | Uplift at transform boundaries (plates sliding past each other)                 |
 | `PropagationDepth` | 3     | BFS hops inward from boundary edges. Wider = broader mountain ranges/rift zones |
 | `SmoothingPasses`  | 2     | Laplacian smoothing iterations after boundary effects                           |
-| `SmoothingWeight`  | 0.2   | Each pass pulls each cell 30% toward its neighbors' average                     |
+| `SmoothingWeight`  | 0.2   | Each pass pulls each cell 20% toward its neighbors' average                     |
+| `MaxSubcontinents` | 8     | Max minor oceanic plates promoted to continental                                |
 
 **Data model additions:**
 
@@ -127,7 +130,7 @@ Generates a dense SphereMesh (~20k cells) on top of the coarse tectonic mesh, tr
 **Algorithm:**
 
 1. **Dense mesh** — `FibonacciSphere(20k, jitter, seed+100)` → ConvexHull → SphericalVoronoi → ComputeAreas. Seed offset avoids correlation with coarse points.
-2. **Nearest-neighbor mapping** — Brute-force: for each dense cell, find closest coarse cell center via `Vec3.SqrDistance`. O(20k × 1k) ≈ 20M comparisons.
+2. **Nearest-neighbor mapping** — Brute-force: for each dense cell, find closest coarse cell center via `Vec3.SqrDistance`. O(20k × 2k) ≈ 40M comparisons.
 3. **Elevation transfer + noise** — Each dense cell inherits its coarse cell's elevation, plus fractal 3D Perlin noise (6 octaves, amplitude 0.5). Sea level at 0.5.
 
 **3D Perlin noise** avoids UV seam artifacts by sampling at 3D cell center positions on the sphere. Classic implementation: 256-entry permutation table, Ken Perlin's optimized 12-gradient function, quintic fade, trilinear interpolation.
@@ -152,7 +155,7 @@ Generates a dense SphereMesh (~20k cells) on top of the coarse tectonic mesh, tr
 
 **Config (`WorldGenConfig`):**
 
-- `CoarseCellCount` (default 1000) — renamed from `CellCount`
+- `CoarseCellCount` (default 2000) — renamed from `CellCount`
 - `DenseCellCount` (default 20000) — new
 
 **Visualization:** `SphereView` renders the dense mesh. Plates mode maps dense → coarse via `DenseToCoarse` for plate palette lookup. Elevation mode uses dense `CellElevation` directly.
