@@ -10,6 +10,8 @@ namespace PopGen.Core
         Philosophical
     }
 
+    public enum Worldview { Exclusivist, Pluralist, Syncretist }
+
     public static class ReligionSuffixes
     {
         static readonly string[] Monotheistic = { "ism", "ity", "ion", "aith", "ance", "ence" };

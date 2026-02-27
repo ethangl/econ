@@ -388,6 +388,8 @@ namespace EconSim.Core.Data
         public string Name;
         public string TypeName;          // ReligionType name (e.g. "Monotheistic")
         public int SabbathDay;           // 0=Monday .. 6=Sunday
+        public int ParentId;             // 0 for root religions
+        public int Worldview;            // PopGen.Core.Worldview ordinal
     }
 
     /// <summary>

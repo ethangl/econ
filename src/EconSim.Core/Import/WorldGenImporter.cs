@@ -294,7 +294,9 @@ namespace EconSim.Core.Import
                     Id = r.Id,
                     Name = r.Name,
                     TypeName = r.TypeName ?? "Unknown",
-                    SabbathDay = r.SabbathDay
+                    SabbathDay = r.SabbathDay,
+                    ParentId = r.ParentId,
+                    Worldview = (int)r.Worldview
                 });
             }
 
