@@ -21,12 +21,16 @@ namespace WorldGen.Core
         /// <summary>
         /// Run the full elevation pipeline. Populates tectonics.PlateIsOceanic and tectonics.CellElevation.
         /// </summary>
+        const int MaxSubcontinents = 2;
+
         public static void Generate(SphereMesh mesh, TectonicData tectonics, float oceanFraction, int seed)
         {
             var rng = new Random(seed);
             int cellCount = mesh.CellCount;
 
             bool[] isOceanic = AssignPlateTypes(tectonics.PlateCount, oceanFraction, rng);
+            var plateNeighbors = BuildPlateAdjacency(mesh, tectonics.CellPlate, tectonics.PlateCount);
+            PromoteSubcontinents(isOceanic, tectonics.PlateIsMajor, plateNeighbors, MaxSubcontinents, rng);
             float[] elevation = ComputeBaseElevation(cellCount, tectonics.CellPlate, isOceanic);
             ApplyBoundaryEffects(mesh, tectonics, elevation);
             Smooth(mesh, elevation);
@@ -60,6 +64,73 @@ namespace WorldGen.Core
                 isOceanic[indices[i]] = true;
 
             return isOceanic;
+        }
+
+        /// <summary>
+        /// Build plate adjacency: for each plate, which other plates share a boundary edge.
+        /// </summary>
+        internal static HashSet<int>[] BuildPlateAdjacency(SphereMesh mesh, int[] cellPlate, int plateCount)
+        {
+            var adj = new HashSet<int>[plateCount];
+            for (int p = 0; p < plateCount; p++)
+                adj[p] = new HashSet<int>();
+
+            int edgeCount = mesh.EdgeCount;
+            for (int e = 0; e < edgeCount; e++)
+            {
+                var (c0, c1) = mesh.EdgeCells[e];
+                int p0 = cellPlate[c0];
+                int p1 = cellPlate[c1];
+                if (p0 != p1)
+                {
+                    adj[p0].Add(p1);
+                    adj[p1].Add(p0);
+                }
+            }
+
+            return adj;
+        }
+
+        /// <summary>
+        /// Flip minor oceanic plates to continental if all their neighbors are oceanic,
+        /// creating sub-continent islands. Candidates are shuffled and capped at maxCount.
+        /// </summary>
+        internal static void PromoteSubcontinents(
+            bool[] isOceanic, bool[] isMajor, HashSet<int>[] plateNeighbors, int maxCount, Random rng)
+        {
+            // Collect candidates: minor, oceanic, all neighbors oceanic
+            var candidates = new List<int>();
+            for (int p = 0; p < isOceanic.Length; p++)
+            {
+                if (!isOceanic[p] || isMajor[p])
+                    continue;
+
+                bool allNeighborsOceanic = true;
+                foreach (int nb in plateNeighbors[p])
+                {
+                    if (!isOceanic[nb])
+                    {
+                        allNeighborsOceanic = false;
+                        break;
+                    }
+                }
+
+                if (allNeighborsOceanic)
+                    candidates.Add(p);
+            }
+
+            // Shuffle and promote up to maxCount
+            for (int i = candidates.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                int tmp = candidates[i];
+                candidates[i] = candidates[j];
+                candidates[j] = tmp;
+            }
+
+            int promoted = Math.Min(maxCount, candidates.Count);
+            for (int i = 0; i < promoted; i++)
+                isOceanic[candidates[i]] = false;
         }
 
         internal static float[] ComputeBaseElevation(int cellCount, int[] cellPlate, bool[] isOceanic)
