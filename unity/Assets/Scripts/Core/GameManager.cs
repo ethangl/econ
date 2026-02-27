@@ -10,6 +10,7 @@ using EconSim.Core.Simulation;
 using EconSim.Renderer;
 using EconSim.Camera;
 using MapGen.Core;
+using WorldGen.Core;
 using Profiler = EconSim.Core.Common.StartupProfiler;
 
 namespace EconSim.Core
@@ -100,6 +101,55 @@ namespace EconSim.Core
         private void Start()
         {
             // Map generation is triggered by StartupScreenPanel
+        }
+
+        /// <summary>
+        /// Generate a sphere (globe) using the WorldGen pipeline.
+        /// </summary>
+        public void GenerateGlobe(int seed, int cellCount)
+        {
+            var config = new WorldGenConfig
+            {
+                Seed = seed,
+                CellCount = cellCount,
+            };
+
+            Debug.Log($"WorldGen: generating globe with seed={seed}, cells={cellCount}, radius={config.Radius}");
+
+            // Get or create SphereView
+            var sphereViewObj = GameObject.Find("SphereView");
+            if (sphereViewObj == null)
+            {
+                sphereViewObj = new GameObject("SphereView");
+                sphereViewObj.AddComponent<MeshFilter>();
+                sphereViewObj.AddComponent<MeshRenderer>();
+                sphereViewObj.AddComponent<EconSim.Renderer.SphereView>();
+            }
+
+            var sphereView = sphereViewObj.GetComponent<EconSim.Renderer.SphereView>();
+            sphereView.Generate(config);
+
+            // Hide flat map if visible
+            if (mapView != null)
+                mapView.gameObject.SetActive(false);
+
+            // Switch camera: disable MapCamera, enable OrbitCamera
+            if (mapCamera != null)
+                mapCamera.enabled = false;
+
+            var cam = UnityEngine.Camera.main;
+            if (cam != null)
+            {
+                var orbitCam = cam.GetComponent<EconSim.Camera.OrbitCamera>();
+                if (orbitCam == null)
+                    orbitCam = cam.gameObject.AddComponent<EconSim.Camera.OrbitCamera>();
+                orbitCam.enabled = true;
+                orbitCam.Configure(Vector3.zero, sphereView.Radius);
+            }
+
+            // Dismiss startup screen
+            IsMapReady = true;
+            OnMapReady?.Invoke();
         }
 
         /// <summary>

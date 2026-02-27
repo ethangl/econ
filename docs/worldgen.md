@@ -6,11 +6,11 @@ Inspiration: https://civilization.2k.com/civ-vii/from-the-devs/map-generation/ a
 
 ## Process
 
-1. Generate a coarse voronoi sphere with perhaps 1,000 cells
+1. Generate a coarse voronoi sphere with perhaps 400 cells
 2. Select cells to seed plates
 3. Grow plates by adding adjacent cells to plates
 4. Once complete, raise some plates to form continental shelves
-5. Generate a denser voronoi sphere with perhaps 100,000 cells "on top" of the tectonic plates
+5. Generate a denser voronoi sphere with perhaps 10,000 cells "on top" of the tectonic plates
 6. Use the tectonic layer to influence terrain generated on the denser sphere — add ridges on plate edges, etc.
 7. Extract a rectangular region from the globe into the existing flat-map pipeline
 
@@ -24,15 +24,15 @@ Standalone library at `src/WorldGen/` generating a `SphereMesh` — the spherica
 
 **Files:**
 
-| File | Purpose |
-|------|---------|
-| `Vec3.cs` | 3D vector struct (mirrors MapGen's `Vec2`, adds `Cross`) |
-| `FibonacciSphere.cs` | Golden-spiral point distribution on unit sphere |
-| `ConvexHull.cs` | Incremental 3D convex hull, half-edge output matching `Delaunay.cs` conventions |
-| `SphereMesh.cs` | Core data model: cell centers/vertices/neighbors/edges, spherical excess areas |
-| `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells |
-| `WorldGenPipeline.cs` | Entry point: points -> hull -> Voronoi -> areas -> `SphereMesh` |
-| `WorldGenConfig.cs` | Config: `CellCount`, `Seed`, `Radius`, `Jitter` |
+| File                         | Purpose                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------- |
+| `Vec3.cs`                    | 3D vector struct (mirrors MapGen's `Vec2`, adds `Cross`)                        |
+| `FibonacciSphere.cs`         | Golden-spiral point distribution on unit sphere                                 |
+| `ConvexHull.cs`              | Incremental 3D convex hull, half-edge output matching `Delaunay.cs` conventions |
+| `SphereMesh.cs`              | Core data model: cell centers/vertices/neighbors/edges, spherical excess areas  |
+| `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells                              |
+| `WorldGenPipeline.cs`        | Entry point: points -> hull -> Voronoi -> areas -> `SphereMesh`                 |
+| `WorldGenConfig.cs`          | Config: `CellCount`, `Seed`, `Radius`, `Jitter`                                 |
 
 **Performance:** 10,000 cells in ~5s (incremental hull is O(n^2)). Fine for the coarse tectonic mesh. The dense 100k mesh in step 5 may need a faster algorithm (Quickhull or divide-and-conquer).
 
@@ -42,7 +42,7 @@ Standalone library at `src/WorldGen/` generating a `SphereMesh` — the spherica
 
 ### Step 2: Tectonic Plates
 
-Seed N plates (8–12) on the coarse ~1,000-cell sphere. Flood-fill to assign every cell to a plate. Each plate gets a drift vector (random direction on sphere surface). Classify plate boundaries by relative motion: convergent, divergent, or transform.
+Seed N plates (8–12) on the coarse ~400-cell sphere. Flood-fill to assign every cell to a plate. Each plate gets a drift vector (random direction on sphere surface). Classify plate boundaries by relative motion: convergent, divergent, or transform.
 
 ### Step 3: Elevation from Tectonics
 
@@ -50,7 +50,7 @@ Assign base elevation per plate (continental vs oceanic). Modify elevation at bo
 
 ### Step 4: Dense Sphere + Terrain Transfer
 
-Generate a second, denser SphereMesh (~100k cells). For each dense cell, find the enclosing coarse cell and inherit its tectonic elevation. Apply noise and detail at the dense scale. This is where biomes, climate, rivers, etc. would eventually live on the globe.
+Generate a second, denser SphereMesh (~10k cells). For each dense cell, find the enclosing coarse cell and inherit its tectonic elevation. Apply noise and detail at the dense scale. This is where biomes, climate, rivers, etc. would eventually live on the globe.
 
 ### Step 5: Region Extraction
 

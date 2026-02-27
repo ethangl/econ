@@ -2,7 +2,8 @@
     "name": "EconSim",
     "rootNamespace": "EconSim",
     "references": [
-        "MapGen"
+        "MapGen",
+        "WorldGen"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

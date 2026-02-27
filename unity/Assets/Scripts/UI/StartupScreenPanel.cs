@@ -19,6 +19,7 @@ namespace EconSim.UI
         private VisualElement _overlay;
         private Button _generateButton;
         private Button _loadLastMapButton;
+        private Button _generateGlobeButton;
         private Label _statusLabel;
         private DropdownField _templateDropdown;
         private IntegerField _seedField;
@@ -86,9 +87,12 @@ namespace EconSim.UI
                 _templateDropdown.index = TemplateNames.IndexOf(nameof(HeightmapTemplateType.Continents));
             }
 
+            _generateGlobeButton = root.Q<Button>("generate-globe-button");
+
             // Wire up buttons
             _generateButton?.RegisterCallback<ClickEvent>(evt => OnGenerateClicked());
             _loadLastMapButton?.RegisterCallback<ClickEvent>(evt => OnLoadLastMapClicked());
+            _generateGlobeButton?.RegisterCallback<ClickEvent>(evt => OnGenerateGlobeClicked());
             RefreshLoadButtonState();
         }
 
@@ -128,6 +132,29 @@ namespace EconSim.UI
                     _isLoading = false;
                     EnableButtons();
                 }
+            }
+            else
+            {
+                SetStatus("Error: GameManager not found");
+                _isLoading = false;
+                EnableButtons();
+            }
+        }
+
+        private void OnGenerateGlobeClicked()
+        {
+            if (_isLoading) return;
+
+            _isLoading = true;
+            SetStatus("Generating globe...");
+            DisableButtons();
+
+            var gameManager = EconSim.Core.GameManager.Instance;
+            if (gameManager != null)
+            {
+                int seed = _seedField?.value ?? 12345;
+                int cellCount = 400;
+                gameManager.GenerateGlobe(seed, cellCount);
             }
             else
             {
@@ -209,6 +236,11 @@ namespace EconSim.UI
             {
                 _loadLastMapButton.SetEnabled(false);
             }
+
+            if (_generateGlobeButton != null)
+            {
+                _generateGlobeButton.SetEnabled(false);
+            }
         }
 
         private void EnableButtons()
@@ -216,6 +248,11 @@ namespace EconSim.UI
             if (_generateButton != null)
             {
                 _generateButton.SetEnabled(true);
+            }
+
+            if (_generateGlobeButton != null)
+            {
+                _generateGlobeButton.SetEnabled(true);
             }
 
             RefreshLoadButtonState();
