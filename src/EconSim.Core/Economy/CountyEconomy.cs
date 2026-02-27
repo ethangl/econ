@@ -11,6 +11,9 @@ namespace EconSim.Core.Economy
         /// <summary>County population (cached at init).</summary>
         public float Population;
 
+        /// <summary>Population per estate pool, indexed by (int)Estate. Derived from Population x shares.</summary>
+        public float[] EstatePop = new float[Estates.Count];
+
         /// <summary>Geographic latitude in degrees (cached at init for seasonal calculations).</summary>
         public float Latitude;
 
