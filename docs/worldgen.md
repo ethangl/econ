@@ -33,7 +33,7 @@ Standalone library at `src/WorldGen/` generating a `SphereMesh` — the spherica
 | `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells                               |
 | `WorldGenPipeline.cs`        | Entry point: points -> hull -> Voronoi -> areas -> tectonics -> `WorldGenResult` |
 | `WorldGenResult.cs`          | Composite result: `SphereMesh` + `TectonicData`                                  |
-| `WorldGenConfig.cs`          | Config: `CellCount`, `Seed`, `Radius`, `Jitter`, `PlateCount`                    |
+| `WorldGenConfig.cs`          | Config: `CoarseCellCount`, `DenseCellCount`, `Seed`, `Radius`, `Jitter`, `PlateCount` |
 
 **Performance:** 10,000 cells in ~5s (incremental hull is O(n^2)). Fine for the coarse tectonic mesh. The dense 100k mesh in step 5 may need a faster algorithm (Quickhull or divide-and-conquer).
 
@@ -101,11 +101,43 @@ Vertex colors are rebuilt without regenerating mesh geometry.
 | `TectonicData.cs`   | Added `PlateIsOceanic`, `CellElevation`          |
 | `WorldGenConfig.cs` | Added `OceanFraction`                            |
 
+## Step 4: Dense Sphere + Terrain Transfer (DONE)
+
+Generates a dense SphereMesh (~20k cells) on top of the coarse tectonic mesh, transfers elevation via nearest-neighbor mapping, and adds fractal 3D Perlin noise for terrain detail.
+
+**Algorithm:**
+
+1. **Dense mesh** — `FibonacciSphere(20k, jitter, seed+100)` → ConvexHull → SphericalVoronoi → ComputeAreas. Seed offset avoids correlation with coarse points.
+2. **Nearest-neighbor mapping** — Brute-force: for each dense cell, find closest coarse cell center via `Vec3.SqrDistance`. O(20k × 1k) ≈ 20M comparisons.
+3. **Elevation transfer + noise** — Each dense cell inherits its coarse cell's elevation, plus fractal 3D Perlin noise (6 octaves, amplitude 0.15). Coast damping attenuates noise near sea level (0.4) to preserve tectonic coastline shapes.
+
+**Coast damping:** `dampFactor = min(|baseElev - 0.4| / 0.06, 1.0)`. Full noise inland/deep-ocean, zero at coastlines.
+
+**3D Perlin noise** avoids UV seam artifacts by sampling at 3D cell center positions on the sphere. Classic implementation: 256-entry permutation table, Ken Perlin's optimized 12-gradient function, quintic fade, trilinear interpolation.
+
+**Data model (`DenseTerrainData`):**
+
+- `Mesh` — high-resolution SphereMesh
+- `DenseToCoarse[denseCell]` — index of nearest coarse cell
+- `CellElevation[denseCell]` — final elevation (0-1)
+
+**Config (`WorldGenConfig`):**
+
+- `CoarseCellCount` (default 1000) — renamed from `CellCount`
+- `DenseCellCount` (default 20000) — new
+
+**Visualization:** `SphereView` renders the dense mesh. Plates mode maps dense → coarse via `DenseToCoarse` for plate palette lookup. Elevation mode uses dense `CellElevation` directly.
+
+**Files:**
+
+| File                  | Purpose                                                |
+| --------------------- | ------------------------------------------------------ |
+| `Noise3D.cs`          | 3D Perlin noise with fractal octave support            |
+| `DenseTerrainOps.cs`  | Dense mesh generation, mapping, elevation + noise      |
+| `WorldGenResult.cs`   | Added `DenseTerrainData` class + field                 |
+| `WorldGenConfig.cs`   | `CoarseCellCount`, `DenseCellCount`                    |
+
 ## Next Steps
-
-### Step 4: Dense Sphere + Terrain Transfer
-
-Generate a second, denser SphereMesh (~10k cells). For each dense cell, find the enclosing coarse cell and inherit its tectonic elevation. Apply noise and detail at the dense scale. This is where biomes, climate, rivers, etc. would eventually live on the globe.
 
 ### Step 5: Region Extraction
 

@@ -153,8 +153,7 @@ namespace EconSim.UI
             if (gameManager != null)
             {
                 int seed = _seedField?.value ?? 12345;
-                int cellCount = 500;
-                gameManager.GenerateGlobe(seed, cellCount);
+                gameManager.GenerateGlobe(seed);
             }
             else
             {

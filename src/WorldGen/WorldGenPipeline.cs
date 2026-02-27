@@ -14,11 +14,13 @@ namespace WorldGen.Core
         public static WorldGenResult Generate(WorldGenConfig config)
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
-            if (config.CellCount < 4)
-                throw new ArgumentException("Need at least 4 cells", nameof(config));
+            if (config.CoarseCellCount < 4)
+                throw new ArgumentException("Need at least 4 coarse cells", nameof(config));
+            if (config.DenseCellCount < config.CoarseCellCount)
+                throw new ArgumentException("DenseCellCount must be >= CoarseCellCount", nameof(config));
 
-            // 1. Generate points on unit sphere
-            Vec3[] points = FibonacciSphere.Generate(config.CellCount, config.Jitter, config.Seed);
+            // 1. Generate points on unit sphere (coarse tectonic mesh)
+            Vec3[] points = FibonacciSphere.Generate(config.CoarseCellCount, config.Jitter, config.Seed);
 
             // 2. Build convex hull (= spherical Delaunay triangulation)
             ConvexHull hull = ConvexHullBuilder.Build(points);
@@ -35,10 +37,14 @@ namespace WorldGen.Core
             // 6. Compute tectonic elevation
             ElevationOps.Generate(mesh, tectonics, config.OceanFraction, config.Seed + 1);
 
+            // 7. Generate dense terrain mesh with fractal noise
+            DenseTerrainData denseTerrain = DenseTerrainOps.Generate(mesh, tectonics, config);
+
             return new WorldGenResult
             {
                 Mesh = mesh,
                 Tectonics = tectonics,
+                DenseTerrain = denseTerrain,
             };
         }
     }

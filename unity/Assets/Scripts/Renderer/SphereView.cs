@@ -22,7 +22,7 @@ namespace EconSim.Renderer
         private Mesh unityMesh;
         private SphereViewMode viewMode = SphereViewMode.Plates;
 
-        public float Radius => result?.Mesh?.Radius ?? 0f;
+        public float Radius => result?.DenseTerrain?.Mesh?.Radius ?? result?.Mesh?.Radius ?? 0f;
         public SphereViewMode ViewMode => viewMode;
 
         public void Generate(WorldGenConfig config)
@@ -47,8 +47,8 @@ namespace EconSim.Renderer
 
         private void BuildMesh()
         {
-            if (result?.Mesh == null) return;
-            var mesh = result.Mesh;
+            if (result?.DenseTerrain?.Mesh == null) return;
+            var mesh = result.DenseTerrain.Mesh;
 
             if (meshFilter == null)
                 meshFilter = GetComponent<MeshFilter>();
@@ -108,7 +108,7 @@ namespace EconSim.Renderer
             unityMesh.RecalculateBounds();
 
             meshFilter.mesh = unityMesh;
-            Debug.Log($"SphereView: built mesh with {cellCount} cells, {result.Tectonics.PlateCount} plates, {vertices.Count} vertices, {triangles.Count / 3} triangles");
+            Debug.Log($"SphereView: built dense mesh with {cellCount} cells, {result.Tectonics.PlateCount} plates, {vertices.Count} vertices, {triangles.Count / 3} triangles");
         }
 
         private void RebuildColors()
@@ -119,7 +119,8 @@ namespace EconSim.Renderer
 
         private List<Color32> BuildColors()
         {
-            var mesh = result.Mesh;
+            var dense = result.DenseTerrain;
+            var mesh = dense.Mesh;
             var colors = new List<Color32>();
             int cellCount = mesh.CellCount;
 
@@ -133,9 +134,16 @@ namespace EconSim.Renderer
                 if (cellVerts == null || cellVerts.Length < 3)
                     continue;
 
-                Color32 color = viewMode == SphereViewMode.Plates
-                    ? palette[result.Tectonics.CellPlate[c]]
-                    : ElevationColor(result.Tectonics.CellElevation[c]);
+                Color32 color;
+                if (viewMode == SphereViewMode.Plates)
+                {
+                    int coarseCell = dense.DenseToCoarse[c];
+                    color = palette[result.Tectonics.CellPlate[coarseCell]];
+                }
+                else
+                {
+                    color = ElevationColor(dense.CellElevation[c]);
+                }
 
                 // Center vertex + polygon vertices
                 int vertCount = 1 + cellVerts.Length;

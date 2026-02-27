@@ -5,8 +5,11 @@ namespace WorldGen.Core
     /// </summary>
     public class WorldGenConfig
     {
-        /// <summary>Number of Voronoi cells on the sphere</summary>
-        public int CellCount { get; set; } = 10000;
+        /// <summary>Number of coarse tectonic cells</summary>
+        public int CoarseCellCount { get; set; } = 1000;
+
+        /// <summary>Number of dense terrain cells</summary>
+        public int DenseCellCount { get; set; } = 20000;
 
         /// <summary>Random seed</summary>
         public int Seed { get; set; } = 42;

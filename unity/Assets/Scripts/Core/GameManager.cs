@@ -106,15 +106,14 @@ namespace EconSim.Core
         /// <summary>
         /// Generate a sphere (globe) using the WorldGen pipeline.
         /// </summary>
-        public void GenerateGlobe(int seed, int cellCount)
+        public void GenerateGlobe(int seed)
         {
             var config = new WorldGenConfig
             {
                 Seed = seed,
-                CellCount = cellCount,
             };
 
-            Debug.Log($"WorldGen: generating globe with seed={seed}, cells={cellCount}, radius={config.Radius}");
+            Debug.Log($"WorldGen: generating globe with seed={seed}, coarse={config.CoarseCellCount}, dense={config.DenseCellCount}, radius={config.Radius}");
 
             // Get or create SphereView
             var sphereViewObj = GameObject.Find("SphereView");

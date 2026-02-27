@@ -13,7 +13,7 @@ namespace EconSim.Tests
         [TestCase(10000)]
         public void Generate_ProducesValidMesh(int cellCount)
         {
-            var config = new WorldGenConfig { CellCount = cellCount, Seed = 42, Radius = 1f };
+            var config = new WorldGenConfig { CoarseCellCount = cellCount, DenseCellCount = cellCount, Seed = 42, Radius = 1f };
             var mesh = WorldGenPipeline.Generate(config).Mesh;
 
             Assert.AreEqual(cellCount, mesh.CellCount);
@@ -24,7 +24,7 @@ namespace EconSim.Tests
         [Test]
         public void AllPoints_OnUnitSphere()
         {
-            var config = new WorldGenConfig { CellCount = 1000, Seed = 42, Radius = 1f };
+            var config = new WorldGenConfig { CoarseCellCount = 1000, DenseCellCount = 1000, Seed = 42, Radius = 1f };
             var mesh = WorldGenPipeline.Generate(config).Mesh;
 
             foreach (var center in mesh.CellCenters)
@@ -67,7 +67,7 @@ namespace EconSim.Tests
         [Test]
         public void CellNeighbors_AreSymmetric()
         {
-            var config = new WorldGenConfig { CellCount = 500, Seed = 42, Radius = 1f };
+            var config = new WorldGenConfig { CoarseCellCount = 500, DenseCellCount = 500, Seed = 42, Radius = 1f };
             var mesh = WorldGenPipeline.Generate(config).Mesh;
 
             for (int c = 0; c < mesh.CellCount; c++)
@@ -91,7 +91,7 @@ namespace EconSim.Tests
         public void CellAreas_SumToSphereArea()
         {
             float radius = 1f;
-            var config = new WorldGenConfig { CellCount = 1000, Seed = 42, Radius = radius };
+            var config = new WorldGenConfig { CoarseCellCount = 1000, DenseCellCount = 1000, Seed = 42, Radius = radius };
             var mesh = WorldGenPipeline.Generate(config).Mesh;
 
             float totalArea = 0f;
@@ -107,7 +107,7 @@ namespace EconSim.Tests
         [Test]
         public void Vertices_AreOnSphere()
         {
-            var config = new WorldGenConfig { CellCount = 500, Seed = 42, Radius = 1f };
+            var config = new WorldGenConfig { CoarseCellCount = 500, DenseCellCount = 500, Seed = 42, Radius = 1f };
             var mesh = WorldGenPipeline.Generate(config).Mesh;
 
             foreach (var vertex in mesh.Vertices)
@@ -122,7 +122,7 @@ namespace EconSim.Tests
         [TestCase(1000)]
         public void AllCells_HaveVerticesAndNeighbors(int cellCount)
         {
-            var config = new WorldGenConfig { CellCount = cellCount, Seed = 42, Radius = 1f };
+            var config = new WorldGenConfig { CoarseCellCount = cellCount, DenseCellCount = cellCount, Seed = 42, Radius = 1f };
             var mesh = WorldGenPipeline.Generate(config).Mesh;
 
             for (int c = 0; c < mesh.CellCount; c++)
