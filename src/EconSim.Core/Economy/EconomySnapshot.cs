@@ -79,6 +79,15 @@ namespace EconSim.Core.Economy
         // Transport costs (destroyed money)
         public float TotalTransportCostsPaid;
 
+        // Virtual overseas market (Layer 9 Phase D)
+        public float[] TotalVMImportedByGood;
+        public float[] TotalVMExportedByGood;
+        public float TotalVMImportSpending;
+        public float TotalVMExportRevenue;
+        public float TotalVMTariffsPaid;
+        public float[] VMStock;
+        public float[] VMSellPrice;
+
         // Market prices (Layer 4 Phase C)
         public float[] MarketPrices;
         public float[][] PerMarketPrices;

@@ -686,6 +686,11 @@ namespace EconSim.Editor
                 j.KV("marketFeesCollected", snap.TotalMarketFeesCollected);
                 j.KV("transportCostsPaid", snap.TotalTransportCostsPaid);
 
+                // Virtual market
+                j.KV("vmImportSpending", snap.TotalVMImportSpending);
+                j.KV("vmExportRevenue", snap.TotalVMExportRevenue);
+                j.KV("vmTariffsPaid", snap.TotalVMTariffsPaid);
+
                 // Population dynamics
                 j.KV("totalPopulation", snap.TotalPopulation);
                 j.KV("totalBirths", snap.TotalBirths);
@@ -800,6 +805,35 @@ namespace EconSim.Editor
                     j.ArrClose();
                 }
 
+                if (snap.TotalVMImportedByGood != null)
+                {
+                    j.Key("vmImportedByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalVMImportedByGood.Length; g++)
+                        j.Val(snap.TotalVMImportedByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.TotalVMExportedByGood != null)
+                {
+                    j.Key("vmExportedByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.TotalVMExportedByGood.Length; g++)
+                        j.Val(snap.TotalVMExportedByGood[g]);
+                    j.ArrClose();
+                }
+                if (snap.VMStock != null)
+                {
+                    j.Key("vmStockByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.VMStock.Length; g++)
+                        j.Val(snap.VMStock[g]);
+                    j.ArrClose();
+                }
+                if (snap.VMSellPrice != null)
+                {
+                    j.Key("vmSellPriceByGood"); j.ArrOpen();
+                    for (int g = 0; g < snap.VMSellPrice.Length; g++)
+                        j.Val(snap.VMSellPrice[g]);
+                    j.ArrClose();
+                }
+
                 // Per-good breakdowns
                 if (snap.TotalStockByGood != null)
                 {
@@ -894,6 +928,12 @@ namespace EconSim.Editor
             float totalCRTradeSpending = 0f, totalCRTradeRevenue = 0f;
             float totalCRTollsPaid = 0f, totalCRTariffsPaid = 0f;
 
+            // Virtual market aggregates
+            float[] totalVMBought = new float[Goods.Count];
+            float[] totalVMSold = new float[Goods.Count];
+            float totalVMSpending = 0f, totalVMRevenue = 0f;
+            float totalVMTariffs = 0f;
+
             // Market fee aggregates
             float totalMarketFeesCollected = 0f;
             float totalTransportCostsPaid = 0f;
@@ -910,6 +950,8 @@ namespace EconSim.Editor
                     totalCPTradeSold[g] += ce2.CrossProvTradeSold[g];
                     totalCRTradeBought[g] += ce2.CrossMarketTradeBought[g];
                     totalCRTradeSold[g] += ce2.CrossMarketTradeSold[g];
+                    totalVMBought[g] += ce2.VirtualMarketBought[g];
+                    totalVMSold[g] += ce2.VirtualMarketSold[g];
                 }
                 totalTradeSpending += ce2.TradeCrownsSpent;
                 totalTradeRevenue += ce2.TradeCrownsEarned;
@@ -922,6 +964,9 @@ namespace EconSim.Editor
                 totalCRTariffsPaid += ce2.CrossMarketTariffsPaid;
                 totalMarketFeesCollected += ce2.MarketFeesReceived;
                 totalTransportCostsPaid += ce2.TransportCostsPaid;
+                totalVMSpending += ce2.VirtualMarketCrownsSpent;
+                totalVMRevenue += ce2.VirtualMarketCrownsEarned;
+                totalVMTariffs += ce2.VirtualMarketTariffsPaid;
             }
 
             j.KV("countyCount", countyCount);
@@ -1002,6 +1047,81 @@ namespace EconSim.Editor
             j.KV("marketFeesCollected", totalMarketFeesCollected);
             j.KV("totalTransportCostsPaid", totalTransportCostsPaid);
             j.KV("marketCount", econ.Markets != null ? econ.Markets.Length - 1 : 0);
+
+            // Virtual overseas market
+            j.Key("virtualMarket"); j.ObjOpen();
+            var vm = econ.VirtualMarket;
+            if (vm != null)
+            {
+                j.KV("enabled", true);
+                j.KV("overseasSurcharge", vm.OverseasSurcharge);
+                j.Key("tradedGoods"); j.ArrOpen();
+                foreach (int g in vm.TradedGoods)
+                    j.Val(goodNames[g]);
+                j.ArrClose();
+
+                j.Key("stockByGood"); j.ObjOpen();
+                foreach (int g in vm.TradedGoods)
+                    j.KV(goodNames[g], vm.Stock[g]);
+                j.ObjClose();
+                j.Key("sellPriceByGood"); j.ObjOpen();
+                foreach (int g in vm.TradedGoods)
+                    j.KV(goodNames[g], vm.SellPrice[g]);
+                j.ObjClose();
+                j.Key("buyPriceByGood"); j.ObjOpen();
+                foreach (int g in vm.TradedGoods)
+                    j.KV(goodNames[g], vm.BuyPrice[g]);
+                j.ObjClose();
+                j.Key("targetStockByGood"); j.ObjOpen();
+                foreach (int g in vm.TradedGoods)
+                    j.KV(goodNames[g], vm.TargetStock[g]);
+                j.ObjClose();
+                j.Key("replenishRateByGood"); j.ObjOpen();
+                foreach (int g in vm.TradedGoods)
+                    j.KV(goodNames[g], vm.ReplenishRate[g]);
+                j.ObjClose();
+                j.Key("maxStockByGood"); j.ObjOpen();
+                foreach (int g in vm.TradedGoods)
+                    j.KV(goodNames[g], vm.MaxStock[g]);
+                j.ObjClose();
+
+                // County-level VM aggregates
+                j.Key("importedByGood"); j.ObjOpen();
+                foreach (int g in vm.TradedGoods)
+                    j.KV(goodNames[g], totalVMBought[g]);
+                j.ObjClose();
+                j.Key("exportedByGood"); j.ObjOpen();
+                foreach (int g in vm.TradedGoods)
+                    j.KV(goodNames[g], totalVMSold[g]);
+                j.ObjClose();
+                j.KV("importSpending", totalVMSpending);
+                j.KV("exportRevenue", totalVMRevenue);
+                j.KV("tariffsPaid", totalVMTariffs);
+
+                // Port cost distribution
+                int reachable = 0;
+                float minPort = float.MaxValue, maxPort = 0f, sumPort = 0f;
+                for (int i = 0; i < vm.CountyPortCost.Length; i++)
+                {
+                    float cost = vm.CountyPortCost[i];
+                    if (cost < float.MaxValue / 2)
+                    {
+                        reachable++;
+                        if (cost < minPort) minPort = cost;
+                        if (cost > maxPort) maxPort = cost;
+                        sumPort += cost;
+                    }
+                }
+                j.KV("reachableCounties", reachable);
+                j.KV("minPortCost", reachable > 0 ? minPort : 0f);
+                j.KV("maxPortCost", maxPort);
+                j.KV("avgPortCost", reachable > 0 ? sumPort / reachable : 0f);
+            }
+            else
+            {
+                j.KV("enabled", false);
+            }
+            j.ObjClose();
 
             // Per-province summary (granary + monetary)
             j.Key("provinces"); j.ArrOpen();

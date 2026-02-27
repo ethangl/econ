@@ -24,6 +24,7 @@ Update the econ debug bridge and `analyze_econ.py` with every change.
 14. Transport costs
 15. Seasonality
 16. Multiple Markets
+17. Virtual Market
 
 ### Known Issues and Future Layers
 

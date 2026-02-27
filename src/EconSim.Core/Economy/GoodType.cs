@@ -43,6 +43,7 @@ namespace EconSim.Core.Economy
         Butter = 34,
         Spices = 35,
         SpicedWine = 36,
+        Fur = 37,
     }
 
     public static class Goods
@@ -164,6 +165,7 @@ namespace EconSim.Core.Economy
             (int)GoodType.Tools,
             (int)GoodType.Salt,
             (int)GoodType.Clothes,
+            (int)GoodType.Fur,
             (int)GoodType.Timber,
             (int)GoodType.Cheese,
             (int)GoodType.Bacon,
@@ -350,6 +352,18 @@ namespace EconSim.Core.Economy
                         { (int)BiomeId.Savanna, 0.01f },
                     }),
                 new GoodDef(GoodType.SpicedWine, "spicedWine", GoodCategory.Finished, NeedCategory.Luxury, 0.02f, 0.0f, 0.0f, 0.0f, 0.20f, 0.01f, 4.0f, true, false, 0.005f),
+                new GoodDef(GoodType.Fur, "fur", GoodCategory.Raw, NeedCategory.Comfort,
+                    0.0f, 0.0005f, 0.0f, 0.0f, 4.00f, 0.20f, 80.0f, true, false,
+                    0.001f, 1.0f, unitWeight: 2.0f,
+                    comfortCategory: ComfortCategory.Clothing,
+                    seasonalSensitivity: 0.2f, maxTemperature: 12f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.BorealForest, 0.08f },
+                        { (int)BiomeId.Tundra, 0.05f },
+                        { (int)BiomeId.TemperateForest, 0.04f },
+                        { (int)BiomeId.MountainShrub, 0.03f },
+                        { (int)BiomeId.ColdDesert, 0.02f },
+                    }),
             };
 
             Count = Defs.Length;
