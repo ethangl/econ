@@ -41,6 +41,8 @@ namespace EconSim.Core.Economy
         Honey = 32,
         Mead = 33,
         Butter = 34,
+        Spices = 35,
+        SpicedWine = 36,
     }
 
     public static class Goods
@@ -155,6 +157,7 @@ namespace EconSim.Core.Economy
             (int)GoodType.Barley,
             (int)GoodType.Ale,
             (int)GoodType.Wine,
+            (int)GoodType.SpicedWine,
             (int)GoodType.Sausage,
             (int)GoodType.SaltedFish,
             (int)GoodType.Stockfish,
@@ -172,6 +175,7 @@ namespace EconSim.Core.Economy
             (int)GoodType.Iron,
             (int)GoodType.Charcoal,
             (int)GoodType.Honey,
+            (int)GoodType.Spices,
             (int)GoodType.Mead,
             (int)GoodType.Butter,
             (int)GoodType.GoldJewelry,
@@ -322,7 +326,7 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.Ale, "ale", GoodCategory.Finished, NeedCategory.Staple, 0.05f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.03f),
                 new GoodDef(GoodType.Gold, "gold", GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 1050.0f, 1050.0f, 1050.0f, true, false),
                 new GoodDef(GoodType.Silver, "silver", GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 105.0f, 105.0f, 105.0f, true, false),
-                new GoodDef(GoodType.GoldJewelry, "goldJewelry", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0f, 0.0f, 0.0f, 15.0f, 0.75f, 300.0f, true, false, 0.0005f, 0.2f, unitWeight: 0.05f, comfortCategory: ComfortCategory.Jewelry),
+                new GoodDef(GoodType.GoldJewelry, "goldJewelry", GoodCategory.Finished, NeedCategory.Luxury, 0.0f, 0.0f, 0.0f, 0.0f, 15.0f, 0.75f, 300.0f, true, false, 0.0005f, 0.2f, unitWeight: 0.05f, comfortCategory: ComfortCategory.Jewelry),
                 new GoodDef(GoodType.SilverJewelry, "silverJewelry", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0f, 0.0f, 0.0f, 8.0f, 0.40f, 160.0f, true, false, 0.0005f, 0.3f, unitWeight: 0.1f, comfortCategory: ComfortCategory.Jewelry),
                 new GoodDef(GoodType.Grapes, "grapes", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.04f, 0.002f, 0.8f, true, false, 0.02f, 0f, seasonalSensitivity: 0.95f, minTemperature: 12f,
                     biomeYields: new Dictionary<int, float> {
@@ -340,6 +344,12 @@ namespace EconSim.Core.Economy
                     }),
                 new GoodDef(GoodType.Mead, "mead", GoodCategory.Finished, NeedCategory.Comfort, 0.03f, 0.0f, 0.0f, 0.0f, 0.10f, 0.005f, 2.0f, true, false, 0.005f, comfortCategory: ComfortCategory.Alcohol),
                 new GoodDef(GoodType.Butter, "butter", GoodCategory.Finished, NeedCategory.Comfort, 0.02f, 0.0f, 0.0f, 0.0f, 0.15f, 0.0075f, 3.0f, true, false, 0.02f, comfortCategory: ComfortCategory.Pantry),
+                new GoodDef(GoodType.Spices, "spices", GoodCategory.Raw, NeedCategory.Luxury, 0.01f, 0.0f, 0.0f, 0.0f, 2.0f, 0.10f, 40.0f, true, false, 0.001f, 0f, seasonalSensitivity: 0.7f, minTemperature: 18f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.TropicalRainforest, 0.06f }, { (int)BiomeId.TropicalDryForest, 0.04f },
+                        { (int)BiomeId.Savanna, 0.01f },
+                    }),
+                new GoodDef(GoodType.SpicedWine, "spicedWine", GoodCategory.Finished, NeedCategory.Luxury, 0.02f, 0.0f, 0.0f, 0.0f, 0.20f, 0.01f, 4.0f, true, false, 0.005f),
             };
 
             Count = Defs.Length;

@@ -30,6 +30,7 @@ namespace EconSim.Core.Economy
         const float ComfortWeight = 0.3f;
         int[] _countyIds;
         int[] _countyToMarket;
+        readonly float[] _effPopBuf = new float[5]; // reusable buffer for NeedCategory effective pop
 
         static EconomySystem()
         {
@@ -85,6 +86,7 @@ namespace EconSim.Core.Economy
             {
                 var ce = new CountyEconomy();
                 ce.Population = county.TotalPopulation;
+                Estates.ComputeEstatePop(ce.Population, ce.EstatePop);
                 ComputeCountyProductivity(county, mapData, ce.Productivity);
 
                 // Cache latitude for seasonal calculations
@@ -320,6 +322,8 @@ namespace EconSim.Core.Economy
                 if (ce == null) continue;
 
                 float pop = ce.Population;
+                float[] effPop = _effPopBuf;
+                Estates.ComputeEffectivePop(ce.EstatePop, effPop);
                 var indices = countyFacilityIndices != null && countyId < countyFacilityIndices.Length
                     ? countyFacilityIndices[countyId]
                     : null;
@@ -530,7 +534,7 @@ namespace EconSim.Core.Economy
                     if (tgt > 0f)
                     {
                         // Durable: only wear removes stock; deficit is a demand signal
-                        float targetStock = pop * tgt;
+                        float targetStock = effPop[(int)Goods.Defs[g].Need] * tgt;
                         float replacement = ce.Stock[g] * Goods.Defs[g].SpoilageRate;
                         float wear = Math.Min(ce.Stock[g], replacement);
                         ce.Stock[g] -= wear;
@@ -541,7 +545,7 @@ namespace EconSim.Core.Economy
                     }
                     else
                     {
-                        float needed = pop * ConsumptionPerPop[g];
+                        float needed = effPop[(int)Goods.Defs[g].Need] * ConsumptionPerPop[g];
                         float consumed = Math.Min(ce.Stock[g], needed);
                         ce.Stock[g] -= consumed;
                         ce.Consumption[g] = consumed;
@@ -550,7 +554,7 @@ namespace EconSim.Core.Economy
                 }
 
                 // Pooled staple consumption — people eat 1 kg/day of any combination
-                float stapleBudget = pop * Goods.StapleBudgetPerPop;
+                float stapleBudget = effPop[(int)NeedCategory.Staple] * Goods.StapleBudgetPerPop;
                 float totalStapleAvail = 0f;
                 for (int s = 0; s < Goods.StapleGoods.Length; s++)
                     totalStapleAvail += ce.Stock[Goods.StapleGoods[s]];
@@ -584,7 +588,7 @@ namespace EconSim.Core.Economy
                 for (int s = 0; s < Goods.StapleGoods.Length; s++)
                 {
                     int g = Goods.StapleGoods[s];
-                    ce.UnmetNeed[g] = Math.Max(0f, pop * Goods.StapleIdealPerPop[g] - ce.Consumption[g]);
+                    ce.UnmetNeed[g] = Math.Max(0f, effPop[(int)NeedCategory.Staple] * Goods.StapleIdealPerPop[g] - ce.Consumption[g]);
                 }
 
                 // Basic-needs fulfillment EMA (alpha ≈ 2/(30+1) ≈ 0.065, ~30-day smoothing)
@@ -595,7 +599,7 @@ namespace EconSim.Core.Economy
                 for (int b = 0; b < IndividualBasicGoods.Length; b++)
                 {
                     int g = IndividualBasicGoods[b];
-                    float needed = pop * ConsumptionPerPop[g];
+                    float needed = effPop[(int)NeedCategory.Basic] * ConsumptionPerPop[g];
                     float ratio = needed > 0f ? Math.Min(1f, ce.Consumption[g] / needed) : 1f;
                     dailyNeeds += IndividualBasicWeights[b] * ratio;
                 }
@@ -608,7 +612,7 @@ namespace EconSim.Core.Economy
                 for (int cat = 0; cat < comfortCats.Length; cat++)
                 {
                     var catDef = comfortCats[cat];
-                    float catTarget = pop * catDef.TargetPerPop;
+                    float catTarget = effPop[(int)NeedCategory.Comfort] * catDef.TargetPerPop;
                     float catActual = 0f;
                     var members = comfortCatGoods[cat];
                     for (int j = 0; j < members.Length; j++)

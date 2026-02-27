@@ -20,6 +20,7 @@ namespace EconSim.Core.Economy
         Winery = 15,
         Meadery = 16,
         Churn = 17,
+        SpiceBlender = 18,
     }
 
     public readonly struct RecipeInput
@@ -134,6 +135,9 @@ namespace EconSim.Core.Economy
                 new FacilityDef(FacilityType.Churn, "churn",
                     new[] { new RecipeInput(GoodType.Milk, 3.0f) },
                     GoodType.Butter, 1.0f, 1, 0.10f, 1.0f),
+                new FacilityDef(FacilityType.SpiceBlender, "spiceBlender",
+                    new[] { new RecipeInput(GoodType.Wine, 2.0f), new RecipeInput(GoodType.Spices, 0.1f) },
+                    GoodType.SpicedWine, 2.0f, 1, 0.05f, 1.0f),
             };
 
             Count = Defs.Length;

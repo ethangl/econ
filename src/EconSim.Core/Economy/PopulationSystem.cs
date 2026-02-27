@@ -112,6 +112,7 @@ namespace EconSim.Core.Economy
                     newPop = PopulationFloor;
 
                 ce.Population = newPop;
+                Estates.ComputeEstatePop(ce.Population, ce.EstatePop);
                 ce.BirthsThisMonth = births;
                 ce.DeathsThisMonth = deaths;
             }
@@ -187,6 +188,8 @@ namespace EconSim.Core.Economy
                 // Enforce floor after migration
                 if (ce.Population < PopulationFloor)
                     ce.Population = PopulationFloor;
+
+                Estates.ComputeEstatePop(ce.Population, ce.EstatePop);
             }
 
             // Refresh shared population caches after all demographic changes
