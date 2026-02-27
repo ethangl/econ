@@ -31,6 +31,9 @@ namespace WorldGen.Core
         /// <summary>Signed convergence scalar per edge (positive=convergent, negative=divergent)</summary>
         public float[] EdgeConvergence;
 
+        /// <summary>Per plate: true=major, false=minor</summary>
+        public bool[] PlateIsMajor;
+
         /// <summary>Per plate: true=oceanic, false=continental</summary>
         public bool[] PlateIsOceanic;
 

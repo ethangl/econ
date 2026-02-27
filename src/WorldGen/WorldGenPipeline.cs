@@ -32,7 +32,8 @@ namespace WorldGen.Core
             mesh.ComputeAreas();
 
             // 5. Generate tectonic plates
-            TectonicData tectonics = TectonicOps.Generate(mesh, config.PlateCount, config.Seed);
+            TectonicData tectonics = TectonicOps.Generate(mesh, config.MajorPlateCount, config.MinorPlateCount,
+                config.MajorHeadStartRounds, config.Seed);
 
             // 6. Compute tectonic elevation
             ElevationOps.Generate(mesh, tectonics, config.OceanFraction, config.Seed + 1);

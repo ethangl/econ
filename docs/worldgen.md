@@ -24,16 +24,16 @@ Standalone library at `src/WorldGen/` generating a `SphereMesh` — the spherica
 
 **Files:**
 
-| File                         | Purpose                                                                          |
-| ---------------------------- | -------------------------------------------------------------------------------- |
-| `Vec3.cs`                    | 3D vector struct (mirrors MapGen's `Vec2`, adds `Cross`)                         |
-| `FibonacciSphere.cs`         | Golden-spiral point distribution on unit sphere                                  |
-| `ConvexHull.cs`              | Incremental 3D convex hull, half-edge output matching `Delaunay.cs` conventions  |
-| `SphereMesh.cs`              | Core data model: cell centers/vertices/neighbors/edges, spherical excess areas   |
-| `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells                               |
-| `WorldGenPipeline.cs`        | Entry point: points -> hull -> Voronoi -> areas -> tectonics -> `WorldGenResult` |
-| `WorldGenResult.cs`          | Composite result: `SphereMesh` + `TectonicData`                                  |
-| `WorldGenConfig.cs`          | Config: `CoarseCellCount`, `DenseCellCount`, `Seed`, `Radius`, `Jitter`, `PlateCount` |
+| File                         | Purpose                                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `Vec3.cs`                    | 3D vector struct (mirrors MapGen's `Vec2`, adds `Cross`)                                                                              |
+| `FibonacciSphere.cs`         | Golden-spiral point distribution on unit sphere                                                                                       |
+| `ConvexHull.cs`              | Incremental 3D convex hull, half-edge output matching `Delaunay.cs` conventions                                                       |
+| `SphereMesh.cs`              | Core data model: cell centers/vertices/neighbors/edges, spherical excess areas                                                        |
+| `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells                                                                                    |
+| `WorldGenPipeline.cs`        | Entry point: points -> hull -> Voronoi -> areas -> tectonics -> `WorldGenResult`                                                      |
+| `WorldGenResult.cs`          | Composite result: `SphereMesh` + `TectonicData`                                                                                       |
+| `WorldGenConfig.cs`          | Config: `CoarseCellCount`, `DenseCellCount`, `Seed`, `Radius`, `Jitter`, `MajorPlateCount`, `MinorPlateCount`, `MajorHeadStartRounds` |
 
 **Performance:** 10,000 cells in ~5s (incremental hull is O(n^2)). Fine for the coarse tectonic mesh. The dense 100k mesh in step 5 may need a faster algorithm (Quickhull or divide-and-conquer).
 
@@ -41,20 +41,25 @@ Standalone library at `src/WorldGen/` generating a `SphereMesh` — the spherica
 
 ## Step 2: Tectonic Plates (DONE)
 
-Seeds 20 plates on the 500-cell sphere, grows them via flood-fill, assigns drift vectors, and classifies boundaries.
+Seeds 7 major and 14 minor plates on the 1000-cell sphere with a two-phase growth strategy, assigns drift vectors, and classifies boundaries.
 
 **Algorithm:**
 
-1. **Seeding** — Farthest-point heuristic: first seed random, each subsequent seed maximizes min-distance to existing seeds. Produces well-separated plate origins.
-2. **Growth** — Multi-source BFS: all seeds enqueued simultaneously, first plate to reach a cell claims it. Sphere connectivity guarantees full coverage.
-3. **Drift** — Per plate: random 3D direction projected onto the tangent plane at the seed, normalized. Represents plate motion direction.
-4. **Boundary classification** — For each edge between different plates: project both drift vectors onto the edge direction. If convergence dominates shear → Convergent/Divergent (by sign); otherwise → Transform.
+1. **Major seeding** — Farthest-point heuristic: first seed random, each subsequent seed maximizes min-distance to existing seeds. Produces well-separated plate origins for major plates.
+2. **Head-start growth** — Major plates grow via level-synchronous BFS for `MajorHeadStartRounds` (default 4) before any minor plates exist.
+3. **Minor seeding** — Farthest-point heuristic among unclaimed cells, measuring distance to all existing seeds (major + already-placed minor).
+4. **Final growth** — All plates (major + minor) continue standard BFS until every cell is claimed. Major plates are naturally larger due to their head start.
+5. **Drift** — Per plate: random 3D direction projected onto the tangent plane at the seed, normalized. Represents plate motion direction.
+6. **Boundary classification** — For each edge between different plates: project both drift vectors onto the edge direction. If convergence dominates shear → Convergent/Divergent (by sign); otherwise → Transform.
+
+Plate IDs: major plates are `0..majorCount-1`, minor plates are `majorCount..totalCount-1`.
 
 **Data model (`TectonicData`):**
 
 - `CellPlate[cellIndex]` — plate ID (0-based)
 - `PlateSeeds[plateId]` — seed cell index
 - `PlateDrift[plateId]` — tangent drift vector
+- `PlateIsMajor[plateId]` — true for major plates
 - `EdgeBoundary[edgeIndex]` — `None | Convergent | Divergent | Transform`
 - `EdgeConvergence[edgeIndex]` — signed scalar (positive = convergent)
 
@@ -75,11 +80,24 @@ Assigns each plate as continental or oceanic, computes base elevation, applies b
 **Algorithm:**
 
 1. **Plate types** — Fisher-Yates shuffle of plate indices, first `floor(plateCount * oceanFraction)` marked oceanic (default 60%).
-2. **Base elevation** — Oceanic cells get 0.2, continental cells get 0.6. Implicit sea level ~0.4.
+2. **Base elevation** — Oceanic cells get 0.2, continental cells get 0.6. Sea level at 0.5.
 3. **Boundary effects** — For each boundary edge, compute effect from type (convergent +0.25, divergent -0.15, transform +0.05) scaled by `min(|convergence| / 2, 1)`. Both adjacent cells receive the effect (max-abs-wins for overlaps at triple junctions).
 4. **BFS propagation** — Effects propagate 3 hops inward from boundary cells with linear decay. Source effect preserved across hops so decay is relative to the original boundary magnitude.
 5. **Smoothing** — 2 passes of Laplacian smoothing (0.3 neighbor pull weight).
 6. **Clamp** — Final values clamped to [0, 1].
+
+**Constants (`ElevationOps`):**
+
+| Constant           | Value | Purpose                                                                         |
+| ------------------ | ----- | ------------------------------------------------------------------------------- |
+| `OceanicBase`      | 0.2   | Starting elevation for cells on oceanic plates                                  |
+| `ContinentalBase`  | 0.7   | Starting elevation for cells on continental plates                              |
+| `ConvergentLift`   | +0.25 | Elevation boost at convergent boundaries (mountain ranges)                      |
+| `DivergentDrop`    | -0.25 | Elevation drop at divergent boundaries (rifts)                                  |
+| `TransformLift`    | +0.05 | Small uplift at transform boundaries (plates sliding past each other)           |
+| `PropagationDepth` | 3     | BFS hops inward from boundary edges. Wider = broader mountain ranges/rift zones |
+| `SmoothingPasses`  | 2     | Laplacian smoothing iterations after boundary effects                           |
+| `SmoothingWeight`  | 0.2   | Each pass pulls each cell 30% toward its neighbors' average                     |
 
 **Data model additions:**
 
@@ -88,18 +106,19 @@ Assigns each plate as continental or oceanic, computes base elevation, applies b
 - `WorldGenConfig.OceanFraction` — fraction of plates that are oceanic (default 0.6)
 
 **Visualization:** `SphereView` supports two modes toggled with Tab:
+
 - **Plates** — HSV palette by plate (same as before)
-- **Elevation** — Color ramp: deep blue (0.0) → medium blue (0.4/sea level) → green (0.4) → brown (0.7) → white (1.0)
+- **Elevation** — Color ramp: deep blue (0.0) → medium blue (0.5/sea level) → green (0.5) → brown (0.7) → white (1.0)
 
 Vertex colors are rebuilt without regenerating mesh geometry.
 
 **Files:**
 
-| File                | Purpose                                          |
-| ------------------- | ------------------------------------------------ |
-| `ElevationOps.cs`   | Full elevation pipeline (plate types → smooth)   |
-| `TectonicData.cs`   | Added `PlateIsOceanic`, `CellElevation`          |
-| `WorldGenConfig.cs` | Added `OceanFraction`                            |
+| File                | Purpose                                        |
+| ------------------- | ---------------------------------------------- |
+| `ElevationOps.cs`   | Full elevation pipeline (plate types → smooth) |
+| `TectonicData.cs`   | Added `PlateIsOceanic`, `CellElevation`        |
+| `WorldGenConfig.cs` | Added `OceanFraction`                          |
 
 ## Step 4: Dense Sphere + Terrain Transfer (DONE)
 
@@ -109,11 +128,21 @@ Generates a dense SphereMesh (~20k cells) on top of the coarse tectonic mesh, tr
 
 1. **Dense mesh** — `FibonacciSphere(20k, jitter, seed+100)` → ConvexHull → SphericalVoronoi → ComputeAreas. Seed offset avoids correlation with coarse points.
 2. **Nearest-neighbor mapping** — Brute-force: for each dense cell, find closest coarse cell center via `Vec3.SqrDistance`. O(20k × 1k) ≈ 20M comparisons.
-3. **Elevation transfer + noise** — Each dense cell inherits its coarse cell's elevation, plus fractal 3D Perlin noise (6 octaves, amplitude 0.15). Coast damping attenuates noise near sea level (0.4) to preserve tectonic coastline shapes.
-
-**Coast damping:** `dampFactor = min(|baseElev - 0.4| / 0.06, 1.0)`. Full noise inland/deep-ocean, zero at coastlines.
+3. **Elevation transfer + noise** — Each dense cell inherits its coarse cell's elevation, plus fractal 3D Perlin noise (6 octaves, amplitude 0.5). Sea level at 0.5.
 
 **3D Perlin noise** avoids UV seam artifacts by sampling at 3D cell center positions on the sphere. Classic implementation: 256-entry permutation table, Ken Perlin's optimized 12-gradient function, quintic fade, trilinear interpolation.
+
+**Constants (`DenseTerrainOps`):**
+
+| Constant            | Value | Purpose                                                                           |
+| ------------------- | ----- | --------------------------------------------------------------------------------- |
+| `NoiseOctaves`      | 8     | Number of noise layers. Each adds finer detail                                    |
+| `NoiseFrequency`    | 8.0   | Base frequency — roughly 8 "bumps" around the circumference at the coarsest scale |
+| `NoiseLacunarity`   | 2.0   | Frequency multiplier per octave (each octave is 2x finer)                         |
+| `NoisePersistence`  | 0.5   | Amplitude multiplier per octave (each octave contributes half the previous)       |
+| `NoiseAmplitude`    | 0.5   | Overall noise strength applied to base elevation                                  |
+| `CoastDampingRange` | 0.0   | Distance from sea level over which noise is attenuated (0 = no damping)           |
+| `SeaLevel`          | 0.5   | Reference elevation for coast damping                                             |
 
 **Data model (`DenseTerrainData`):**
 
@@ -130,12 +159,12 @@ Generates a dense SphereMesh (~20k cells) on top of the coarse tectonic mesh, tr
 
 **Files:**
 
-| File                  | Purpose                                                |
-| --------------------- | ------------------------------------------------------ |
-| `Noise3D.cs`          | 3D Perlin noise with fractal octave support            |
-| `DenseTerrainOps.cs`  | Dense mesh generation, mapping, elevation + noise      |
-| `WorldGenResult.cs`   | Added `DenseTerrainData` class + field                 |
-| `WorldGenConfig.cs`   | `CoarseCellCount`, `DenseCellCount`                    |
+| File                 | Purpose                                           |
+| -------------------- | ------------------------------------------------- |
+| `Noise3D.cs`         | 3D Perlin noise with fractal octave support       |
+| `DenseTerrainOps.cs` | Dense mesh generation, mapping, elevation + noise |
+| `WorldGenResult.cs`  | Added `DenseTerrainData` class + field            |
+| `WorldGenConfig.cs`  | `CoarseCellCount`, `DenseCellCount`               |
 
 ## Next Steps
 

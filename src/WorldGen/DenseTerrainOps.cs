@@ -8,13 +8,13 @@ namespace WorldGen.Core
     /// </summary>
     public static class DenseTerrainOps
     {
-        const int NoiseOctaves = 6;
+        const int NoiseOctaves = 8;
         const float NoiseFrequency = 8.0f;
         const float NoiseLacunarity = 2.0f;
         const float NoisePersistence = 0.5f;
-        const float NoiseAmplitude = 0.15f;
-        const float CoastDampingRange = 0.06f;
-        const float SeaLevel = 0.4f;
+        const float NoiseAmplitude = 0.5f;
+        const float CoastDampingRange = 0.0f;
+        const float SeaLevel = 0.5f;
 
         public static DenseTerrainData Generate(SphereMesh coarseMesh, TectonicData tectonics, WorldGenConfig config)
         {

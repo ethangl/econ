@@ -10,13 +10,13 @@ namespace WorldGen.Core
     public static class ElevationOps
     {
         const float OceanicBase = 0.2f;
-        const float ContinentalBase = 0.6f;
+        const float ContinentalBase = 0.7f;
         const float ConvergentLift = 0.25f;
-        const float DivergentDrop = -0.15f;
-        const float TransformLift = 0.05f;
+        const float DivergentDrop = -0.25f;
+        const float TransformLift = 0.125f;
         const int PropagationDepth = 3;
         const int SmoothingPasses = 2;
-        const float SmoothingWeight = 0.3f;
+        const float SmoothingWeight = 0.2f;
 
         /// <summary>
         /// Run the full elevation pipeline. Populates tectonics.PlateIsOceanic and tectonics.CellElevation.

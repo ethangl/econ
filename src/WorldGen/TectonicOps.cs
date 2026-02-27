@@ -10,24 +10,39 @@ namespace WorldGen.Core
     public static class TectonicOps
     {
         /// <summary>
-        /// Run the full tectonic pipeline: seed → grow → drift → classify.
+        /// Run the full tectonic pipeline: seed majors → head-start BFS → seed minors → finish BFS → drift → classify.
+        /// Major plates get IDs 0..majorCount-1, minor plates get majorCount..totalCount-1.
         /// </summary>
-        public static TectonicData Generate(SphereMesh mesh, int plateCount, int seed)
+        public static TectonicData Generate(SphereMesh mesh, int majorCount, int minorCount, int headStartRounds, int seed)
         {
             var rng = new Random(seed);
-            plateCount = Math.Min(plateCount, mesh.CellCount);
+            int totalCount = majorCount + minorCount;
+            totalCount = Math.Min(totalCount, mesh.CellCount);
+            majorCount = Math.Min(majorCount, totalCount);
+            minorCount = totalCount - majorCount;
 
-            int[] seeds = SelectSeeds(mesh, plateCount, rng);
-            int[] cellPlate = GrowPlates(mesh, seeds, plateCount);
-            Vec3[] drifts = GenerateDrifts(mesh, seeds, plateCount, rng);
+            int[] majorSeeds = SelectSeeds(mesh, majorCount, rng);
+            var (cellPlate, minorSeeds) = GrowPlates(mesh, majorSeeds, majorCount, minorCount, headStartRounds, rng);
+
+            // Build combined seeds array: major seeds [0..majorCount-1], minor seeds [majorCount..totalCount-1]
+            int[] allSeeds = new int[totalCount];
+            Array.Copy(majorSeeds, 0, allSeeds, 0, majorCount);
+            Array.Copy(minorSeeds, 0, allSeeds, majorCount, minorCount);
+
+            Vec3[] drifts = GenerateDrifts(mesh, allSeeds, totalCount, rng);
             var (edgeBoundary, edgeConvergence) = ClassifyBoundaries(mesh, cellPlate, drifts);
+
+            bool[] isMajor = new bool[totalCount];
+            for (int i = 0; i < majorCount; i++)
+                isMajor[i] = true;
 
             return new TectonicData
             {
                 CellPlate = cellPlate,
-                PlateCount = plateCount,
-                PlateSeeds = seeds,
+                PlateCount = totalCount,
+                PlateSeeds = allSeeds,
                 PlateDrift = drifts,
+                PlateIsMajor = isMajor,
                 EdgeBoundary = edgeBoundary,
                 EdgeConvergence = edgeConvergence,
             };
@@ -83,28 +98,64 @@ namespace WorldGen.Core
         }
 
         /// <summary>
-        /// Multi-source BFS: all seeds enqueue simultaneously, first to reach claims the cell.
+        /// Three-phase level-synchronous BFS:
+        /// 1) Major seeds grow for headStartRounds
+        /// 2) Minor seeds placed in unclaimed space
+        /// 3) All plates grow until every cell is claimed
         /// </summary>
-        internal static int[] GrowPlates(SphereMesh mesh, int[] seeds, int plateCount)
+        internal static (int[] cellPlate, int[] minorSeeds) GrowPlates(
+            SphereMesh mesh, int[] majorSeeds, int majorCount, int minorCount,
+            int headStartRounds, Random rng)
         {
             int n = mesh.CellCount;
             int[] cellPlate = new int[n];
             for (int i = 0; i < n; i++)
                 cellPlate[i] = -1;
 
-            var queue = new Queue<int>();
-
-            for (int p = 0; p < plateCount; p++)
+            // Phase 1: enqueue major seeds, run headStartRounds of level-synchronous BFS
+            var frontier = new List<int>();
+            for (int p = 0; p < majorCount; p++)
             {
-                cellPlate[seeds[p]] = p;
-                queue.Enqueue(seeds[p]);
+                cellPlate[majorSeeds[p]] = p;
+                frontier.Add(majorSeeds[p]);
             }
 
+            for (int round = 0; round < headStartRounds && frontier.Count > 0; round++)
+            {
+                var nextFrontier = new List<int>();
+                for (int f = 0; f < frontier.Count; f++)
+                {
+                    int cell = frontier[f];
+                    int plate = cellPlate[cell];
+                    int[] neighbors = mesh.CellNeighbors[cell];
+                    for (int i = 0; i < neighbors.Length; i++)
+                    {
+                        int nb = neighbors[i];
+                        if (cellPlate[nb] == -1)
+                        {
+                            cellPlate[nb] = plate;
+                            nextFrontier.Add(nb);
+                        }
+                    }
+                }
+                frontier = nextFrontier;
+            }
+
+            // Phase 2: seed minor plates in unclaimed space
+            int[] minorSeeds = SelectMinorSeeds(mesh, cellPlate, majorSeeds, minorCount, rng);
+            for (int p = 0; p < minorCount; p++)
+            {
+                int plateId = majorCount + p;
+                cellPlate[minorSeeds[p]] = plateId;
+                frontier.Add(minorSeeds[p]);
+            }
+
+            // Phase 3: standard BFS until all cells claimed
+            var queue = new Queue<int>(frontier);
             while (queue.Count > 0)
             {
                 int cell = queue.Dequeue();
                 int plate = cellPlate[cell];
-
                 int[] neighbors = mesh.CellNeighbors[cell];
                 for (int i = 0; i < neighbors.Length; i++)
                 {
@@ -117,7 +168,65 @@ namespace WorldGen.Core
                 }
             }
 
-            return cellPlate;
+            return (cellPlate, minorSeeds);
+        }
+
+        /// <summary>
+        /// Farthest-point heuristic among unclaimed cells, measuring distance to all existing seeds.
+        /// </summary>
+        internal static int[] SelectMinorSeeds(
+            SphereMesh mesh, int[] cellPlate, int[] majorSeeds, int minorCount, Random rng)
+        {
+            int n = mesh.CellCount;
+            int[] seeds = new int[minorCount];
+
+            // Track min squared distance from each cell to any seed (major + already-placed minor)
+            float[] minDist = new float[n];
+            for (int i = 0; i < n; i++)
+                minDist[i] = float.MaxValue;
+
+            // Initialize with distances to major seeds
+            for (int s = 0; s < majorSeeds.Length; s++)
+            {
+                Vec3 seedPos = mesh.CellCenters[majorSeeds[s]];
+                for (int i = 0; i < n; i++)
+                {
+                    float d = Vec3.SqrDistance(mesh.CellCenters[i], seedPos);
+                    if (d < minDist[i])
+                        minDist[i] = d;
+                }
+            }
+
+            for (int s = 0; s < minorCount; s++)
+            {
+                // Pick unclaimed cell with maximum min-distance
+                int best = -1;
+                float bestDist = -1f;
+                for (int i = 0; i < n; i++)
+                {
+                    if (cellPlate[i] == -1 && minDist[i] > bestDist)
+                    {
+                        bestDist = minDist[i];
+                        best = i;
+                    }
+                }
+
+                if (best == -1)
+                    break; // no unclaimed cells left
+
+                seeds[s] = best;
+
+                // Update min distances with new seed
+                Vec3 pos = mesh.CellCenters[best];
+                for (int i = 0; i < n; i++)
+                {
+                    float d = Vec3.SqrDistance(mesh.CellCenters[i], pos);
+                    if (d < minDist[i])
+                        minDist[i] = d;
+                }
+            }
+
+            return seeds;
         }
 
         /// <summary>

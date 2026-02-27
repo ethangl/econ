@@ -155,24 +155,24 @@ namespace EconSim.Renderer
         }
 
         /// <summary>
-        /// Elevation color ramp: deep blue (0.0) → medium blue (0.4) → green (0.4) → brown (0.7) → white (1.0)
+        /// Elevation color ramp: deep blue (0.0) → medium blue (0.5) → green (0.5) → brown (0.7) → white (1.0)
         /// </summary>
         private static Color32 ElevationColor(float elev)
         {
-            // Sea level at ~0.4
-            if (elev < 0.4f)
+            // Sea level at 0.5
+            if (elev < 0.5f)
             {
-                // Deep blue (0.0) to medium blue (0.4)
-                float t = elev / 0.4f;
+                // Deep blue (0.0) to medium blue (0.5)
+                float t = elev / 0.5f;
                 byte r = (byte)(10 * t);
                 byte g = (byte)(30 + 70 * t);
                 byte b = (byte)(80 + 140 * t);
                 return new Color32(r, g, b, 255);
             }
-            else if (elev < 0.55f)
+            else if (elev < 0.6f)
             {
                 // Green (land near sea level)
-                float t = (elev - 0.4f) / 0.15f;
+                float t = (elev - 0.5f) / 0.1f;
                 byte r = (byte)(30 + 80 * t);
                 byte g = (byte)(140 + 40 * t);
                 byte b = (byte)(40 - 10 * t);

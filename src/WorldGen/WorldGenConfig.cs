@@ -20,8 +20,14 @@ namespace WorldGen.Core
         /// <summary>Jitter for point distribution (0-1). Higher values give more irregular cells.</summary>
         public float Jitter { get; set; } = 0f;
 
-        /// <summary>Number of tectonic plates</summary>
-        public int PlateCount { get; set; } = 20;
+        /// <summary>Number of major tectonic plates (seeded first, get a BFS head start)</summary>
+        public int MajorPlateCount { get; set; } = 7;
+
+        /// <summary>Number of minor tectonic plates (seeded after major plates have grown)</summary>
+        public int MinorPlateCount { get; set; } = 14;
+
+        /// <summary>BFS rounds major plates grow before minor plates are seeded</summary>
+        public int MajorHeadStartRounds { get; set; } = 3;
 
         /// <summary>Fraction of plates that are oceanic (0-1)</summary>
         public float OceanFraction { get; set; } = 0.6f;

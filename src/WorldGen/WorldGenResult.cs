@@ -11,7 +11,7 @@ namespace WorldGen.Core
         /// <summary>Maps each dense cell index to its nearest coarse cell index</summary>
         public int[] DenseToCoarse;
 
-        /// <summary>Elevation per dense cell (0-1, sea level ~0.4)</summary>
+        /// <summary>Elevation per dense cell (0-1, sea level 0.5)</summary>
         public float[] CellElevation;
     }
 
