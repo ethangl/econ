@@ -654,6 +654,62 @@ namespace PopGen.Core
                         break;
                 }
 
+                // Assign celibacy with correlation to religion type + seeded variation
+                Celibacy celibacy;
+                uint celRng = (uint)(seed.Value * 67 + i * 113);
+                celRng ^= celRng >> 16;
+                celRng *= 0x85EBCA6Bu;
+                float celRoll = (celRng & 0x7FFFFFFF) / (float)0x7FFFFFFF;
+                switch (religionType)
+                {
+                    case ReligionType.Monotheistic:
+                        celibacy = celRoll < 0.6f ? Celibacy.Celibate : Celibacy.NonCelibate;
+                        break;
+                    case ReligionType.Philosophical:
+                        celibacy = celRoll < 0.5f ? Celibacy.Celibate : Celibacy.NonCelibate;
+                        break;
+                    case ReligionType.Dualistic:
+                        celibacy = celRoll < 0.5f ? Celibacy.Celibate : Celibacy.NonCelibate;
+                        break;
+                    case ReligionType.Polytheistic:
+                    case ReligionType.Animistic:
+                    case ReligionType.AncestorWorship:
+                        celibacy = celRoll < 0.2f ? Celibacy.Celibate : Celibacy.NonCelibate;
+                        break;
+                    default:
+                        celibacy = Celibacy.NonCelibate;
+                        break;
+                }
+
+                // Assign holy war doctrine with correlation to religion type + seeded variation
+                HolyWar holyWar;
+                uint hwRng = (uint)(seed.Value * 83 + i * 131);
+                hwRng ^= hwRng >> 16;
+                hwRng *= 0x85EBCA6Bu;
+                float hwRoll = (hwRng & 0x7FFFFFFF) / (float)0x7FFFFFFF;
+                switch (religionType)
+                {
+                    case ReligionType.Monotheistic:
+                        holyWar = hwRoll < 0.5f ? HolyWar.Justified : hwRoll < 0.85f ? HolyWar.Defensive : HolyWar.Forbidden;
+                        break;
+                    case ReligionType.Dualistic:
+                        holyWar = hwRoll < 0.4f ? HolyWar.Justified : hwRoll < 0.8f ? HolyWar.Defensive : HolyWar.Forbidden;
+                        break;
+                    case ReligionType.Polytheistic:
+                    case ReligionType.AncestorWorship:
+                        holyWar = hwRoll < 0.3f ? HolyWar.Justified : hwRoll < 0.8f ? HolyWar.Defensive : HolyWar.Forbidden;
+                        break;
+                    case ReligionType.Animistic:
+                        holyWar = hwRoll < 0.15f ? HolyWar.Justified : hwRoll < 0.5f ? HolyWar.Defensive : HolyWar.Forbidden;
+                        break;
+                    case ReligionType.Philosophical:
+                        holyWar = hwRoll < 0.1f ? HolyWar.Justified : hwRoll < 0.4f ? HolyWar.Defensive : HolyWar.Forbidden;
+                        break;
+                    default:
+                        holyWar = HolyWar.Defensive;
+                        break;
+                }
+
                 religions[i] = new PopReligion
                 {
                     Id = i + 1,
@@ -662,7 +718,9 @@ namespace PopGen.Core
                     TypeName = religionType.ToString(),
                     SabbathDay = ((seed.Value * 31 + i * 17) & 0x7FFFFFFF) % 7,
                     ParentId = 0, // All generated religions are roots; schisms come later
-                    Worldview = worldview
+                    Worldview = worldview,
+                    Celibacy = celibacy,
+                    HolyWar = holyWar
                 };
             }
 

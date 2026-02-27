@@ -296,7 +296,9 @@ namespace EconSim.Core.Import
                     TypeName = r.TypeName ?? "Unknown",
                     SabbathDay = r.SabbathDay,
                     ParentId = r.ParentId,
-                    Worldview = (int)r.Worldview
+                    Worldview = (int)r.Worldview,
+                    Celibacy = (int)r.Celibacy,
+                    HolyWar = (int)r.HolyWar
                 });
             }
 

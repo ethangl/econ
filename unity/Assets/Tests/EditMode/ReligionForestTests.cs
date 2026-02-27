@@ -119,6 +119,25 @@ namespace EconSim.Tests
         }
 
         [Test]
+        public void Celibacy_EnumHasExactlyTwoValues()
+        {
+            var values = (Celibacy[])Enum.GetValues(typeof(Celibacy));
+            Assert.That(values.Length, Is.EqualTo(2));
+            Assert.That(values, Does.Contain(Celibacy.Celibate));
+            Assert.That(values, Does.Contain(Celibacy.NonCelibate));
+        }
+
+        [Test]
+        public void HolyWar_EnumHasExactlyThreeValues()
+        {
+            var values = (HolyWar[])Enum.GetValues(typeof(HolyWar));
+            Assert.That(values.Length, Is.EqualTo(3));
+            Assert.That(values, Does.Contain(HolyWar.Justified));
+            Assert.That(values, Does.Contain(HolyWar.Defensive));
+            Assert.That(values, Does.Contain(HolyWar.Forbidden));
+        }
+
+        [Test]
         public void AllGeneratedReligions_AreRoots()
         {
             // At world gen, all religions should have ParentId = 0

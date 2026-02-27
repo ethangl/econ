@@ -390,6 +390,8 @@ namespace EconSim.Core.Data
         public int SabbathDay;           // 0=Monday .. 6=Sunday
         public int ParentId;             // 0 for root religions
         public int Worldview;            // PopGen.Core.Worldview ordinal
+        public int Celibacy;             // PopGen.Core.Celibacy ordinal
+        public int HolyWar;              // PopGen.Core.HolyWar ordinal
     }
 
     /// <summary>

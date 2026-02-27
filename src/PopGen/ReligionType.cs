@@ -11,6 +11,8 @@ namespace PopGen.Core
     }
 
     public enum Worldview { Exclusivist, Pluralist, Syncretist }
+    public enum Celibacy { Celibate, NonCelibate }
+    public enum HolyWar { Justified, Defensive, Forbidden }
 
     public static class ReligionSuffixes
     {
