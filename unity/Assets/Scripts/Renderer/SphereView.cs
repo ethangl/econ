@@ -7,12 +7,13 @@ namespace EconSim.Renderer
     public enum SphereViewMode
     {
         Plates,
-        Elevation
+        Elevation,
+        UltraDense
     }
 
     /// <summary>
     /// Generates a Unity mesh from a WorldGenResult Voronoi tessellation.
-    /// Tab toggles between plate and elevation coloring.
+    /// Tab toggles between plate, elevation, and ultra-dense coloring.
     /// </summary>
     public class SphereView : MonoBehaviour
     {
@@ -28,7 +29,7 @@ namespace EconSim.Renderer
         public void Generate(WorldGenConfig config)
         {
             result = WorldGenPipeline.Generate(config);
-            BuildMesh();
+            BuildMesh(result.DenseTerrain.Mesh);
         }
 
         private void Update()
@@ -37,18 +38,37 @@ namespace EconSim.Renderer
 
             if (Input.GetKeyDown(KeyCode.Tab))
             {
-                viewMode = viewMode == SphereViewMode.Plates
-                    ? SphereViewMode.Elevation
-                    : SphereViewMode.Plates;
-                RebuildColors();
+                var prev = viewMode;
+                viewMode = viewMode switch
+                {
+                    SphereViewMode.Plates => SphereViewMode.Elevation,
+                    SphereViewMode.Elevation => SphereViewMode.UltraDense,
+                    SphereViewMode.UltraDense => SphereViewMode.Plates,
+                    _ => SphereViewMode.Plates,
+                };
+
+                bool geometryChanged =
+                    (prev == SphereViewMode.UltraDense) != (viewMode == SphereViewMode.UltraDense);
+
+                if (geometryChanged)
+                {
+                    var mesh = viewMode == SphereViewMode.UltraDense
+                        ? result.DenseTerrain.UltraDenseMesh
+                        : result.DenseTerrain.Mesh;
+                    BuildMesh(mesh);
+                }
+                else
+                {
+                    RebuildColors();
+                }
+
                 Debug.Log($"SphereView: switched to {viewMode} mode");
             }
         }
 
-        private void BuildMesh()
+        private void BuildMesh(SphereMesh mesh)
         {
-            if (result?.DenseTerrain?.Mesh == null) return;
-            var mesh = result.DenseTerrain.Mesh;
+            if (mesh == null) return;
 
             if (meshFilter == null)
                 meshFilter = GetComponent<MeshFilter>();
@@ -103,26 +123,32 @@ namespace EconSim.Renderer
             unityMesh.SetTriangles(triangles, 0);
 
             // Apply colors for current mode
-            unityMesh.SetColors(BuildColors());
+            unityMesh.SetColors(BuildColors(mesh));
             unityMesh.RecalculateNormals();
             unityMesh.RecalculateBounds();
 
             meshFilter.mesh = unityMesh;
-            Debug.Log($"SphereView: built dense mesh with {cellCount} cells, {result.Tectonics.PlateCount} plates, {vertices.Count} vertices, {triangles.Count / 3} triangles");
+            Debug.Log($"SphereView: built mesh with {cellCount} cells, {vertices.Count} vertices, {triangles.Count / 3} triangles ({viewMode})");
         }
 
         private void RebuildColors()
         {
             if (unityMesh == null || result == null) return;
-            unityMesh.SetColors(BuildColors());
+            var mesh = viewMode == SphereViewMode.UltraDense
+                ? result.DenseTerrain.UltraDenseMesh
+                : result.DenseTerrain.Mesh;
+            unityMesh.SetColors(BuildColors(mesh));
         }
 
-        private List<Color32> BuildColors()
+        private List<Color32> BuildColors(SphereMesh mesh)
         {
             var dense = result.DenseTerrain;
-            var mesh = dense.Mesh;
             var colors = new List<Color32>();
             int cellCount = mesh.CellCount;
+
+            bool isUltra = viewMode == SphereViewMode.UltraDense;
+            int[] toCoarse = isUltra ? dense.UltraDenseToCoarse : dense.DenseToCoarse;
+            float[] elev = isUltra ? dense.UltraDenseCellElevation : dense.CellElevation;
 
             Color32[] palette = viewMode == SphereViewMode.Plates
                 ? BuildPlatePalette(result.Tectonics.PlateCount, result.Tectonics.PolarPlateCount)
@@ -137,12 +163,12 @@ namespace EconSim.Renderer
                 Color32 color;
                 if (viewMode == SphereViewMode.Plates)
                 {
-                    int coarseCell = dense.DenseToCoarse[c];
+                    int coarseCell = toCoarse[c];
                     color = palette[result.Tectonics.CellPlate[coarseCell]];
                 }
                 else
                 {
-                    color = ElevationColor(dense.CellElevation[c]);
+                    color = ElevationColor(elev[c]);
                 }
 
                 // Center vertex + polygon vertices

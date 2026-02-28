@@ -35,5 +35,8 @@ namespace WorldGen.Core
         /// <summary>Polar cap latitude threshold in degrees from equator. Cells above this latitude
         /// are pre-assigned to polar cap plates (north=0, south=1) before normal seeding. Set to 0 to disable.</summary>
         public float PolarCapLatitude { get; set; } = 65f;
+
+        /// <summary>Jitter for subdivision midpoints (0-1). Breaks grid regularity in ultra-dense mesh.</summary>
+        public float SubdivisionJitter { get; set; } = 0.1f;
     }
 }

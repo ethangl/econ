@@ -34,7 +34,8 @@ Standalone library at `src/WorldGen/` generating a `SphereMesh` — the spherica
 | `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells                                                                                                        |
 | `WorldGenPipeline.cs`        | Entry point: points -> hull -> Voronoi -> areas -> tectonics -> `WorldGenResult`                                                                          |
 | `WorldGenResult.cs`          | Composite result: `SphereMesh` + `TectonicData`                                                                                                           |
-| `WorldGenConfig.cs`          | Config: `CoarseCellCount`, `DenseCellCount`, `Seed`, `Radius`, `Jitter`, `MajorPlateCount`, `MinorPlateCount`, `MajorHeadStartRounds`, `PolarCapLatitude` |
+| `SubdivisionBuilder.cs`      | Midpoint subdivision of convex hulls with Delaunay restoration via edge flips                                                                             |
+| `WorldGenConfig.cs`          | Config: `CoarseCellCount`, `DenseCellCount`, `Seed`, `Radius`, `Jitter`, `SubdivisionJitter`, `MajorPlateCount`, `MinorPlateCount`, etc.                  |
 
 **Performance:** Quickhull handles 2k cells in ~40ms, 20k cells in ~4s.
 
@@ -170,6 +171,39 @@ Generates a dense SphereMesh (~20.4k cells) on top of the coarse tectonic mesh, 
 | `DenseTerrainOps.cs` | Dense mesh generation, mapping, elevation + noise |
 | `WorldGenResult.cs`  | Added `DenseTerrainData` class + field            |
 | `WorldGenConfig.cs`  | `CoarseCellCount`, `DenseCellCount`               |
+
+## Step 4b: Ultra-Dense Tessellation (DONE)
+
+Subdivides the dense hull (~20k) to produce an ultra-dense mesh (~80k cells) in O(n) time, avoiding the O(n²) Quickhull cost at high cell counts.
+
+**Algorithm:**
+
+1. **Midpoint subdivision** — For each unique edge in the dense hull, compute the spherical midpoint (normalized average of endpoints). Each triangle splits into 4 sub-triangles via the 3 edge midpoints. Half-edge connectivity is synthesized directly from combinatorial rules (no hull recomputation).
+2. **Jitter** — Each midpoint is displaced by a random tangent-plane vector scaled by `SubdivisionJitter * edgeLength`, then re-projected to the unit sphere. Breaks grid regularity.
+3. **Delaunay restoration** — Midpoint subdivision does not preserve the Delaunay property. Non-Delaunay edges produce circumcenters outside their triangles, causing overlapping Voronoi cells. A sweep-based edge flip pass (Lawson's algorithm) restores Delaunay: for each edge, if the opposite vertex is inside the circumcircle (spherical InCircle test via circumcenter angular distance), the edge is flipped. Repeats until convergence.
+4. **Voronoi + elevation** — The restored hull feeds into `SphericalVoronoiBuilder` unchanged. Elevation transfer and fractal noise use the same `ComputeElevation` pipeline as the dense mesh, mapping ultra-dense → coarse via the composed `ultraToDense[i] → denseToCoarse[j]` chain.
+
+**Data model (`DenseTerrainData` additions):**
+
+- `UltraDenseMesh` — SphereMesh from tessellated hull (~80k cells)
+- `UltraDenseToCoarse[ultraCell]` — index of nearest coarse cell (composed mapping)
+- `UltraDenseCellElevation[ultraCell]` — elevation with noise at ultra-dense resolution
+
+**Config (`WorldGenConfig`):**
+
+- `SubdivisionJitter` (default 0.0) — tangent-plane jitter for subdivision midpoints (0-1)
+
+**Visualization:** `SphereView` adds an **UltraDense** mode (Tab cycles: Plates → Elevation → UltraDense → Plates). Switching to/from UltraDense rebuilds mesh geometry; switching between Plates and Elevation only rebuilds vertex colors.
+
+**Files:**
+
+| File                       | Purpose                                                  |
+| -------------------------- | -------------------------------------------------------- |
+| `SubdivisionBuilder.cs`    | Midpoint subdivision + Delaunay edge flips               |
+| `DenseTerrainOps.cs`       | Added tessellation step after dense mesh generation      |
+| `WorldGenResult.cs`        | Added ultra-dense fields to `DenseTerrainData`           |
+| `WorldGenConfig.cs`        | Added `SubdivisionJitter`                                |
+| `SphereView.cs` (Unity)    | Added `UltraDense` view mode with geometry switch        |
 
 ## Next Steps
 

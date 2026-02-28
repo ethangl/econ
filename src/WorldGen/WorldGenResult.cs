@@ -13,6 +13,15 @@ namespace WorldGen.Core
 
         /// <summary>Elevation per dense cell (0-1, sea level 0.5)</summary>
         public float[] CellElevation;
+
+        /// <summary>Ultra-dense Voronoi mesh from tessellation (~4x dense cell count)</summary>
+        public SphereMesh UltraDenseMesh;
+
+        /// <summary>Maps each ultra-dense cell to its nearest coarse cell</summary>
+        public int[] UltraDenseToCoarse;
+
+        /// <summary>Elevation per ultra-dense cell (0-1, sea level 0.5)</summary>
+        public float[] UltraDenseCellElevation;
     }
 
     /// <summary>
