@@ -4,12 +4,13 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.UIElements;
 using MapGen.Core;
+using WorldGen.Core;
 
 namespace EconSim.UI
 {
     /// <summary>
     /// UI Toolkit controller for the startup screen.
-    /// Allows the user to generate a new map with template and cell count options.
+    /// Two phases: generation fields (initial) and site review (after globe gen).
     /// </summary>
     public class StartupScreenPanel : MonoBehaviour
     {
@@ -28,6 +29,16 @@ namespace EconSim.UI
         private FloatField _latitudeField;
         private bool _isLoading;
 
+        // Site review mode elements
+        private VisualElement _generationFields;
+        private VisualElement _siteReviewFields;
+        private Label _siteTypeLabel;
+        private Label _siteLatLabel;
+        private Label _siteLngLabel;
+        private Label _siteTemplateLabel;
+        private Button _generateFromSiteButton;
+        private Button _regenerateGlobeButton;
+
         /// <summary>True while the startup overlay is visible (suppresses hotkeys).</summary>
         public static bool IsOpen { get; private set; } = true;
 
@@ -42,11 +53,13 @@ namespace EconSim.UI
         private void OnEnable()
         {
             EconSim.Core.GameManager.OnMapReady += OnMapReady;
+            EconSim.Core.GameManager.OnGlobeReady += OnGlobeReady;
         }
 
         private void OnDisable()
         {
             EconSim.Core.GameManager.OnMapReady -= OnMapReady;
+            EconSim.Core.GameManager.OnGlobeReady -= OnGlobeReady;
         }
 
         private void SetupUI()
@@ -89,11 +102,26 @@ namespace EconSim.UI
 
             _generateGlobeButton = root.Q<Button>("generate-globe-button");
 
+            // Site review mode elements
+            _generationFields = root.Q<VisualElement>("generation-fields");
+            _siteReviewFields = root.Q<VisualElement>("site-review-fields");
+            _siteTypeLabel = root.Q<Label>("site-type-value");
+            _siteLatLabel = root.Q<Label>("site-lat-value");
+            _siteLngLabel = root.Q<Label>("site-lng-value");
+            _siteTemplateLabel = root.Q<Label>("site-template-value");
+            _generateFromSiteButton = root.Q<Button>("generate-from-site-button");
+            _regenerateGlobeButton = root.Q<Button>("regenerate-globe-button");
+
             // Wire up buttons
             _generateButton?.RegisterCallback<ClickEvent>(evt => OnGenerateClicked());
             _loadLastMapButton?.RegisterCallback<ClickEvent>(evt => OnLoadLastMapClicked());
             _generateGlobeButton?.RegisterCallback<ClickEvent>(evt => OnGenerateGlobeClicked());
+            _generateFromSiteButton?.RegisterCallback<ClickEvent>(evt => OnGenerateFromSiteClicked());
+            _regenerateGlobeButton?.RegisterCallback<ClickEvent>(evt => OnRegenerateGlobeClicked());
             RefreshLoadButtonState();
+
+            // Start in generation mode
+            ShowGenerationMode();
         }
 
         private void OnGenerateClicked()
@@ -191,10 +219,113 @@ namespace EconSim.UI
             }
         }
 
+        private void OnGenerateFromSiteClicked()
+        {
+            if (_isLoading) return;
+
+            _isLoading = true;
+            SetStatus("Generating map from site...");
+            DisableButtons();
+
+            var gameManager = EconSim.Core.GameManager.Instance;
+            if (gameManager != null)
+            {
+                gameManager.GenerateMapFromSite();
+            }
+            else
+            {
+                SetStatus("Error: GameManager not found");
+                _isLoading = false;
+                EnableButtons();
+            }
+        }
+
+        private void OnRegenerateGlobeClicked()
+        {
+            if (_isLoading) return;
+
+            // Increment seed for variety
+            if (_seedField != null)
+                _seedField.value = _seedField.value + 1;
+
+            ShowGenerationMode();
+            OnGenerateGlobeClicked();
+        }
+
+        private void OnGlobeReady(SiteContext site)
+        {
+            _isLoading = false;
+
+            if (site == null)
+            {
+                SetStatus("No suitable site found. Try a different seed.");
+                ShowGenerationMode();
+                EnableButtons();
+                return;
+            }
+
+            ShowSiteReviewMode(site);
+        }
+
         private void OnMapReady()
         {
             _isLoading = false;
             Hide();
+        }
+
+        private void ShowGenerationMode()
+        {
+            if (_generationFields != null)
+                _generationFields.style.display = DisplayStyle.Flex;
+            if (_siteReviewFields != null)
+                _siteReviewFields.style.display = DisplayStyle.None;
+            if (_overlay != null)
+            {
+                _overlay.RemoveFromClassList("site-review-mode");
+                _overlay.pickingMode = PickingMode.Position;
+            }
+        }
+
+        private void ShowSiteReviewMode(SiteContext site)
+        {
+            if (_generationFields != null)
+                _generationFields.style.display = DisplayStyle.None;
+            if (_siteReviewFields != null)
+                _siteReviewFields.style.display = DisplayStyle.Flex;
+            if (_overlay != null)
+            {
+                _overlay.AddToClassList("site-review-mode");
+                _overlay.pickingMode = PickingMode.Ignore;
+            }
+
+            // Populate site info
+            var templateName = EconSim.Core.GameManager.Instance?.CurrentSite != null
+                ? MapTemplateNameForSiteType(site.SiteType)
+                : "Unknown";
+
+            if (_siteTypeLabel != null)
+                _siteTypeLabel.text = site.SiteType.ToString();
+            if (_siteLatLabel != null)
+                _siteLatLabel.text = $"{site.Latitude:F1}\u00b0";
+            if (_siteLngLabel != null)
+                _siteLngLabel.text = $"{site.Longitude:F1}\u00b0";
+            if (_siteTemplateLabel != null)
+                _siteTemplateLabel.text = templateName;
+
+            SetStatus("");
+            EnableButtons();
+        }
+
+        private static string MapTemplateNameForSiteType(SiteType siteType)
+        {
+            return siteType switch
+            {
+                SiteType.Volcanic => "Volcano",
+                SiteType.HighIsland => "HighIsland",
+                SiteType.LowIsland => "LowIsland",
+                SiteType.Archipelago => "HighIsland",
+                _ => "LowIsland",
+            };
         }
 
         public void Show()
@@ -204,6 +335,7 @@ namespace EconSim.UI
                 _overlay.style.display = DisplayStyle.Flex;
             }
             IsOpen = true;
+            ShowGenerationMode();
             EnableButtons();
             SetStatus("");
         }
@@ -228,33 +360,27 @@ namespace EconSim.UI
         private void DisableButtons()
         {
             if (_generateButton != null)
-            {
                 _generateButton.SetEnabled(false);
-            }
-
             if (_loadLastMapButton != null)
-            {
                 _loadLastMapButton.SetEnabled(false);
-            }
-
             if (_generateGlobeButton != null)
-            {
                 _generateGlobeButton.SetEnabled(false);
-            }
+            if (_generateFromSiteButton != null)
+                _generateFromSiteButton.SetEnabled(false);
+            if (_regenerateGlobeButton != null)
+                _regenerateGlobeButton.SetEnabled(false);
         }
 
         private void EnableButtons()
         {
             if (_generateButton != null)
-            {
                 _generateButton.SetEnabled(true);
-            }
-
             if (_generateGlobeButton != null)
-            {
                 _generateGlobeButton.SetEnabled(true);
-            }
-
+            if (_generateFromSiteButton != null)
+                _generateFromSiteButton.SetEnabled(true);
+            if (_regenerateGlobeButton != null)
+                _regenerateGlobeButton.SetEnabled(true);
             RefreshLoadButtonState();
         }
 

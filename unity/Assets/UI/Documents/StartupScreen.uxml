@@ -2,15 +2,42 @@
     <Style src="project://database/Assets/UI/Styles/Main.uss" />
     <ui:VisualElement name="startup-overlay" class="startup-overlay">
         <ui:VisualElement name="startup-modal" class="startup-modal panel">
-            <ui:DropdownField name="template-dropdown" label="Template" class="startup-field" />
-            <ui:IntegerField name="seed-field" label="Seed" value="12345" class="startup-field" />
-            <ui:IntegerField name="cellcount-field" label="Cells" value="100000" class="startup-field" />
-            <ui:FloatField name="aspect-ratio-field" label="Aspect Ratio" value="1.5" class="startup-field" />
-            <ui:FloatField name="latitude-field" label="Latitude" value="50" class="startup-field" />
-            <ui:VisualElement name="startup-buttons" class="startup-buttons">
-                <ui:Button name="generate-button" text="Generate New" class="startup-button" />
-                <ui:Button name="load-last-map-button" text="Load Last Map" class="startup-button startup-button-secondary" />
-                <ui:Button name="generate-globe-button" text="Generate Globe" class="startup-button startup-button-secondary" />
+            <!-- Generation fields (initial mode) -->
+            <ui:VisualElement name="generation-fields">
+                <ui:DropdownField name="template-dropdown" label="Template" class="startup-field" />
+                <ui:IntegerField name="seed-field" label="Seed" value="12345" class="startup-field" />
+                <ui:IntegerField name="cellcount-field" label="Cells" value="100000" class="startup-field" />
+                <ui:FloatField name="aspect-ratio-field" label="Aspect Ratio" value="1.5" class="startup-field" />
+                <ui:FloatField name="latitude-field" label="Latitude" value="50" class="startup-field" />
+                <ui:VisualElement name="startup-buttons" class="startup-buttons">
+                    <ui:Button name="generate-button" text="Generate New" class="startup-button" />
+                    <ui:Button name="load-last-map-button" text="Load Last Map" class="startup-button startup-button-secondary" />
+                    <ui:Button name="generate-globe-button" text="Generate Globe" class="startup-button startup-button-secondary" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <!-- Site review fields (after globe gen) -->
+            <ui:VisualElement name="site-review-fields" class="site-review-fields">
+                <ui:Label text="Site Selected" class="site-review-title" />
+                <ui:VisualElement class="site-review-row">
+                    <ui:Label text="Type" class="site-review-label" />
+                    <ui:Label name="site-type-value" text="—" class="site-review-value" />
+                </ui:VisualElement>
+                <ui:VisualElement class="site-review-row">
+                    <ui:Label text="Latitude" class="site-review-label" />
+                    <ui:Label name="site-lat-value" text="—" class="site-review-value" />
+                </ui:VisualElement>
+                <ui:VisualElement class="site-review-row">
+                    <ui:Label text="Longitude" class="site-review-label" />
+                    <ui:Label name="site-lng-value" text="—" class="site-review-value" />
+                </ui:VisualElement>
+                <ui:VisualElement class="site-review-row">
+                    <ui:Label text="Template" class="site-review-label" />
+                    <ui:Label name="site-template-value" text="—" class="site-review-value" />
+                </ui:VisualElement>
+                <ui:VisualElement class="startup-buttons">
+                    <ui:Button name="generate-from-site-button" text="Generate Map at Site" class="startup-button" />
+                    <ui:Button name="regenerate-globe-button" text="Regenerate Globe" class="startup-button startup-button-secondary" />
+                </ui:VisualElement>
             </ui:VisualElement>
             <ui:Label name="startup-status" class="startup-status" />
         </ui:VisualElement>

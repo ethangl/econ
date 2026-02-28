@@ -27,6 +27,7 @@ namespace EconSim.Renderer
 
         public float Radius => result?.DenseTerrain?.Mesh?.Radius ?? result?.Mesh?.Radius ?? 0f;
         public SphereViewMode ViewMode => viewMode;
+        public SiteContext Site => result?.Site;
 
         public void Generate(WorldGenConfig config)
         {

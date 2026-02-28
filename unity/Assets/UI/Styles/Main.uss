@@ -278,6 +278,13 @@
     align-items: center;
 }
 
+.startup-overlay.site-review-mode {
+    background-color: rgba(0, 0, 0, 0);
+    justify-content: flex-end;
+    align-items: flex-end;
+    padding: 20px;
+}
+
 .startup-modal {
     width: 320px;
     padding: 24px;
@@ -328,4 +335,35 @@
     font-size: 13px;
     color: rgb(170, 170, 180);
     -unity-text-align: middle-center;
+}
+
+/* Site review mode */
+.site-review-fields {
+    display: none;
+    width: 100%;
+}
+
+.site-review-title {
+    font-size: 18px;
+    -unity-font-definition: url("../../Fonts/EBGaramond-Bold.ttf");
+    color: rgb(220, 220, 230);
+    -unity-text-align: middle-center;
+    margin-bottom: 12px;
+}
+
+.site-review-row {
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 3px 0;
+}
+
+.site-review-label {
+    font-size: 14px;
+    color: rgb(140, 140, 150);
+}
+
+.site-review-value {
+    font-size: 14px;
+    -unity-font-definition: url("../../Fonts/EBGaramond-Bold.ttf");
+    color: rgb(220, 220, 230);
 }

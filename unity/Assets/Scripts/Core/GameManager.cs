@@ -47,13 +47,26 @@ namespace EconSim.Core
         public static event Action OnMapReady;
 
         /// <summary>
+        /// Fired when globe generation completes with a site selected.
+        /// The startup screen should switch to site review mode.
+        /// </summary>
+        public static event Action<SiteContext> OnGlobeReady;
+
+        /// <summary>
         /// True after the map has been loaded and simulation initialized.
         /// </summary>
         public static bool IsMapReady { get; private set; }
         public static bool HasLastMapCache => File.Exists(GetLastMapPayloadPath());
 
+        /// <summary>
+        /// The site context from the most recent globe generation, or null.
+        /// </summary>
+        public SiteContext CurrentSite { get; private set; }
+
         private ISimulation _simulation;
         private Coroutine deferredStartupWorkRoutine;
+        private int _globeSeed;
+        private GameObject _sphereViewObj;
 
         public static GameManager Instance { get; private set; }
 
@@ -105,9 +118,13 @@ namespace EconSim.Core
 
         /// <summary>
         /// Generate a sphere (globe) using the WorldGen pipeline.
+        /// Does NOT fire OnMapReady — fires OnGlobeReady instead so the startup
+        /// screen can switch to site review mode.
         /// </summary>
         public void GenerateGlobe(int seed, float latitude = 50f)
         {
+            _globeSeed = seed;
+
             // Map latitude (degrees from equator) to site selection band centered on it
             float latBandHalf = 15f;
             var config = new WorldGenConfig
@@ -119,18 +136,21 @@ namespace EconSim.Core
 
             Debug.Log($"WorldGen: generating globe with seed={seed}, coarse={config.CoarseCellCount}, dense={config.DenseCellCount}, radius={config.Radius}");
 
-            // Get or create SphereView
-            var sphereViewObj = GameObject.Find("SphereView");
-            if (sphereViewObj == null)
+            // Get or create SphereView (cached to survive SetActive(false))
+            if (_sphereViewObj == null)
             {
-                sphereViewObj = new GameObject("SphereView");
-                sphereViewObj.AddComponent<MeshFilter>();
-                sphereViewObj.AddComponent<MeshRenderer>();
-                sphereViewObj.AddComponent<EconSim.Renderer.SphereView>();
+                _sphereViewObj = new GameObject("SphereView");
+                _sphereViewObj.AddComponent<MeshFilter>();
+                _sphereViewObj.AddComponent<MeshRenderer>();
+                _sphereViewObj.AddComponent<SphereView>();
             }
+            _sphereViewObj.SetActive(true);
 
-            var sphereView = sphereViewObj.GetComponent<EconSim.Renderer.SphereView>();
+            var sphereView = _sphereViewObj.GetComponent<SphereView>();
             sphereView.Generate(config);
+
+            // Store site context
+            CurrentSite = sphereView.Site;
 
             // Hide flat map if visible
             if (mapView != null)
@@ -150,9 +170,69 @@ namespace EconSim.Core
                 orbitCam.Configure(Vector3.zero, sphereView.Radius);
             }
 
-            // Dismiss startup screen
-            IsMapReady = true;
-            OnMapReady?.Invoke();
+            // Signal globe ready (startup screen stays visible in review mode)
+            OnGlobeReady?.Invoke(CurrentSite);
+        }
+
+        /// <summary>
+        /// Generate a flat map from the currently selected globe site.
+        /// Maps SiteType → HeightmapTemplateType, passes latitude through.
+        /// </summary>
+        public void GenerateMapFromSite()
+        {
+            if (CurrentSite == null)
+            {
+                Debug.LogWarning("GenerateMapFromSite: no site selected");
+                return;
+            }
+
+            // Hide globe
+            if (_sphereViewObj != null)
+                _sphereViewObj.SetActive(false);
+
+            // Re-enable flat map and camera
+            if (mapView != null)
+                mapView.gameObject.SetActive(true);
+            if (mapCamera != null)
+                mapCamera.enabled = true;
+
+            var cam = UnityEngine.Camera.main;
+            if (cam != null)
+            {
+                var orbitCam = cam.GetComponent<EconSim.Camera.OrbitCamera>();
+                if (orbitCam != null)
+                    orbitCam.enabled = false;
+
+                // Reset clip planes from globe-scale back to map-scale defaults
+                cam.nearClipPlane = 0.3f;
+                cam.farClipPlane = 5000f;
+            }
+
+            var config = new MapGenConfig
+            {
+                Seed = _globeSeed,
+                CellCount = 100000,
+                AspectRatio = 1.5f,
+                Template = MapTemplateForSiteType(CurrentSite.SiteType),
+                Latitude = CurrentSite.Latitude,
+            };
+
+            Debug.Log($"GenerateMapFromSite: type={CurrentSite.SiteType} → template={config.Template}, lat={config.Latitude:F1}°");
+            GenerateMap(config);
+        }
+
+        private static HeightmapTemplateType MapTemplateForSiteType(SiteType siteType)
+        {
+            return siteType switch
+            {
+                SiteType.Volcanic => HeightmapTemplateType.Volcano,
+                SiteType.HighIsland => HeightmapTemplateType.HighIsland,
+                SiteType.LowIsland => HeightmapTemplateType.LowIsland,
+                // Archipelago sites are tectonically interesting but the template
+                // produces too little landmass for the economic sim. Use HighIsland.
+                SiteType.Archipelago => HeightmapTemplateType.HighIsland,
+                _ => HeightmapTemplateType.LowIsland,
+            };
         }
 
         /// <summary>
