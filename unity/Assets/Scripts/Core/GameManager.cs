@@ -215,9 +215,12 @@ namespace EconSim.Core
                 AspectRatio = 1.5f,
                 Template = MapTemplateForSiteType(CurrentSite.SiteType),
                 Latitude = CurrentSite.Latitude,
+                Tectonics = BuildTectonicHints(CurrentSite),
             };
 
-            Debug.Log($"GenerateMapFromSite: type={CurrentSite.SiteType} → template={config.Template}, lat={config.Latitude:F1}°");
+            Debug.Log($"GenerateMapFromSite: type={CurrentSite.SiteType} → template={config.Template}, lat={config.Latitude:F1}°, " +
+                $"convergence={config.Tectonics.ConvergenceMagnitude:F2}, coastDir=({config.Tectonics.CoastDirectionX:F2},{config.Tectonics.CoastDirectionY:F2}), " +
+                $"boundaryHops={config.Tectonics.BoundaryDistanceHops}");
             GenerateMap(config);
         }
 
@@ -232,6 +235,47 @@ namespace EconSim.Core
                 // produces too little landmass for the economic sim. Use HighIsland.
                 SiteType.Archipelago => HeightmapTemplateType.HighIsland,
                 _ => HeightmapTemplateType.LowIsland,
+            };
+        }
+
+        /// <summary>
+        /// Project globe-space SiteContext into flat-map TectonicHints.
+        /// CoastDirection (3D unit vector on sphere) is projected onto local
+        /// east/north tangent-plane basis vectors at the site's lat/lng,
+        /// then mapped to [0,1] where 0.5 = center = no bias.
+        /// </summary>
+        private static TectonicHints BuildTectonicHints(SiteContext site)
+        {
+            float latRad = site.Latitude * Mathf.Deg2Rad;
+            float lngRad = site.Longitude * Mathf.Deg2Rad;
+            float sinLat = Mathf.Sin(latRad);
+            float cosLat = Mathf.Cos(latRad);
+            float sinLng = Mathf.Sin(lngRad);
+            float cosLng = Mathf.Cos(lngRad);
+
+            // Local tangent-plane basis vectors at (lat, lng) on the unit sphere.
+            // East: perpendicular to meridian, pointing east.
+            var east = new WorldGen.Core.Vec3(-sinLng, 0f, cosLng);
+            // North: tangent along meridian, pointing north.
+            var north = new WorldGen.Core.Vec3(
+                -sinLat * cosLng,
+                cosLat,
+                -sinLat * sinLng);
+
+            var cd = site.CoastDirection;
+            double coastE = cd.X * east.X + cd.Y * east.Y + cd.Z * east.Z;
+            double coastN = cd.X * north.X + cd.Y * north.Y + cd.Z * north.Z;
+
+            // Map to [0,1]: 0.5 = center (no bias), 0/1 = full bias left/right or bottom/top.
+            float coastDirX = Mathf.Clamp01(0.5f + (float)coastE * 0.5f);
+            float coastDirY = Mathf.Clamp01(0.5f + (float)coastN * 0.5f);
+
+            return new TectonicHints
+            {
+                ConvergenceMagnitude = Math.Abs(site.BoundaryConvergence),
+                CoastDirectionX = coastDirX,
+                CoastDirectionY = coastDirY,
+                BoundaryDistanceHops = site.BoundaryDistanceHops,
             };
         }
 

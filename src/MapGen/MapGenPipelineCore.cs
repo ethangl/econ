@@ -78,7 +78,10 @@ namespace MapGen.Core
             if (string.IsNullOrWhiteSpace(script))
                 throw new InvalidOperationException($"No map template found for {config.Template}.");
 
-            var dslContext = new HeightmapDslExecutionContext();
+            var dslContext = new HeightmapDslExecutionContext
+            {
+                Tectonics = config.Tectonics
+            };
             HeightmapDsl.Execute(elevation, script, config.ElevationSeed, context: dslContext);
             ConstrainLandRatioBand(elevation, config.Template);
             elevation.ClampAll();

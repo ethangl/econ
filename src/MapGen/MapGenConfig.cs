@@ -3,6 +3,25 @@ using System;
 namespace MapGen.Core
 {
     /// <summary>
+    /// Optional tectonic context from globe site selection.
+    /// When non-null, biases DSL feature placement and magnitude.
+    /// </summary>
+    public class TectonicHints
+    {
+        /// <summary>Convergence magnitude of nearest boundary (0-1 typical, can exceed 1).</summary>
+        public float ConvergenceMagnitude;
+
+        /// <summary>Direction toward nearest coast as normalized bias in map space.
+        /// x: 0=left edge, 1=right edge. y: 0=bottom, 1=top.
+        /// (0.5, 0.5) = center = no directional bias.</summary>
+        public float CoastDirectionX;
+        public float CoastDirectionY;
+
+        /// <summary>BFS hops to plate boundary (0=on boundary, higher=more distant).</summary>
+        public int BoundaryDistanceHops;
+    }
+
+    /// <summary>
     /// Configuration for world-unit map generation.
     /// Elevation values are signed meters relative to sea level.
     /// </summary>
@@ -65,6 +84,10 @@ namespace MapGen.Core
 
         // Optional per-template tuning override used by analysis/sweeps.
         public HeightmapTemplateTuningProfile TemplateTuningOverride;
+
+        // Optional tectonic context from globe site selection.
+        // Null when generating without a globe (no impact on non-globe flows).
+        public TectonicHints Tectonics;
 
         public float EffectiveRiverThreshold
         {
