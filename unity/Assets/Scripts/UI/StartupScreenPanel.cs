@@ -153,7 +153,8 @@ namespace EconSim.UI
             if (gameManager != null)
             {
                 int seed = _seedField?.value ?? 12345;
-                gameManager.GenerateGlobe(seed);
+                float latitude = _latitudeField?.value ?? 50f;
+                gameManager.GenerateGlobe(seed, latitude);
             }
             else
             {

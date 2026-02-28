@@ -106,11 +106,15 @@ namespace EconSim.Core
         /// <summary>
         /// Generate a sphere (globe) using the WorldGen pipeline.
         /// </summary>
-        public void GenerateGlobe(int seed)
+        public void GenerateGlobe(int seed, float latitude = 50f)
         {
+            // Map latitude (degrees from equator) to site selection band centered on it
+            float latBandHalf = 15f;
             var config = new WorldGenConfig
             {
                 Seed = seed,
+                SiteLatitudeMin = Mathf.Max(0f, latitude - latBandHalf),
+                SiteLatitudeMax = latitude + latBandHalf,
             };
 
             Debug.Log($"WorldGen: generating globe with seed={seed}, coarse={config.CoarseCellCount}, dense={config.DenseCellCount}, radius={config.Radius}");

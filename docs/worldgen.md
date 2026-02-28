@@ -205,8 +205,43 @@ Subdivides the dense hull (~20k) to produce an ultra-dense mesh (~80k cells) in 
 | `WorldGenConfig.cs`        | Added `SubdivisionJitter`                                |
 | `SphereView.cs` (Unity)    | Added `UltraDense` view mode with geometry switch        |
 
-## Next Steps
+## Next Steps: Globe-Informed MapGen
 
-### Step 5: Region Extraction
+Instead of extracting terrain directly from the globe, the globe serves as a **context oracle** — each generated map has a specific lat/lng and tectonic neighborhood that cascades through every downstream system. The globe provides macro-scale structure; MapGen provides local detail.
 
-Select a rectangular lat/lon window on the globe. Project the enclosed dense cells onto a flat plane (equirectangular or Mercator). Convert to a flat `CellMesh` compatible with the existing MapGen/EconSim pipeline, so all downstream systems (heightmap, climate, political, economy) work unchanged.
+The key insight: pick an *uninteresting* (oceanic) region on the globe and run MapGen there. The globe doesn't need to produce play-ready terrain — it provides the constraints that make MapGen's output feel like it belongs to a specific place in the world.
+
+### Step 5: Location Picking + Template Selection
+
+Find a site on the globe and use tectonic context to drive MapGen's heightmap template.
+
+1. **Site selection** — Scan oceanic cells at a target latitude band, filtering for proximity to continental coastline (near enough for trade relevance, far enough to be a distinct island). This gives a specific lat/lng.
+2. **Tectonic context** — Read the local plate environment: convergent boundary nearby → volcanic island. Divergent/rift → low atoll. Multiple plate intersection → complex archipelago. Stable oceanic interior → flat reef island.
+3. **Template mapping** — Translate tectonic context into a HeightmapTemplateType (or new island-specific templates) and DSL parameters. Key tectonic data points (boundary type, convergence magnitude, distance to boundary) become DSL hints for feature placement — e.g., place the volcano peak near the convergent edge direction.
+
+### Step 6: Tectonic-Informed Climate
+
+Use continental positions, polar proximity, and ocean currents derived from the globe to build a more physically grounded weather model for the generated map.
+
+- Prevailing wind direction from global circulation patterns at the site's latitude
+- Rain shadow effects based on nearby continental mountain ranges
+- Ocean current temperature from basin-scale flow (warm equatorial vs cold polar currents)
+- Replaces the current latitude-only temperature/precipitation model with one that accounts for the island's global context
+
+### Step 7: Tectonic Geology
+
+Use the plate environment to make resource and geology placement less random.
+
+- Volcanic islands get obsidian, sulfur, fertile volcanic soil
+- Rift zones get mineral veins, geothermal features
+- Stable continental shelf sites get limestone, clay, coral
+- Distance from convergent boundaries influences metamorphic rock distribution
+
+### Step 8: Culture + Trade Context
+
+Use the island's global position to determine cultural influences and economic connections.
+
+- Longitude added as a culture-type axis — the island's lat/lng determines which cultures have settled it and in what mixture
+- Nearby continental civilizations influence available trade goods, technology level, and political pressures
+- The virtual market is placed nearby, relative to the island's lat/lng, connecting it to the broader world's trade network
+- Distance to major continental ports determines trade cost and cultural isolation

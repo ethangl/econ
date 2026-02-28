@@ -38,5 +38,19 @@ namespace WorldGen.Core
 
         /// <summary>Jitter for subdivision midpoints (0-1). Breaks grid regularity in ultra-dense mesh.</summary>
         public float SubdivisionJitter { get; set; } = 0.1f;
+
+        // --- Site selection ---
+
+        /// <summary>Minimum degrees from equator for site candidates</summary>
+        public float SiteLatitudeMin { get; set; } = 15f;
+
+        /// <summary>Maximum degrees from equator for site candidates</summary>
+        public float SiteLatitudeMax { get; set; } = 45f;
+
+        /// <summary>Minimum BFS hops from coast for site candidates</summary>
+        public int SiteCoastDistMin { get; set; } = 2;
+
+        /// <summary>Maximum BFS hops from coast for site candidates</summary>
+        public int SiteCoastDistMax { get; set; } = 5;
     }
 }

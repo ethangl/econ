@@ -32,5 +32,8 @@ namespace WorldGen.Core
         public SphereMesh Mesh;
         public TectonicData Tectonics;
         public DenseTerrainData DenseTerrain;
+
+        /// <summary>Selected site for flat map generation (null if selection failed)</summary>
+        public SiteContext Site;
     }
 }

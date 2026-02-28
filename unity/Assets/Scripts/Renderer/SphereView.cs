@@ -22,6 +22,8 @@ namespace EconSim.Renderer
         private WorldGenResult result;
         private Mesh unityMesh;
         private SphereViewMode viewMode = SphereViewMode.Plates;
+        private int siteCoarseCell = -1;
+        private static readonly Color32 SiteHighlightColor = new Color32(255, 50, 220, 255); // magenta
 
         public float Radius => result?.DenseTerrain?.Mesh?.Radius ?? result?.Mesh?.Radius ?? 0f;
         public SphereViewMode ViewMode => viewMode;
@@ -29,7 +31,24 @@ namespace EconSim.Renderer
         public void Generate(WorldGenConfig config)
         {
             result = WorldGenPipeline.Generate(config);
+            siteCoarseCell = result.Site?.CellIndex ?? -1;
             BuildMesh(result.DenseTerrain.Mesh);
+            LogSiteSelection();
+        }
+
+        private void LogSiteSelection()
+        {
+            var site = result?.Site;
+            if (site == null)
+            {
+                Debug.Log("SphereView: no site selected");
+                return;
+            }
+            Debug.Log($"SphereView: site selected — cell={site.CellIndex}, " +
+                      $"lat={site.Latitude:F1}° lng={site.Longitude:F1}°, " +
+                      $"coastDist={site.CoastDistanceHops} hops, " +
+                      $"type={site.SiteType}, " +
+                      $"boundary={site.NearestBoundary} ({site.BoundaryConvergence:F2}) at {site.BoundaryDistanceHops} hops");
         }
 
         private void Update()
@@ -160,10 +179,16 @@ namespace EconSim.Renderer
                 if (cellVerts == null || cellVerts.Length < 3)
                     continue;
 
+                int coarseCell = toCoarse[c];
                 Color32 color;
-                if (viewMode == SphereViewMode.Plates)
+
+                // Highlight selected site cell
+                if (siteCoarseCell >= 0 && coarseCell == siteCoarseCell)
                 {
-                    int coarseCell = toCoarse[c];
+                    color = SiteHighlightColor;
+                }
+                else if (viewMode == SphereViewMode.Plates)
+                {
                     color = palette[result.Tectonics.CellPlate[coarseCell]];
                 }
                 else
