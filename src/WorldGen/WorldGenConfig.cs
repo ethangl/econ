@@ -1,20 +1,15 @@
 namespace WorldGen.Core
 {
-    public enum ConvexHullAlgorithm { Quickhull, Incremental }
-
     /// <summary>
     /// Configuration for spherical world generation.
     /// </summary>
     public class WorldGenConfig
     {
-        /// <summary>Which convex hull algorithm to use</summary>
-        public ConvexHullAlgorithm HullAlgorithm { get; set; } = ConvexHullAlgorithm.Quickhull;
-
         /// <summary>Number of coarse tectonic cells</summary>
-        public int CoarseCellCount { get; set; } = 2000;
+        public int CoarseCellCount { get; set; } = 2040;
 
         /// <summary>Number of dense terrain cells</summary>
-        public int DenseCellCount { get; set; } = 20000;
+        public int DenseCellCount { get; set; } = 20400;
 
         /// <summary>Random seed</summary>
         public int Seed { get; set; } = 42;

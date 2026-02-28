@@ -20,7 +20,7 @@ namespace WorldGen.Core
         {
             // 1. Generate dense mesh
             Vec3[] densePoints = FibonacciSphere.Generate(config.DenseCellCount, config.Jitter, config.Seed + 100);
-            ConvexHull denseHull = ConvexHull.Build(densePoints, config.HullAlgorithm);
+            ConvexHull denseHull = ConvexHull.Build(densePoints);
             SphereMesh denseMesh = SphericalVoronoiBuilder.Build(denseHull, config.Radius);
             denseMesh.ComputeAreas();
 

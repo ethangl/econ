@@ -6,11 +6,11 @@ Inspiration: https://civilization.2k.com/civ-vii/from-the-devs/map-generation/ a
 
 ## Process
 
-1. Generate a coarse voronoi sphere with ~2000 cells
+1. Generate a coarse voronoi sphere with ~2040 cells
 2. Select cells to seed plates
 3. Grow plates by adding adjacent cells to plates
 4. Once complete, raise some plates to form continental shelves
-5. Generate a denser voronoi sphere with ~20,000 cells "on top" of the tectonic plates
+5. Generate a denser voronoi sphere with ~20,400 cells "on top" of the tectonic plates
 6. Use the tectonic layer to influence terrain generated on the denser sphere — add ridges on plate edges, etc.
 7. Extract a rectangular region from the globe into the existing flat-map pipeline
 
@@ -18,31 +18,31 @@ Inspiration: https://civilization.2k.com/civ-vii/from-the-devs/map-generation/ a
 
 Standalone library at `src/WorldGen/` generating a `SphereMesh` — the spherical analog of MapGen's `CellMesh`.
 
-**Algorithm:** Fibonacci spiral distributes N points on a unit sphere. Their 3D convex hull gives the spherical Delaunay triangulation (half-edge output). Two algorithms available: **Quickhull** (default, O(n log n) average via conflict lists) and **Incremental** (O(n²), scans all faces per point). The Voronoi diagram is the dual — each triangle's circumcenter (outward face normal, normalized) becomes a Voronoi vertex.
+**Algorithm:** Fibonacci spiral distributes N points on a unit sphere. Their 3D convex hull gives the spherical Delaunay triangulation (half-edge output). Uses **Quickhull** (O(n log n) average via conflict lists + max-heap face selection). The Voronoi diagram is the dual — each triangle's circumcenter (outward face normal, normalized) becomes a Voronoi vertex.
 
 **Key difference from MapGen:** A sphere has no boundary edges. Every cell is interior, every half-edge has a valid opposite. This simplifies the Voronoi builder vs the flat-map version.
 
 **Files:**
 
-| File                         | Purpose                                                                                                                                                |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Vec3.cs`                    | 3D vector struct (mirrors MapGen's `Vec2`, adds `Cross`)                                                                                               |
-| `FibonacciSphere.cs`         | Golden-spiral point distribution on unit sphere                                                                                                        |
-| `ConvexHull.cs`              | Hull data model + `Build()` factory dispatching to Quickhull or Incremental; `ConvexHullBuilder` (incremental O(n²))                                   |
-| `QuickhullBuilder.cs`        | Quickhull 3D algorithm with conflict lists (O(n log n) average)                                                                                        |
-| `SphereMesh.cs`              | Core data model: cell centers/vertices/neighbors/edges, spherical excess areas                                                                         |
-| `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells                                                                                                     |
-| `WorldGenPipeline.cs`        | Entry point: points -> hull -> Voronoi -> areas -> tectonics -> `WorldGenResult`                                                                       |
-| `WorldGenResult.cs`          | Composite result: `SphereMesh` + `TectonicData`                                                                                                        |
-| `WorldGenConfig.cs`          | Config: `CoarseCellCount`, `DenseCellCount`, `Seed`, `Radius`, `Jitter`, `MajorPlateCount`, `MinorPlateCount`, `MajorHeadStartRounds`, `HullAlgorithm` |
+| File                         | Purpose                                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `Vec3.cs`                    | 3D vector struct (mirrors MapGen's `Vec2`, adds `Cross`)                                                                              |
+| `FibonacciSphere.cs`         | Golden-spiral point distribution on unit sphere                                                                                       |
+| `ConvexHull.cs`              | Hull data model + `Build()` entry point                                                                                               |
+| `QuickhullBuilder.cs`        | Quickhull 3D algorithm with conflict lists + max-heap (O(n log n) average)                                                            |
+| `SphereMesh.cs`              | Core data model: cell centers/vertices/neighbors/edges, spherical excess areas                                                        |
+| `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells                                                                                    |
+| `WorldGenPipeline.cs`        | Entry point: points -> hull -> Voronoi -> areas -> tectonics -> `WorldGenResult`                                                      |
+| `WorldGenResult.cs`          | Composite result: `SphereMesh` + `TectonicData`                                                                                       |
+| `WorldGenConfig.cs`          | Config: `CoarseCellCount`, `DenseCellCount`, `Seed`, `Radius`, `Jitter`, `MajorPlateCount`, `MinorPlateCount`, `MajorHeadStartRounds` |
 
-**Performance:** Quickhull (default) handles 20k cells efficiently. Incremental is O(n²) — fine for ≤2k cells but slow for dense meshes. Set `WorldGenConfig.HullAlgorithm` to switch between them.
+**Performance:** Quickhull handles 2k cells in ~40ms, 20k cells in ~4s.
 
 **Unity wiring:** Symlinked at `unity/Assets/Scripts/WorldGen`, assembly def with `noEngineReferences: true`.
 
 ## Step 2: Tectonic Plates (DONE)
 
-Seeds 8 major and 40 minor plates on the 2000-cell sphere with a two-phase growth strategy, assigns drift vectors, and classifies boundaries.
+Seeds 8 major and 40 minor plates on the 2040-cell sphere with a two-phase growth strategy, assigns drift vectors, and classifies boundaries.
 
 **Algorithm:**
 
@@ -125,13 +125,13 @@ Vertex colors are rebuilt without regenerating mesh geometry.
 
 ## Step 4: Dense Sphere + Terrain Transfer (DONE)
 
-Generates a dense SphereMesh (~20k cells) on top of the coarse tectonic mesh, transfers elevation via nearest-neighbor mapping, and adds fractal 3D Perlin noise for terrain detail.
+Generates a dense SphereMesh (~20.4k cells) on top of the coarse tectonic mesh, transfers elevation via nearest-neighbor mapping, and adds fractal 3D Perlin noise for terrain detail.
 
 **Algorithm:**
 
-1. **Dense mesh** — `FibonacciSphere(20k, jitter, seed+100)` → ConvexHull → SphericalVoronoi → ComputeAreas. Seed offset avoids correlation with coarse points.
+1. **Dense mesh** — `FibonacciSphere(20.4k, jitter, seed+100)` → ConvexHull → SphericalVoronoi → ComputeAreas. Seed offset avoids correlation with coarse points.
 2. **Nearest-neighbor mapping** — Brute-force: for each dense cell, find closest coarse cell center via `Vec3.SqrDistance`. O(20k × 2k) ≈ 40M comparisons.
-3. **Elevation transfer + noise** — Each dense cell inherits its coarse cell's elevation, plus fractal 3D Perlin noise (6 octaves, amplitude 0.5). Sea level at 0.5.
+3. **Elevation transfer + noise** — Each dense cell inherits its coarse cell's elevation, plus fractal 3D Perlin noise (8 octaves, amplitude 0.5). Sea level at 0.5.
 
 **3D Perlin noise** avoids UV seam artifacts by sampling at 3D cell center positions on the sphere. Classic implementation: 256-entry permutation table, Ken Perlin's optimized 12-gradient function, quintic fade, trilinear interpolation.
 
@@ -155,8 +155,8 @@ Generates a dense SphereMesh (~20k cells) on top of the coarse tectonic mesh, tr
 
 **Config (`WorldGenConfig`):**
 
-- `CoarseCellCount` (default 2000) — renamed from `CellCount`
-- `DenseCellCount` (default 20000) — new
+- `CoarseCellCount` (default 2040) — renamed from `CellCount`
+- `DenseCellCount` (default 20400) — chosen so each dense cell ≈ 25,000 km² = exactly 10,000 MapGen cells (at 2.5 km² each)
 
 **Visualization:** `SphereView` renders the dense mesh. Plates mode maps dense → coarse via `DenseToCoarse` for plate palette lookup. Elevation mode uses dense `CellElevation` directly.
 
