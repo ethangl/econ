@@ -37,6 +37,9 @@ namespace WorldGen.Core
         /// <summary>Per plate: true=oceanic, false=continental</summary>
         public bool[] PlateIsOceanic;
 
+        /// <summary>Number of polar cap plates (0..PolarPlateCount-1 are polar caps)</summary>
+        public int PolarPlateCount;
+
         /// <summary>Normalized elevation per cell (0-1). Sea level ~0.4.</summary>
         public float[] CellElevation;
     }

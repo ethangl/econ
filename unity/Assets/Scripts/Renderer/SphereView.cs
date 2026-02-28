@@ -125,7 +125,7 @@ namespace EconSim.Renderer
             int cellCount = mesh.CellCount;
 
             Color32[] palette = viewMode == SphereViewMode.Plates
-                ? BuildPlatePalette(result.Tectonics.PlateCount)
+                ? BuildPlatePalette(result.Tectonics.PlateCount, result.Tectonics.PolarPlateCount)
                 : null;
 
             for (int c = 0; c < cellCount; c++)
@@ -202,12 +202,17 @@ namespace EconSim.Renderer
         /// <summary>
         /// Build a palette of evenly-spaced hues for plate coloring.
         /// </summary>
-        private static Color32[] BuildPlatePalette(int plateCount)
+        private static Color32[] BuildPlatePalette(int plateCount, int polarPlateCount)
         {
             var palette = new Color32[plateCount];
-            for (int i = 0; i < plateCount; i++)
+            // Polar caps are black
+            for (int i = 0; i < polarPlateCount; i++)
+                palette[i] = new Color32(0, 0, 0, 255);
+            // Non-polar plates get evenly-spaced hues
+            int nonPolar = plateCount - polarPlateCount;
+            for (int i = polarPlateCount; i < plateCount; i++)
             {
-                Color c = Color.HSVToRGB((float)i / plateCount, 0.6f, 0.8f);
+                Color c = Color.HSVToRGB((float)(i - polarPlateCount) / nonPolar, 0.6f, 0.8f);
                 palette[i] = new Color32(
                     (byte)(c.r * 255),
                     (byte)(c.g * 255),

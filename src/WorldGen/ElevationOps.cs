@@ -29,6 +29,11 @@ namespace WorldGen.Core
             int cellCount = mesh.CellCount;
 
             bool[] isOceanic = AssignPlateTypes(tectonics.PlateCount, oceanFraction, rng);
+
+            // Force polar cap plates to oceanic (before subcontinent promotion)
+            for (int i = 0; i < tectonics.PolarPlateCount; i++)
+                isOceanic[i] = true;
+
             var plateNeighbors = BuildPlateAdjacency(mesh, tectonics.CellPlate, tectonics.PlateCount);
             PromoteSubcontinents(isOceanic, tectonics.PlateIsMajor, plateNeighbors, MaxSubcontinents, rng);
             float[] elevation = ComputeBaseElevation(cellCount, tectonics.CellPlate, isOceanic);

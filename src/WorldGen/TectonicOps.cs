@@ -10,39 +10,92 @@ namespace WorldGen.Core
     public static class TectonicOps
     {
         /// <summary>
-        /// Run the full tectonic pipeline: seed majors → head-start BFS → seed minors → finish BFS → drift → classify.
-        /// Major plates get IDs 0..majorCount-1, minor plates get majorCount..totalCount-1.
+        /// Run the full tectonic pipeline: polar caps → seed majors → head-start BFS → seed minors → finish BFS → drift → classify.
+        /// Plate IDs: [0..polarCount-1=polar caps, polarCount..polarCount+majorCount-1=majors, rest=minors].
         /// </summary>
-        public static TectonicData Generate(SphereMesh mesh, int majorCount, int minorCount, int headStartRounds, int seed)
+        public static TectonicData Generate(SphereMesh mesh, int majorCount, int minorCount, int headStartRounds, int seed, float polarCapLatitude = 0f)
         {
             var rng = new Random(seed);
-            int totalCount = majorCount + minorCount;
-            totalCount = Math.Min(totalCount, mesh.CellCount);
-            majorCount = Math.Min(majorCount, totalCount);
-            minorCount = totalCount - majorCount;
+            int n = mesh.CellCount;
 
-            int[] majorSeeds = SelectSeeds(mesh, majorCount, rng);
-            var (cellPlate, minorSeeds) = GrowPlates(mesh, majorSeeds, majorCount, minorCount, headStartRounds, rng);
+            // Pre-claim polar cap cells
+            int polarCount = 0;
+            int[] cellPlate = new int[n];
+            for (int i = 0; i < n; i++)
+                cellPlate[i] = -1;
 
-            // Build combined seeds array: major seeds [0..majorCount-1], minor seeds [majorCount..totalCount-1]
+            int[] polarSeeds = Array.Empty<int>();
+
+            if (polarCapLatitude > 0f)
+            {
+                polarCount = 2; // north=0, south=1
+                float sinThreshold = (float)Math.Sin(polarCapLatitude * Math.PI / 180.0);
+
+                // Find seed cells closest to each pole
+                int northSeed = -1, southSeed = -1;
+                float bestNorth = -2f, bestSouth = 2f;
+                for (int i = 0; i < n; i++)
+                {
+                    // sinLat = y/r on a unit-radius sphere, but CellCenters are at config.Radius
+                    float sinLat = mesh.CellCenters[i].Y / mesh.CellCenters[i].Magnitude;
+                    if (sinLat > bestNorth) { bestNorth = sinLat; northSeed = i; }
+                    if (sinLat < bestSouth) { bestSouth = sinLat; southSeed = i; }
+                }
+
+                polarSeeds = new int[] { northSeed, southSeed };
+
+                // Assign all cells above threshold to polar caps
+                for (int i = 0; i < n; i++)
+                {
+                    float sinLat = mesh.CellCenters[i].Y / mesh.CellCenters[i].Magnitude;
+                    if (sinLat > sinThreshold)
+                        cellPlate[i] = 0; // north cap
+                    else if (sinLat < -sinThreshold)
+                        cellPlate[i] = 1; // south cap
+                }
+            }
+
+            // Offset major/minor plate IDs by polar count
+            int totalCount = polarCount + majorCount + minorCount;
+            totalCount = Math.Min(totalCount, n);
+            int nonPolarSlots = totalCount - polarCount;
+            majorCount = Math.Min(majorCount, nonPolarSlots);
+            minorCount = nonPolarSlots - majorCount;
+
+            int[] majorSeeds = SelectSeeds(mesh, majorCount, rng, cellPlate);
+            // Offset major seed plate IDs by polarCount
+            for (int p = 0; p < majorCount; p++)
+                cellPlate[majorSeeds[p]] = polarCount + p;
+
+            var (finalCellPlate, minorSeeds) = GrowPlates(mesh, majorSeeds, polarCount, majorCount, minorCount, headStartRounds, rng, cellPlate);
+
+            // Build combined seeds array
             int[] allSeeds = new int[totalCount];
-            Array.Copy(majorSeeds, 0, allSeeds, 0, majorCount);
-            Array.Copy(minorSeeds, 0, allSeeds, majorCount, minorCount);
+            if (polarCount > 0)
+                Array.Copy(polarSeeds, 0, allSeeds, 0, polarCount);
+            Array.Copy(majorSeeds, 0, allSeeds, polarCount, majorCount);
+            Array.Copy(minorSeeds, 0, allSeeds, polarCount + majorCount, minorCount);
 
             Vec3[] drifts = GenerateDrifts(mesh, allSeeds, totalCount, rng);
-            var (edgeBoundary, edgeConvergence) = ClassifyBoundaries(mesh, cellPlate, drifts);
+
+            // Zero out drift for polar caps
+            for (int p = 0; p < polarCount; p++)
+                drifts[p] = new Vec3(0, 0, 0);
+
+            var (edgeBoundary, edgeConvergence) = ClassifyBoundaries(mesh, finalCellPlate, drifts);
 
             bool[] isMajor = new bool[totalCount];
-            for (int i = 0; i < majorCount; i++)
+            for (int i = polarCount; i < polarCount + majorCount; i++)
                 isMajor[i] = true;
 
             return new TectonicData
             {
-                CellPlate = cellPlate,
+                CellPlate = finalCellPlate,
                 PlateCount = totalCount,
                 PlateSeeds = allSeeds,
                 PlateDrift = drifts,
                 PlateIsMajor = isMajor,
+                PolarPlateCount = polarCount,
                 EdgeBoundary = edgeBoundary,
                 EdgeConvergence = edgeConvergence,
             };
@@ -50,14 +103,19 @@ namespace WorldGen.Core
 
         /// <summary>
         /// Farthest-point heuristic: pick seeds that maximize minimum distance to existing seeds.
+        /// Skips cells where cellPlate[i] >= 0 (already claimed by polar caps).
         /// </summary>
-        internal static int[] SelectSeeds(SphereMesh mesh, int plateCount, Random rng)
+        internal static int[] SelectSeeds(SphereMesh mesh, int plateCount, Random rng, int[] cellPlate)
         {
             int n = mesh.CellCount;
             int[] seeds = new int[plateCount];
 
-            // First seed: random
-            seeds[0] = rng.Next(n);
+            if (plateCount == 0) return seeds;
+
+            // First seed: random unclaimed cell
+            int firstSeed;
+            do { firstSeed = rng.Next(n); } while (cellPlate[firstSeed] >= 0);
+            seeds[0] = firstSeed;
 
             // Track min squared distance from each cell to nearest seed
             float[] minDist = new float[n];
@@ -71,11 +129,12 @@ namespace WorldGen.Core
 
             for (int s = 1; s < plateCount; s++)
             {
-                // Pick cell with maximum min-distance to any existing seed
+                // Pick unclaimed cell with maximum min-distance to any existing seed
                 int best = -1;
                 float bestDist = -1f;
                 for (int i = 0; i < n; i++)
                 {
+                    if (cellPlate[i] >= 0) continue; // skip claimed
                     if (minDist[i] > bestDist)
                     {
                         bestDist = minDist[i];
@@ -102,21 +161,18 @@ namespace WorldGen.Core
         /// 1) Major seeds grow for headStartRounds
         /// 2) Minor seeds placed in unclaimed space
         /// 3) All plates grow until every cell is claimed
+        /// Accepts pre-initialized cellPlate (polar caps already claimed).
+        /// Major plate IDs are polarCount..polarCount+majorCount-1.
         /// </summary>
         internal static (int[] cellPlate, int[] minorSeeds) GrowPlates(
-            SphereMesh mesh, int[] majorSeeds, int majorCount, int minorCount,
-            int headStartRounds, Random rng)
+            SphereMesh mesh, int[] majorSeeds, int polarCount, int majorCount, int minorCount,
+            int headStartRounds, Random rng, int[] cellPlate)
         {
-            int n = mesh.CellCount;
-            int[] cellPlate = new int[n];
-            for (int i = 0; i < n; i++)
-                cellPlate[i] = -1;
-
             // Phase 1: enqueue major seeds, run headStartRounds of level-synchronous BFS
             var frontier = new List<int>();
             for (int p = 0; p < majorCount; p++)
             {
-                cellPlate[majorSeeds[p]] = p;
+                // Major seeds already assigned in Generate, just add to frontier
                 frontier.Add(majorSeeds[p]);
             }
 
@@ -145,7 +201,7 @@ namespace WorldGen.Core
             int[] minorSeeds = SelectMinorSeeds(mesh, cellPlate, majorSeeds, minorCount, rng);
             for (int p = 0; p < minorCount; p++)
             {
-                int plateId = majorCount + p;
+                int plateId = polarCount + majorCount + p;
                 cellPlate[minorSeeds[p]] = plateId;
                 frontier.Add(minorSeeds[p]);
             }

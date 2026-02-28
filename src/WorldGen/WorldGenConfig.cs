@@ -31,5 +31,9 @@ namespace WorldGen.Core
 
         /// <summary>Fraction of plates that are oceanic (0-1)</summary>
         public float OceanFraction { get; set; } = 0.6f;
+
+        /// <summary>Polar cap latitude threshold in degrees from equator. Cells above this latitude
+        /// are pre-assigned to polar cap plates (north=0, south=1) before normal seeding. Set to 0 to disable.</summary>
+        public float PolarCapLatitude { get; set; } = 65f;
     }
 }

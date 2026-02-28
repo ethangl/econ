@@ -24,17 +24,17 @@ Standalone library at `src/WorldGen/` generating a `SphereMesh` — the spherica
 
 **Files:**
 
-| File                         | Purpose                                                                                                                               |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `Vec3.cs`                    | 3D vector struct (mirrors MapGen's `Vec2`, adds `Cross`)                                                                              |
-| `FibonacciSphere.cs`         | Golden-spiral point distribution on unit sphere                                                                                       |
-| `ConvexHull.cs`              | Hull data model + `Build()` entry point                                                                                               |
-| `QuickhullBuilder.cs`        | Quickhull 3D algorithm with conflict lists + max-heap (O(n log n) average)                                                            |
-| `SphereMesh.cs`              | Core data model: cell centers/vertices/neighbors/edges, spherical excess areas                                                        |
-| `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells                                                                                    |
-| `WorldGenPipeline.cs`        | Entry point: points -> hull -> Voronoi -> areas -> tectonics -> `WorldGenResult`                                                      |
-| `WorldGenResult.cs`          | Composite result: `SphereMesh` + `TectonicData`                                                                                       |
-| `WorldGenConfig.cs`          | Config: `CoarseCellCount`, `DenseCellCount`, `Seed`, `Radius`, `Jitter`, `MajorPlateCount`, `MinorPlateCount`, `MajorHeadStartRounds` |
+| File                         | Purpose                                                                                                                                                   |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Vec3.cs`                    | 3D vector struct (mirrors MapGen's `Vec2`, adds `Cross`)                                                                                                  |
+| `FibonacciSphere.cs`         | Golden-spiral point distribution on unit sphere                                                                                                           |
+| `ConvexHull.cs`              | Hull data model + `Build()` entry point                                                                                                                   |
+| `QuickhullBuilder.cs`        | Quickhull 3D algorithm with conflict lists + max-heap (O(n log n) average)                                                                                |
+| `SphereMesh.cs`              | Core data model: cell centers/vertices/neighbors/edges, spherical excess areas                                                                            |
+| `SphericalVoronoiBuilder.cs` | Dual construction: hull triangles -> Voronoi cells                                                                                                        |
+| `WorldGenPipeline.cs`        | Entry point: points -> hull -> Voronoi -> areas -> tectonics -> `WorldGenResult`                                                                          |
+| `WorldGenResult.cs`          | Composite result: `SphereMesh` + `TectonicData`                                                                                                           |
+| `WorldGenConfig.cs`          | Config: `CoarseCellCount`, `DenseCellCount`, `Seed`, `Radius`, `Jitter`, `MajorPlateCount`, `MinorPlateCount`, `MajorHeadStartRounds`, `PolarCapLatitude` |
 
 **Performance:** Quickhull handles 2k cells in ~40ms, 20k cells in ~4s.
 
@@ -42,18 +42,19 @@ Standalone library at `src/WorldGen/` generating a `SphereMesh` — the spherica
 
 ## Step 2: Tectonic Plates (DONE)
 
-Seeds 8 major and 40 minor plates on the 2040-cell sphere with a two-phase growth strategy, assigns drift vectors, and classifies boundaries.
+Seeds 8 major and 40 minor plates on the 2040-cell sphere with a two-phase growth strategy, assigns drift vectors, and classifies boundaries. Optional polar ice caps claim high-latitude cells first, pushing tectonic activity toward the equatorial band.
 
 **Algorithm:**
 
-1. **Major seeding** — Farthest-point heuristic: first seed random, each subsequent seed maximizes min-distance to existing seeds. Produces well-separated plate origins for major plates.
-2. **Head-start growth** — Major plates grow via level-synchronous BFS for `MajorHeadStartRounds` (default 3) before any minor plates exist.
-3. **Minor seeding** — Farthest-point heuristic among unclaimed cells, measuring distance to all existing seeds (major + already-placed minor).
-4. **Final growth** — All plates (major + minor) continue standard BFS until every cell is claimed. Major plates are naturally larger due to their head start.
-5. **Drift** — Per plate: random 3D direction projected onto the tangent plane at the seed, normalized. Represents plate motion direction.
-6. **Boundary classification** — For each edge between different plates: project both drift vectors onto the edge direction. If convergence dominates shear → Convergent/Divergent (by sign); otherwise → Transform.
+1. **Polar caps** (optional) — If `PolarCapLatitude > 0`, two cap plates (north=ID 0, south=ID 1) are pre-assigned. All cells with `|sinLat| > sin(threshold)` are claimed. Seeds are the cells closest to each pole. Cap plates have zero drift, are always oceanic, and cannot be promoted to continental. Set `PolarCapLatitude = 0` to disable.
+2. **Major seeding** — Farthest-point heuristic among unclaimed cells: first seed random, each subsequent seed maximizes min-distance to existing seeds. Produces well-separated plate origins for major plates.
+3. **Head-start growth** — Major plates grow via level-synchronous BFS for `MajorHeadStartRounds` (default 3) before any minor plates exist.
+4. **Minor seeding** — Farthest-point heuristic among unclaimed cells, measuring distance to all existing seeds (major + already-placed minor).
+5. **Final growth** — All plates (major + minor) continue standard BFS until every cell is claimed. Major plates are naturally larger due to their head start.
+6. **Drift** — Per plate: random 3D direction projected onto the tangent plane at the seed, normalized. Polar cap drifts are zeroed after generation.
+7. **Boundary classification** — For each edge between different plates: project both drift vectors onto the edge direction. If convergence dominates shear → Convergent/Divergent (by sign); otherwise → Transform. Zero drift → all polar boundaries classify as Transform with near-zero convergence → minimal elevation effects.
 
-Plate IDs: major plates are `0..majorCount-1`, minor plates are `majorCount..totalCount-1`.
+Plate IDs: `[0..polarCount-1=polar caps, polarCount..polarCount+majorCount-1=majors, rest=minors]` (with `PolarCapLatitude=65`, polarCount=2).
 
 **Data model (`TectonicData`):**
 
@@ -61,6 +62,7 @@ Plate IDs: major plates are `0..majorCount-1`, minor plates are `majorCount..tot
 - `PlateSeeds[plateId]` — seed cell index
 - `PlateDrift[plateId]` — tangent drift vector
 - `PlateIsMajor[plateId]` — true for major plates
+- `PolarPlateCount` — number of polar cap plates (0 or 2)
 - `EdgeBoundary[edgeIndex]` — `None | Convergent | Divergent | Transform`
 - `EdgeConvergence[edgeIndex]` — signed scalar (positive = convergent)
 
