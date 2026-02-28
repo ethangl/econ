@@ -33,8 +33,22 @@ namespace MapGen.Core
                 Vec2 windDir = band.WindVector;
                 float[] bandPrecip = SweepBand(mesh, elevation, climate, windDir, config);
 
+                float effectiveFraction = overlapFraction;
+                if (config.Tectonics != null)
+                {
+                    float hintX = config.Tectonics.WindDirectionX;
+                    float hintY = config.Tectonics.WindDirectionY;
+                    float hintMag = (float)Math.Sqrt(hintX * hintX + hintY * hintY);
+                    if (hintMag > 0.01f)
+                    {
+                        float alignment = (windDir.X * hintX + windDir.Y * hintY) / hintMag;
+                        // Factor: 0.3 (anti-aligned) to 1.7 (aligned)
+                        effectiveFraction *= 1f + alignment * 0.7f;
+                    }
+                }
+
                 for (int i = 0; i < n; i++)
-                    totalPrecip[i] += bandPrecip[i] * overlapFraction;
+                    totalPrecip[i] += bandPrecip[i] * effectiveFraction;
             }
 
             float maxVal = 0f;
@@ -114,7 +128,17 @@ namespace MapGen.Core
                     hasUpwind = true;
                 }
 
-                humidity[i] = hasUpwind ? gatheredHumidity / totalWeight : OceanHumidity * cap;
+                if (hasUpwind)
+                {
+                    humidity[i] = gatheredHumidity / totalWeight;
+                }
+                else
+                {
+                    float baseHumidity = OceanHumidity;
+                    if (config.Tectonics != null)
+                        baseHumidity = Math.Max(0.5f, Math.Min(1f, OceanHumidity + config.Tectonics.MoistureBias * 0.1f));
+                    humidity[i] = baseHumidity * cap;
+                }
 
                 if (elevation.IsWater(i))
                 {

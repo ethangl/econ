@@ -220,7 +220,8 @@ namespace EconSim.Core
 
             Debug.Log($"GenerateMapFromSite: type={CurrentSite.SiteType} → template={config.Template}, lat={config.Latitude:F1}°, " +
                 $"convergence={config.Tectonics.ConvergenceMagnitude:F2}, coastDir=({config.Tectonics.CoastDirectionX:F2},{config.Tectonics.CoastDirectionY:F2}), " +
-                $"boundaryHops={config.Tectonics.BoundaryDistanceHops}");
+                $"boundaryHops={config.Tectonics.BoundaryDistanceHops}, oceanAnomaly={config.Tectonics.OceanCurrentAnomalyC:F1}°C, " +
+                $"moistureBias={config.Tectonics.MoistureBias:F2}, wind=({config.Tectonics.WindDirectionX:F2},{config.Tectonics.WindDirectionY:F2})");
             GenerateMap(config);
         }
 
@@ -276,6 +277,10 @@ namespace EconSim.Core
                 CoastDirectionX = coastDirX,
                 CoastDirectionY = coastDirY,
                 BoundaryDistanceHops = site.BoundaryDistanceHops,
+                OceanCurrentAnomalyC = site.OceanCurrentAnomaly,
+                MoistureBias = site.MoistureBias,
+                WindDirectionX = site.WindDirectionEast,
+                WindDirectionY = site.WindDirectionNorth,
             };
         }
 

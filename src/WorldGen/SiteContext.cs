@@ -48,5 +48,21 @@ namespace WorldGen.Core
 
         /// <summary>Derived template recommendation</summary>
         public SiteType SiteType;
+
+        /// <summary>Ocean current temperature anomaly in °C.
+        /// Positive = warm current (source water from equator-ward),
+        /// negative = cold current (source water from pole-ward). Range ~[-8, +8].</summary>
+        public float OceanCurrentAnomaly;
+
+        /// <summary>Moisture bias from continental blocking.
+        /// -1 = site is downwind of continent (dry shadow),
+        /// +1 = full oceanic fetch (wet). 0 = neutral.</summary>
+        public float MoistureBias;
+
+        /// <summary>Prevailing wind at site latitude as tangent-plane unit vector (east component).</summary>
+        public float WindDirectionEast;
+
+        /// <summary>Prevailing wind at site latitude as tangent-plane unit vector (north component).</summary>
+        public float WindDirectionNorth;
     }
 }

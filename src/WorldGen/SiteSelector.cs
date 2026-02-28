@@ -243,6 +243,79 @@ namespace WorldGen.Core
             if (coastSource[selected] >= 0)
                 coastDir = (mesh.CellCenters[coastSource[selected]] - mesh.CellCenters[selected]).Normalized;
 
+            // --- Climate hints ---
+
+            // Wind direction from Earth circulation bands
+            float siteLat = lat[selected];
+            float siteAbsLat = Math.Abs(siteLat);
+            float compassDeg;
+            if (siteAbsLat < 30f)
+                compassDeg = siteLat >= 0f ? 225f : 315f; // Trade winds
+            else if (siteAbsLat < 60f)
+                compassDeg = siteLat >= 0f ? 45f : 135f;  // Westerlies
+            else
+                compassDeg = siteLat >= 0f ? 225f : 315f; // Polar easterlies
+            float windRad = compassDeg * (float)Math.PI / 180f;
+            float windE = (float)Math.Sin(windRad);
+            float windN = (float)Math.Cos(windRad);
+
+            // Ocean current anomaly: plate drift projected onto local north
+            Vec3 sitePos = mesh.CellCenters[selected];
+            // Local north tangent vector at site
+            float latR = siteLat * (float)Math.PI / 180f;
+            float lngR = lng[selected] * (float)Math.PI / 180f;
+            float sinLatR = (float)Math.Sin(latR);
+            float cosLatR = (float)Math.Cos(latR);
+            float sinLngR = (float)Math.Sin(lngR);
+            float cosLngR = (float)Math.Cos(lngR);
+            Vec3 localNorth = new Vec3(-sinLatR * cosLngR, cosLatR, -sinLatR * sinLngR);
+            Vec3 localEast = new Vec3(-sinLngR, 0f, cosLngR);
+
+            int plateIdx = tectonics.CellPlate[selected];
+            Vec3 drift = tectonics.PlateDrift[plateIdx];
+            float northComponent = drift.X * localNorth.X + drift.Y * localNorth.Y + drift.Z * localNorth.Z;
+            // Poleward drift → warm current (brings equatorial water)
+            float polewardDrift = siteLat >= 0f ? northComponent : -northComponent;
+            float latFactor = Math.Max(0.1f, 1f - Math.Abs(siteAbsLat - 40f) / 50f);
+            float oceanAnomaly = polewardDrift * latFactor * 8f;
+            oceanAnomaly = Math.Max(-8f, Math.Min(8f, oceanAnomaly));
+
+            // Moisture bias: walk ~8 hops upwind, count land/ocean fraction
+            Vec3 windDir3D = new Vec3(
+                localEast.X * windE + localNorth.X * windN,
+                localEast.Y * windE + localNorth.Y * windN,
+                localEast.Z * windE + localNorth.Z * windN);
+            Vec3 upwindDir = new Vec3(-windDir3D.X, -windDir3D.Y, -windDir3D.Z);
+            int walkCell = selected;
+            int landCount = 0;
+            int totalSampled = 0;
+            for (int hop = 0; hop < 8; hop++)
+            {
+                int bestNb = -1;
+                float bestAlign = -2f;
+                foreach (int nb in mesh.CellNeighbors[walkCell])
+                {
+                    Vec3 toNb = new Vec3(
+                        mesh.CellCenters[nb].X - mesh.CellCenters[walkCell].X,
+                        mesh.CellCenters[nb].Y - mesh.CellCenters[walkCell].Y,
+                        mesh.CellCenters[nb].Z - mesh.CellCenters[walkCell].Z);
+                    float mag = toNb.Magnitude;
+                    if (mag < 1e-9f) continue;
+                    float align = (toNb.X * upwindDir.X + toNb.Y * upwindDir.Y + toNb.Z * upwindDir.Z) / mag;
+                    if (align > bestAlign)
+                    {
+                        bestAlign = align;
+                        bestNb = nb;
+                    }
+                }
+                if (bestNb < 0) break;
+                walkCell = bestNb;
+                totalSampled++;
+                if (!isOcean[walkCell]) landCount++;
+            }
+            float landFraction = totalSampled > 0 ? (float)landCount / totalSampled : 0f;
+            float moistureBias = 1f - 2f * landFraction;
+
             return new SiteContext
             {
                 CellIndex = selected,
@@ -254,6 +327,10 @@ namespace WorldGen.Core
                 BoundaryConvergence = nearestBConv[selected],
                 BoundaryDistanceHops = boundaryDist[selected],
                 SiteType = siteType,
+                OceanCurrentAnomaly = oceanAnomaly,
+                MoistureBias = moistureBias,
+                WindDirectionEast = windE,
+                WindDirectionNorth = windN,
             };
         }
 

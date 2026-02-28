@@ -19,6 +19,16 @@ namespace MapGen.Core
 
         /// <summary>BFS hops to plate boundary (0=on boundary, higher=more distant).</summary>
         public int BoundaryDistanceHops;
+
+        /// <summary>Ocean current temperature anomaly in °C. Range ~[-8, +8].</summary>
+        public float OceanCurrentAnomalyC;
+
+        /// <summary>Moisture bias. -1 dry (downwind of continent) to +1 wet (oceanic fetch).</summary>
+        public float MoistureBias;
+
+        /// <summary>Prevailing wind direction in flat-map space (X=east, Y=north). Unit vector.</summary>
+        public float WindDirectionX;
+        public float WindDirectionY;
     }
 
     /// <summary>
