@@ -55,6 +55,9 @@ namespace EconSim.UI
         private int _selectedCountyId = -1;
         private int _selectedProvinceId = -1;
         private int _selectedRealmId = -1;
+        private int _selectedArchdioceseId = -1;
+        private int _selectedDioceseId = -1;
+        private int _selectedParishId = -1;
 
         private void Start()
         {
@@ -117,22 +120,26 @@ namespace EconSim.UI
             }
         }
 
+        private static bool IsPoliticalOrReligionMode(MapView.MapMode mode)
+        {
+            return mode == MapView.MapMode.Political ||
+                   mode == MapView.MapMode.Province ||
+                   mode == MapView.MapMode.County ||
+                   mode == MapView.MapMode.Religion ||
+                   mode == MapView.MapMode.ReligionDiocese ||
+                   mode == MapView.MapMode.ReligionParish;
+        }
+
         private void OnSelectionChanged(MapView.SelectionScope scope)
         {
             if (_mapView == null) return;
 
-            // Only show in political and religion modes
-            var mode = _mapView.CurrentMode;
-            if (mode != MapView.MapMode.Political &&
-                mode != MapView.MapMode.Province &&
-                mode != MapView.MapMode.County &&
-                mode != MapView.MapMode.Religion)
+            if (!IsPoliticalOrReligionMode(_mapView.CurrentMode))
             {
                 Hide();
                 return;
             }
 
-            // Use the selection scope from MapView.
             switch (scope)
             {
                 case MapView.SelectionScope.Realm:
@@ -143,6 +150,15 @@ namespace EconSim.UI
                     break;
                 case MapView.SelectionScope.County:
                     SelectCounty(_mapView.SelectedCountyId);
+                    break;
+                case MapView.SelectionScope.Archdiocese:
+                    SelectArchdiocese(_mapView.SelectedArchdioceseId);
+                    break;
+                case MapView.SelectionScope.Diocese:
+                    SelectDiocese(_mapView.SelectedDioceseId);
+                    break;
+                case MapView.SelectionScope.Parish:
+                    SelectParish(_mapView.SelectedParishId);
                     break;
                 default:
                     Hide();
@@ -246,14 +262,66 @@ namespace EconSim.UI
             UpdateCountyDisplay();
         }
 
+        public void SelectArchdiocese(int archdioceseId)
+        {
+            ClearSelection();
+            _selectedArchdioceseId = archdioceseId;
+
+            if (_religionState == null || archdioceseId <= 0 || archdioceseId >= _religionState.Archdioceses.Length
+                || _religionState.Archdioceses[archdioceseId] == null)
+            {
+                Hide();
+                return;
+            }
+
+            Show();
+            UpdateArchdioceseDisplay();
+        }
+
+        public void SelectDiocese(int dioceseId)
+        {
+            ClearSelection();
+            _selectedDioceseId = dioceseId;
+
+            if (_religionState == null || dioceseId <= 0 || dioceseId >= _religionState.Dioceses.Length
+                || _religionState.Dioceses[dioceseId] == null)
+            {
+                Hide();
+                return;
+            }
+
+            Show();
+            UpdateDioceseDisplay();
+        }
+
+        public void SelectParish(int parishId)
+        {
+            ClearSelection();
+            _selectedParishId = parishId;
+
+            if (_religionState == null || parishId <= 0 || parishId >= _religionState.Parishes.Length
+                || _religionState.Parishes[parishId] == null)
+            {
+                Hide();
+                return;
+            }
+
+            Show();
+            UpdateParishDisplay();
+        }
+
         private void ClearSelection()
         {
             _selectedCountyId = -1;
             _selectedProvinceId = -1;
             _selectedRealmId = -1;
+            _selectedArchdioceseId = -1;
+            _selectedDioceseId = -1;
+            _selectedParishId = -1;
         }
 
-        private bool HasSelection => _selectedCountyId > 0 || _selectedProvinceId > 0 || _selectedRealmId > 0;
+        private bool HasSelection => _selectedCountyId > 0 || _selectedProvinceId > 0 || _selectedRealmId > 0
+            || _selectedArchdioceseId > 0 || _selectedDioceseId > 0 || _selectedParishId > 0;
 
         public void Show()
         {
@@ -285,6 +353,12 @@ namespace EconSim.UI
                     UpdateProvinceDisplay();
                 else if (_selectedCountyId > 0)
                     UpdateCountyDisplay();
+                else if (_selectedArchdioceseId > 0)
+                    UpdateArchdioceseDisplay();
+                else if (_selectedDioceseId > 0)
+                    UpdateDioceseDisplay();
+                else if (_selectedParishId > 0)
+                    UpdateParishDisplay();
             }
         }
 
@@ -433,7 +507,9 @@ namespace EconSim.UI
             SetSectionVisible(_resourcesSection, true);
             var resourcesHeader = _resourcesSection?.Q<Label>(className: "section-header");
 
-            if (_mapView != null && _mapView.CurrentMode == MapView.MapMode.Religion)
+            if (_mapView != null && (_mapView.CurrentMode == MapView.MapMode.Religion ||
+                _mapView.CurrentMode == MapView.MapMode.ReligionDiocese ||
+                _mapView.CurrentMode == MapView.MapMode.ReligionParish))
             {
                 if (resourcesHeader != null)
                     resourcesHeader.text = "Faith Adherence";
@@ -444,6 +520,210 @@ namespace EconSim.UI
                 if (resourcesHeader != null)
                     resourcesHeader.text = "Resources";
                 ClearList(_resourcesList);
+            }
+        }
+
+        private void UpdateArchdioceseDisplay()
+        {
+            var arch = _religionState.Archdioceses[_selectedArchdioceseId];
+            if (arch == null) return;
+
+            int faithReligionId = (arch.FaithIndex >= 0 && arch.FaithIndex < _religionState.FaithIndexToReligion.Length)
+                ? _religionState.FaithIndexToReligion[arch.FaithIndex] : 0;
+            string faithName = faithReligionId > 0 ? GetFaithName(faithReligionId) : "Unknown";
+
+            SetLabel(_entityName, $"Archdiocese {arch.Id}");
+            SetLabel(_rulerValue, GetReligiousRulerDisplay(arch.ArchbishopActorId, TitleRank.Archdiocese));
+            SetLabel(_provinceValue, "-");
+            SetLabel(_stateValue, faithName);
+            SetLabel(_terrainValue, "-");
+            SetLabel(_cultureValue, "-");
+            SetLabel(_religionValue, faithName);
+
+            // Population: sum counties across all parishes in all dioceses
+            long totalPop = 0;
+            if (arch.DioceseIds != null)
+            {
+                var countedCounties = new System.Collections.Generic.HashSet<int>();
+                foreach (int dioId in arch.DioceseIds)
+                {
+                    if (dioId <= 0 || dioId >= _religionState.Dioceses.Length) continue;
+                    var dio = _religionState.Dioceses[dioId];
+                    if (dio?.ParishIds == null) continue;
+                    foreach (int pid in dio.ParishIds)
+                    {
+                        if (pid <= 0 || pid >= _religionState.Parishes.Length) continue;
+                        var par = _religionState.Parishes[pid];
+                        if (par?.CountyIds == null) continue;
+                        foreach (int cid in par.CountyIds)
+                        {
+                            if (countedCounties.Add(cid) && TryGetCounty(cid, out var county))
+                                totalPop += (long)county.TotalPopulation;
+                        }
+                    }
+                }
+            }
+            SetLabel(_popTotal, totalPop.ToString("N0"));
+
+            // Show dioceses list
+            ShowSectionAsDiocesesList(arch);
+        }
+
+        private void UpdateDioceseDisplay()
+        {
+            var diocese = _religionState.Dioceses[_selectedDioceseId];
+            if (diocese == null) return;
+
+            int faithReligionId = (diocese.FaithIndex >= 0 && diocese.FaithIndex < _religionState.FaithIndexToReligion.Length)
+                ? _religionState.FaithIndexToReligion[diocese.FaithIndex] : 0;
+            string faithName = faithReligionId > 0 ? GetFaithName(faithReligionId) : "Unknown";
+
+            SetLabel(_entityName, $"Diocese {diocese.Id}");
+            SetLabel(_rulerValue, GetReligiousRulerDisplay(diocese.BishopActorId, TitleRank.Diocese));
+            SetLabel(_provinceValue, "-");
+            SetLabel(_stateValue, faithName);
+            SetLabel(_terrainValue, "-");
+            SetLabel(_cultureValue, "-");
+            SetLabel(_religionValue, faithName);
+
+            long totalPop = 0;
+            var countedCounties = new System.Collections.Generic.HashSet<int>();
+            if (diocese.ParishIds != null)
+            {
+                foreach (int pid in diocese.ParishIds)
+                {
+                    if (pid <= 0 || pid >= _religionState.Parishes.Length) continue;
+                    var par = _religionState.Parishes[pid];
+                    if (par?.CountyIds == null) continue;
+                    foreach (int cid in par.CountyIds)
+                    {
+                        if (countedCounties.Add(cid) && TryGetCounty(cid, out var county))
+                            totalPop += (long)county.TotalPopulation;
+                    }
+                }
+            }
+            SetLabel(_popTotal, totalPop.ToString("N0"));
+
+            // Show parishes list
+            ShowSectionAsParishesList(diocese);
+        }
+
+        private void UpdateParishDisplay()
+        {
+            var parish = _religionState.Parishes[_selectedParishId];
+            if (parish == null) return;
+
+            int faithReligionId = (parish.FaithIndex >= 0 && parish.FaithIndex < _religionState.FaithIndexToReligion.Length)
+                ? _religionState.FaithIndexToReligion[parish.FaithIndex] : 0;
+            string faithName = faithReligionId > 0 ? GetFaithName(faithReligionId) : "Unknown";
+
+            SetLabel(_entityName, $"Parish {parish.Id}");
+            SetLabel(_rulerValue, GetReligiousRulerDisplay(parish.PriestActorId, TitleRank.Parish));
+            SetLabel(_provinceValue, "-");
+            SetLabel(_stateValue, faithName);
+            SetLabel(_terrainValue, $"{parish.CountyIds?.Count ?? 0} counties");
+            SetLabel(_cultureValue, "-");
+            SetLabel(_religionValue, faithName);
+
+            long totalPop = 0;
+            if (parish.CountyIds != null)
+            {
+                foreach (int cid in parish.CountyIds)
+                {
+                    if (TryGetCounty(cid, out var county))
+                        totalPop += (long)county.TotalPopulation;
+                }
+            }
+            SetLabel(_popTotal, totalPop.ToString("N0"));
+
+            // Show counties list
+            if (_resourcesSection != null && _resourcesList != null)
+            {
+                SetSectionVisible(_resourcesSection, true);
+                var header = _resourcesSection.Q<Label>(className: "section-header");
+                if (header != null) header.text = "Counties";
+                _resourcesList.Clear();
+
+                if (parish.CountyIds != null)
+                {
+                    foreach (int cid in parish.CountyIds)
+                    {
+                        if (!TryGetCounty(cid, out var county)) continue;
+                        var row = new VisualElement();
+                        row.AddToClassList("resource-item");
+                        row.Add(new Label(county.Name ?? $"County {cid}"));
+                        _resourcesList.Add(row);
+                    }
+                }
+            }
+        }
+
+        private string GetReligiousRulerDisplay(int actorId, TitleRank rank)
+        {
+            if (_actorState == null || actorId <= 0 || actorId >= _actorState.Actors.Length)
+                return "-";
+            var actor = _actorState.Actors[actorId];
+            if (actor == null) return "-";
+            return GetRulerDisplay(actor, rank);
+        }
+
+        private void ShowSectionAsDiocesesList(Archdiocese arch)
+        {
+            if (_resourcesSection == null || _resourcesList == null) return;
+            SetSectionVisible(_resourcesSection, true);
+            var header = _resourcesSection.Q<Label>(className: "section-header");
+            if (header != null) header.text = "Dioceses";
+            _resourcesList.Clear();
+
+            if (arch.DioceseIds == null || arch.DioceseIds.Count == 0)
+            {
+                _resourcesList.Add(new Label("None") { style = { color = new Color(0.5f, 0.5f, 0.5f), fontSize = 13 } });
+                return;
+            }
+
+            foreach (int dioId in arch.DioceseIds)
+            {
+                if (dioId <= 0 || dioId >= _religionState.Dioceses.Length) continue;
+                var dio = _religionState.Dioceses[dioId];
+                if (dio == null) continue;
+
+                var row = new VisualElement();
+                row.AddToClassList("resource-item");
+                row.Add(new Label($"Diocese {dioId} ({dio.ParishIds?.Count ?? 0} parishes)"));
+                _resourcesList.Add(row);
+            }
+        }
+
+        private void ShowSectionAsParishesList(Diocese diocese)
+        {
+            if (_resourcesSection == null || _resourcesList == null) return;
+            SetSectionVisible(_resourcesSection, true);
+            var header = _resourcesSection.Q<Label>(className: "section-header");
+            if (header != null) header.text = "Parishes";
+            _resourcesList.Clear();
+
+            if (diocese.ParishIds == null || diocese.ParishIds.Count == 0)
+            {
+                _resourcesList.Add(new Label("None") { style = { color = new Color(0.5f, 0.5f, 0.5f), fontSize = 13 } });
+                return;
+            }
+
+            if (diocese.ParishIds.Count > 15)
+            {
+                _resourcesList.Add(new Label($"{diocese.ParishIds.Count} parishes") { style = { color = new Color(0.7f, 0.7f, 0.7f), fontSize = 13 } });
+                return;
+            }
+
+            foreach (int pid in diocese.ParishIds)
+            {
+                if (pid <= 0 || pid >= _religionState.Parishes.Length) continue;
+                var par = _religionState.Parishes[pid];
+                if (par == null) continue;
+
+                var row = new VisualElement();
+                row.AddToClassList("resource-item");
+                row.Add(new Label($"Parish {pid} ({par.CountyIds?.Count ?? 0} counties)"));
+                _resourcesList.Add(row);
             }
         }
 

@@ -155,6 +155,11 @@ public class MapOverlayManager
         // Religion overlay data
         private EconSim.Core.Religious.ReligionState religionState;
         private Color[] faithPaletteColors;            // faithIndex → color
+        private int[] cellParishIdById;                // cellId → parishId (majority faith)
+        private int[] cellDioceseIdById;               // cellId → dioceseId
+        private int[] cellArchdioceseIdById;           // cellId → archdioceseId
+        private Dictionary<int, int> parishToDioceseId;    // parishId → dioceseId
+        private Dictionary<int, int> dioceseToArchdioceseId; // dioceseId → archdioceseId
 
         // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
         private const int ReliefBlurRadius = 4;
@@ -2413,7 +2418,9 @@ public class MapOverlayManager
                    mode == MapView.MapMode.Market ||
                    mode == MapView.MapMode.TransportCost ||
                    mode == MapView.MapMode.MarketAccess ||
-                   mode == MapView.MapMode.Religion;
+                   mode == MapView.MapMode.Religion ||
+                   mode == MapView.MapMode.ReligionDiocese ||
+                   mode == MapView.MapMode.ReligionParish;
         }
 
         private static MapView.MapMode ResolveCacheKeyForMode(MapView.MapMode mode)
@@ -2683,8 +2690,29 @@ public class MapOverlayManager
                     resolved[i] = heat;
                 }
             }
-            else if (currentMapMode == MapView.MapMode.Religion)
+            else if (currentMapMode == MapView.MapMode.Religion ||
+                     currentMapMode == MapView.MapMode.ReligionDiocese ||
+                     currentMapMode == MapView.MapMode.ReligionParish)
             {
+                // Build territory color maps for diocese/parish levels
+                Dictionary<int, Color> archdioceseColorById = null;
+                Dictionary<int, Color> dioceseColorById = null;
+                Dictionary<int, Color> parishColorById = null;
+
+                if (religionState != null && faithPaletteColors != null)
+                {
+                    archdioceseColorById = BuildArchdioceseColors();
+                    if (currentMapMode == MapView.MapMode.ReligionDiocese ||
+                        currentMapMode == MapView.MapMode.ReligionParish)
+                    {
+                        dioceseColorById = BuildDioceseColors(archdioceseColorById);
+                    }
+                    if (currentMapMode == MapView.MapMode.ReligionParish)
+                    {
+                        parishColorById = BuildParishColors(dioceseColorById, archdioceseColorById);
+                    }
+                }
+
                 for (int i = 0; i < size; i++)
                 {
                     int cellId = spatialGrid[i];
@@ -2694,9 +2722,40 @@ public class MapOverlayManager
                     if (!cell.IsLand || rivers[i].r > 0.5f)
                         continue;
 
-                    Color faithColor = GetCellFaithColor(cellId);
-                    faithColor.a = 0f;
-                    resolved[i] = faithColor;
+                    Color territoryColor;
+                    int territoryId = 0;
+
+                    if (currentMapMode == MapView.MapMode.ReligionParish)
+                    {
+                        int parId = (cellParishIdById != null && cellId < cellParishIdById.Length) ? cellParishIdById[cellId] : 0;
+                        territoryId = parId;
+                        if (parId > 0 && parishColorById != null && parishColorById.TryGetValue(parId, out Color pc))
+                            territoryColor = pc;
+                        else
+                            territoryColor = GetCellFaithColor(cellId);
+                    }
+                    else if (currentMapMode == MapView.MapMode.ReligionDiocese)
+                    {
+                        int dioId = (cellDioceseIdById != null && cellId < cellDioceseIdById.Length) ? cellDioceseIdById[cellId] : 0;
+                        territoryId = dioId;
+                        if (dioId > 0 && dioceseColorById != null && dioceseColorById.TryGetValue(dioId, out Color dc))
+                            territoryColor = dc;
+                        else
+                            territoryColor = GetCellFaithColor(cellId);
+                    }
+                    else // Archdiocese
+                    {
+                        int archId = (cellArchdioceseIdById != null && cellId < cellArchdioceseIdById.Length) ? cellArchdioceseIdById[cellId] : 0;
+                        territoryId = archId;
+                        if (archId > 0 && archdioceseColorById != null && archdioceseColorById.TryGetValue(archId, out Color ac))
+                            territoryColor = ac;
+                        else
+                            territoryColor = GetCellFaithColor(cellId);
+                    }
+
+                    // Pack territory ID in alpha for shader selection/hover (same slot as marketId)
+                    territoryColor.a = territoryId / 255f;
+                    resolved[i] = territoryColor;
                 }
             }
             else
@@ -3311,6 +3370,115 @@ public class MapOverlayManager
             return new Color(r, g, b, 1f);
         }
 
+        /// <summary>Build a color for each archdiocese (base color from faith palette).</summary>
+        private Dictionary<int, Color> BuildArchdioceseColors()
+        {
+            var colors = new Dictionary<int, Color>();
+            if (religionState == null || faithPaletteColors == null) return colors;
+
+            for (int a = 1; a < religionState.Archdioceses.Length; a++)
+            {
+                var arch = religionState.Archdioceses[a];
+                if (arch == null) continue;
+
+                Color baseColor = (arch.FaithIndex >= 0 && arch.FaithIndex < faithPaletteColors.Length)
+                    ? faithPaletteColors[arch.FaithIndex]
+                    : Color.gray;
+
+                // Vary slightly per archdiocese to distinguish same-faith archdioceses
+                Color.RGBToHSV(baseColor, out float h, out float s, out float v);
+                float hShift = ((a * 0.618034f) % 1f - 0.5f) * 0.06f; // golden ratio spread
+                h = (h + hShift + 1f) % 1f;
+                colors[arch.Id] = Color.HSVToRGB(h, s, v);
+            }
+
+            return colors;
+        }
+
+        /// <summary>Build a color for each diocese, varied from its archdiocese base.</summary>
+        private Dictionary<int, Color> BuildDioceseColors(Dictionary<int, Color> archdioceseColorById)
+        {
+            var colors = new Dictionary<int, Color>();
+            if (religionState == null) return colors;
+
+            for (int d = 1; d < religionState.Dioceses.Length; d++)
+            {
+                var diocese = religionState.Dioceses[d];
+                if (diocese == null) continue;
+
+                Color parentColor = Color.gray;
+                if (dioceseToArchdioceseId != null &&
+                    dioceseToArchdioceseId.TryGetValue(diocese.Id, out int archId) &&
+                    archdioceseColorById != null &&
+                    archdioceseColorById.TryGetValue(archId, out Color ac))
+                {
+                    parentColor = ac;
+                }
+                else if (diocese.FaithIndex >= 0 && diocese.FaithIndex < faithPaletteColors.Length)
+                {
+                    parentColor = faithPaletteColors[diocese.FaithIndex];
+                }
+
+                colors[diocese.Id] = DeriveProvinceColorFromRealm(parentColor, diocese.Id);
+            }
+
+            return colors;
+        }
+
+        /// <summary>Build a color for each parish, varied from its diocese base.</summary>
+        private Dictionary<int, Color> BuildParishColors(
+            Dictionary<int, Color> dioceseColorById,
+            Dictionary<int, Color> archdioceseColorById)
+        {
+            var colors = new Dictionary<int, Color>();
+            if (religionState == null) return colors;
+
+            for (int p = 1; p < religionState.Parishes.Length; p++)
+            {
+                var parish = religionState.Parishes[p];
+                if (parish == null) continue;
+
+                Color parentColor = Color.gray;
+                if (parishToDioceseId != null &&
+                    parishToDioceseId.TryGetValue(parish.Id, out int dioId) &&
+                    dioceseColorById != null &&
+                    dioceseColorById.TryGetValue(dioId, out Color dc))
+                {
+                    parentColor = dc;
+                }
+                else if (parish.FaithIndex >= 0 && parish.FaithIndex < faithPaletteColors.Length)
+                {
+                    parentColor = faithPaletteColors[parish.FaithIndex];
+                }
+
+                colors[parish.Id] = DeriveCountyColorFromProvince(parentColor, parish.Id);
+            }
+
+            return colors;
+        }
+
+        /// <summary>Set selection highlight for a religious territory (uses market ID alpha channel).</summary>
+        public void SetSelectedReligiousTerritory(int territoryId)
+        {
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(SelectedRealmIdId, -1f);
+            styleMaterial.SetFloat(SelectedProvinceIdId, -1f);
+            styleMaterial.SetFloat(SelectedCountyIdId, -1f);
+            float normalizedId = territoryId < 0 ? -1f : territoryId / 255f;
+            styleMaterial.SetFloat(SelectedMarketIdId, normalizedId);
+        }
+
+        /// <summary>Set hover highlight for a religious territory (uses market ID alpha channel).</summary>
+        public void SetHoveredReligiousTerritory(int territoryId)
+        {
+            if (styleMaterial == null) return;
+            styleMaterial.SetFloat(HoveredRealmIdId, -1f);
+            styleMaterial.SetFloat(HoveredProvinceIdId, -1f);
+            styleMaterial.SetFloat(HoveredCountyIdId, -1f);
+            float normalizedId = territoryId < 0 ? -1f : territoryId / 255f;
+            styleMaterial.SetFloat(HoveredMarketIdId, normalizedId);
+        }
+
         private static int ComputeRoadStateHash(RoadState roads)
         {
             if (roads == null)
@@ -3490,16 +3658,104 @@ public class MapOverlayManager
                 faithPaletteColors[f] = Color.HSVToRGB(hue, 0.65f, 0.85f);
             }
 
+            // Build reverse lookups: parish→diocese, diocese→archdiocese
+            parishToDioceseId = new Dictionary<int, int>();
+            dioceseToArchdioceseId = new Dictionary<int, int>();
+
+            for (int d = 1; d < religion.Dioceses.Length; d++)
+            {
+                var diocese = religion.Dioceses[d];
+                if (diocese == null) continue;
+                foreach (int pid in diocese.ParishIds)
+                    parishToDioceseId[pid] = diocese.Id;
+            }
+
+            for (int a = 1; a < religion.Archdioceses.Length; a++)
+            {
+                var arch = religion.Archdioceses[a];
+                if (arch == null) continue;
+                foreach (int did in arch.DioceseIds)
+                    dioceseToArchdioceseId[did] = arch.Id;
+            }
+
+            // Build cell→territory lookup arrays
+            int maxCellId = cellCountyIdById != null ? cellCountyIdById.Length : 0;
+            cellParishIdById = new int[maxCellId];
+            cellDioceseIdById = new int[maxCellId];
+            cellArchdioceseIdById = new int[maxCellId];
+
+            for (int cellId = 0; cellId < maxCellId; cellId++)
+            {
+                int countyId = cellCountyIdById[cellId];
+                if (countyId <= 0 || countyId >= religion.CountyParishes.Length)
+                    continue;
+
+                var parishes = religion.CountyParishes[countyId];
+                if (parishes == null || parishes.Count == 0)
+                    continue;
+
+                // Pick parish matching majority faith for this county
+                int majorityFaith = (countyId < religion.MajorityFaith.Length) ? religion.MajorityFaith[countyId] : 0;
+                int majorityFaithIndex = -1;
+                if (majorityFaith > 0 && religion.ReligionToFaithIndex != null)
+                    religion.ReligionToFaithIndex.TryGetValue(majorityFaith, out majorityFaithIndex);
+
+                int parishId = 0;
+                foreach (int pid in parishes)
+                {
+                    if (pid <= 0 || pid >= religion.Parishes.Length) continue;
+                    var parish = religion.Parishes[pid];
+                    if (parish == null) continue;
+                    if (parishId == 0) parishId = pid; // fallback to first
+                    if (parish.FaithIndex == majorityFaithIndex)
+                    {
+                        parishId = pid;
+                        break;
+                    }
+                }
+
+                cellParishIdById[cellId] = parishId;
+
+                if (parishId > 0 && parishToDioceseId.TryGetValue(parishId, out int dioId))
+                {
+                    cellDioceseIdById[cellId] = dioId;
+                    if (dioceseToArchdioceseId.TryGetValue(dioId, out int archId))
+                        cellArchdioceseIdById[cellId] = archId;
+                }
+            }
+
             InvalidateModeColorResolveCache(MapView.MapMode.Religion);
+            InvalidateModeColorResolveCache(MapView.MapMode.ReligionDiocese);
+            InvalidateModeColorResolveCache(MapView.MapMode.ReligionParish);
 
             Debug.Log($"MapOverlayManager: Set religion state with {religion.FaithCount} faiths, " +
                 $"{religion.Parishes.Length - 1} parishes, {religion.Dioceses.Length - 1} dioceses, " +
                 $"{religion.Archdioceses.Length - 1} archdioceses");
         }
 
+        public int GetCellParishId(int cellId)
+        {
+            if (cellParishIdById == null || cellId < 0 || cellId >= cellParishIdById.Length) return 0;
+            return cellParishIdById[cellId];
+        }
+
+        public int GetCellDioceseId(int cellId)
+        {
+            if (cellDioceseIdById == null || cellId < 0 || cellId >= cellDioceseIdById.Length) return 0;
+            return cellDioceseIdById[cellId];
+        }
+
+        public int GetCellArchdioceseId(int cellId)
+        {
+            if (cellArchdioceseIdById == null || cellId < 0 || cellId >= cellArchdioceseIdById.Length) return 0;
+            return cellArchdioceseIdById[cellId];
+        }
+
         public void InvalidateReligionOverlay()
         {
             InvalidateModeColorResolveCache(MapView.MapMode.Religion);
+            InvalidateModeColorResolveCache(MapView.MapMode.ReligionDiocese);
+            InvalidateModeColorResolveCache(MapView.MapMode.ReligionParish);
         }
 
         private void GenerateMarketBorderDistTexture()
@@ -3921,6 +4177,12 @@ public class MapOverlayManager
                     break;
                 case MapView.MapMode.Religion:
                     shaderMode = 10;
+                    break;
+                case MapView.MapMode.ReligionDiocese:
+                    shaderMode = 11;
+                    break;
+                case MapView.MapMode.ReligionParish:
+                    shaderMode = 12;
                     break;
                 default:
                     shaderMode = 1;
