@@ -5,6 +5,7 @@ using UnityEngine;
 using EconSim.Core.Data;
 using EconSim.Core.Common;
 using EconSim.Core.Import;
+using EconSim.Core.Actors;
 using EconSim.Core.Economy;
 using EconSim.Core.Simulation;
 using EconSim.Renderer;
@@ -520,6 +521,12 @@ namespace EconSim.Core
             runner.RegisterSystem(new PopulationSystem());
             runner.RegisterSystem(new SpoilageSystem());
             _simulation = runner;
+
+            // Bootstrap actors and peerage
+            var simStateForActors = _simulation.GetState();
+            simStateForActors.Actors = ActorBootstrap.Generate(MapData, MapData.Info.PopGenSeed);
+            SimLog.Log("Actors", $"Bootstrapped {simStateForActors.Actors.ActorCount} actors, {simStateForActors.Actors.TitleCount} titles");
+
             Profiler.End();
             _simulation.IsPaused = true;  // Start paused
 

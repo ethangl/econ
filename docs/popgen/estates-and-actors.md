@@ -80,7 +80,7 @@ for simplicity:
 
 | Level    | Noble | Clergy     | Commoner        |
 | -------- | ----- | ---------- | --------------- |
-| County   | Baron | Prior      | Alderman        |
+| County   | Count | Prior      | Alderman        |
 | Province | Duke  | Bishop     | Guildmaster (?) |
 | Realm    | King  | Archbishop | — (very rare)   |
 
@@ -542,17 +542,17 @@ Layer 1: Population (depends on Layer 0)
 ├── Estate populations (split existing pop into 6 pools)
 └── Bootstrap percentages from culture/religion
 
-Layer 2: Social Fabric (depends on Layers 0-1)
-├── Opinions (actor + pool opinion system, scoped by culture/religion)
-└── Social currencies (ledger, earning/spending, scoped by culture/religion)
-
-Layer 3: Actors & Peerage (depends on Layers 0-2)
+Layer 2: Actors & Peerage (depends on Layers 0-1)
 ├── Peerage (title ranks, de jure territorial claims, parallel hierarchies)
 ├── Actor spawning (from upper estate pools)
 ├── Actor identity (name, estate, culture, religion, title)
 └── Territorial control (assign initial de jure + de facto controllers)
 
-Layer 4: Relationships (depends on Layer 3)
+Layer 3: Social Fabric (depends on Layers 0-2)
+├── Opinions (actor + pool opinion system, scoped by culture/religion)
+└── Social currencies (ledger, earning/spending, scoped by culture/religion)
+
+Layer 4: Relationships (depends on Layers 2-3)
 ├── Contracts (feudal bundles, charters, tithes, trade agreements)
 └── Economy integration (ownership, taxation flow to actors, facility investment)
 
@@ -574,7 +574,7 @@ Layer 7: Conflict (depends on Layers 4-6)
 
 - **Layers 0-1 are low-risk.** They extend existing systems (culture
   forest, population pools) without breaking anything. Good starting points.
-- **Layer 3 is the biggest single step.** Actors are the new primitive that
+- **Layer 2 is the biggest single step.** Actors are the new primitive that
   everything else hangs off. Getting the data model right here matters most.
 - **Layer 4 is where the economy gets rewired.** Ownership and taxation
   flowing to actors rather than abstract treasuries is a significant change
@@ -583,7 +583,7 @@ Layer 7: Conflict (depends on Layers 4-6)
   passive behavior before the full ambition system is in place. Marriage
   and succession can be added without warfare.
 - **Each layer should be playable/observable.** After Layer 1, you can see
-  estate population breakdown. After Layer 3, the map shows who controls
+  estate population breakdown. After Layer 2, the map shows who controls
   what. After Layer 4, the economy reflects ownership. Avoid building
   multiple layers before anything is visible.
 

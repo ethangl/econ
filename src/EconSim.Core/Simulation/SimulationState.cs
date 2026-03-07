@@ -1,3 +1,4 @@
+using EconSim.Core.Actors;
 using EconSim.Core.Economy;
 using EconSim.Core.Transport;
 
@@ -47,5 +48,10 @@ namespace EconSim.Core.Simulation
         /// Economy state (production, consumption, stock per county).
         /// </summary>
         public EconomyState Economy { get; set; }
+
+        /// <summary>
+        /// Actor and peerage state (titled characters, feudal hierarchy).
+        /// </summary>
+        public ActorState Actors { get; set; }
     }
 }

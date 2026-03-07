@@ -1,6 +1,7 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <ui:VisualElement name="selection-panel" class="panel">
         <ui:Label name="county-name" class="panel-title" text="County" />
+        <ui:Label name="ruler-value" class="panel-subtitle" text="" />
 
         <ui:VisualElement class="section">
             <ui:Label class="section-header" text="Location" />

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UIElements;
+using EconSim.Core.Actors;
 using EconSim.Core.Data;
 using EconSim.Core.Simulation;
 using EconSim.Renderer;
@@ -32,11 +33,14 @@ namespace EconSim.UI
         private Label _religionValue;
         private Label _popTotal;
 
+        private Label _rulerValue;
+
         private VisualElement _resourcesSection;
         private VisualElement _resourcesList;
         private VisualElement _selectionRail;
 
         private MapData _mapData;
+        private ActorState _actorState;
         private Coroutine _panelAnimationCoroutine;
         private float _currentRailWidth;
         private float _nextOpenDuration = DefaultPanelAnimationDuration;
@@ -72,6 +76,8 @@ namespace EconSim.UI
             if (gameManager != null)
             {
                 _mapData = gameManager.MapData;
+                if (gameManager.Simulation != null)
+                    _actorState = gameManager.Simulation.GetState()?.Actors;
             }
 
             // Find MapView if not assigned
@@ -169,7 +175,8 @@ namespace EconSim.UI
             _panel = _root.Q<VisualElement>("selection-panel");
             _selectionRail = _root.Q<VisualElement>("selection-rail");
             _closeButton = _root.Q<Button>("close-button");
-            _entityName = _root.Q<Label>("county-name");  // Reusing as entity name
+            _entityName = _root.Q<Label>("county-name");
+            _rulerValue = _root.Q<Label>("ruler-value");
             _locationSection = _root.Q<VisualElement>("selection-panel")?.Q<VisualElement>(className: "section");
             _provinceValue = _root.Q<Label>("province-value");
             _stateValue = _root.Q<Label>("state-value");
@@ -282,6 +289,10 @@ namespace EconSim.UI
             // Title - use full name (includes government form, e.g. "Kuningaskunta of Härvälä")
             SetLabel(_entityName, realm.FullName ?? realm.Name ?? $"Realm {realm.Id}");
 
+            // Ruler
+            var realmHolder = _actorState?.GetRealmHolder(realm.Id);
+            SetLabel(_rulerValue, GetRulerDisplay(realmHolder, TitleRank.Realm));
+
             // Location section - show capital and culture
             SetLabel(_provinceValue, "-");
             SetLabel(_stateValue, "-");
@@ -322,6 +333,10 @@ namespace EconSim.UI
 
             // Title - use full name (e.g. "Province of Koskiniemi")
             SetLabel(_entityName, province.FullName ?? province.Name ?? $"Province {province.Id}");
+
+            // Ruler
+            var provHolder = _actorState?.GetProvinceHolder(province.Id);
+            SetLabel(_rulerValue, GetRulerDisplay(provHolder, TitleRank.Province));
 
             // Location section
             SetLabel(_provinceValue, "-");
@@ -379,6 +394,10 @@ namespace EconSim.UI
             // County name
             string countyName = county.Name ?? $"County {county.Id}";
             SetLabel(_entityName, countyName);
+
+            // Ruler
+            var countyHolder = _actorState?.GetCountyHolder(county.Id);
+            SetLabel(_rulerValue, GetRulerDisplay(countyHolder, TitleRank.County));
 
             // Province
             string provinceName = "-";
@@ -593,6 +612,20 @@ namespace EconSim.UI
             _selectionRail.style.width = _currentRailWidth;
             _selectionRail.style.minWidth = _currentRailWidth;
             _selectionRail.style.maxWidth = _currentRailWidth;
+        }
+
+        private string GetRulerDisplay(Actor actor, TitleRank rank)
+        {
+            if (actor == null) return "-";
+            string rankLabel;
+            switch (rank)
+            {
+                case TitleRank.Realm: rankLabel = "King"; break;
+                case TitleRank.Province: rankLabel = "Duke"; break;
+                case TitleRank.County: rankLabel = "Count"; break;
+                default: rankLabel = ""; break;
+            }
+            return $"{rankLabel} {actor.Name}";
         }
 
         private string GetCultureName(int realmId)

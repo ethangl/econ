@@ -16,6 +16,8 @@ namespace PopGen.Core
         public string[] CountySuffixes;
         public string[] GovernmentForms;
         public string[] DirectionalPrefixes;
+        public string[] MalePersonSuffixes;
+        public string[] FemalePersonSuffixes;
     }
 
     /// <summary>
@@ -77,7 +79,9 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Pohjois", "Etelä", "Itä", "Länsi", "Ylä", "Ala", "Sisä", "Ulko"
-            }
+            },
+            MalePersonSuffixes = new[] { "nen", "nen", "nen", "la", "lä", "sto", "nen" },
+            FemalePersonSuffixes = new[] { "nen", "nen", "nen", "la", "lä", "sto", "nen" }
         };
         public static CultureType Icelandic => new CultureType
         {
@@ -131,7 +135,9 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Norður", "Suður", "Austur", "Vestur", "Efri", "Neðri", "Innri", "Ytri"
-            }
+            },
+            MalePersonSuffixes = new[] { "sson", "sson", "sson", "son", "sen" },
+            FemalePersonSuffixes = new[] { "sdóttir", "sdóttir", "dóttir", "dóttir" }
         };
 
         public static CultureType Danish => new CultureType
@@ -191,7 +197,9 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Nord", "Syd", "Øst", "Vest", "Øvre", "Nedre", "Indre", "Ydre"
-            }
+            },
+            MalePersonSuffixes = new[] { "sen", "sen", "sen", "gaard", "borg", "rup" },
+            FemalePersonSuffixes = new[] { "sen", "sen", "datter", "datter", "gaard" }
         };
 
         public static CultureType Welsh => new CultureType
@@ -252,7 +260,9 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Gogledd", "De", "Dwyrain", "Gorllewin", "Uchaf", "Isaf", "Mewnol", "Allanol"
-            }
+            },
+            MalePersonSuffixes = new[] { " ap ", " ap ", " ab ", " map " },
+            FemalePersonSuffixes = new[] { " ferch ", " ferch ", " ach " }
         };
 
         public static CultureType Gaelic => new CultureType
@@ -315,7 +325,9 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Tuaisceart", "Deisceart", "Oirthear", "Iarthar", "Uachtar", "Íochtar", "Lár", "Imeall"
-            }
+            },
+            MalePersonSuffixes = new[] { " mac ", " mac ", " mac ", " Ó" },
+            FemalePersonSuffixes = new[] { " nic ", " nic ", " Ní" }
         };
 
         public static CultureType Brythonic => new CultureType
@@ -375,7 +387,9 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Hanternoz", "Kreisteiz", "Reter", "Kornôg", "Uhel", "Izel", "Kreiz", "Diavaez"
-            }
+            },
+            MalePersonSuffixes = new[] { " ap ", " ap ", " ab ", " mab " },
+            FemalePersonSuffixes = new[] { " ferch ", " merch ", " ach " }
         };
 
         public static CultureType LowGerman => new CultureType
@@ -435,7 +449,9 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Noord", "Zuid", "Oost", "West", "Boven", "Beneden", "Binnen", "Buiten"
-            }
+            },
+            MalePersonSuffixes = new[] { "man", "mans", "sen", "burg", "veld", "berg" },
+            FemalePersonSuffixes = new[] { "man", "mans", "sen", "burg", "veld", "berg" }
         };
 
         public static CultureType HighGerman => new CultureType
@@ -495,7 +511,9 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Nord", "Süd", "Ost", "West", "Ober", "Nieder", "Inner", "Äußer"
-            }
+            },
+            MalePersonSuffixes = new[] { "mann", "berg", "stein", "burg", "feld", "wald" },
+            FemalePersonSuffixes = new[] { "mann", "berg", "stein", "burg", "feld", "wald" }
         };
 
         public static CultureType Frisian => new CultureType
@@ -558,7 +576,9 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Noard", "Súd", "East", "West", "Boppeste", "Underste", "Binne", "Bûten"
-            }
+            },
+            MalePersonSuffixes = new[] { "sma", "stra", "ma", "inga", "ga" },
+            FemalePersonSuffixes = new[] { "sma", "stra", "ma", "inga", "ga" }
         };
 
         public static CultureType WestSlavic => new CultureType
@@ -622,7 +642,9 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Północ", "Południe", "Wschód", "Zachód", "Górny", "Dolny", "Wielki", "Mały"
-            }
+            },
+            MalePersonSuffixes = new[] { "ski", "ski", "wicz", "czyk", "owski", "ek" },
+            FemalePersonSuffixes = new[] { "ska", "ska", "wicz", "czyk", "owska", "ek" }
         };
 
         public static CultureType SouthSlavic => new CultureType
@@ -685,7 +707,9 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Severno", "Južno", "Istočno", "Zapadno", "Gornje", "Donje", "Veliko", "Malo"
-            }
+            },
+            MalePersonSuffixes = new[] { "ić", "ić", "ović", "ević", "ović", "ov" },
+            FemalePersonSuffixes = new[] { "ić", "ić", "ović", "ević", "ović", "ov" }
         };
 
         public static CultureType Baltic => new CultureType
@@ -750,7 +774,9 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Šiaurės", "Pietų", "Rytų", "Vakarų", "Aukštasis", "Žemasis", "Didysis", "Mažasis"
-            }
+            },
+            MalePersonSuffixes = new[] { "aitis", "ūnas", "auskas", "ėnas", "inis" },
+            FemalePersonSuffixes = new[] { "aitė", "ūnė", "auskė", "ėnė", "inė" }
         };
 
         public static CultureType Ugric => new CultureType
@@ -810,7 +836,9 @@ namespace PopGen.Core
             DirectionalPrefixes = new[]
             {
                 "Észak", "Dél", "Kelet", "Nyugat", "Felső", "Alsó", "Nagy", "Kis"
-            }
+            },
+            MalePersonSuffixes = new[] { "fi", "fi", "házi", "vári", "falvi", "i" },
+            FemalePersonSuffixes = new[] { "fi", "fi", "házi", "vári", "falvi", "i" }
         };
     }
 }
