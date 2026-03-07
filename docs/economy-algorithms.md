@@ -144,13 +144,22 @@ Key effects:
 ### Durable Goods
 
 Durables (pottery, furniture, tools, wool clothes, shoes, etc.) are tracked in
-abstract units (pots, chairs, tool sets, outfits, pairs), not kilograms. Each person needs a
-**target stock level** in units (e.g. 1.0 tool set per person). All internal
-accounting — stock, production, consumption, unmet need — uses units. Weight
-only matters for transport cost calculation (see Transport Costs). Stock
-degrades at a daily spoilage rate (wear). Production aims to maintain stock at
-the target, with a catch-up rate tied to durability: lower spoilage means
-slower catch-up, preventing overproduction of very durable items.
+abstract units (pots, chairs, tool sets, outfits, pairs), not kilograms. Each
+person needs a **target stock level** in units (e.g. 1.0 tool set per person).
+All internal accounting — stock, production, consumption, unmet need — uses
+units. Weight only matters for transport cost calculation (see Transport Costs).
+
+Target stock is computed using **effective population** for the good's need
+category, not raw headcount. Comfort durables target ~635 units per 1,000 raw
+population; luxury durables target ~51 per 1,000. Both production caps and
+consumption use the same effective population, ensuring stock converges to the
+intended level.
+
+Stock degrades at a daily spoilage rate (wear). Production aims to maintain
+stock at the target, with a catch-up rate tied to durability: lower spoilage
+means slower catch-up, preventing overproduction of very durable items. Raw
+durables (e.g. fur, which is extracted directly rather than facility-produced)
+use the same stock-gap cap on extraction.
 
 ### Seasonal Extraction Modifier
 
@@ -361,7 +370,7 @@ governs demand-driven extraction and trade retain calculations.
         Pass 1 — Durable outputs (pottery, furniture, tools, wool clothes, shoes, etc.):
             For each facility that produces a durable good:
                 Compute labor-constrained max output
-                Compute target stock (population × target_stock_per_pop)
+                Compute target stock (effPop[good's need category] × target_stock_per_pop)
                 Compute maintenance need (current_stock × spoilage_rate)
                 Compute stock gap (target - current, floored at 0)
                 Daily need = maintenance + gap × catch_up_rate
@@ -394,6 +403,14 @@ governs demand-driven extraction and trade retain calculations.
                     target_stock = local_facility_demand × 14 days buffer
                     produced = min(produced, max(0, target_stock - current_stock))
 
+            Else if this good is a raw durable (e.g. fur — extracted directly, not facility-produced):
+                Cap extraction by stock-gap need (same formula as facility durables):
+                    target_stock = effPop[good's need category] × target_stock_per_pop
+                    maintenance = current_stock × spoilage_rate
+                    gap = max(0, target_stock - current_stock)
+                    daily_need = maintenance + gap × catch_up_rate × 3.0
+                    produced = min(produced, daily_need)
+
             Else if this good has no direct population demand and has a base price:
                 Price-throttle extraction (uses local market price):
                     price_ratio = local_market_price / base_price
@@ -416,7 +433,8 @@ governs demand-driven extraction and trade retain calculations.
             throughput = min(material_constraint, labor_constraint), floored at 0
 
             If output is a durable:
-                Cap throughput by stock-gap need (same formula as Pass 1)
+                Cap throughput by stock-gap need (same formula as Pass 1):
+                    target_stock = effPop[good's need category] × target_stock_per_pop
 
             If output is a durable-chain intermediate:
                 Cap throughput by downstream demand (same formula as Pass 2)
