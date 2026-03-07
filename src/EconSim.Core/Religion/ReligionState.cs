@@ -80,6 +80,7 @@ namespace EconSim.Core.Religious
         public int SeatCellId;          // Cell where the parish church is
         public List<int> CountyIds;     // Counties served by this parish
         public int PriestActorId;       // 0 = vacant
+        public float Treasury;          // Crowns collected from tithes
     }
 
     public class Diocese
@@ -89,6 +90,7 @@ namespace EconSim.Core.Religious
         public int CathedralCellId;     // Cell where the cathedral is
         public List<int> ParishIds;     // Parishes in this diocese
         public int BishopActorId;       // 0 = vacant
+        public float Treasury;          // Crowns collected from parish tithes
     }
 
     public class Archdiocese
@@ -98,5 +100,6 @@ namespace EconSim.Core.Religious
         public int SeatCellId;          // Archbishopric seat
         public List<int> DioceseIds;    // Dioceses in this archdiocese
         public int ArchbishopActorId;   // 0 = vacant
+        public float Treasury;          // Crowns collected from diocese tithes
     }
 }

@@ -535,8 +535,9 @@ namespace EconSim.Core
             simStateForActors.Religion = ReligionInitializer.Initialize(MapData, maxCountyIdForReligion);
             ReligionBootstrap.Generate(simStateForActors.Religion, MapData, simStateForActors.Actors, MapData.Info.PopGenSeed);
 
-            // Register religion spread after religion state is initialized
+            // Register religion spread and tithe collection after religion state is initialized
             runner.RegisterSystem(new ReligionSpreadSystem());
+            runner.RegisterSystem(new TitheSystem());
 
             Profiler.End();
             _simulation.IsPaused = true;  // Start paused

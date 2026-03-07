@@ -26,6 +26,7 @@ namespace EconSim.Core.Economy
         Tanner = 21,
         Cobbler = 22,
         LinenWeaver = 23,
+        CandleMaker = 24,
     }
 
     public readonly struct RecipeInput
@@ -148,6 +149,9 @@ namespace EconSim.Core.Economy
                 new FacilityDef(FacilityType.LinenWeaver, "linenWeaver",
                     new[] { new RecipeInput(GoodType.Flax, 8.0f) },
                     GoodType.LinenClothes, 2.0f, 0.05f),
+                new FacilityDef(FacilityType.CandleMaker, "candleMaker",
+                    new[] { new RecipeInput(GoodType.Honey, 2.0f) },
+                    GoodType.Candles, 4.0f, 0.05f),
             };
 
             Count = Defs.Length;

@@ -53,6 +53,7 @@ namespace EconSim.Core.Economy
         Shoes = 44,
         Flax = 45,
         LinenClothes = 46,
+        Candles = 47,
     }
 
     public static class Goods
@@ -203,6 +204,7 @@ namespace EconSim.Core.Economy
             (int)GoodType.SilkClothes,
             (int)GoodType.Amber,
             (int)GoodType.AmberJewelry,
+            (int)GoodType.Candles,
             (int)GoodType.Gold,
             (int)GoodType.Silver,
         };
@@ -446,6 +448,9 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.LinenClothes, "linenClothes", GoodCategory.Finished, NeedCategory.Comfort,
                     0.0f, 0.0005f, 0.0f, 0.001f, 2.00f, 0.10f, 40.0f, true, false,
                     0.002f, 2.0f, unitWeight: 1.5f, comfortCategory: ComfortCategory.Clothing),
+                new GoodDef(GoodType.Candles, "candles", GoodCategory.Finished, NeedCategory.Comfort,
+                    0.02f, 0.0f, 0.0f, 0.0f, 0.15f, 0.0075f, 3.0f, true, false,
+                    0.01f, comfortCategory: ComfortCategory.Worship),
             };
 
             Count = Defs.Length;
@@ -555,6 +560,7 @@ namespace EconSim.Core.Economy
                 new ComfortCategoryDef(ComfortCategory.Jewelry,      0.2f,  true),
                 new ComfortCategoryDef(ComfortCategory.Pantry,       0.02f, false),
                 new ComfortCategoryDef(ComfortCategory.Footwear,     1.5f,  true),
+                new ComfortCategoryDef(ComfortCategory.Worship,      0.02f, false),
             };
             ComfortCategories = catDefs;
             ComfortCategoryGoods = new int[catDefs.Length][];
