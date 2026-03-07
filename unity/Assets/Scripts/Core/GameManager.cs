@@ -512,7 +512,8 @@ namespace EconSim.Core
             // Initialize simulation
             Profiler.Begin("Simulation Init");
             var runner = new SimulationRunner(MapData);
-            runner.RegisterSystem(new EconomySystem());
+            runner.RegisterSystem(new ProductionSystem());
+            runner.RegisterSystem(new ConsumptionSystem());
             runner.RegisterSystem(new FiscalSystem());
             runner.RegisterSystem(new InterRealmTradeSystem());
 
