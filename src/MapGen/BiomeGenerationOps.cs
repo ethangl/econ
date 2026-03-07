@@ -15,6 +15,7 @@ namespace MapGen.Core
             RiverField rivers,
             MapGenConfig config)
         {
+            GeologyOps.AssignRockTypes(biome, elevation, config);
             ComputeLakeCells(biome, elevation, rivers);
             ComputeWaterFeatures(biome, elevation);
             ComputeCoastDistance(biome, elevation);

@@ -37,6 +37,14 @@ namespace MapGen.Core
         public int CellCount;
     }
 
+    public enum RockType : byte
+    {
+        Granite,
+        Sedimentary,
+        Limestone,
+        Volcanic
+    }
+
     public enum BiomeId : byte
     {
         Glacier,

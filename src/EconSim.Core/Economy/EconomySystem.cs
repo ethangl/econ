@@ -683,6 +683,7 @@ namespace EconSim.Core.Economy
                     if (y > 0f && Goods.HasTemperatureGate[g]
                         && (cellTemp < Goods.MinTemperature[g] || cellTemp > Goods.MaxTemperature[g]))
                         continue;
+                    y *= Goods.RockYieldModifier[cell.RockId, g];
                     output[g] += y;
                 }
 

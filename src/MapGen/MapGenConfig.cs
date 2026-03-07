@@ -150,11 +150,13 @@ namespace MapGen.Core
         const uint ElevationXor = 0xA54FF53A;
         const uint ClimateXor = 0x63D83595;
         const uint RiverXor = 0x7B9D14E1;
+        const uint GeologyXor = 0xD1B54A32;
 
         public int MeshSeed => (int)((uint)Seed ^ MeshXor);
         public int ElevationSeed => (int)((uint)Seed ^ ElevationXor);
         public int ClimateSeed => (int)((uint)Seed ^ ClimateXor);
         public int RiverSeed => (int)((uint)Seed ^ RiverXor);
+        public int GeologySeed => (int)((uint)Seed ^ GeologyXor);
 
         public void Validate()
         {

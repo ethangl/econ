@@ -47,6 +47,7 @@ namespace EconSim.Core.Import
             bool hasVegetationTypeData = biomes.Vegetation != null && biomes.Vegetation.Length == cellCount;
             bool hasVegetationDensityData = biomes.VegetationDensity != null && biomes.VegetationDensity.Length == cellCount;
             bool hasMovementCostData = biomes.MovementCost != null && biomes.MovementCost.Length == cellCount;
+            bool hasRockData = biomes.Rock != null && biomes.Rock.Length == cellCount;
             bool hasTemperatureData = climate?.TemperatureC != null && climate.TemperatureC.Length == cellCount;
             var cells = new List<Cell>(cellCount);
             for (int i = 0; i < cellCount; i++)
@@ -72,6 +73,7 @@ namespace EconSim.Core.Import
                     SoilId = hasSoilData ? (int)biomes.Soil[i] : 0,
                     VegetationTypeId = hasVegetationTypeData ? (int)biomes.Vegetation[i] : 0,
                     VegetationDensity = hasVegetationDensityData ? Clamp01(biomes.VegetationDensity[i]) : 0f,
+                    RockId = hasRockData ? (int)biomes.Rock[i] : 1,
                     Temperature = hasTemperatureData ? climate.TemperatureC[i] : 0f,
                     MovementCost = hasMovementCostData ? biomes.MovementCost[i] : 0f,
                     IsLand = elevation.IsLand(i) && !biomes.IsLakeCell[i],

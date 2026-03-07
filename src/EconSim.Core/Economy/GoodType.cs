@@ -127,6 +127,9 @@ namespace EconSim.Core.Economy
         /// <summary>Biome productivity: kg produced per person per day. Indexed [biomeId, goodType].</summary>
         public static readonly float[,] BiomeYield;
 
+        /// <summary>Rock-type yield multiplier. Indexed [rockType, goodType]. Default 1.0 (neutral).</summary>
+        public static readonly float[,] RockYieldModifier;
+
         /// <summary>Goods that can be traded on the inter-realm market.</summary>
         public static readonly int[] TradeableGoods;
 
@@ -494,6 +497,38 @@ namespace EconSim.Core.Economy
                 foreach (var kv in yields)
                     BiomeYield[kv.Key, i] = kv.Value;
             }
+
+            // Build rock-type yield modifier table (default 1.0 = neutral)
+            int rockCount = 4; // RockType enum: Granite, Sedimentary, Limestone, Volcanic
+            RockYieldModifier = new float[rockCount, Count];
+            for (int r = 0; r < rockCount; r++)
+                for (int g = 0; g < Count; g++)
+                    RockYieldModifier[r, g] = 1.0f;
+
+            // Granite: poor soil, precious metal veins
+            RockYieldModifier[0, (int)GoodType.Wheat]     = 0.75f;
+            RockYieldModifier[0, (int)GoodType.Barley]    = 0.75f;
+            RockYieldModifier[0, (int)GoodType.IronOre]   = 1.2f;
+            RockYieldModifier[0, (int)GoodType.GoldOre]   = 1.5f;
+            RockYieldModifier[0, (int)GoodType.SilverOre] = 1.5f;
+            RockYieldModifier[0, (int)GoodType.Stone]     = 1.2f;
+            RockYieldModifier[0, (int)GoodType.Clay]      = 0.5f;
+            // Sedimentary (index 1): all 1.0 (neutral baseline)
+            // Limestone: building materials, decent agriculture
+            RockYieldModifier[2, (int)GoodType.Wheat]     = 1.1f;
+            RockYieldModifier[2, (int)GoodType.Barley]    = 1.1f;
+            RockYieldModifier[2, (int)GoodType.IronOre]   = 0.5f;
+            RockYieldModifier[2, (int)GoodType.GoldOre]   = 0.8f;
+            RockYieldModifier[2, (int)GoodType.Stone]     = 1.5f;
+            RockYieldModifier[2, (int)GoodType.Clay]      = 1.5f;
+            // Volcanic: fertile basalt soil + iron-rich, poor precious metals
+            RockYieldModifier[3, (int)GoodType.Wheat]     = 1.4f;
+            RockYieldModifier[3, (int)GoodType.Barley]    = 1.4f;
+            RockYieldModifier[3, (int)GoodType.IronOre]   = 1.5f;
+            RockYieldModifier[3, (int)GoodType.GoldOre]   = 0.5f;
+            RockYieldModifier[3, (int)GoodType.SilverOre] = 0.5f;
+            RockYieldModifier[3, (int)GoodType.Stone]     = 1.3f;
+            RockYieldModifier[3, (int)GoodType.Clay]      = 0.8f;
         }
 
         static int[] BuildBuyPriority()
