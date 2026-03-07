@@ -1078,6 +1078,39 @@ def print_convergence(data: dict):
             print(f"\n  {good:8s}: {fmt(unmet)} unmet ({pct(unmet, demand)} of demand)")
 
 
+def print_tithes(data: dict):
+    trade = data.get("trade", {})
+    tithes = trade.get("tithes")
+    if not tithes:
+        return
+
+    section("RELIGIOUS TITHES")
+
+    print(f"  Faiths:         {tithes.get('faithCount', 0)}")
+    print(f"  Parishes:       {tithes.get('parishCount', 0)}")
+    print(f"  Dioceses:       {tithes.get('dioceseCount', 0)}")
+    print(f"  Archdioceses:   {tithes.get('archdioceseCount', 0)}")
+    print()
+    print(f"  Monthly tithe collected:  {fmt(tithes.get('totalTithePaid', 0))} Crowns")
+    print()
+    print(f"  Church Treasury:")
+    print(f"    Parishes:      {fmt(tithes.get('totalParishTreasury', 0))} Crowns")
+    print(f"    Dioceses:      {fmt(tithes.get('totalDioceseTreasury', 0))} Crowns")
+    print(f"    Archdioceses:  {fmt(tithes.get('totalArchdioceseTreasury', 0))} Crowns")
+    print(f"    Total:         {fmt(tithes.get('totalChurchTreasury', 0))} Crowns")
+
+    per_faith = tithes.get("perFaith", [])
+    if per_faith:
+        print()
+        print(f"  Per-Faith Breakdown:")
+        print(f"    {'Faith':>6s}  {'Parishes':>8s}  {'Dioceses':>8s}  {'Archdio':>8s}  {'Treasury':>12s}")
+        print(f"    {'------':>6s}  {'--------':>8s}  {'--------':>8s}  {'--------':>8s}  {'--------':>12s}")
+        for f in per_faith:
+            rid = f.get("religionId", -1)
+            label = f"R{rid}" if rid >= 0 else f"F{f['faithIndex']}"
+            print(f"    {label:>6s}  {f.get('parishes', 0):>8d}  {f.get('dioceses', 0):>8d}  {f.get('archdioceses', 0):>8d}  {fmt(f.get('totalTreasury', 0)):>12s}")
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else None
     data = load(path)
@@ -1090,6 +1123,7 @@ def main():
     print_fiscal(data)
     print_trade_snapshot(data)
     print_treasury(data)
+    print_tithes(data)
     print_intra_province_trade(data)
     print_cross_province_trade(data)
     print_cross_market_trade(data)

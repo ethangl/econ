@@ -11,6 +11,7 @@ using EconSim.Core;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
 using EconSim.Core.Simulation;
+using EconSim.Core.Religious;
 using EconSim.Core.Transport;
 using MapGen.Core;
 
@@ -1221,6 +1222,128 @@ namespace EconSim.Editor
                 j.KV("totalCountyTreasury", totalCountyTreasury);
                 j.KV("totalProvinceTreasury", totalProvinceTreasury);
                 j.KV("totalDomesticTreasury", totalCountyTreasury + totalProvinceTreasury + totalTreasury);
+            }
+
+            // Religious tithes
+            var religion = st.Religion;
+            if (religion?.Parishes != null)
+            {
+                j.Key("tithes"); j.ObjOpen();
+
+                float totalTithePaid = 0f;
+                float totalParishTreasury = 0f;
+                float totalDioceseTreasury = 0f;
+                float totalArchdioceseTreasury = 0f;
+                int parishCount = 0;
+                int dioceseCount = 0;
+                int archdioceseCount = 0;
+
+                for (int p = 1; p < religion.Parishes.Length; p++)
+                {
+                    var parish = religion.Parishes[p];
+                    if (parish == null) continue;
+                    parishCount++;
+                    totalParishTreasury += parish.Treasury;
+                }
+
+                if (religion.Dioceses != null)
+                {
+                    for (int d = 1; d < religion.Dioceses.Length; d++)
+                    {
+                        var diocese = religion.Dioceses[d];
+                        if (diocese == null) continue;
+                        dioceseCount++;
+                        totalDioceseTreasury += diocese.Treasury;
+                    }
+                }
+
+                if (religion.Archdioceses != null)
+                {
+                    for (int a = 1; a < religion.Archdioceses.Length; a++)
+                    {
+                        var arch = religion.Archdioceses[a];
+                        if (arch == null) continue;
+                        archdioceseCount++;
+                        totalArchdioceseTreasury += arch.Treasury;
+                    }
+                }
+
+                // Sum county tithe payments
+                if (econ.Counties != null)
+                {
+                    for (int i = 0; i < econ.Counties.Length; i++)
+                    {
+                        var ce = econ.Counties[i];
+                        if (ce != null) totalTithePaid += ce.TithePaid;
+                    }
+                }
+
+                j.KV("totalTithePaid", totalTithePaid);
+                j.KV("totalParishTreasury", totalParishTreasury);
+                j.KV("totalDioceseTreasury", totalDioceseTreasury);
+                j.KV("totalArchdioceseTreasury", totalArchdioceseTreasury);
+                j.KV("totalChurchTreasury", totalParishTreasury + totalDioceseTreasury + totalArchdioceseTreasury);
+                j.KV("parishCount", parishCount);
+                j.KV("dioceseCount", dioceseCount);
+                j.KV("archdioceseCount", archdioceseCount);
+                j.KV("faithCount", religion.FaithCount);
+
+                // Per-faith breakdown
+                j.Key("perFaith"); j.ArrOpen();
+                for (int f = 0; f < religion.FaithCount; f++)
+                {
+                    j.ObjOpen();
+                    j.KV("faithIndex", f);
+                    j.KV("religionId", f < religion.FaithIndexToReligion.Length ? religion.FaithIndexToReligion[f] : -1);
+
+                    float faithParishTreasury = 0f;
+                    int faithParishes = 0;
+                    for (int p = 1; p < religion.Parishes.Length; p++)
+                    {
+                        var parish = religion.Parishes[p];
+                        if (parish == null || parish.FaithIndex != f) continue;
+                        faithParishes++;
+                        faithParishTreasury += parish.Treasury;
+                    }
+
+                    float faithDioceseTreasury = 0f;
+                    int faithDioceses = 0;
+                    if (religion.Dioceses != null)
+                    {
+                        for (int d = 1; d < religion.Dioceses.Length; d++)
+                        {
+                            var diocese = religion.Dioceses[d];
+                            if (diocese == null || diocese.FaithIndex != f) continue;
+                            faithDioceses++;
+                            faithDioceseTreasury += diocese.Treasury;
+                        }
+                    }
+
+                    float faithArchTreasury = 0f;
+                    int faithArchs = 0;
+                    if (religion.Archdioceses != null)
+                    {
+                        for (int a = 1; a < religion.Archdioceses.Length; a++)
+                        {
+                            var arch = religion.Archdioceses[a];
+                            if (arch == null || arch.FaithIndex != f) continue;
+                            faithArchs++;
+                            faithArchTreasury += arch.Treasury;
+                        }
+                    }
+
+                    j.KV("parishes", faithParishes);
+                    j.KV("dioceses", faithDioceses);
+                    j.KV("archdioceses", faithArchs);
+                    j.KV("parishTreasury", faithParishTreasury);
+                    j.KV("dioceseTreasury", faithDioceseTreasury);
+                    j.KV("archdioceseTreasury", faithArchTreasury);
+                    j.KV("totalTreasury", faithParishTreasury + faithDioceseTreasury + faithArchTreasury);
+                    j.ObjClose();
+                }
+                j.ArrClose();
+
+                j.ObjClose();
             }
 
             j.ObjClose();

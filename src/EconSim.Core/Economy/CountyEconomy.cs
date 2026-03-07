@@ -131,5 +131,8 @@ namespace EconSim.Core.Economy
 
         /// <summary>Virtual market: tariff crowns paid to own realm this tick (reset daily).</summary>
         public float VirtualMarketTariffsPaid;
+
+        /// <summary>Religious tithe crowns paid this month (reset monthly by TitheSystem).</summary>
+        public float TithePaid;
     }
 }

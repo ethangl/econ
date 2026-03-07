@@ -361,19 +361,85 @@ During simulation, religions evolve through:
 - **Usury doctrine** affects commoner economic activity and market
   development
 - **Monasticism** creates institutional wealth (monastic lands, production)
-- **Tithes** are a contract between clergy and populations, flowing
-  wealth into the religious hierarchy
+- **Tithes** — monthly collection from county surplus, flowing through
+  the religious hierarchy (see Tithe System below)
+- **Worship goods** — candles (from honey via candlemakers) satisfy the
+  Worship comfort category for population satisfaction
 - **Pilgrimage** (TBD) creates trade routes and economic activity
 - **Charity/alms** (TBD) creates wealth redistribution
 
 ### Contracts
 
 - **Tithe contracts** — populations owe a fraction of production to the
-  church
+  church (currently automatic via adherence weighting)
 - **Church appointments** — bishops appoint local clergy, sometimes
   contested by secular rulers (investiture disputes)
 - **Religious obligations** — actors may owe service or gold to their
   religious hierarchy
+
+## Tithe System (Implemented)
+
+Monthly tick system that models religious taxation and redistribution.
+
+### Collection
+
+Each parish computes the surplus production value (production minus
+consumption, valued at market prices) across its counties over the past
+month. The tithe is **7% of surplus value × the county's adherence** to
+the parish's faith, deducted from the county treasury.
+
+A county split between two faiths pays proportionally to each — a county
+that is 60% Faith A and 40% Faith B pays 60% of its tithe to Faith A's
+parish and 40% to Faith B's.
+
+### Hierarchy Flow
+
+Collected tithes flow upward through the hierarchy:
+
+| Level        | Keeps | Passes Up |
+| ------------ | ----- | --------- |
+| Parish       | 60%   | 40% → Diocese |
+| Diocese      | 70%   | 30% → Archdiocese |
+| Archdiocese  | 100%  | — (top of hierarchy) |
+
+### Church Wages
+
+Parishes spend **50% of their treasury** back into the local economy as
+wages, distributed to their counties proportional to adherence. This
+recirculates crowns and stimulates counties with strong religious
+presence.
+
+### Worship Economy
+
+Population worship satisfaction is driven by **candles**, a finished
+comfort good in the Worship category:
+
+- **Candles** — 0.02 kg/day per capita, base price 0.15 Cr
+- **CandleMaker** facility — converts 2 honey → 4 candles (5% max labor)
+- Honey competes between mead production and candle production
+
+### Tracking
+
+- `CountyEconomy.TithePaid` — monthly tithe per county (reset each month)
+- `Parish.Treasury`, `Diocese.Treasury`, `Archdiocese.Treasury` — accumulated crowns
+- EconDebugBridge exports tithe data; analyzer prints per-faith breakdown
+
+## Temple Construction (TODO)
+
+Faith hierarchies accumulate treasury from tithes but currently have no
+spending mechanism beyond parish wages. A future system will allow
+dioceses and archdioceses to commission **temple construction** in their
+territory, spending accumulated treasury to:
+
+- Build temples/cathedrals as physical structures in counties
+- Boost worship satisfaction beyond what candles alone provide
+- Increase local adherence (impressive buildings attract converts)
+- Provide prestige to the commissioning clergy actor
+
+Design details TBD — the key constraint is that temple spending gives
+the accumulated church treasury a meaningful purpose and creates a
+feedback loop: tithes → treasury → temples → more adherence → more
+tithes.
 
 ## Open Questions
 

@@ -1,7 +1,7 @@
 ﻿<Solution>
   <Project Path="EconSim.Editor.csproj" />
+  <Project Path="EconSim.csproj" />
   <Project Path="MapGen.csproj" />
   <Project Path="EconSim.EditModeTests.csproj" />
   <Project Path="WorldGen.csproj" />
-  <Project Path="EconSim.csproj" />
 </Solution>

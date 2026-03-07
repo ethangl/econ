@@ -386,6 +386,13 @@ Shader "EconSim/MapOverlayFlat"
                     float marketBorderDist = tex2D(_MarketBorderDistTex, IN.dataUV).r * 255.0;
                     if (marketBorderDist >= _MarketBorderWidth) discard;
                 }
+                else if (_MapMode == 10)
+                {
+                    // Religion mode: show realm and province borders for context
+                    float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
+                    float provinceBorderDist = tex2D(_ProvinceBorderDistTex, IN.dataUV).r * 255.0;
+                    if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth) discard;
+                }
                 else
                 {
                     discard;

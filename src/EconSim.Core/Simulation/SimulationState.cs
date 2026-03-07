@@ -1,5 +1,6 @@
 using EconSim.Core.Actors;
 using EconSim.Core.Economy;
+using EconSim.Core.Religious;
 using EconSim.Core.Transport;
 
 namespace EconSim.Core.Simulation
@@ -53,5 +54,10 @@ namespace EconSim.Core.Simulation
         /// Actor and peerage state (titled characters, feudal hierarchy).
         /// </summary>
         public ActorState Actors { get; set; }
+
+        /// <summary>
+        /// Religion state (adherence, parishes, dioceses, archdioceses).
+        /// </summary>
+        public ReligionState Religion { get; set; }
     }
 }
