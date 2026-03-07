@@ -9,11 +9,12 @@ The simulation runs on a **fixed-timestep tick loop** where each tick represents
 one day. Five systems execute in order every tick (some only on certain days).
 The registration order is:
 
-1. **EconomySystem** — daily — production, facility processing, consumption, satisfaction
-2. **FiscalSystem** — daily — taxation, minting, trade, granary, relief
-3. **InterRealmTradeSystem** — daily — deficit scanning, price discovery
-4. **PopulationSystem** — every 30 days — births, deaths, migration
-5. **SpoilageSystem** — every 30 days — monthly decay of perishable stockpiles
+1. **ProductionSystem** — daily — extraction, facility processing
+2. **ConsumptionSystem** — daily — consumption, satisfaction, demand computation
+3. **FiscalSystem** — daily — taxation, minting, trade, granary, relief
+4. **InterRealmTradeSystem** — daily — deficit scanning, price discovery
+5. **PopulationSystem** — every 30 days — births, deaths, migration
+6. **SpoilageSystem** — every 30 days — monthly decay of perishable stockpiles
 
 ## Tick Loop
 
@@ -236,9 +237,9 @@ grapes only grow in warm climates, wheat fails in extreme cold or heat, and
 livestock tolerates a wider range. Counties with cells outside the temperature
 range have zero productivity for that good, forcing trade dependence.
 
-## Initialization (EconomySystem)
+## Initialization (EconomyInitializer)
 
-When the simulation starts, EconomySystem sets up all economic state:
+When the simulation starts, EconomyInitializer sets up all economic state:
 
     For each county on the map:
         Set initial population from map generation data
@@ -319,10 +320,13 @@ Before the first tick, a road network is generated:
         The top 20% (by usage weight) become "road" tier
         Roads reduce travel cost for future pathfinding
 
-## EconomySystem (Daily)
+## ProductionSystem + ConsumptionSystem (Daily)
 
-This system handles production, facility processing, and consumption for every
-county.
+These two systems run in sequence every tick, handling production then
+consumption for every county. They were split from a single monolithic system
+so each phase can be modified independently. ProductionSystem writes Stock[]
+and Production[]; ConsumptionSystem reads post-production stock and writes
+Consumption[], UnmetNeed[], and satisfaction metrics.
 
 ### Sabbath (Rest Day)
 
@@ -525,7 +529,7 @@ Two satisfaction metrics are computed as 30-day exponential moving averages
 
 ## FiscalSystem (Daily)
 
-Runs after EconomySystem. Handles taxation, minting, trade, granaries, and
+Runs after ConsumptionSystem. Handles taxation, minting, trade, granaries, and
 emergency relief across the feudal hierarchy (county → province → realm).
 
 ### Phase 1: County Admin Consumption
@@ -689,7 +693,7 @@ salt only grows in salt flats, coastal marshes, and wetlands; spices require
 tropical heat (≥18°C); fur requires cold climates (≤12°C). On many map seeds,
 large regions have no access to one or more of these goods.
 
-**Initialization** (during EconomySystem setup):
+**Initialization** (during EconomyInitializer setup):
 
     Create VM state with per-good configuration:
 
@@ -864,7 +868,7 @@ per market zone, creating geographic price variation.
         For each eligible good:
             MarketPrices[good] = Σ(market_pop × market_price) / Σ(market_pop)
 
-    EconomySystem reads PerMarketPrices for local production throttle decisions
+    ProductionSystem reads PerMarketPrices for local production throttle decisions
     (extraction and facility throughput respond to the county's own market price,
     not the global average). FiscalSystem's cross-market trade pass uses the
     global average price for pool fill/sell math.
@@ -916,7 +920,7 @@ BasicSatisfaction.
 
 Applies monthly decay to perishable stockpiles. "Perishable" means any good
 with a spoilage rate and no target stock (durables handle their own wear in
-EconomySystem). The monthly retention factor is (1 - daily_spoilage)^30.
+ConsumptionSystem). The monthly retention factor is (1 - daily_spoilage)^30.
 
     For each perishable good (wheat, barley, timber, wool, pork, milk, fish,
                               sausage, bacon, cheese, salted fish, stockfish,
