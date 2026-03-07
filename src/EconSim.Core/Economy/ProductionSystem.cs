@@ -156,7 +156,11 @@ namespace EconSim.Core.Economy
                                 ce.FacilityInputNeed[(int)def.Inputs[ii].Good] += scale * def.Inputs[ii].Amount;
                         }
 
-                        // Pass 2: Remaining facilities — signal input demand based on downstream need
+                        // Pass 2: Remaining facilities — signal input demand
+                        // Durable-chain intermediates: cap by downstream need (no material check
+                        // to avoid chicken-and-egg deadlock with demand-driven extraction).
+                        // Commodity facilities: cap by material availability so secondary inputs
+                        // (e.g. salt) aren't over-claimed when the primary input is scarce.
                         for (int fi = 0; fi < indices.Count; fi++)
                         {
                             var def = econ.Facilities[indices[fi]].Def;
@@ -167,11 +171,25 @@ namespace EconSim.Core.Economy
                             float maxByLabor = pop * def.MaxLaborFraction * def.OutputAmount;
                             float throughput = maxByLabor;
 
-                            // Demand planning: cap by downstream need, NOT current stock
                             if (Goods.IsDurableInput[output])
                             {
+                                // Durable-chain intermediates: cap by downstream need only.
+                                // Do NOT apply material constraint — these must signal demand
+                                // even with zero stock so extraction can bootstrap.
                                 float downstreamDemand = ce.FacilityInputNeed[output];
                                 throughput = Math.Min(throughput, downstreamDemand);
+                            }
+                            else
+                            {
+                                // Commodity facilities: cap by available stock so secondary
+                                // inputs (e.g. salt) aren't over-claimed when the primary
+                                // input is scarce.
+                                for (int ii = 0; ii < def.Inputs.Length; ii++)
+                                {
+                                    float avail = ce.Stock[(int)def.Inputs[ii].Good] / def.Inputs[ii].Amount * def.OutputAmount;
+                                    if (avail < throughput) throughput = avail;
+                                }
+                                if (throughput < 0f) throughput = 0f;
                             }
 
                             float scale = throughput / def.OutputAmount;

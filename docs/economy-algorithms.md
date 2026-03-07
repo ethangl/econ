@@ -396,11 +396,17 @@ governs demand-driven extraction and trade retain calculations.
             For each facility that produces a non-durable good:
                 max_by_labor = population × max_labor_fraction × output_amount
                 If this good is a durable-chain input (iron, charcoal, etc.):
-                    Throughput is capped by downstream demand:
+                    Throughput is capped by downstream demand only:
                         target_stock = downstream_facility_demand × 7 days buffer
                         throughput = min(max_by_labor, max(0, target_stock - current_stock))
+                    (No material constraint — must signal demand even with zero
+                    stock so extraction can bootstrap the chain)
                 Else (commodity — sausage, bread, ale, etc.):
-                    Throughput = max labor capacity (no stock cap)
+                    Throughput is capped by material availability:
+                        For each input, compute how much output current stock supports
+                        throughput = min(max_by_labor, min across all inputs)
+                    (Prevents over-claiming secondary inputs like salt when the
+                    primary input is scarce)
                 For each input good of this facility:
                     Accumulate input demand proportional to throughput
 
@@ -716,7 +722,7 @@ large regions have no access to one or more of these goods.
     | ------ | ------------- | --------------- | ----------- | ------------ |
     | Salt   | 5,000 kg      | +50 kg/day      | 10,000 kg   | 0.10 Cr/kg   |
     | Spices | 10,000 kg     | +500 kg/day     | 25,000 kg   | 2.00 Cr/kg   |
-    | Fur    | 5,000 units   | -500 units/day  | 10,000 units| 4.00 Cr/unit |
+    | Fur    | 5,000 units   | -250 units/day  | 10,000 units| 4.00 Cr/unit |
 
     Salt/spices: seed stock at target, prices at base (supply goods)
     Fur: start at zero stock (demand-only — foreign consumption absorbs exports)
@@ -976,9 +982,9 @@ population can work there).
 | Spice Blender   | 4.0 wine + 0.2 spices        | 4.0 sp.wine       | 5%        |
 | Amber Carver    | 1.0 amber                    | 2 a.jewelry       | 2%        |
 | Silk Weaver     | 6.0 silk                     | 2 silk outfits    | 2.5%      |
-| Tanner          | 6.0 hides                    | 2.0 leather       | 10%       |
-| Cobbler         | 4.0 leather                  | 2 pair shoes      | 8%        |
-| Linen Weaver    | 8.0 flax                     | 2 linen outfits   | 2.5%      |
+| Tanner          | 3.0 hides                    | 3.0 leather       | 15%       |
+| Cobbler         | 4.0 leather                  | 4 pair shoes      | 12%       |
+| Linen Weaver    | 8.0 flax                     | 2 linen outfits   | 5%        |
 
 Durable outputs (pottery, furniture, tools, wool clothes, linen clothes, shoes,
 gold jewelry, silver jewelry, amber jewelry, silk clothes) are in units; all

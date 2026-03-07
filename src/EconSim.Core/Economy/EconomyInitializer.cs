@@ -405,7 +405,7 @@ namespace EconSim.Core.Economy
             int furIdx = (int)GoodType.Fur;
             vm.TradedGoods.Add(furIdx);
             vm.TargetStock[furIdx] = 5000f * volumeScale;
-            vm.ReplenishRate[furIdx] = -500f * volumeScale;   // foreign consumption drain
+            vm.ReplenishRate[furIdx] = -250f * volumeScale;   // foreign consumption drain
             vm.MaxStock[furIdx] = 10000f * volumeScale;
             vm.Stock[furIdx] = 0f;              // starts empty — demand only
             vm.SellPrice[furIdx] = Goods.BasePrice[furIdx];

@@ -52,15 +52,11 @@ namespace EconSim.Core.Economy
         /// <summary>Max fraction of county pop that can work in this industry.</summary>
         public readonly float MaxLaborFraction;
 
-        /// <summary>Minimum daily output (cold start / idle production).</summary>
-        public readonly float BaselineOutput;
-
         public FacilityDef(
             FacilityType type, string name,
             RecipeInput[] inputs,
             GoodType outputGood, float outputAmount,
-            float maxLaborFraction,
-            float baselineOutput)
+            float maxLaborFraction)
         {
             Type = type;
             Name = name;
@@ -68,7 +64,6 @@ namespace EconSim.Core.Economy
             OutputGood = outputGood;
             OutputAmount = outputAmount;
             MaxLaborFraction = maxLaborFraction;
-            BaselineOutput = baselineOutput;
         }
     }
 
@@ -83,76 +78,76 @@ namespace EconSim.Core.Economy
             {
                 new FacilityDef(FacilityType.Kiln,    "kiln",
                     new[] { new RecipeInput(GoodType.Clay, 4.0f) },
-                    GoodType.Pottery, 2.0f, 0.017f, 2.0f),
+                    GoodType.Pottery, 2.0f, 0.017f),
                 new FacilityDef(FacilityType.Carpenter, "carpenter",
                     new[] { new RecipeInput(GoodType.Timber, 30.0f) },
-                    GoodType.Furniture, 2.0f, 0.10f, 1.0f),
+                    GoodType.Furniture, 2.0f, 0.10f),
                 new FacilityDef(FacilityType.Smelter, "smelter",
                     new[] { new RecipeInput(GoodType.IronOre, 6.0f), new RecipeInput(GoodType.Charcoal, 0.8f) },
-                    GoodType.Iron, 4.0f, 0.05f, 2.0f),
+                    GoodType.Iron, 4.0f, 0.05f),
                 new FacilityDef(FacilityType.Smithy,  "smithy",
                     new[] { new RecipeInput(GoodType.Iron, 10.0f), new RecipeInput(GoodType.Charcoal, 1.0f) },
-                    GoodType.Tools, 2.0f, 0.05f, 0.5f),
+                    GoodType.Tools, 2.0f, 0.05f),
                 new FacilityDef(FacilityType.CharcoalBurner, "charcoalBurner",
                     new[] { new RecipeInput(GoodType.Timber, 10.0f) },
-                    GoodType.Charcoal, 4.0f, 0.10f, 4.0f),
+                    GoodType.Charcoal, 4.0f, 0.10f),
                 new FacilityDef(FacilityType.Weaver, "weaver",
                     new[] { new RecipeInput(GoodType.Wool, 8.0f) },
-                    GoodType.WoolClothes, 2.0f, 0.05f, 1.334f),
+                    GoodType.WoolClothes, 2.0f, 0.05f),
                 new FacilityDef(FacilityType.Butcher, "butcher",
                     new[] { new RecipeInput(GoodType.Pork, 2.0f), new RecipeInput(GoodType.Salt, 0.4f) },
-                    GoodType.Sausage, 6.0f, 0.15f, 6.0f),
+                    GoodType.Sausage, 6.0f, 0.15f),
                 new FacilityDef(FacilityType.Smokehouse, "smokehouse",
                     new[] { new RecipeInput(GoodType.Pork, 4.0f) },
-                    GoodType.Bacon, 6.0f, 0.15f, 6.0f),
+                    GoodType.Bacon, 6.0f, 0.15f),
                 new FacilityDef(FacilityType.Cheesemaker, "cheesemaker",
                     new[] { new RecipeInput(GoodType.Milk, 6.0f), new RecipeInput(GoodType.Salt, 0.6f) },
-                    GoodType.Cheese, 3.0f, 0.15f, 3.0f),
+                    GoodType.Cheese, 3.0f, 0.15f),
                 new FacilityDef(FacilityType.Salter, "salter",
                     new[] { new RecipeInput(GoodType.Fish, 2.0f), new RecipeInput(GoodType.Salt, 1.0f) },
-                    GoodType.SaltedFish, 6.0f, 0.15f, 6.0f),
+                    GoodType.SaltedFish, 6.0f, 0.15f),
                 new FacilityDef(FacilityType.DryingRack, "dryingRack",
                     new[] { new RecipeInput(GoodType.Fish, 4.0f) },
-                    GoodType.Stockfish, 3.0f, 0.10f, 3.0f),
+                    GoodType.Stockfish, 3.0f, 0.10f),
                 new FacilityDef(FacilityType.Bakery, "bakery",
                     new[] { new RecipeInput(GoodType.Wheat, 8.0f), new RecipeInput(GoodType.Salt, 0.12f) },
-                    GoodType.Bread, 11.2f, 0.15f, 11.2f),
+                    GoodType.Bread, 11.2f, 0.15f),
                 new FacilityDef(FacilityType.Brewery, "brewery",
                     new[] { new RecipeInput(GoodType.Barley, 4.0f) },
-                    GoodType.Ale, 8.0f, 0.15f, 8.0f),
+                    GoodType.Ale, 8.0f, 0.15f),
                 new FacilityDef(FacilityType.GoldJeweler, "goldJeweler",
                     new[] { new RecipeInput(GoodType.Gold, 0.02f) },
-                    GoodType.GoldJewelry, 2.0f, 0.02f, 0.2f),
+                    GoodType.GoldJewelry, 2.0f, 0.02f),
                 new FacilityDef(FacilityType.SilverJeweler, "silverJeweler",
                     new[] { new RecipeInput(GoodType.Silver, 0.1f) },
-                    GoodType.SilverJewelry, 2.0f, 0.02f, 0.2f),
+                    GoodType.SilverJewelry, 2.0f, 0.02f),
                 new FacilityDef(FacilityType.Winery, "winery",
                     new[] { new RecipeInput(GoodType.Grapes, 4.0f) },
-                    GoodType.Wine, 3.0f, 0.10f, 3.0f),
+                    GoodType.Wine, 3.0f, 0.10f),
                 new FacilityDef(FacilityType.Meadery, "meadery",
                     new[] { new RecipeInput(GoodType.Honey, 4.0f) },
-                    GoodType.Mead, 4.0f, 0.10f, 4.0f),
+                    GoodType.Mead, 4.0f, 0.10f),
                 new FacilityDef(FacilityType.Churn, "churn",
                     new[] { new RecipeInput(GoodType.Milk, 6.0f) },
-                    GoodType.Butter, 2.0f, 0.10f, 2.0f),
+                    GoodType.Butter, 2.0f, 0.10f),
                 new FacilityDef(FacilityType.SpiceBlender, "spiceBlender",
                     new[] { new RecipeInput(GoodType.Wine, 4.0f), new RecipeInput(GoodType.Spices, 0.2f) },
-                    GoodType.SpicedWine, 4.0f, 0.05f, 2.0f),
+                    GoodType.SpicedWine, 4.0f, 0.05f),
                 new FacilityDef(FacilityType.AmberCarver, "amberCarver",
                     new[] { new RecipeInput(GoodType.Amber, 1.0f) },
-                    GoodType.AmberJewelry, 2.0f, 0.02f, 0.2f),
+                    GoodType.AmberJewelry, 2.0f, 0.02f),
                 new FacilityDef(FacilityType.SilkWeaver, "silkWeaver",
                     new[] { new RecipeInput(GoodType.Silk, 6.0f) },
-                    GoodType.SilkClothes, 2.0f, 0.025f, 1.0f),
+                    GoodType.SilkClothes, 2.0f, 0.025f),
                 new FacilityDef(FacilityType.Tanner, "tanner",
-                    new[] { new RecipeInput(GoodType.Hides, 6.0f) },
-                    GoodType.Leather, 2.0f, 0.10f, 2.0f),
+                    new[] { new RecipeInput(GoodType.Hides, 3.0f) },
+                    GoodType.Leather, 3.0f, 0.15f),
                 new FacilityDef(FacilityType.Cobbler, "cobbler",
                     new[] { new RecipeInput(GoodType.Leather, 4.0f) },
-                    GoodType.Shoes, 2.0f, 0.08f, 0.5f),
+                    GoodType.Shoes, 4.0f, 0.12f),
                 new FacilityDef(FacilityType.LinenWeaver, "linenWeaver",
                     new[] { new RecipeInput(GoodType.Flax, 8.0f) },
-                    GoodType.LinenClothes, 2.0f, 0.025f, 1.0f),
+                    GoodType.LinenClothes, 2.0f, 0.05f),
             };
 
             Count = Defs.Length;
