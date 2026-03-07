@@ -875,6 +875,16 @@ namespace EconSim.Core.Economy
             vm.SellPrice[furIdx] = Goods.BasePrice[furIdx];
             vm.BuyPrice[furIdx] = Goods.BasePrice[furIdx] * 0.75f / distancePriceFactor;
 
+            // Silk: scarce luxury import (Silk Road)
+            int silkIdx = (int)GoodType.Silk;
+            vm.TradedGoods.Add(silkIdx);
+            vm.TargetStock[silkIdx] = 8000f * volumeScale;
+            vm.ReplenishRate[silkIdx] = 300f * volumeScale;
+            vm.MaxStock[silkIdx] = 20000f * volumeScale;
+            vm.Stock[silkIdx] = vm.TargetStock[silkIdx];
+            vm.SellPrice[silkIdx] = Goods.BasePrice[silkIdx] * distancePriceFactor;
+            vm.BuyPrice[silkIdx] = Goods.BasePrice[silkIdx] * 0.75f;
+
             vm.OverseasSurcharge = trade?.OverseasSurcharge ?? 0.02f;
 
             // Precompute per-county port cost via Dijkstra to nearest coast cell

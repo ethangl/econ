@@ -23,6 +23,9 @@ namespace EconSim.Core.Economy
         SpiceBlender = 18,
         AmberCarver = 19,
         SilkWeaver = 20,
+        Tanner = 21,
+        Cobbler = 22,
+        LinenWeaver = 23,
     }
 
     public readonly struct RecipeInput
@@ -100,7 +103,7 @@ namespace EconSim.Core.Economy
                     GoodType.Charcoal, 2.0f, 1, 0.10f, 2.0f),
                 new FacilityDef(FacilityType.Weaver, "weaver",
                     new[] { new RecipeInput(GoodType.Wool, 4.0f) },
-                    GoodType.Clothes, 1.0f, 2, 0.10f, 0.667f),
+                    GoodType.WoolClothes, 1.0f, 2, 0.10f, 0.667f),
                 new FacilityDef(FacilityType.Butcher, "butcher",
                     new[] { new RecipeInput(GoodType.Pork, 1.0f), new RecipeInput(GoodType.Salt, 0.2f) },
                     GoodType.Sausage, 3.0f, 1, 0.15f, 3.0f),
@@ -146,6 +149,15 @@ namespace EconSim.Core.Economy
                 new FacilityDef(FacilityType.SilkWeaver, "silkWeaver",
                     new[] { new RecipeInput(GoodType.Silk, 3.0f) },
                     GoodType.SilkClothes, 1.0f, 2, 0.05f, 0.5f),
+                new FacilityDef(FacilityType.Tanner, "tanner",
+                    new[] { new RecipeInput(GoodType.Hides, 3.0f) },
+                    GoodType.Leather, 1.0f, 1, 0.10f, 1.0f),
+                new FacilityDef(FacilityType.Cobbler, "cobbler",
+                    new[] { new RecipeInput(GoodType.Leather, 2.0f) },
+                    GoodType.Shoes, 1.0f, 1, 0.08f, 0.25f),
+                new FacilityDef(FacilityType.LinenWeaver, "linenWeaver",
+                    new[] { new RecipeInput(GoodType.Flax, 4.0f) },
+                    GoodType.LinenClothes, 1.0f, 2, 0.05f, 0.5f),
             };
 
             Count = Defs.Length;

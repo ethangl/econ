@@ -4,7 +4,7 @@ namespace EconSim.Core.Economy
 {
     public enum GoodCategory { Raw, Refined, Finished }
     public enum NeedCategory { None, Staple, Basic, Comfort, Luxury }
-    public enum ComfortCategory { None, Alcohol, PreparedFood, Pottery, Furniture, Tools, Clothing, Jewelry, Pantry }
+    public enum ComfortCategory { None, Alcohol, PreparedFood, Pottery, Furniture, Tools, Clothing, Jewelry, Pantry, Footwear }
 
     public readonly struct ComfortCategoryDef
     {
