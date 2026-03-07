@@ -10,10 +10,20 @@ namespace MapGen.Core
         public static void Compute(ClimateField climate, ElevationField elevation, MapGenConfig config, WorldMetadata world)
         {
             var mesh = climate.Mesh;
+            float oceanAnomaly = config.Tectonics?.OceanCurrentAnomalyC ?? 0f;
             ParallelOps.For(0, mesh.CellCount, i =>
             {
                 float latitude = CellLatitude(mesh, i, world);
                 float seaLevelTemp = SeaLevelTemperature(latitude, config);
+
+                if (oceanAnomaly != 0f)
+                {
+                    float elevMeters = elevation[i] > 0f ? elevation[i] : 0f;
+                    // Full effect below 200m, linear fade to zero at 2000m
+                    float elevFade = 1f - Math.Min(1f, Math.Max(0f, elevMeters - 200f) / 1800f);
+                    seaLevelTemp += oceanAnomaly * elevFade;
+                }
+
                 float elevationMeters = elevation[i] > 0f ? elevation[i] : 0f;
                 float lapseCorrection = -config.LapseRateCPerKm * elevationMeters / 1000f;
                 climate.TemperatureC[i] = seaLevelTemp + lapseCorrection;

@@ -278,6 +278,13 @@
     align-items: center;
 }
 
+.startup-overlay.site-review-mode {
+    background-color: rgba(0, 0, 0, 0);
+    justify-content: flex-end;
+    align-items: flex-end;
+    padding: 20px;
+}
+
 .startup-modal {
     width: 320px;
     padding: 24px;
@@ -328,4 +335,64 @@
     font-size: 13px;
     color: rgb(170, 170, 180);
     -unity-text-align: middle-center;
+}
+
+/* Site review mode */
+.site-review-fields {
+    display: none;
+    width: 100%;
+}
+
+.site-review-header {
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.site-review-title {
+    font-size: 18px;
+    -unity-font-definition: url("../../Fonts/EBGaramond-Bold.ttf");
+    color: rgb(220, 220, 230);
+    -unity-text-align: middle-center;
+    margin: 0 8px;
+}
+
+.site-nav-button {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    background-color: rgba(60, 60, 70, 0.9);
+    color: rgb(200, 200, 210);
+    border-width: 1px;
+    border-color: rgba(100, 100, 120, 0.6);
+    border-radius: 4px;
+    padding: 0;
+}
+
+.site-nav-button:hover {
+    background-color: rgba(80, 80, 95, 0.9);
+    border-color: rgba(140, 140, 160, 0.8);
+}
+
+.site-nav-button:disabled {
+    opacity: 0.3;
+}
+
+.site-review-row {
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 3px 0;
+}
+
+.site-review-label {
+    font-size: 14px;
+    color: rgb(140, 140, 150);
+}
+
+.site-review-value {
+    font-size: 14px;
+    -unity-font-definition: url("../../Fonts/EBGaramond-Bold.ttf");
+    color: rgb(220, 220, 230);
 }

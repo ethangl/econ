@@ -6,6 +6,12 @@ namespace MapGen.Core
     public sealed class HeightmapDslExecutionContext
     {
         public float? DepthRemapExponentOverride;
+        /// <summary>Tectonic hints from globe site selection. Null = no bias.</summary>
+        public TectonicHints Tectonics;
+        /// <summary>Tracks how many feature ops (Hill/Range) have been biased so far.
+        /// Incremented per DSL line that uses tectonic bias. Used to diminish bias
+        /// on secondary features so they spread naturally.</summary>
+        internal int TectonicFeatureIndex;
     }
 
     /// <summary>
@@ -92,13 +98,13 @@ namespace MapGen.Core
             switch (op)
             {
                 case "hill":
-                    return ExecuteBlob(field, parts, positive: true, rng, op);
+                    return ExecuteBlob(field, parts, positive: true, rng, op, context);
                 case "pit":
-                    return ExecuteBlob(field, parts, positive: false, rng, op);
+                    return ExecuteBlob(field, parts, positive: false, rng, op, context);
                 case "range":
-                    return ExecuteLinear(field, parts, positive: true, rng, op);
+                    return ExecuteLinear(field, parts, positive: true, rng, op, context);
                 case "trough":
-                    return ExecuteLinear(field, parts, positive: false, rng, op);
+                    return ExecuteLinear(field, parts, positive: false, rng, op, context);
                 case "mask":
                     ExecuteMask(field, parts);
                     return new OpTrace(op);
@@ -139,7 +145,7 @@ namespace MapGen.Core
                 context.DepthRemapExponentOverride = exponent;
         }
 
-        static OpTrace ExecuteBlob(ElevationField field, string[] parts, bool positive, Random rng, string operation)
+        static OpTrace ExecuteBlob(ElevationField field, string[] parts, bool positive, Random rng, string operation, HeightmapDslExecutionContext context)
         {
             if (parts.Length < 5)
                 throw new ArgumentException("Blob operation requires: count height_m x% y%.");
@@ -154,6 +160,14 @@ namespace MapGen.Core
             float xMax = xMaxPercent / 100f;
             float yMin = yMinPercent / 100f;
             float yMax = yMaxPercent / 100f;
+
+            // Apply tectonic magnitude scaling (positive features only — hills/ranges).
+            if (positive && context?.Tectonics != null)
+            {
+                float conv = Math.Min(context.Tectonics.ConvergenceMagnitude, 1.5f);
+                heightMeters *= 1f + (conv - 0.5f) * 0.4f;
+            }
+
             // DSL x/y bounds are hard placement bounds for blob seeds. Terrain spread may extend beyond them.
             var trace = new OpTrace(operation)
             {
@@ -163,10 +177,33 @@ namespace MapGen.Core
                 RequestedYMaxPercent = yMaxPercent
             };
 
+            // Compute tectonic placement bias (diminishes per feature op).
+            bool useBias = positive && context?.Tectonics != null;
+            float biasFactor = 0f;
+            if (useBias)
+            {
+                float baseBias = Math.Min(context.Tectonics.ConvergenceMagnitude, 1f) * 0.6f;
+                biasFactor = baseBias * (float)Math.Pow(0.5, context.TectonicFeatureIndex);
+            }
+
             for (int i = 0; i < count; i++)
             {
-                float x = RandInRange(xMin, xMax, rng);
-                float y = RandInRange(yMin, yMax, rng);
+                float x, y;
+                if (useBias)
+                {
+                    float midX = (xMin + xMax) * 0.5f;
+                    float midY = (yMin + yMax) * 0.5f;
+                    float modeX = Lerp(midX, context.Tectonics.CoastDirectionX, biasFactor);
+                    float modeY = Lerp(midY, context.Tectonics.CoastDirectionY, biasFactor);
+                    x = TriangularSample(xMin, xMax, modeX, rng);
+                    y = TriangularSample(yMin, yMax, modeY, rng);
+                }
+                else
+                {
+                    x = RandInRange(xMin, xMax, rng);
+                    y = RandInRange(yMin, yMax, rng);
+                }
+
                 bool placed;
                 float acceptedX;
                 float acceptedY;
@@ -209,10 +246,13 @@ namespace MapGen.Core
                 }
             }
 
+            if (useBias)
+                context.TectonicFeatureIndex++;
+
             return trace;
         }
 
-        static OpTrace ExecuteLinear(ElevationField field, string[] parts, bool positive, Random rng, string operation)
+        static OpTrace ExecuteLinear(ElevationField field, string[] parts, bool positive, Random rng, string operation, HeightmapDslExecutionContext context)
         {
             if (parts.Length < 5)
                 throw new ArgumentException("Linear operation requires: count height_m x% y%.");
@@ -228,6 +268,13 @@ namespace MapGen.Core
             float yMin = yMinPercent / 100f;
             float yMax = yMaxPercent / 100f;
 
+            // Apply tectonic magnitude scaling (positive features only — ranges).
+            if (positive && context?.Tectonics != null)
+            {
+                float conv = Math.Min(context.Tectonics.ConvergenceMagnitude, 1.5f);
+                heightMeters *= 1f + (conv - 0.5f) * 0.4f;
+            }
+
             float maxDistFraction = positive ? 3f : 2f;
             float mapW = field.Mesh.Width;
             float mapH = field.Mesh.Height;
@@ -242,10 +289,32 @@ namespace MapGen.Core
                 RequestedYMaxPercent = yMaxPercent
             };
 
+            // Compute tectonic placement bias (diminishes per feature op).
+            bool useBias = positive && context?.Tectonics != null;
+            float biasFactor = 0f;
+            if (useBias)
+            {
+                float baseBias = Math.Min(context.Tectonics.ConvergenceMagnitude, 1f) * 0.6f;
+                biasFactor = baseBias * (float)Math.Pow(0.5, context.TectonicFeatureIndex);
+            }
+
             for (int i = 0; i < count; i++)
             {
-                float x1 = RandInRange(xMin, xMax, rng);
-                float y1 = RandInRange(yMin, yMax, rng);
+                float x1, y1;
+                if (useBias)
+                {
+                    float midX = (xMin + xMax) * 0.5f;
+                    float midY = (yMin + yMax) * 0.5f;
+                    float modeX = Lerp(midX, context.Tectonics.CoastDirectionX, biasFactor);
+                    float modeY = Lerp(midY, context.Tectonics.CoastDirectionY, biasFactor);
+                    x1 = TriangularSample(xMin, xMax, modeX, rng);
+                    y1 = TriangularSample(yMin, yMax, modeY, rng);
+                }
+                else
+                {
+                    x1 = RandInRange(xMin, xMax, rng);
+                    y1 = RandInRange(yMin, yMax, rng);
+                }
 
                 if (!positive)
                 {
@@ -270,6 +339,9 @@ namespace MapGen.Core
                 else
                     HeightmapTerrainOps.Trough(field, x1, y1, x2, y2, heightMeters, rng);
             }
+
+            if (useBias)
+                context.TectonicFeatureIndex++;
 
             return trace;
         }
@@ -488,6 +560,27 @@ namespace MapGen.Core
             if (max <= min)
                 return min;
             return min + (float)rng.NextDouble() * (max - min);
+        }
+
+        static float Lerp(float a, float b, float t)
+        {
+            return a + (b - a) * t;
+        }
+
+        /// <summary>
+        /// Sample from a triangular distribution within [min, max] with peak at mode.
+        /// </summary>
+        static float TriangularSample(float min, float max, float mode, Random rng)
+        {
+            mode = Math.Max(min, Math.Min(max, mode));
+            float u = (float)rng.NextDouble();
+            float range = max - min;
+            if (range <= 0f) return min;
+            float f = (mode - min) / range;
+            if (u < f)
+                return min + (float)Math.Sqrt(u * range * (mode - min));
+            else
+                return max - (float)Math.Sqrt((1f - u) * range * (max - mode));
         }
 
         static float ComputeEdgeLandRatio(ElevationField field)

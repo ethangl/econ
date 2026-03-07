@@ -10,6 +10,7 @@ using EconSim.Core.Simulation;
 using EconSim.Renderer;
 using EconSim.Camera;
 using MapGen.Core;
+using WorldGen.Core;
 using Profiler = EconSim.Core.Common.StartupProfiler;
 
 namespace EconSim.Core
@@ -46,13 +47,40 @@ namespace EconSim.Core
         public static event Action OnMapReady;
 
         /// <summary>
+        /// Fired when globe generation completes with a site selected.
+        /// The startup screen should switch to site review mode.
+        /// </summary>
+        public static event Action<SiteContext> OnGlobeReady;
+
+        /// <summary>
+        /// Fired when the active site changes via cycling (Prev/Next).
+        /// Args: site, currentIndex (0-based), totalCount.
+        /// </summary>
+        public static event Action<SiteContext, int, int> OnSiteChanged;
+
+        /// <summary>
         /// True after the map has been loaded and simulation initialized.
         /// </summary>
         public static bool IsMapReady { get; private set; }
         public static bool HasLastMapCache => File.Exists(GetLastMapPayloadPath());
 
+        /// <summary>
+        /// The site context from the most recent globe generation, or null.
+        /// </summary>
+        public SiteContext CurrentSite { get; private set; }
+
+        /// <summary>Number of candidate sites from last globe generation.</summary>
+        public int SiteCount => _sites?.Count ?? 0;
+
+        /// <summary>Current site index (0-based) within the candidates list.</summary>
+        public int CurrentSiteIndex { get; private set; }
+
+        private System.Collections.Generic.List<SiteContext> _sites;
         private ISimulation _simulation;
         private Coroutine deferredStartupWorkRoutine;
+        private int _globeSeed;
+        private GameObject _sphereViewObj;
+        private GlobalTradeContext _pendingTradeContext;
 
         public static GameManager Instance { get; private set; }
 
@@ -103,6 +131,234 @@ namespace EconSim.Core
         }
 
         /// <summary>
+        /// Generate a sphere (globe) using the WorldGen pipeline.
+        /// Does NOT fire OnMapReady — fires OnGlobeReady instead so the startup
+        /// screen can switch to site review mode.
+        /// </summary>
+        public void GenerateGlobe(int seed, float latitude = 50f)
+        {
+            _globeSeed = seed;
+
+            // Map latitude (degrees from equator) to site selection band centered on it
+            float latBandHalf = 15f;
+            var config = new WorldGenConfig
+            {
+                Seed = seed,
+                SiteLatitudeMin = Mathf.Max(0f, latitude - latBandHalf),
+                SiteLatitudeMax = latitude + latBandHalf,
+            };
+
+            Debug.Log($"WorldGen: generating globe with seed={seed}, coarse={config.CoarseCellCount}, dense={config.DenseCellCount}, radius={config.Radius}");
+
+            // Get or create SphereView (cached to survive SetActive(false))
+            if (_sphereViewObj == null)
+            {
+                _sphereViewObj = new GameObject("SphereView");
+                _sphereViewObj.AddComponent<MeshFilter>();
+                _sphereViewObj.AddComponent<MeshRenderer>();
+                _sphereViewObj.AddComponent<SphereView>();
+            }
+            _sphereViewObj.SetActive(true);
+
+            var sphereView = _sphereViewObj.GetComponent<SphereView>();
+            sphereView.Generate(config);
+
+            // Store site candidates
+            _sites = sphereView.Sites ?? new System.Collections.Generic.List<SiteContext>();
+            CurrentSiteIndex = 0;
+            CurrentSite = _sites.Count > 0 ? _sites[0] : null;
+
+            // Hide flat map if visible
+            if (mapView != null)
+                mapView.gameObject.SetActive(false);
+
+            // Switch camera: disable MapCamera, enable OrbitCamera
+            if (mapCamera != null)
+                mapCamera.enabled = false;
+
+            var cam = UnityEngine.Camera.main;
+            if (cam != null)
+            {
+                var orbitCam = cam.GetComponent<EconSim.Camera.OrbitCamera>();
+                if (orbitCam == null)
+                    orbitCam = cam.gameObject.AddComponent<EconSim.Camera.OrbitCamera>();
+                orbitCam.enabled = true;
+                orbitCam.Configure(Vector3.zero, sphereView.Radius);
+            }
+
+            // Signal globe ready (startup screen stays visible in review mode)
+            OnGlobeReady?.Invoke(CurrentSite);
+        }
+
+        /// <summary>
+        /// Generate a flat map from the currently selected globe site.
+        /// Maps SiteType → HeightmapTemplateType, passes latitude through.
+        /// </summary>
+        public void GenerateMapFromSite()
+        {
+            if (CurrentSite == null)
+            {
+                Debug.LogWarning("GenerateMapFromSite: no site selected");
+                return;
+            }
+
+            // Hide globe
+            if (_sphereViewObj != null)
+                _sphereViewObj.SetActive(false);
+
+            // Re-enable flat map and camera
+            if (mapView != null)
+                mapView.gameObject.SetActive(true);
+            if (mapCamera != null)
+                mapCamera.enabled = true;
+
+            var cam = UnityEngine.Camera.main;
+            if (cam != null)
+            {
+                var orbitCam = cam.GetComponent<EconSim.Camera.OrbitCamera>();
+                if (orbitCam != null)
+                    orbitCam.enabled = false;
+
+                // Reset clip planes from globe-scale back to map-scale defaults
+                cam.nearClipPlane = 0.3f;
+                cam.farClipPlane = 5000f;
+            }
+
+            _pendingTradeContext = BuildGlobalTradeContext(CurrentSite);
+
+            var config = new MapGenConfig
+            {
+                Seed = _globeSeed,
+                CellCount = 100000,
+                AspectRatio = 1.5f,
+                Template = MapTemplateForSiteType(CurrentSite.SiteType),
+                Latitude = CurrentSite.Latitude,
+                Longitude = CurrentSite.Longitude,
+                Tectonics = BuildTectonicHints(CurrentSite),
+            };
+
+            Debug.Log($"GenerateMapFromSite: type={CurrentSite.SiteType} → template={config.Template}, " +
+                $"lat={config.Latitude:F1}°, lng={config.Longitude:F1}°, " +
+                $"convergence={config.Tectonics.ConvergenceMagnitude:F2}, coastDir=({config.Tectonics.CoastDirectionX:F2},{config.Tectonics.CoastDirectionY:F2}), " +
+                $"boundaryHops={config.Tectonics.BoundaryDistanceHops}, oceanAnomaly={config.Tectonics.OceanCurrentAnomalyC:F1}°C, " +
+                $"moistureBias={config.Tectonics.MoistureBias:F2}, wind=({config.Tectonics.WindDirectionX:F2},{config.Tectonics.WindDirectionY:F2}), " +
+                $"continentalNeighbors={CurrentSite.ContinentalNeighbors?.Count ?? 0}");
+            GenerateMap(config);
+        }
+
+        /// <summary>
+        /// Cycle to the next or previous candidate site.
+        /// delta=+1 for next, -1 for previous.
+        /// </summary>
+        public void CycleSite(int delta)
+        {
+            if (_sites == null || _sites.Count <= 1) return;
+
+            CurrentSiteIndex = ((CurrentSiteIndex + delta) % _sites.Count + _sites.Count) % _sites.Count;
+            CurrentSite = _sites[CurrentSiteIndex];
+
+            // Update globe highlight
+            if (_sphereViewObj != null)
+            {
+                var sphereView = _sphereViewObj.GetComponent<SphereView>();
+                sphereView?.SetActiveSite(CurrentSite);
+            }
+
+            OnSiteChanged?.Invoke(CurrentSite, CurrentSiteIndex, _sites.Count);
+        }
+
+        private static HeightmapTemplateType MapTemplateForSiteType(SiteType siteType)
+        {
+            return siteType switch
+            {
+                SiteType.Volcanic => HeightmapTemplateType.Volcano,
+                SiteType.HighIsland => HeightmapTemplateType.HighIsland,
+                SiteType.LowIsland => HeightmapTemplateType.LowIsland,
+                // Archipelago sites are tectonically interesting but the template
+                // produces too little landmass for the economic sim. Use HighIsland.
+                SiteType.Archipelago => HeightmapTemplateType.HighIsland,
+                _ => HeightmapTemplateType.LowIsland,
+            };
+        }
+
+        /// <summary>
+        /// Project globe-space SiteContext into flat-map TectonicHints.
+        /// CoastDirection (3D unit vector on sphere) is projected onto local
+        /// east/north tangent-plane basis vectors at the site's lat/lng,
+        /// then mapped to [0,1] where 0.5 = center = no bias.
+        /// </summary>
+        private static TectonicHints BuildTectonicHints(SiteContext site)
+        {
+            float latRad = site.Latitude * Mathf.Deg2Rad;
+            float lngRad = site.Longitude * Mathf.Deg2Rad;
+            float sinLat = Mathf.Sin(latRad);
+            float cosLat = Mathf.Cos(latRad);
+            float sinLng = Mathf.Sin(lngRad);
+            float cosLng = Mathf.Cos(lngRad);
+
+            // Local tangent-plane basis vectors at (lat, lng) on the unit sphere.
+            // East: perpendicular to meridian, pointing east.
+            var east = new WorldGen.Core.Vec3(-sinLng, 0f, cosLng);
+            // North: tangent along meridian, pointing north.
+            var north = new WorldGen.Core.Vec3(
+                -sinLat * cosLng,
+                cosLat,
+                -sinLat * sinLng);
+
+            var cd = site.CoastDirection;
+            double coastE = cd.X * east.X + cd.Y * east.Y + cd.Z * east.Z;
+            double coastN = cd.X * north.X + cd.Y * north.Y + cd.Z * north.Z;
+
+            // Map to [0,1]: 0.5 = center (no bias), 0/1 = full bias left/right or bottom/top.
+            float coastDirX = Mathf.Clamp01(0.5f + (float)coastE * 0.5f);
+            float coastDirY = Mathf.Clamp01(0.5f + (float)coastN * 0.5f);
+
+            return new TectonicHints
+            {
+                ConvergenceMagnitude = Math.Abs(site.BoundaryConvergence),
+                CoastDirectionX = coastDirX,
+                CoastDirectionY = coastDirY,
+                BoundaryDistanceHops = site.BoundaryDistanceHops,
+                OceanCurrentAnomalyC = site.OceanCurrentAnomaly,
+                MoistureBias = site.MoistureBias,
+                WindDirectionX = site.WindDirectionEast,
+                WindDirectionY = site.WindDirectionNorth,
+            };
+        }
+
+        private static GlobalTradeContext BuildGlobalTradeContext(SiteContext site)
+        {
+            int coastDist = site.CoastDistanceHops;
+            float surcharge = Mathf.Clamp(0.01f + 0.005f * coastDist, 0.01f, 0.10f);
+
+            int neighborCount = site.ContinentalNeighbors?.Count ?? 0;
+            float volumeScale = 0.5f + 0.5f * Mathf.Min((float)neighborCount / 3f, 1f);
+
+            int nearestHops = int.MaxValue;
+            if (site.ContinentalNeighbors != null)
+            {
+                foreach (var cn in site.ContinentalNeighbors)
+                {
+                    if (cn.DistanceHops < nearestHops)
+                        nearestHops = cn.DistanceHops;
+                }
+            }
+            if (nearestHops == int.MaxValue)
+                nearestHops = 0;
+
+            Debug.Log($"GlobalTradeContext: surcharge={surcharge:F3}, volumeScale={volumeScale:F2}, " +
+                $"nearestContinent={nearestHops}hops, neighborCount={neighborCount}");
+
+            return new GlobalTradeContext
+            {
+                OverseasSurcharge = surcharge,
+                TradeVolumeScale = volumeScale,
+                NearestContinentHops = nearestHops,
+                ContinentNeighborCount = neighborCount,
+            };
+        }
+
+        /// <summary>
         /// Generate a map procedurally using the MapGen pipeline.
         /// </summary>
         public void GenerateMap(MapGenConfig config = null)
@@ -139,6 +395,11 @@ namespace EconSim.Core
 
             Profiler.Begin("WorldGenImporter Convert");
             MapData = WorldGenImporter.Convert(result, generationContext);
+            if (_pendingTradeContext != null)
+            {
+                MapData.Info.Trade = _pendingTradeContext;
+                _pendingTradeContext = null;
+            }
             Profiler.End();
             LogMapGenSummary(result, MapData);
 

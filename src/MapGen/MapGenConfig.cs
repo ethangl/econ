@@ -3,6 +3,35 @@ using System;
 namespace MapGen.Core
 {
     /// <summary>
+    /// Optional tectonic context from globe site selection.
+    /// When non-null, biases DSL feature placement and magnitude.
+    /// </summary>
+    public class TectonicHints
+    {
+        /// <summary>Convergence magnitude of nearest boundary (0-1 typical, can exceed 1).</summary>
+        public float ConvergenceMagnitude;
+
+        /// <summary>Direction toward nearest coast as normalized bias in map space.
+        /// x: 0=left edge, 1=right edge. y: 0=bottom, 1=top.
+        /// (0.5, 0.5) = center = no directional bias.</summary>
+        public float CoastDirectionX;
+        public float CoastDirectionY;
+
+        /// <summary>BFS hops to plate boundary (0=on boundary, higher=more distant).</summary>
+        public int BoundaryDistanceHops;
+
+        /// <summary>Ocean current temperature anomaly in °C. Range ~[-8, +8].</summary>
+        public float OceanCurrentAnomalyC;
+
+        /// <summary>Moisture bias. -1 dry (downwind of continent) to +1 wet (oceanic fetch).</summary>
+        public float MoistureBias;
+
+        /// <summary>Prevailing wind direction in flat-map space (X=east, Y=north). Unit vector.</summary>
+        public float WindDirectionX;
+        public float WindDirectionY;
+    }
+
+    /// <summary>
     /// Configuration for world-unit map generation.
     /// Elevation values are signed meters relative to sea level.
     /// </summary>
@@ -18,6 +47,11 @@ namespace MapGen.Core
         /// from this value and the map's height in km.
         /// </summary>
         public float Latitude = 50f;
+        /// <summary>
+        /// Longitude of the map center in degrees (-180 to 180).
+        /// Used for culture selection bias. Defaults to 0 (no bias).
+        /// </summary>
+        public float Longitude = 0f;
 
         // Elevation envelope in signed meters (sea level = 0).
         public float MaxElevationMeters = 8000f;
@@ -65,6 +99,10 @@ namespace MapGen.Core
 
         // Optional per-template tuning override used by analysis/sweeps.
         public HeightmapTemplateTuningProfile TemplateTuningOverride;
+
+        // Optional tectonic context from globe site selection.
+        // Null when generating without a globe (no impact on non-globe flows).
+        public TectonicHints Tectonics;
 
         public float EffectiveRiverThreshold
         {
@@ -117,11 +155,13 @@ namespace MapGen.Core
         const uint ElevationXor = 0xA54FF53A;
         const uint ClimateXor = 0x63D83595;
         const uint RiverXor = 0x7B9D14E1;
+        const uint GeologyXor = 0xD1B54A32;
 
         public int MeshSeed => (int)((uint)Seed ^ MeshXor);
         public int ElevationSeed => (int)((uint)Seed ^ ElevationXor);
         public int ClimateSeed => (int)((uint)Seed ^ ClimateXor);
         public int RiverSeed => (int)((uint)Seed ^ RiverXor);
+        public int GeologySeed => (int)((uint)Seed ^ GeologyXor);
 
         public void Validate()
         {

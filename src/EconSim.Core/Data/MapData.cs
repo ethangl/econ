@@ -181,6 +181,24 @@ namespace EconSim.Core.Data
         public int TotalCells;
         public int LandCells;
         public WorldInfo World;
+        public GlobalTradeContext Trade;
+    }
+
+    /// <summary>
+    /// Globe-derived context that tunes the virtual overseas market.
+    /// Null when generating without a globe (defaults apply).
+    /// </summary>
+    [Serializable]
+    public class GlobalTradeContext
+    {
+        /// <summary>Flat surcharge on overseas transport (Cr/kg). Range [0.01, 0.10].</summary>
+        public float OverseasSurcharge;
+        /// <summary>Multiplier on stock/replenish rates. Range [0.5, 1.0].</summary>
+        public float TradeVolumeScale;
+        /// <summary>BFS hops from site to nearest continent on globe.</summary>
+        public int NearestContinentHops;
+        /// <summary>Number of continental plates within BFS range.</summary>
+        public int ContinentNeighborCount;
     }
 
     [Serializable]
@@ -218,6 +236,7 @@ namespace EconSim.Core.Data
         public int SoilId;             // MapGen.Core.SoilType ordinal (0-7)
         public int VegetationTypeId;   // MapGen.Core.VegetationType ordinal (0-6)
         public float VegetationDensity; // 0..1
+        public int RockId;             // MapGen.Core.RockType ordinal (0-3)
         public float Temperature;      // Air temperature in degrees Celsius
         public float MovementCost;     // Per-cell transport difficulty (biome + slope)
         public bool IsLand;
