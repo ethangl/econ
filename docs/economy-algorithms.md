@@ -33,7 +33,7 @@ prevent stalls when running at high speed.
 
 ## Goods
 
-There are 38 goods, each belonging to a **need category**:
+There are 42 goods, each belonging to a **need category**:
 
 - **Staple** (wheat, sausage, cheese, salted fish, stockfish, ale) — pooled
   food budget, starvation if unmet
@@ -42,12 +42,12 @@ There are 38 goods, each belonging to a **need category**:
 - **Comfort** (bread, wine, mead, bacon, honey, butter, pottery, furniture,
   tools, clothes, fur, silver jewelry) — grouped into 8 substitute categories;
   drives migration pull
-- **Luxury** (gold jewelry, spices, spiced wine) — consumed only by upper
-  estates (nobility, clergy); no comfort satisfaction effect yet, but creates
-  trade-driven economic activity
+- **Luxury** (gold jewelry, amber jewelry, silk clothes, spices, spiced wine)
+  — consumed only by upper estates (nobility, clergy); no comfort satisfaction
+  effect yet, but creates trade-driven economic activity
 - **None** (timber, iron ore, gold ore, silver ore, stone, clay, wool, pork,
-  milk, fish, gold, silver, iron, charcoal, grapes) — intermediate or facility
-  inputs, no direct population demand
+  milk, fish, gold, silver, iron, charcoal, grapes, amber, silk) —
+  intermediate or facility inputs, no direct population demand
 
 Demand for each good is driven by **effective population** (see Estates below),
 not raw headcount. Staples and basics use effective population ≈ actual
@@ -71,6 +71,8 @@ Durables and durable-input goods use fixed base pricing instead.
 | Fur            | 2.0 kg      | 4.00 Cr    | 1.0 /person  |
 | Gold Jewelry   | 0.05 kg     | 15.00 Cr   | 0.2 /person  |
 | Silver Jewelry | 0.10 kg     | 8.00 Cr    | 0.3 /person  |
+| Amber Jewelry  | 0.05 kg     | 12.00 Cr   | 0.1 /person  |
+| Silk Clothes   | 1.5 kg      | 8.00 Cr    | 0.5 /person  |
 
 ### Comfort Categories
 
@@ -88,8 +90,8 @@ target faster.
 | Pottery       | Pottery                 | 3.0 units     | stock       |
 | Furniture     | Furniture               | 0.5 units     | stock       |
 | Tools         | Tools                   | 1.0 units     | stock       |
-| Clothing      | Clothes, Fur            | 2.0 units     | stock       |
-| Jewelry       | Gold Jewelry, Silver J. | 0.2 units     | stock       |
+| Clothing      | Clothes, Fur, Silk C.   | 2.0 units     | stock       |
+| Jewelry       | Gold J., Silver J., Amber J. | 0.2 units     | stock       |
 
 Category fulfillment = min(1, sum of member goods / (population × target)).
 Overall comfort = average across all 8 categories.
@@ -183,9 +185,11 @@ raw material availability.
 | Barley    | 0.9         | 1.25×       | 0.75×       | 1.05×          | 0.95×          |
 | Spices    | 0.7         | 1.20×       | 0.80×       | 1.04×          | 0.96×          |
 | Honey     | 0.6         | 1.17×       | 0.83×       | 1.03×          | 0.97×          |
+| Silk      | 0.5         | 1.14×       | 0.86×       | 1.03×          | 0.97×          |
 | Milk      | 0.5         | 1.14×       | 0.86×       | 1.03×          | 0.97×          |
 | Pork      | 0.4         | 1.11×       | 0.89×       | 1.02×          | 0.98×          |
 | Fish      | 0.3         | 1.08×       | 0.92×       | 1.02×          | 0.98×          |
+| Amber     | 0.3         | 1.08×       | 0.92×       | 1.02×          | 0.98×          |
 | Wool      | 0.4         | 1.11×       | 0.89×       | 1.02×          | 0.98×          |
 | Fur       | 0.2         | 1.06×       | 0.94×       | 1.01×          | 0.99×          |
 | Salt      | 0.2         | 1.06×       | 0.94×       | 1.01×          | 0.99×          |
@@ -201,6 +205,7 @@ range, that cell contributes zero yield for that good.
 | Good      | Min Temp | Max Temp |
 | --------- | -------- | -------- |
 | Spices    | 18°C     | —        |
+| Silk      | 15°C     | —        |
 | Grapes    | 12°C     | —        |
 | Fur       | —        | 12°C     |
 | Honey     | 8°C      | —        |
@@ -240,9 +245,9 @@ When the simulation starts, EconomySystem sets up all economic state:
     Place one of every facility type in every county:
         (Every county gets a kiln, carpenter, smelter, smithy, charcoal burner,
          weaver, butcher, smokehouse, cheesemaker, salter, drying rack, bakery,
-         brewery, gold jeweler, silver jeweler, winery, meadery, churn, and
-         spice blender — whether they can actually operate depends on input
-         availability)
+         brewery, gold jeweler, silver jeweler, winery, meadery, churn,
+         spice blender, amber carver, and silk weaver — whether they can
+         actually operate depends on input availability)
 
     Initialize province and realm economies (empty treasuries and granaries)
 
@@ -923,9 +928,11 @@ population can work there).
 | Meadery         | 2.0 honey                   | 2.0 mead      | 1     | 10%       |
 | Churn           | 3.0 milk                    | 1.0 butter    | 1     | 10%       |
 | Spice Blender   | 2.0 wine + 0.1 spices       | 2.0 sp.wine   | 1     | 5%        |
+| Amber Carver    | 0.5 amber                   | 1 a.jewelry   | 1     | 2%        |
+| Silk Weaver     | 3.0 silk                    | 1 silk outfit | 2     | 5%        |
 
 Durable outputs (pottery, furniture, tools, clothes, gold jewelry, silver
-jewelry) are in units; all other outputs are in kg.
+jewelry, amber jewelry, silk clothes) are in units; all other outputs are in kg.
 
 Throughput is constrained by the minimum of:
 

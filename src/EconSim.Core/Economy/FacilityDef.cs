@@ -21,6 +21,8 @@ namespace EconSim.Core.Economy
         Meadery = 16,
         Churn = 17,
         SpiceBlender = 18,
+        AmberCarver = 19,
+        SilkWeaver = 20,
     }
 
     public readonly struct RecipeInput
@@ -138,6 +140,12 @@ namespace EconSim.Core.Economy
                 new FacilityDef(FacilityType.SpiceBlender, "spiceBlender",
                     new[] { new RecipeInput(GoodType.Wine, 2.0f), new RecipeInput(GoodType.Spices, 0.1f) },
                     GoodType.SpicedWine, 2.0f, 1, 0.05f, 1.0f),
+                new FacilityDef(FacilityType.AmberCarver, "amberCarver",
+                    new[] { new RecipeInput(GoodType.Amber, 0.5f) },
+                    GoodType.AmberJewelry, 1.0f, 1, 0.02f, 0.1f),
+                new FacilityDef(FacilityType.SilkWeaver, "silkWeaver",
+                    new[] { new RecipeInput(GoodType.Silk, 3.0f) },
+                    GoodType.SilkClothes, 1.0f, 2, 0.05f, 0.5f),
             };
 
             Count = Defs.Length;
