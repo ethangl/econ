@@ -80,6 +80,7 @@ namespace EconSim.Core
         private Coroutine deferredStartupWorkRoutine;
         private int _globeSeed;
         private GameObject _sphereViewObj;
+        private GlobalTradeContext _pendingTradeContext;
 
         public static GameManager Instance { get; private set; }
 
@@ -223,6 +224,8 @@ namespace EconSim.Core
                 cam.farClipPlane = 5000f;
             }
 
+            _pendingTradeContext = BuildGlobalTradeContext(CurrentSite);
+
             var config = new MapGenConfig
             {
                 Seed = _globeSeed,
@@ -230,13 +233,16 @@ namespace EconSim.Core
                 AspectRatio = 1.5f,
                 Template = MapTemplateForSiteType(CurrentSite.SiteType),
                 Latitude = CurrentSite.Latitude,
+                Longitude = CurrentSite.Longitude,
                 Tectonics = BuildTectonicHints(CurrentSite),
             };
 
-            Debug.Log($"GenerateMapFromSite: type={CurrentSite.SiteType} → template={config.Template}, lat={config.Latitude:F1}°, " +
+            Debug.Log($"GenerateMapFromSite: type={CurrentSite.SiteType} → template={config.Template}, " +
+                $"lat={config.Latitude:F1}°, lng={config.Longitude:F1}°, " +
                 $"convergence={config.Tectonics.ConvergenceMagnitude:F2}, coastDir=({config.Tectonics.CoastDirectionX:F2},{config.Tectonics.CoastDirectionY:F2}), " +
                 $"boundaryHops={config.Tectonics.BoundaryDistanceHops}, oceanAnomaly={config.Tectonics.OceanCurrentAnomalyC:F1}°C, " +
-                $"moistureBias={config.Tectonics.MoistureBias:F2}, wind=({config.Tectonics.WindDirectionX:F2},{config.Tectonics.WindDirectionY:F2})");
+                $"moistureBias={config.Tectonics.MoistureBias:F2}, wind=({config.Tectonics.WindDirectionX:F2},{config.Tectonics.WindDirectionY:F2}), " +
+                $"continentalNeighbors={CurrentSite.ContinentalNeighbors?.Count ?? 0}");
             GenerateMap(config);
         }
 
@@ -320,6 +326,38 @@ namespace EconSim.Core
             };
         }
 
+        private static GlobalTradeContext BuildGlobalTradeContext(SiteContext site)
+        {
+            int coastDist = site.CoastDistanceHops;
+            float surcharge = Mathf.Clamp(0.01f + 0.005f * coastDist, 0.01f, 0.10f);
+
+            int neighborCount = site.ContinentalNeighbors?.Count ?? 0;
+            float volumeScale = 0.5f + 0.5f * Mathf.Min((float)neighborCount / 3f, 1f);
+
+            int nearestHops = int.MaxValue;
+            if (site.ContinentalNeighbors != null)
+            {
+                foreach (var cn in site.ContinentalNeighbors)
+                {
+                    if (cn.DistanceHops < nearestHops)
+                        nearestHops = cn.DistanceHops;
+                }
+            }
+            if (nearestHops == int.MaxValue)
+                nearestHops = 0;
+
+            Debug.Log($"GlobalTradeContext: surcharge={surcharge:F3}, volumeScale={volumeScale:F2}, " +
+                $"nearestContinent={nearestHops}hops, neighborCount={neighborCount}");
+
+            return new GlobalTradeContext
+            {
+                OverseasSurcharge = surcharge,
+                TradeVolumeScale = volumeScale,
+                NearestContinentHops = nearestHops,
+                ContinentNeighborCount = neighborCount,
+            };
+        }
+
         /// <summary>
         /// Generate a map procedurally using the MapGen pipeline.
         /// </summary>
@@ -357,6 +395,11 @@ namespace EconSim.Core
 
             Profiler.Begin("WorldGenImporter Convert");
             MapData = WorldGenImporter.Convert(result, generationContext);
+            if (_pendingTradeContext != null)
+            {
+                MapData.Info.Trade = _pendingTradeContext;
+                _pendingTradeContext = null;
+            }
             Profiler.End();
             LogMapGenSummary(result, MapData);
 

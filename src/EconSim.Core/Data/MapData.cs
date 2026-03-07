@@ -181,6 +181,24 @@ namespace EconSim.Core.Data
         public int TotalCells;
         public int LandCells;
         public WorldInfo World;
+        public GlobalTradeContext Trade;
+    }
+
+    /// <summary>
+    /// Globe-derived context that tunes the virtual overseas market.
+    /// Null when generating without a globe (defaults apply).
+    /// </summary>
+    [Serializable]
+    public class GlobalTradeContext
+    {
+        /// <summary>Flat surcharge on overseas transport (Cr/kg). Range [0.01, 0.10].</summary>
+        public float OverseasSurcharge;
+        /// <summary>Multiplier on stock/replenish rates. Range [0.5, 1.0].</summary>
+        public float TradeVolumeScale;
+        /// <summary>BFS hops from site to nearest continent on globe.</summary>
+        public int NearestContinentHops;
+        /// <summary>Number of continental plates within BFS range.</summary>
+        public int ContinentNeighborCount;
     }
 
     [Serializable]

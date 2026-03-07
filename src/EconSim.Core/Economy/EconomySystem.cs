@@ -837,6 +837,11 @@ namespace EconSim.Core.Economy
         {
             var vm = new VirtualMarketState(Goods.Count, maxCountyId);
 
+            // Globe-derived trade context (null when generating without globe)
+            var trade = mapData.Info?.Trade;
+            float volumeScale = trade?.TradeVolumeScale ?? 1f;
+            float distancePriceFactor = trade != null ? 1f + 0.02f * trade.NearestContinentHops : 1f;
+
             // Configure traded goods: salt and spices
             int saltIdx = (int)GoodType.Salt;
             int spicesIdx = (int)GoodType.Spices;
@@ -844,33 +849,33 @@ namespace EconSim.Core.Economy
             vm.TradedGoods.Add(spicesIdx);
 
             // Salt: abundant foreign supply
-            vm.TargetStock[saltIdx] = 5000f;
-            vm.ReplenishRate[saltIdx] = 50f;
-            vm.MaxStock[saltIdx] = 10000f;
+            vm.TargetStock[saltIdx] = 5000f * volumeScale;
+            vm.ReplenishRate[saltIdx] = 50f * volumeScale;
+            vm.MaxStock[saltIdx] = 10000f * volumeScale;
             vm.Stock[saltIdx] = vm.TargetStock[saltIdx];
-            vm.SellPrice[saltIdx] = Goods.BasePrice[saltIdx];
+            vm.SellPrice[saltIdx] = Goods.BasePrice[saltIdx] * distancePriceFactor;
             vm.BuyPrice[saltIdx] = Goods.BasePrice[saltIdx] * 0.75f;
 
             // Spices: scarce luxury import
-            vm.TargetStock[spicesIdx] = 10000f;
-            vm.ReplenishRate[spicesIdx] = 500f;
-            vm.MaxStock[spicesIdx] = 25000f;
+            vm.TargetStock[spicesIdx] = 10000f * volumeScale;
+            vm.ReplenishRate[spicesIdx] = 500f * volumeScale;
+            vm.MaxStock[spicesIdx] = 25000f * volumeScale;
             vm.Stock[spicesIdx] = vm.TargetStock[spicesIdx];
-            vm.SellPrice[spicesIdx] = Goods.BasePrice[spicesIdx];
+            vm.SellPrice[spicesIdx] = Goods.BasePrice[spicesIdx] * distancePriceFactor;
             vm.BuyPrice[spicesIdx] = Goods.BasePrice[spicesIdx] * 0.75f;
 
             // Fur: demand-only (foreign consumption absorbs domestic surplus)
             // Negative replenish = foreign buyers consuming stock over time
             int furIdx = (int)GoodType.Fur;
             vm.TradedGoods.Add(furIdx);
-            vm.TargetStock[furIdx] = 5000f;
-            vm.ReplenishRate[furIdx] = -500f;   // foreign consumption drain
-            vm.MaxStock[furIdx] = 10000f;
+            vm.TargetStock[furIdx] = 5000f * volumeScale;
+            vm.ReplenishRate[furIdx] = -500f * volumeScale;   // foreign consumption drain
+            vm.MaxStock[furIdx] = 10000f * volumeScale;
             vm.Stock[furIdx] = 0f;              // starts empty — demand only
             vm.SellPrice[furIdx] = Goods.BasePrice[furIdx];
-            vm.BuyPrice[furIdx] = Goods.BasePrice[furIdx] * 0.75f;
+            vm.BuyPrice[furIdx] = Goods.BasePrice[furIdx] * 0.75f / distancePriceFactor;
 
-            vm.OverseasSurcharge = 0.02f;
+            vm.OverseasSurcharge = trade?.OverseasSurcharge ?? 0.02f;
 
             // Precompute per-county port cost via Dijkstra to nearest coast cell
             // Coast cells: land cells adjacent to water (CoastDistance == 1)

@@ -39,7 +39,8 @@ namespace PopGen.Core
             // Build cultures before name generation so we can pass CultureType through
             float latS = map.World?.LatitudeSouth ?? -50f;
             float latN = map.World?.LatitudeNorth ?? 50f;
-            PopCulture[] cultures = BuildCultures(political.RealmCount, latS, latN, seed);
+            float longitude = map.World?.Longitude ?? 0f;
+            PopCulture[] cultures = BuildCultures(political.RealmCount, latS, latN, longitude, seed);
             int[] realmCultureIds = AssignRealmCultures(political.RealmCount, cultures.Length);
 
             // Religion generation
@@ -67,11 +68,12 @@ namespace PopGen.Core
             };
         }
 
-        static PopCulture[] BuildCultures(int realmCount, float latSouth, float latNorth, PopGenSeed seed)
+        static PopCulture[] BuildCultures(int realmCount, float latSouth, float latNorth, float longitude, PopGenSeed seed)
         {
             int cultureCount = Math.Max(1, realmCount / 2);
             var allTypes = CultureTypes.All;
-            var selected = CultureForest.SelectForLatitudeRange(latSouth, latNorth, cultureCount, seed.Value);
+            float avgLat = (latSouth + latNorth) * 0.5f;
+            var selected = CultureForest.SelectForPosition(avgLat, longitude, cultureCount, seed.Value);
             var cultures = new PopCulture[cultureCount];
             for (int i = 0; i < cultureCount; i++)
             {

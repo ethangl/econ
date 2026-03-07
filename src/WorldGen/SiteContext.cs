@@ -1,5 +1,18 @@
+using System.Collections.Generic;
+
 namespace WorldGen.Core
 {
+    /// <summary>
+    /// A nearby continental plate detected from the site via BFS on the coarse mesh.
+    /// </summary>
+    public struct ContinentalNeighbor
+    {
+        public int PlateIndex;
+        public float DirectionDeg;
+        public int DistanceHops;
+        public bool IsMajor;
+    }
+
     /// <summary>
     /// Terrain archetype derived from tectonic context.
     /// Caller maps to MapGen's HeightmapTemplateType.
@@ -64,5 +77,8 @@ namespace WorldGen.Core
 
         /// <summary>Prevailing wind at site latitude as tangent-plane unit vector (north component).</summary>
         public float WindDirectionNorth;
+
+        /// <summary>Nearby continental plates found via BFS, sorted by distance. Capped at 5.</summary>
+        public List<ContinentalNeighbor> ContinentalNeighbors;
     }
 }

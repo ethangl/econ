@@ -246,7 +246,8 @@ namespace MapGen.Core
                 SeaLevelHeight = 0f,
                 MaxHeight = config.MaxElevationMeters,
                 MaxElevationMeters = config.MaxElevationMeters,
-                MaxSeaDepthMeters = config.MaxSeaDepthMeters
+                MaxSeaDepthMeters = config.MaxSeaDepthMeters,
+                Longitude = config.Longitude
             };
         }
     }

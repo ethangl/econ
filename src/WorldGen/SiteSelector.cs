@@ -370,6 +370,9 @@ namespace WorldGen.Core
             float landFraction = totalSampled > 0 ? (float)landCount / totalSampled : 0f;
             float moistureBias = 1f - 2f * landFraction;
 
+            // BFS from site to find nearby continental plates
+            var continentalNeighbors = FindContinentalNeighbors(selected, mesh, tectonics, ctx, localEast, localNorth);
+
             return new SiteContext
             {
                 CellIndex = selected,
@@ -385,6 +388,7 @@ namespace WorldGen.Core
                 MoistureBias = moistureBias,
                 WindDirectionEast = windE,
                 WindDirectionNorth = windN,
+                ContinentalNeighbors = continentalNeighbors,
             };
         }
 
@@ -429,6 +433,67 @@ namespace WorldGen.Core
                 return SiteType.HighIsland;
 
             return SiteType.LowIsland;
+        }
+
+        const int MaxBfsHops = 12;
+        const int MaxContinentalNeighbors = 5;
+
+        static List<ContinentalNeighbor> FindContinentalNeighbors(
+            int siteCell, SphereMesh mesh, TectonicData tectonics,
+            AnalysisContext ctx, Vec3 localEast, Vec3 localNorth)
+        {
+            // BFS outward from site, tracking first encounter of each continental plate
+            var visited = new bool[mesh.CellCount];
+            var queue = new Queue<(int cell, int dist)>();
+            visited[siteCell] = true;
+            queue.Enqueue((siteCell, 0));
+
+            var found = new Dictionary<int, ContinentalNeighbor>(); // plateIndex -> neighbor
+            Vec3 sitePos = mesh.CellCenters[siteCell];
+
+            while (queue.Count > 0)
+            {
+                var (cell, dist) = queue.Dequeue();
+
+                int plate = tectonics.CellPlate[cell];
+                if (!tectonics.PlateIsOceanic[plate] && !found.ContainsKey(plate) && cell != siteCell)
+                {
+                    Vec3 toPlate = new Vec3(
+                        mesh.CellCenters[cell].X - sitePos.X,
+                        mesh.CellCenters[cell].Y - sitePos.Y,
+                        mesh.CellCenters[cell].Z - sitePos.Z);
+
+                    float eastComp = toPlate.X * localEast.X + toPlate.Y * localEast.Y + toPlate.Z * localEast.Z;
+                    float northComp = toPlate.X * localNorth.X + toPlate.Y * localNorth.Y + toPlate.Z * localNorth.Z;
+                    float dirDeg = (float)(Math.Atan2(eastComp, northComp) * 180.0 / Math.PI);
+
+                    found[plate] = new ContinentalNeighbor
+                    {
+                        PlateIndex = plate,
+                        DirectionDeg = dirDeg,
+                        DistanceHops = dist,
+                        IsMajor = tectonics.PlateIsMajor[plate],
+                    };
+                }
+
+                if (dist < MaxBfsHops)
+                {
+                    foreach (int nb in mesh.CellNeighbors[cell])
+                    {
+                        if (!visited[nb])
+                        {
+                            visited[nb] = true;
+                            queue.Enqueue((nb, dist + 1));
+                        }
+                    }
+                }
+            }
+
+            var result = new List<ContinentalNeighbor>(found.Values);
+            result.Sort((a, b) => a.DistanceHops.CompareTo(b.DistanceHops));
+            if (result.Count > MaxContinentalNeighbors)
+                result.RemoveRange(MaxContinentalNeighbors, result.Count - MaxContinentalNeighbors);
+            return result;
         }
     }
 }

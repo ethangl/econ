@@ -18,6 +18,7 @@ namespace MapGen.Core
         // Geospatial placement.
         public float LatitudeSouth;
         public float LatitudeNorth;
+        public float Longitude;
 
         // Elevation domains.
         public float MinHeight;

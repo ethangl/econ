@@ -47,6 +47,11 @@ namespace MapGen.Core
         /// from this value and the map's height in km.
         /// </summary>
         public float Latitude = 50f;
+        /// <summary>
+        /// Longitude of the map center in degrees (-180 to 180).
+        /// Used for culture selection bias. Defaults to 0 (no bias).
+        /// </summary>
+        public float Longitude = 0f;
 
         // Elevation envelope in signed meters (sea level = 0).
         public float MaxElevationMeters = 8000f;
