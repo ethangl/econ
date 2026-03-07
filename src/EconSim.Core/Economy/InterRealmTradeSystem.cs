@@ -162,8 +162,8 @@ namespace EconSim.Core.Economy
                         for (int fi = 0; fi < indices.Count; fi++)
                         {
                             var def = econ.Facilities[indices[fi]].Def;
-                            if (def.LaborPerUnit > 0 && def.OutputAmount > 0f)
-                                mCap[(int)def.OutputGood] += ce.Population * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount;
+                            if (def.OutputAmount > 0f)
+                                mCap[(int)def.OutputGood] += ce.Population * def.MaxLaborFraction * def.OutputAmount;
                         }
                     }
                 }

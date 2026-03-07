@@ -86,8 +86,8 @@ namespace EconSim.Core.Economy
                     for (int fi = 0; fi < indices.Count; fi++)
                     {
                         var def = allFacilities[indices[fi]].Def;
-                        if (def.LaborPerUnit > 0 && def.OutputAmount > 0f)
-                            productionCap[(int)def.OutputGood] += pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount;
+                        if (def.OutputAmount > 0f)
+                            productionCap[(int)def.OutputGood] += pop * def.MaxLaborFraction * def.OutputAmount;
                     }
                 }
             }
@@ -143,9 +143,7 @@ namespace EconSim.Core.Economy
                             int output = (int)def.OutputGood;
                             if (!Goods.IsDurable[output]) continue;
 
-                            float maxByLabor = def.LaborPerUnit > 0
-                                ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
-                                : float.MaxValue;
+                            float maxByLabor = pop * def.MaxLaborFraction * def.OutputAmount;
 
                             float targetStock = effPop[(int)Goods.Defs[output].Need] * Goods.TargetStockPerPop[output];
                             float maintenance = ce.Stock[output] * Goods.Defs[output].SpoilageRate;
@@ -166,9 +164,7 @@ namespace EconSim.Core.Economy
                             int output = (int)def.OutputGood;
                             if (Goods.IsDurable[output]) continue;
 
-                            float maxByLabor = def.LaborPerUnit > 0
-                                ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
-                                : float.MaxValue;
+                            float maxByLabor = pop * def.MaxLaborFraction * def.OutputAmount;
                             float throughput = maxByLabor;
 
                             // Demand planning: cap by downstream need, NOT current stock
@@ -212,11 +208,13 @@ namespace EconSim.Core.Economy
                             float dailyNeed = maintenance + gap * Goods.DurableCatchUpRate[g] * 3.0f;
                             produced = Math.Min(produced, dailyNeed);
                         }
-                        // Price-based extraction throttle for commodity intermediates
+                        // Gentle price-based extraction throttle for commodity intermediates
+                        // Only kicks in below 50% of base price, using sqrt curve
                         else if (!Goods.HasDirectDemand[g] && Goods.BasePrice[g] > 0f)
                         {
                             float priceRatio = localPrices[g] / Goods.BasePrice[g];
-                            if (priceRatio < 1f) produced *= priceRatio;
+                            if (priceRatio < 0.5f)
+                                produced *= (float)Math.Sqrt(priceRatio * 2f);
                         }
 
                         ce.Stock[g] += produced;
@@ -250,14 +248,10 @@ namespace EconSim.Core.Economy
                             }
 
                             // Per-facility labor constraint
-                            float maxByLabor = def.LaborPerUnit > 0
-                                ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
-                                : float.MaxValue;
+                            float maxByLabor = pop * def.MaxLaborFraction * def.OutputAmount;
 
                             // Shared UpperCommoner labor pool constraint
-                            float maxByPool = def.LaborPerUnit > 0
-                                ? remainingFacLabor / def.LaborPerUnit * def.OutputAmount
-                                : float.MaxValue;
+                            float maxByPool = remainingFacLabor * def.OutputAmount;
 
                             float throughput = Math.Min(maxByInput, Math.Min(maxByLabor, maxByPool));
                             if (throughput < 0f) throughput = 0f;
@@ -284,11 +278,12 @@ namespace EconSim.Core.Economy
                                 throughput = Math.Min(throughput, gap);
                             }
 
-                            // Price-based facility throttle (skip durables and durable inputs — they use stock caps above)
+                            // Gentle price-based facility throttle — only below 50% base price, sqrt curve
                             if (Goods.BasePrice[output] > 0f && !Goods.IsDurable[output] && !Goods.IsDurableInput[output])
                             {
                                 float priceRatio = localPrices[output] / Goods.BasePrice[output];
-                                if (priceRatio < 1f) throughput *= priceRatio;
+                                if (priceRatio < 0.5f)
+                                    throughput *= (float)Math.Sqrt(priceRatio * 2f);
                             }
 
                             // Consume all inputs proportionally
@@ -304,7 +299,7 @@ namespace EconSim.Core.Economy
 
                             fac.Throughput = throughput;
                             fac.Workforce = def.OutputAmount > 0f
-                                ? throughput / def.OutputAmount * def.LaborPerUnit
+                                ? throughput / def.OutputAmount
                                 : 0f;
                             totalFacWorkers += fac.Workforce;
                             remainingFacLabor -= fac.Workforce;

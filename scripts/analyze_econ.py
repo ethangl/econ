@@ -925,8 +925,8 @@ def print_facilities(data: dict):
         # Detect format: old (int count) vs new (object with details)
         first_val = next(iter(by_type.values()))
         if isinstance(first_val, dict):
-            print(f"  {'Type':12s}  {'Count':>6s}  {'Recipe':30s}  {'Labor':>6s}  {'Throughput':>12s}  {'Workers':>10s}")
-            print(f"  {'-'*12}  {'-'*6}  {'-'*30}  {'-'*6}  {'-'*12}  {'-'*10}")
+            print(f"  {'Type':12s}  {'Count':>6s}  {'Recipe':30s}  {'Throughput':>12s}  {'Workers':>10s}")
+            print(f"  {'-'*12}  {'-'*6}  {'-'*30}  {'-'*12}  {'-'*10}")
             for name, info in by_type.items():
                 inputs = info.get('inputs')
                 if inputs:
@@ -937,7 +937,7 @@ def print_facilities(data: dict):
                 actual_tp = info.get('actualThroughput', 0)
                 actual_wk = info.get('actualWorkers', 0)
                 tp_str = f"{fmt(actual_tp)}/{fmt(info['expectedThroughput'])}"
-                print(f"  {name:12s}  {info['count']:>6d}  {recipe:30s}  {info['laborPerUnit']:>6.1f}  {tp_str:>12s}  {fmt(actual_wk):>10s}")
+                print(f"  {name:12s}  {info['count']:>6d}  {recipe:30s}  {tp_str:>12s}  {fmt(actual_wk):>10s}")
         else:
             print(f"  By type:")
             for name, count in by_type.items():
