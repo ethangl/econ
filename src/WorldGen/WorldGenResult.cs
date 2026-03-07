@@ -35,5 +35,8 @@ namespace WorldGen.Core
 
         /// <summary>Selected site for flat map generation (null if selection failed)</summary>
         public SiteContext Site;
+
+        /// <summary>Ranked candidate sites (best first), for UI cycling</summary>
+        public System.Collections.Generic.List<SiteContext> Sites;
     }
 }

@@ -17,7 +17,11 @@
             </ui:VisualElement>
             <!-- Site review fields (after globe gen) -->
             <ui:VisualElement name="site-review-fields" class="site-review-fields">
-                <ui:Label text="Site Selected" class="site-review-title" />
+                <ui:VisualElement class="site-review-header">
+                    <ui:Button name="site-prev-button" text="◀" class="site-nav-button" />
+                    <ui:Label name="site-counter-label" text="Site 1 of 1" class="site-review-title" />
+                    <ui:Button name="site-next-button" text="▶" class="site-nav-button" />
+                </ui:VisualElement>
                 <ui:VisualElement class="site-review-row">
                     <ui:Label text="Type" class="site-review-label" />
                     <ui:Label name="site-type-value" text="—" class="site-review-value" />

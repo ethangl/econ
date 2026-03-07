@@ -53,6 +53,12 @@ namespace EconSim.Core
         public static event Action<SiteContext> OnGlobeReady;
 
         /// <summary>
+        /// Fired when the active site changes via cycling (Prev/Next).
+        /// Args: site, currentIndex (0-based), totalCount.
+        /// </summary>
+        public static event Action<SiteContext, int, int> OnSiteChanged;
+
+        /// <summary>
         /// True after the map has been loaded and simulation initialized.
         /// </summary>
         public static bool IsMapReady { get; private set; }
@@ -63,6 +69,13 @@ namespace EconSim.Core
         /// </summary>
         public SiteContext CurrentSite { get; private set; }
 
+        /// <summary>Number of candidate sites from last globe generation.</summary>
+        public int SiteCount => _sites?.Count ?? 0;
+
+        /// <summary>Current site index (0-based) within the candidates list.</summary>
+        public int CurrentSiteIndex { get; private set; }
+
+        private System.Collections.Generic.List<SiteContext> _sites;
         private ISimulation _simulation;
         private Coroutine deferredStartupWorkRoutine;
         private int _globeSeed;
@@ -149,8 +162,10 @@ namespace EconSim.Core
             var sphereView = _sphereViewObj.GetComponent<SphereView>();
             sphereView.Generate(config);
 
-            // Store site context
-            CurrentSite = sphereView.Site;
+            // Store site candidates
+            _sites = sphereView.Sites ?? new System.Collections.Generic.List<SiteContext>();
+            CurrentSiteIndex = 0;
+            CurrentSite = _sites.Count > 0 ? _sites[0] : null;
 
             // Hide flat map if visible
             if (mapView != null)
@@ -223,6 +238,27 @@ namespace EconSim.Core
                 $"boundaryHops={config.Tectonics.BoundaryDistanceHops}, oceanAnomaly={config.Tectonics.OceanCurrentAnomalyC:F1}°C, " +
                 $"moistureBias={config.Tectonics.MoistureBias:F2}, wind=({config.Tectonics.WindDirectionX:F2},{config.Tectonics.WindDirectionY:F2})");
             GenerateMap(config);
+        }
+
+        /// <summary>
+        /// Cycle to the next or previous candidate site.
+        /// delta=+1 for next, -1 for previous.
+        /// </summary>
+        public void CycleSite(int delta)
+        {
+            if (_sites == null || _sites.Count <= 1) return;
+
+            CurrentSiteIndex = ((CurrentSiteIndex + delta) % _sites.Count + _sites.Count) % _sites.Count;
+            CurrentSite = _sites[CurrentSiteIndex];
+
+            // Update globe highlight
+            if (_sphereViewObj != null)
+            {
+                var sphereView = _sphereViewObj.GetComponent<SphereView>();
+                sphereView?.SetActiveSite(CurrentSite);
+            }
+
+            OnSiteChanged?.Invoke(CurrentSite, CurrentSiteIndex, _sites.Count);
         }
 
         private static HeightmapTemplateType MapTemplateForSiteType(SiteType siteType)

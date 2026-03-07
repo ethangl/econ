@@ -59,6 +59,12 @@ namespace WorldGen.Core
                 CellElevation = elevation,
             };
 
+            // Skip tessellation for now (slow) — reuse dense as ultra-dense
+            result.UltraDenseMesh = denseMesh;
+            result.UltraDenseToCoarse = denseToCoarse;
+            result.UltraDenseCellElevation = elevation;
+            return result;
+
             // 4. Tessellate dense hull → ultra-dense mesh
             var rng = new Random(config.Seed + 300);
             ConvexHull ultraHull = SubdivisionBuilder.Subdivide(denseHull, config.SubdivisionJitter, rng);

@@ -153,7 +153,7 @@ Material:
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.000052970972
+    - _HoverIntensity: 0.0000017243922
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
@@ -182,8 +182,8 @@ Material:
     - _SelectedProvinceId: -1
     - _SelectedRealmId: -1
     - _SelectionBorderWidth: 3
-    - _SelectionDesaturation: 4e-45
-    - _SelectionDimming: 0.9999998
+    - _SelectionDesaturation: 0
+    - _SelectionDimming: 1
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
     - _ShimmerIntensity: 0.2

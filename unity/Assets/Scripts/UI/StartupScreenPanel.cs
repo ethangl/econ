@@ -36,6 +36,9 @@ namespace EconSim.UI
         private Label _siteLatLabel;
         private Label _siteLngLabel;
         private Label _siteTemplateLabel;
+        private Label _siteCounterLabel;
+        private Button _sitePrevButton;
+        private Button _siteNextButton;
         private Button _generateFromSiteButton;
         private Button _regenerateGlobeButton;
 
@@ -54,12 +57,14 @@ namespace EconSim.UI
         {
             EconSim.Core.GameManager.OnMapReady += OnMapReady;
             EconSim.Core.GameManager.OnGlobeReady += OnGlobeReady;
+            EconSim.Core.GameManager.OnSiteChanged += OnSiteChanged;
         }
 
         private void OnDisable()
         {
             EconSim.Core.GameManager.OnMapReady -= OnMapReady;
             EconSim.Core.GameManager.OnGlobeReady -= OnGlobeReady;
+            EconSim.Core.GameManager.OnSiteChanged -= OnSiteChanged;
         }
 
         private void SetupUI()
@@ -109,6 +114,9 @@ namespace EconSim.UI
             _siteLatLabel = root.Q<Label>("site-lat-value");
             _siteLngLabel = root.Q<Label>("site-lng-value");
             _siteTemplateLabel = root.Q<Label>("site-template-value");
+            _siteCounterLabel = root.Q<Label>("site-counter-label");
+            _sitePrevButton = root.Q<Button>("site-prev-button");
+            _siteNextButton = root.Q<Button>("site-next-button");
             _generateFromSiteButton = root.Q<Button>("generate-from-site-button");
             _regenerateGlobeButton = root.Q<Button>("regenerate-globe-button");
 
@@ -118,6 +126,8 @@ namespace EconSim.UI
             _generateGlobeButton?.RegisterCallback<ClickEvent>(evt => OnGenerateGlobeClicked());
             _generateFromSiteButton?.RegisterCallback<ClickEvent>(evt => OnGenerateFromSiteClicked());
             _regenerateGlobeButton?.RegisterCallback<ClickEvent>(evt => OnRegenerateGlobeClicked());
+            _sitePrevButton?.RegisterCallback<ClickEvent>(evt => OnSitePrevClicked());
+            _siteNextButton?.RegisterCallback<ClickEvent>(evt => OnSiteNextClicked());
             RefreshLoadButtonState();
 
             // Start in generation mode
@@ -252,6 +262,22 @@ namespace EconSim.UI
             OnGenerateGlobeClicked();
         }
 
+        private void OnSitePrevClicked()
+        {
+            EconSim.Core.GameManager.Instance?.CycleSite(-1);
+        }
+
+        private void OnSiteNextClicked()
+        {
+            EconSim.Core.GameManager.Instance?.CycleSite(1);
+        }
+
+        private void OnSiteChanged(SiteContext site, int index, int total)
+        {
+            if (site == null) return;
+            UpdateSiteDisplay(site, index, total);
+        }
+
         private void OnGlobeReady(SiteContext site)
         {
             _isLoading = false;
@@ -298,10 +324,16 @@ namespace EconSim.UI
                 _overlay.pickingMode = PickingMode.Ignore;
             }
 
-            // Populate site info
-            var templateName = EconSim.Core.GameManager.Instance?.CurrentSite != null
-                ? MapTemplateNameForSiteType(site.SiteType)
-                : "Unknown";
+            var gm = EconSim.Core.GameManager.Instance;
+            UpdateSiteDisplay(site, gm?.CurrentSiteIndex ?? 0, gm?.SiteCount ?? 1);
+
+            SetStatus("");
+            EnableButtons();
+        }
+
+        private void UpdateSiteDisplay(SiteContext site, int index, int total)
+        {
+            var templateName = MapTemplateNameForSiteType(site.SiteType);
 
             if (_siteTypeLabel != null)
                 _siteTypeLabel.text = site.SiteType.ToString();
@@ -311,9 +343,12 @@ namespace EconSim.UI
                 _siteLngLabel.text = $"{site.Longitude:F1}\u00b0";
             if (_siteTemplateLabel != null)
                 _siteTemplateLabel.text = templateName;
+            if (_siteCounterLabel != null)
+                _siteCounterLabel.text = $"Site {index + 1} of {total}";
 
-            SetStatus("");
-            EnableButtons();
+            bool canCycle = total > 1;
+            _sitePrevButton?.SetEnabled(canCycle);
+            _siteNextButton?.SetEnabled(canCycle);
         }
 
         private static string MapTemplateNameForSiteType(SiteType siteType)
@@ -369,6 +404,10 @@ namespace EconSim.UI
                 _generateFromSiteButton.SetEnabled(false);
             if (_regenerateGlobeButton != null)
                 _regenerateGlobeButton.SetEnabled(false);
+            if (_sitePrevButton != null)
+                _sitePrevButton.SetEnabled(false);
+            if (_siteNextButton != null)
+                _siteNextButton.SetEnabled(false);
         }
 
         private void EnableButtons()

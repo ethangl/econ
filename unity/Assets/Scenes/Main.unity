@@ -428,7 +428,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 928b3a9ce2f444f9d88c27e3ac7dcc35, type: 3}
   m_Name: 
   m_EditorClassIdentifier: EconSim::EconSim.Renderer.MapView
-  heightScale: 0.2
+  heightScale: 1
   cellScale: 0.01
   flatTerrainMaterial: {fileID: 2100000, guid: 37e4feaa212c4dd49e04f95a2288f672, type: 2}
   biomeTerrainMaterial: {fileID: 2100000, guid: 666d97510569454e8bcf9f8620dd0821, type: 2}

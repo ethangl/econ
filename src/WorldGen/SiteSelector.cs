@@ -10,12 +10,81 @@ namespace WorldGen.Core
     /// </summary>
     public static class SiteSelector
     {
+        /// <summary>
+        /// Returns ranked list of candidate sites (best first), up to maxSites.
+        /// </summary>
+        public static List<SiteContext> SelectMultiple(WorldGenResult result, WorldGenConfig config, int maxSites = 10)
+        {
+            var ctx = BuildAnalysis(result, config);
+            if (ctx.SortedIndices == null || ctx.SortedIndices.Length == 0)
+                return new List<SiteContext>();
+
+            int count = Math.Min(maxSites, ctx.SortedIndices.Length);
+            var sites = new List<SiteContext>(count);
+            for (int i = 0; i < count; i++)
+            {
+                int cell = ctx.Candidates[ctx.SortedIndices[i]];
+                sites.Add(BuildSiteContext(cell, result, ctx));
+            }
+            return sites;
+        }
+
         public static SiteContext Select(WorldGenResult result, WorldGenConfig config, Random rng)
+        {
+            var ctx = BuildAnalysis(result, config);
+            if (ctx.SortedIndices == null || ctx.SortedIndices.Length == 0)
+                return null;
+
+            // Weighted random from top N for seed-based variety
+            int topN = Math.Min(5, ctx.SortedIndices.Length);
+            float totalWeight = 0f;
+            for (int i = 0; i < topN; i++)
+                totalWeight += ctx.Scores[ctx.SortedIndices[i]];
+
+            int selected;
+            if (totalWeight <= 0f)
+            {
+                selected = ctx.Candidates[ctx.SortedIndices[0]];
+            }
+            else
+            {
+                float roll = (float)(rng.NextDouble() * totalWeight);
+                float accum = 0f;
+                selected = ctx.Candidates[ctx.SortedIndices[topN - 1]];
+                for (int i = 0; i < topN; i++)
+                {
+                    accum += ctx.Scores[ctx.SortedIndices[i]];
+                    if (roll <= accum)
+                    {
+                        selected = ctx.Candidates[ctx.SortedIndices[i]];
+                        break;
+                    }
+                }
+            }
+
+            return BuildSiteContext(selected, result, ctx);
+        }
+
+        private struct AnalysisContext
+        {
+            public List<int> Candidates;
+            public float[] Scores;
+            public int[] SortedIndices;
+            public bool[] IsOcean;
+            public int[] CoastDist;
+            public int[] CoastSource;
+            public int[] BoundaryDist;
+            public BoundaryType[] NearestBType;
+            public float[] NearestBConv;
+            public float[] Lat;
+            public float[] Lng;
+        }
+
+        private static AnalysisContext BuildAnalysis(WorldGenResult result, WorldGenConfig config)
         {
             var mesh = result.Mesh;
             var tectonics = result.Tectonics;
             int cellCount = mesh.CellCount;
-            float radius = mesh.Radius;
 
             // 1. Classify cells: ocean vs land by elevation
             bool[] isOcean = new bool[cellCount];
@@ -24,7 +93,7 @@ namespace WorldGen.Core
 
             // 2+3. BFS coast distance through ocean cells
             int[] coastDist = new int[cellCount];
-            int[] coastSource = new int[cellCount]; // nearest land cell (for direction)
+            int[] coastSource = new int[cellCount];
             for (int i = 0; i < cellCount; i++)
             {
                 coastDist[i] = int.MaxValue;
@@ -33,7 +102,6 @@ namespace WorldGen.Core
 
             var queue = new Queue<int>();
 
-            // Seed: ocean cells adjacent to at least one land cell (distance 0)
             for (int i = 0; i < cellCount; i++)
             {
                 if (!isOcean[i]) continue;
@@ -49,7 +117,6 @@ namespace WorldGen.Core
                 }
             }
 
-            // BFS flood through ocean
             while (queue.Count > 0)
             {
                 int cell = queue.Dequeue();
@@ -90,7 +157,6 @@ namespace WorldGen.Core
                 candidates.Add(i);
             }
 
-            // Fallback: relax filters if no candidates found
             if (candidates.Count == 0)
             {
                 for (int i = 0; i < cellCount; i++)
@@ -101,7 +167,13 @@ namespace WorldGen.Core
             }
 
             if (candidates.Count == 0)
-                return null;
+            {
+                return new AnalysisContext
+                {
+                    Candidates = candidates,
+                    SortedIndices = Array.Empty<int>(),
+                };
+            }
 
             // 6. BFS boundary distance from plate boundary edges
             int[] boundaryDist = new int[cellCount];
@@ -113,7 +185,6 @@ namespace WorldGen.Core
                 nearestBType[i] = BoundaryType.None;
             }
 
-            // Seed: cells adjacent to boundary edges (distance 0)
             for (int e = 0; e < mesh.EdgeCount; e++)
             {
                 if (tectonics.EdgeBoundary[e] == BoundaryType.None) continue;
@@ -157,7 +228,6 @@ namespace WorldGen.Core
                 int cell = candidates[ci];
                 float score = 0f;
 
-                // Boundary proximity — convergent most interesting
                 if (boundaryDist[cell] != int.MaxValue && boundaryDist[cell] > 0)
                 {
                     float proxWeight = nearestBType[cell] switch
@@ -171,7 +241,6 @@ namespace WorldGen.Core
                 }
                 else if (boundaryDist[cell] == 0)
                 {
-                    // Right on a boundary
                     float proxWeight = nearestBType[cell] switch
                     {
                         BoundaryType.Convergent => 10f,
@@ -182,10 +251,8 @@ namespace WorldGen.Core
                     score += proxWeight;
                 }
 
-                // Convergence magnitude bonus
                 score += Math.Abs(nearestBConv[cell]) * 2f;
 
-                // Multi-plate junction bonus (2-hop neighborhood)
                 var nearbyPlates = new HashSet<int>();
                 nearbyPlates.Add(tectonics.CellPlate[cell]);
                 foreach (int nb in mesh.CellNeighbors[cell])
@@ -197,73 +264,61 @@ namespace WorldGen.Core
                 if (nearbyPlates.Count >= 3)
                     score += (nearbyPlates.Count - 2) * 3f;
 
-                // Latitude centrality tiebreak
                 float latDist = Math.Abs(Math.Abs(lat[cell]) - latCenter);
                 score += (1f - latDist / latRange) * 0.5f;
 
                 scores[ci] = score;
             }
 
-            // 8. Select — weighted random from top N for seed-based variety
-            int topN = Math.Min(5, candidates.Count);
+            // Sort by score descending
             int[] sortedIdx = new int[candidates.Count];
             for (int i = 0; i < candidates.Count; i++) sortedIdx[i] = i;
             Array.Sort(sortedIdx, (a, b) => scores[b].CompareTo(scores[a]));
 
-            float totalWeight = 0f;
-            for (int i = 0; i < topN; i++)
-                totalWeight += scores[sortedIdx[i]];
-
-            int selected;
-            if (totalWeight <= 0f)
+            return new AnalysisContext
             {
-                selected = candidates[sortedIdx[0]];
-            }
-            else
-            {
-                float roll = (float)(rng.NextDouble() * totalWeight);
-                float accum = 0f;
-                selected = candidates[sortedIdx[topN - 1]]; // default to last in top N
-                for (int i = 0; i < topN; i++)
-                {
-                    accum += scores[sortedIdx[i]];
-                    if (roll <= accum)
-                    {
-                        selected = candidates[sortedIdx[i]];
-                        break;
-                    }
-                }
-            }
+                Candidates = candidates,
+                Scores = scores,
+                SortedIndices = sortedIdx,
+                IsOcean = isOcean,
+                CoastDist = coastDist,
+                CoastSource = coastSource,
+                BoundaryDist = boundaryDist,
+                NearestBType = nearestBType,
+                NearestBConv = nearestBConv,
+                Lat = lat,
+                Lng = lng,
+            };
+        }
 
-            // Classify site type from tectonic context
-            SiteType siteType = ClassifySiteType(selected, boundaryDist, nearestBType, mesh, tectonics);
+        private static SiteContext BuildSiteContext(int selected, WorldGenResult result, AnalysisContext ctx)
+        {
+            var mesh = result.Mesh;
+            var tectonics = result.Tectonics;
 
-            // Coast direction: unit vector from site toward nearest land
+            SiteType siteType = ClassifySiteType(selected, ctx.BoundaryDist, ctx.NearestBType, mesh, tectonics);
+
             Vec3 coastDir = new Vec3(0, 0, 0);
-            if (coastSource[selected] >= 0)
-                coastDir = (mesh.CellCenters[coastSource[selected]] - mesh.CellCenters[selected]).Normalized;
-
-            // --- Climate hints ---
+            if (ctx.CoastSource[selected] >= 0)
+                coastDir = (mesh.CellCenters[ctx.CoastSource[selected]] - mesh.CellCenters[selected]).Normalized;
 
             // Wind direction from Earth circulation bands
-            float siteLat = lat[selected];
+            float siteLat = ctx.Lat[selected];
             float siteAbsLat = Math.Abs(siteLat);
             float compassDeg;
             if (siteAbsLat < 30f)
-                compassDeg = siteLat >= 0f ? 225f : 315f; // Trade winds
+                compassDeg = siteLat >= 0f ? 225f : 315f;
             else if (siteAbsLat < 60f)
-                compassDeg = siteLat >= 0f ? 45f : 135f;  // Westerlies
+                compassDeg = siteLat >= 0f ? 45f : 135f;
             else
-                compassDeg = siteLat >= 0f ? 225f : 315f; // Polar easterlies
+                compassDeg = siteLat >= 0f ? 225f : 315f;
             float windRad = compassDeg * (float)Math.PI / 180f;
             float windE = (float)Math.Sin(windRad);
             float windN = (float)Math.Cos(windRad);
 
-            // Ocean current anomaly: plate drift projected onto local north
-            Vec3 sitePos = mesh.CellCenters[selected];
-            // Local north tangent vector at site
+            // Ocean current anomaly
             float latR = siteLat * (float)Math.PI / 180f;
-            float lngR = lng[selected] * (float)Math.PI / 180f;
+            float lngR = ctx.Lng[selected] * (float)Math.PI / 180f;
             float sinLatR = (float)Math.Sin(latR);
             float cosLatR = (float)Math.Cos(latR);
             float sinLngR = (float)Math.Sin(lngR);
@@ -274,13 +329,12 @@ namespace WorldGen.Core
             int plateIdx = tectonics.CellPlate[selected];
             Vec3 drift = tectonics.PlateDrift[plateIdx];
             float northComponent = drift.X * localNorth.X + drift.Y * localNorth.Y + drift.Z * localNorth.Z;
-            // Poleward drift → warm current (brings equatorial water)
             float polewardDrift = siteLat >= 0f ? northComponent : -northComponent;
             float latFactor = Math.Max(0.1f, 1f - Math.Abs(siteAbsLat - 40f) / 50f);
             float oceanAnomaly = polewardDrift * latFactor * 8f;
             oceanAnomaly = Math.Max(-8f, Math.Min(8f, oceanAnomaly));
 
-            // Moisture bias: walk ~8 hops upwind, count land/ocean fraction
+            // Moisture bias: walk ~8 hops upwind
             Vec3 windDir3D = new Vec3(
                 localEast.X * windE + localNorth.X * windN,
                 localEast.Y * windE + localNorth.Y * windN,
@@ -311,7 +365,7 @@ namespace WorldGen.Core
                 if (bestNb < 0) break;
                 walkCell = bestNb;
                 totalSampled++;
-                if (!isOcean[walkCell]) landCount++;
+                if (!ctx.IsOcean[walkCell]) landCount++;
             }
             float landFraction = totalSampled > 0 ? (float)landCount / totalSampled : 0f;
             float moistureBias = 1f - 2f * landFraction;
@@ -319,13 +373,13 @@ namespace WorldGen.Core
             return new SiteContext
             {
                 CellIndex = selected,
-                Latitude = lat[selected],
-                Longitude = lng[selected],
-                CoastDistanceHops = coastDist[selected],
+                Latitude = ctx.Lat[selected],
+                Longitude = ctx.Lng[selected],
+                CoastDistanceHops = ctx.CoastDist[selected],
                 CoastDirection = coastDir,
-                NearestBoundary = nearestBType[selected],
-                BoundaryConvergence = nearestBConv[selected],
-                BoundaryDistanceHops = boundaryDist[selected],
+                NearestBoundary = ctx.NearestBType[selected],
+                BoundaryConvergence = ctx.NearestBConv[selected],
+                BoundaryDistanceHops = ctx.BoundaryDist[selected],
                 SiteType = siteType,
                 OceanCurrentAnomaly = oceanAnomaly,
                 MoistureBias = moistureBias,
@@ -341,7 +395,6 @@ namespace WorldGen.Core
             int bDist = boundaryDist[cell];
             BoundaryType bType = nearestBType[cell];
 
-            // Count distinct boundary types in 1-hop neighborhood
             var nearbyBoundaryTypes = new HashSet<BoundaryType>();
             foreach (int e in mesh.CellEdges[cell])
             {
@@ -357,7 +410,6 @@ namespace WorldGen.Core
                 }
             }
 
-            // Count distinct plates in 2-hop neighborhood
             var nearbyPlates = new HashSet<int>();
             nearbyPlates.Add(tectonics.CellPlate[cell]);
             foreach (int nb in mesh.CellNeighbors[cell])
@@ -367,19 +419,15 @@ namespace WorldGen.Core
                     nearbyPlates.Add(tectonics.CellPlate[nb2]);
             }
 
-            // Multiple boundary types or triple junction → Archipelago
             if (nearbyBoundaryTypes.Count >= 2 || nearbyPlates.Count >= 4)
                 return SiteType.Archipelago;
 
-            // Strong convergent boundary within 2 hops → Volcanic
             if (bType == BoundaryType.Convergent && bDist <= 2)
                 return SiteType.Volcanic;
 
-            // Moderate convergent boundary (3-4 hops) → HighIsland
             if (bType == BoundaryType.Convergent && bDist <= 4)
                 return SiteType.HighIsland;
 
-            // Everything else → LowIsland
             return SiteType.LowIsland;
         }
     }

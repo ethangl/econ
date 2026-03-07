@@ -28,6 +28,7 @@ namespace EconSim.Renderer
         public float Radius => result?.DenseTerrain?.Mesh?.Radius ?? result?.Mesh?.Radius ?? 0f;
         public SphereViewMode ViewMode => viewMode;
         public SiteContext Site => result?.Site;
+        public System.Collections.Generic.List<SiteContext> Sites => result?.Sites;
 
         public void Generate(WorldGenConfig config)
         {
@@ -35,6 +36,17 @@ namespace EconSim.Renderer
             siteCoarseCell = result.Site?.CellIndex ?? -1;
             BuildMesh(result.DenseTerrain.Mesh);
             LogSiteSelection();
+        }
+
+        /// <summary>
+        /// Switch the highlighted site and rebuild vertex colors.
+        /// </summary>
+        public void SetActiveSite(SiteContext site)
+        {
+            if (result == null) return;
+            result.Site = site;
+            siteCoarseCell = site?.CellIndex ?? -1;
+            RebuildColors();
         }
 
         private void LogSiteSelection()

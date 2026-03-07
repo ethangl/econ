@@ -41,15 +41,15 @@ namespace WorldGen.Core
             // 7. Generate dense terrain mesh with fractal noise
             DenseTerrainData denseTerrain = DenseTerrainOps.Generate(mesh, tectonics, config);
 
-            // 8. Select site for flat map generation
-            var siteRng = new Random(config.Seed + 2);
+            // 8. Select candidate sites for flat map generation
             var partialResult = new WorldGenResult
             {
                 Mesh = mesh,
                 Tectonics = tectonics,
                 DenseTerrain = denseTerrain,
             };
-            partialResult.Site = SiteSelector.Select(partialResult, config, siteRng);
+            partialResult.Sites = SiteSelector.SelectMultiple(partialResult, config);
+            partialResult.Site = partialResult.Sites.Count > 0 ? partialResult.Sites[0] : null;
 
             return partialResult;
         }
