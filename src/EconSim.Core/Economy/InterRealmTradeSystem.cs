@@ -149,9 +149,10 @@ namespace EconSim.Core.Economy
                     var ce = counties[countyId];
                     if (ce == null) continue;
 
-                    // Extraction capacity (approximation — exact seasonal modifiers already applied in EconomySystem)
+                    // Extraction capacity (approximation — uses LowerCommoner pop, ignoring seasonal modifiers)
+                    float extractionPop = ce.EstatePop[(int)Estate.LowerCommoner];
                     for (int g = 0; g < Goods.Count; g++)
-                        mCap[g] += ce.Population * ce.Productivity[g];
+                        mCap[g] += extractionPop * ce.Productivity[g];
 
                     // Facility labor capacity
                     var indices = econ.CountyFacilityIndices != null && countyId < econ.CountyFacilityIndices.Length

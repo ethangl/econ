@@ -937,7 +937,7 @@ def print_facilities(data: dict):
                 actual_tp = info.get('actualThroughput', 0)
                 actual_wk = info.get('actualWorkers', 0)
                 tp_str = f"{fmt(actual_tp)}/{fmt(info['expectedThroughput'])}"
-                print(f"  {name:12s}  {info['count']:>6d}  {recipe:30s}  {info['laborPerUnit']:>6d}  {tp_str:>12s}  {fmt(actual_wk):>10s}")
+                print(f"  {name:12s}  {info['count']:>6d}  {recipe:30s}  {info['laborPerUnit']:>6.1f}  {tp_str:>12s}  {fmt(actual_wk):>10s}")
         else:
             print(f"  By type:")
             for name, count in by_type.items():

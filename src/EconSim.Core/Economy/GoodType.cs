@@ -309,7 +309,7 @@ namespace EconSim.Core.Economy
                         { (int)BiomeId.CoastalMarsh, 0.2f }, { (int)BiomeId.Floodplain, 0.3f },
                         { (int)BiomeId.Wetland, 0.15f }, { (int)BiomeId.Scrubland, 0.05f },
                     }),
-                new GoodDef(GoodType.Pottery,    "pottery",   GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.001f, 0.0005f, 0.0005f, 0.15f, 0.0075f, 3.0f, true, false, 0.002f, 3.0f, unitWeight: 1.0f, comfortCategory: ComfortCategory.Pottery),
+                new GoodDef(GoodType.Pottery,    "pottery",   GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.001f, 0.0005f, 0.0005f, 0.15f, 0.0075f, 3.0f, true, false, 0.002f, 1.0f, unitWeight: 1.0f, comfortCategory: ComfortCategory.Pottery),
                 new GoodDef(GoodType.Furniture,  "furniture", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0f, 0.0f, 1.50f, 0.075f, 30.0f, true, false, 0.001f, 0.5f, unitWeight: 10.0f, comfortCategory: ComfortCategory.Furniture),
                 new GoodDef(GoodType.Iron,       "iron",      GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.50f, 0.025f, 10.0f, true, false),
                 new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0005f, 0.001f, 3.00f, 0.15f, 60.0f, true, false, 0.001f, 1.0f, unitWeight: 3.0f, comfortCategory: ComfortCategory.Tools),
