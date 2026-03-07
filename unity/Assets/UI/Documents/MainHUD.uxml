@@ -21,6 +21,7 @@
                         <ui:Label name="county-name" class="panel-title" text="County" />
                         <ui:Button name="close-button" class="close-button" text="X" />
                     </ui:VisualElement>
+                    <ui:Label name="ruler-value" class="panel-subtitle" text="" />
 
                     <ui:VisualElement class="section">
                         <ui:Label class="section-header" text="Location" />

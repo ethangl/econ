@@ -83,6 +83,60 @@ namespace PopGen.Core
             return EnsureUnique(core, burgId, usedNames);
         }
 
+        public static string GeneratePersonGivenName(int actorId, int cultureId, bool isFemale, CultureType culture, PopGenSeed seed)
+        {
+            uint stream = isFemale ? 0x08u : 0x07u;
+            var rng = new PopRandom(DeriveSeed(seed.Value, stream, actorId, cultureId));
+            // Short names: 1-2 syllables, no suffix
+            int syllableCount = rng.NextInt(100) < 55 ? 1 : 2;
+            var sb = new StringBuilder(12);
+
+            sb.Append(culture.LeadingOnsets[rng.NextInt(culture.LeadingOnsets.Length)]);
+            for (int i = 0; i < syllableCount; i++)
+            {
+                if (i > 0)
+                    sb.Append(culture.MedialOnsets[rng.NextInt(culture.MedialOnsets.Length)]);
+                sb.Append(culture.Vowels[rng.NextInt(culture.Vowels.Length)]);
+                if (i < syllableCount - 1 && rng.NextInt(100) < culture.CodaChance)
+                    sb.Append(culture.Codas[rng.NextInt(culture.Codas.Length)]);
+            }
+
+            string raw = NormalizeRoot(sb.ToString(), culture);
+            return ToTitleCase(raw);
+        }
+
+        public static string GeneratePersonName(int actorId, int cultureId, bool isFemale, CultureType culture, PopGenSeed seed, ISet<string> usedNames)
+        {
+            string given = GeneratePersonGivenName(actorId, cultureId, isFemale, culture, seed);
+
+            // Build family name: root + person suffix
+            var rng = new PopRandom(DeriveSeed(seed.Value, 0x09u, actorId, cultureId));
+            string[] suffixes = isFemale ? culture.FemalePersonSuffixes : culture.MalePersonSuffixes;
+            // Fall back to county suffixes if person suffixes not defined
+            if (suffixes == null || suffixes.Length == 0)
+                suffixes = culture.CountySuffixes;
+
+            string suffix = suffixes[rng.NextInt(suffixes.Length)];
+
+            string fullName;
+            // Check if suffix is a patronymic connector (contains spaces, e.g. " mac ", " ap ")
+            if (suffix.Contains(" "))
+            {
+                // Patronymic: GivenName + connector + father's-name-root
+                string patronRoot = BuildCoreName(ref rng, culture, Array.Empty<string>());
+                // BuildCoreName with empty suffixes returns just the root
+                fullName = given + suffix.TrimEnd() + " " + ToTitleCase(patronRoot);
+            }
+            else
+            {
+                // Surname: root + suffix
+                string familyRoot = BuildCoreName(ref rng, culture, new[] { suffix });
+                fullName = given + " " + ToTitleCase(familyRoot);
+            }
+
+            return EnsureUnique(fullName, actorId, usedNames);
+        }
+
         public static string GenerateReligionName(int religionId, int seedCultureId, CultureType culture, string[] suffixes, PopGenSeed seed)
         {
             var rng = new PopRandom(DeriveSeed(seed.Value, 0x05u, religionId, seedCultureId));
@@ -109,6 +163,8 @@ namespace PopGen.Core
             }
 
             string root = NormalizeRoot(sb.ToString(), culture);
+            if (suffixes == null || suffixes.Length == 0)
+                return ToTitleCase(root);
             string suffix = suffixes[rng.NextInt(suffixes.Length)];
             string merged = MergeRootAndSuffix(root, suffix);
             return ToTitleCase(merged);
