@@ -126,6 +126,11 @@ float4 ComputeMapModeFromResolvedBase(float2 uv, bool isCellWater, bool isRiver,
         // Transport heatmaps are already fully resolved in C#.
         modeColor = resolvedBaseColor;
     }
+    else if (_MapMode == 10)
+    {
+        // Religion mode: faith colors with political border gradients for context.
+        modeColor = ApplyPoliticalModeStyle(uv, resolvedBaseColor);
+    }
     else
     {
         return float4(0, 0, 0, 0);

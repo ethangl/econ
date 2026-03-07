@@ -106,6 +106,9 @@ namespace EconSim.Renderer
         private TransportGraph transportGraph;
         private Transform marketHubMarkerRoot;
 
+        // Religion state reference for dirty-flag overlay refresh
+        private EconSim.Core.Religious.ReligionState religionStateRef;
+
         // Cell mesh data
         private List<Vector3> vertices = new List<Vector3>();
         private List<int> triangles = new List<int>();
@@ -141,6 +144,7 @@ namespace EconSim.Renderer
             ChannelInspector = 5, // Debug channel visualization (key: 0)
             TransportCost = 6, // Local per-cell transport difficulty heatmap (key: 5)
             MarketAccess = 7,  // Transport cost heatmap from market hub (key: 6)
+            Religion = 8,      // Colored by majority faith (key: 4)
         }
 
         public MapMode CurrentMode => currentMode;
@@ -155,7 +159,8 @@ namespace EconSim.Renderer
             "Biomes",
             "Channel Inspector",
             "Transport Cost",
-            "Market Access"
+            "Market Access",
+            "Religion"
         };
 
         private static readonly MapOverlayManager.OverlayLayer[] NoOverlayCycle =
@@ -178,6 +183,7 @@ namespace EconSim.Renderer
                 { MapMode.ChannelInspector, NoOverlayCycle },
                 { MapMode.TransportCost, NoOverlayCycle },
                 { MapMode.MarketAccess, NoOverlayCycle },
+                { MapMode.Religion, NoOverlayCycle },
             };
 
         private readonly Dictionary<MapMode, MapOverlayManager.OverlayLayer> selectedOverlayByScope =
@@ -224,6 +230,14 @@ namespace EconSim.Renderer
             overlayManager?.RefreshPathStyleFromMaterial();
             RefreshNoisyEdgeStyleFromInspector();
 
+            // Refresh religion overlay when spread system marks adherence as meaningfully changed
+            if (currentMode == MapMode.Religion && overlayManager != null
+                && religionStateRef != null && religionStateRef.OverlayDirty)
+            {
+                religionStateRef.OverlayDirty = false;
+                overlayManager.InvalidateReligionOverlay();
+            }
+
             // Suppress hotkeys while startup screen is open.
             if (EconSim.UI.StartupScreenPanel.IsOpen) return;
 
@@ -247,6 +261,10 @@ namespace EconSim.Renderer
             else if (Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3))
             {
                 SetMapMode(MapMode.Market);
+            }
+            else if (Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4))
+            {
+                SetMapMode(MapMode.Religion);
             }
             else if (Input.GetKeyDown(KeyCode.Alpha5) || Input.GetKeyDown(KeyCode.Keypad5))
             {
@@ -859,6 +877,12 @@ namespace EconSim.Renderer
             overlayManager?.SetEconomyState(econ, transport);
             BuildMarketHubMarkers();
             UpdateModeMarkerVisibility();
+        }
+
+        public void SetReligionState(EconSim.Core.Religious.ReligionState religion)
+        {
+            religionStateRef = religion;
+            overlayManager?.SetReligionState(religion);
         }
 
         private void HandleShaderSelection(int cellId)

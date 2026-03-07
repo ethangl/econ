@@ -7,6 +7,7 @@ using EconSim.Core.Common;
 using EconSim.Core.Import;
 using EconSim.Core.Actors;
 using EconSim.Core.Economy;
+using EconSim.Core.Religious;
 using EconSim.Core.Simulation;
 using EconSim.Renderer;
 using EconSim.Camera;
@@ -527,6 +528,16 @@ namespace EconSim.Core
             simStateForActors.Actors = ActorBootstrap.Generate(MapData, MapData.Info.PopGenSeed);
             SimLog.Log("Actors", $"Bootstrapped {simStateForActors.Actors.ActorCount} actors, {simStateForActors.Actors.TitleCount} titles");
 
+            // Bootstrap religion state (adherence from cell data)
+            int maxCountyIdForReligion = 0;
+            foreach (var county in MapData.Counties)
+                if (county.Id > maxCountyIdForReligion) maxCountyIdForReligion = county.Id;
+            simStateForActors.Religion = ReligionInitializer.Initialize(MapData, maxCountyIdForReligion);
+            ReligionBootstrap.Generate(simStateForActors.Religion, MapData, simStateForActors.Actors, MapData.Info.PopGenSeed);
+
+            // Register religion spread after religion state is initialized
+            runner.RegisterSystem(new ReligionSpreadSystem());
+
             Profiler.End();
             _simulation.IsPaused = true;  // Start paused
 
@@ -536,6 +547,7 @@ namespace EconSim.Core
                 var simState = _simulation.GetState();
                 mapView.SetRoadState(simState.Roads);
                 mapView.SetEconomyState(simState.Economy, simState.Transport);
+                mapView.SetReligionState(simState.Religion);
             }
 
             Debug.Log("Simulation initialized (paused). Press Backspace to unpause, -/= to change speed.");

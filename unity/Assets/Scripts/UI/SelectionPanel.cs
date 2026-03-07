@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using EconSim.Core.Actors;
 using EconSim.Core.Data;
+using EconSim.Core.Religious;
 using EconSim.Core.Simulation;
 using EconSim.Renderer;
 using System.Linq;
@@ -41,6 +42,7 @@ namespace EconSim.UI
 
         private MapData _mapData;
         private ActorState _actorState;
+        private ReligionState _religionState;
         private Coroutine _panelAnimationCoroutine;
         private float _currentRailWidth;
         private float _nextOpenDuration = DefaultPanelAnimationDuration;
@@ -77,7 +79,10 @@ namespace EconSim.UI
             {
                 _mapData = gameManager.MapData;
                 if (gameManager.Simulation != null)
+                {
                     _actorState = gameManager.Simulation.GetState()?.Actors;
+                    _religionState = gameManager.Simulation.GetState()?.Religion;
+                }
             }
 
             // Find MapView if not assigned
@@ -116,11 +121,12 @@ namespace EconSim.UI
         {
             if (_mapView == null) return;
 
-            // Don't show in non-political modes
+            // Only show in political and religion modes
             var mode = _mapView.CurrentMode;
             if (mode != MapView.MapMode.Political &&
                 mode != MapView.MapMode.Province &&
-                mode != MapView.MapMode.County)
+                mode != MapView.MapMode.County &&
+                mode != MapView.MapMode.Religion)
             {
                 Hide();
                 return;
@@ -418,20 +424,27 @@ namespace EconSim.UI
             // Cell count
             SetLabel(_terrainValue, $"{county.CellCount}");
             SetLabel(_cultureValue, GetCultureName(county.RealmId));
-            SetLabel(_religionValue, GetReligionName(county.RealmId));
-
-            // Show resources section for county mode
-            SetSectionVisible(_resourcesSection, true);
-
-            // Restore resources section header
-            var resourcesHeader = _resourcesSection?.Q<Label>(className: "section-header");
-            if (resourcesHeader != null)
-                resourcesHeader.text = "Resources";
+            SetLabel(_religionValue, GetCountyMajorityFaithName(county.Id));
 
             // Population from county data
             SetLabel(_popTotal, ((int)county.TotalPopulation).ToString("N0"));
 
-            ClearList(_resourcesList);
+            // Show adherence breakdown in religion mode, resources otherwise
+            SetSectionVisible(_resourcesSection, true);
+            var resourcesHeader = _resourcesSection?.Q<Label>(className: "section-header");
+
+            if (_mapView != null && _mapView.CurrentMode == MapView.MapMode.Religion)
+            {
+                if (resourcesHeader != null)
+                    resourcesHeader.text = "Faith Adherence";
+                ShowCountyAdherence(county.Id);
+            }
+            else
+            {
+                if (resourcesHeader != null)
+                    resourcesHeader.text = "Resources";
+                ClearList(_resourcesList);
+            }
         }
 
         private void ShowSectionAsProvincesList(Realm realm)
@@ -517,6 +530,107 @@ namespace EconSim.UI
                 row.Add(nameLabel);
                 _resourcesList.Add(row);
             }
+        }
+
+        private void ShowCountyAdherence(int countyId)
+        {
+            if (_resourcesList == null) return;
+            _resourcesList.Clear();
+
+            if (_religionState == null || _religionState.FaithCount == 0 ||
+                countyId < 0 || countyId >= _religionState.Adherence.Length)
+            {
+                var noneLabel = new Label("No data");
+                noneLabel.style.color = new Color(0.5f, 0.5f, 0.5f);
+                noneLabel.style.fontSize = 13;
+                _resourcesList.Add(noneLabel);
+                return;
+            }
+
+            var adh = _religionState.Adherence[countyId];
+            if (adh == null) return;
+
+            // Build sorted list of faiths with non-zero adherence
+            var entries = new System.Collections.Generic.List<(int faithIndex, float pct)>();
+            for (int f = 0; f < _religionState.FaithCount; f++)
+            {
+                if (adh[f] > 0.001f)
+                    entries.Add((f, adh[f]));
+            }
+            entries.Sort((a, b) => b.pct.CompareTo(a.pct));
+
+            if (entries.Count == 0)
+            {
+                var noneLabel = new Label("Unaffiliated");
+                noneLabel.style.color = new Color(0.5f, 0.5f, 0.5f);
+                noneLabel.style.fontSize = 13;
+                _resourcesList.Add(noneLabel);
+                return;
+            }
+
+            foreach (var (fi, pct) in entries)
+            {
+                int religionId = _religionState.FaithIndexToReligion[fi];
+                string faithName = GetFaithName(religionId);
+
+                var row = new VisualElement();
+                row.AddToClassList("resource-item");
+
+                var nameLabel = new Label(faithName);
+                nameLabel.style.fontSize = 13;
+                row.Add(nameLabel);
+
+                var valueLabel = new Label($"{pct * 100f:F1}%");
+                valueLabel.AddToClassList("item-value");
+                valueLabel.style.fontSize = 13;
+                row.Add(valueLabel);
+
+                _resourcesList.Add(row);
+            }
+
+            // Show unaffiliated remainder
+            float total = 0f;
+            for (int f = 0; f < _religionState.FaithCount; f++)
+                total += adh[f];
+
+            if (total < 0.999f)
+            {
+                var row = new VisualElement();
+                row.AddToClassList("resource-item");
+
+                var nameLabel = new Label("Unaffiliated");
+                nameLabel.style.color = new Color(0.5f, 0.5f, 0.5f);
+                nameLabel.style.fontSize = 13;
+                row.Add(nameLabel);
+
+                var valueLabel = new Label($"{(1f - total) * 100f:F1}%");
+                valueLabel.AddToClassList("item-value");
+                valueLabel.style.color = new Color(0.5f, 0.5f, 0.5f);
+                valueLabel.style.fontSize = 13;
+                row.Add(valueLabel);
+
+                _resourcesList.Add(row);
+            }
+        }
+
+        private string GetCountyMajorityFaithName(int countyId)
+        {
+            if (_religionState != null && countyId >= 0 && countyId < _religionState.MajorityFaith.Length)
+            {
+                int majorityReligionId = _religionState.MajorityFaith[countyId];
+                if (majorityReligionId > 0)
+                    return GetFaithName(majorityReligionId);
+            }
+            return GetReligionName(_mapData?.CountyById != null &&
+                _mapData.CountyById.TryGetValue(countyId, out var c) ? c.RealmId : 0);
+        }
+
+        private string GetFaithName(int religionId)
+        {
+            if (_mapData?.ReligionById != null &&
+                _mapData.ReligionById.TryGetValue(religionId, out var religion))
+                return religion.Name ?? $"Faith {religionId}";
+            return $"Faith {religionId}";
         }
 
         private void SetSectionVisible(VisualElement section, bool visible)

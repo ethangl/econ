@@ -152,6 +152,10 @@ public class MapOverlayManager
         private Texture2D marketBorderDistTexture;    // gridW×gridH R8: distance to nearest market boundary
         private int[] cellMarketIdById;               // cellId → marketId lookup
 
+        // Religion overlay data
+        private EconSim.Core.Religious.ReligionState religionState;
+        private Color[] faithPaletteColors;            // faithIndex → color
+
         // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
         private const int ReliefBlurRadius = 4;
         private const float ReliefBlurCrossClassWeight = 0.25f;
@@ -2408,7 +2412,8 @@ public class MapOverlayManager
                    mode == MapView.MapMode.County ||
                    mode == MapView.MapMode.Market ||
                    mode == MapView.MapMode.TransportCost ||
-                   mode == MapView.MapMode.MarketAccess;
+                   mode == MapView.MapMode.MarketAccess ||
+                   mode == MapView.MapMode.Religion;
         }
 
         private static MapView.MapMode ResolveCacheKeyForMode(MapView.MapMode mode)
@@ -2676,6 +2681,22 @@ public class MapOverlayManager
                     Color heat = EvaluateHeatColor(normalized);
                     heat.a = 0f;
                     resolved[i] = heat;
+                }
+            }
+            else if (currentMapMode == MapView.MapMode.Religion)
+            {
+                for (int i = 0; i < size; i++)
+                {
+                    int cellId = spatialGrid[i];
+                    if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
+                        continue;
+
+                    if (!cell.IsLand || rivers[i].r > 0.5f)
+                        continue;
+
+                    Color faithColor = GetCellFaithColor(cellId);
+                    faithColor.a = 0f;
+                    resolved[i] = faithColor;
                 }
             }
             else
@@ -3237,6 +3258,59 @@ public class MapOverlayManager
             return c;
         }
 
+        private Color GetCellFaithColor(int cellId)
+        {
+            if (religionState == null || faithPaletteColors == null)
+                return Color.gray;
+
+            int countyId = (cellId >= 0 && cellId < cellCountyIdById.Length) ? cellCountyIdById[cellId] : 0;
+            if (countyId <= 0 || countyId >= religionState.Adherence.Length)
+                return Color.gray;
+
+            var adh = religionState.Adherence[countyId];
+            if (adh == null)
+                return Color.gray;
+
+            // Blend colors by adherence weight
+            float r = 0f, g = 0f, b = 0f;
+            float totalAdh = 0f;
+            for (int f = 0; f < religionState.FaithCount; f++)
+            {
+                if (adh[f] > 0.01f)
+                {
+                    var fc = faithPaletteColors[f];
+                    r += fc.r * adh[f];
+                    g += fc.g * adh[f];
+                    b += fc.b * adh[f];
+                    totalAdh += adh[f];
+                }
+            }
+
+            if (totalAdh < 0.01f)
+                return Color.gray; // unaffiliated
+
+            // Normalize
+            r /= totalAdh;
+            g /= totalAdh;
+            b /= totalAdh;
+
+            // Desaturate contested counties (max adherence < 50%)
+            float maxAdh = 0f;
+            for (int f = 0; f < religionState.FaithCount; f++)
+                if (adh[f] > maxAdh) maxAdh = adh[f];
+
+            if (maxAdh < 0.50f)
+            {
+                float sat = Mathf.Lerp(0.3f, 1f, maxAdh / 0.50f);
+                float gray = r * 0.299f + g * 0.587f + b * 0.114f;
+                r = Mathf.Lerp(gray, r, sat);
+                g = Mathf.Lerp(gray, g, sat);
+                b = Mathf.Lerp(gray, b, sat);
+            }
+
+            return new Color(r, g, b, 1f);
+        }
+
         private static int ComputeRoadStateHash(RoadState roads)
         {
             if (roads == null)
@@ -3399,6 +3473,33 @@ public class MapOverlayManager
             InvalidateModeColorResolveCache(MapView.MapMode.MarketAccess);
 
             Debug.Log($"MapOverlayManager: Set economy state with {econ.Markets.Length - 1} markets");
+        }
+
+        public void SetReligionState(EconSim.Core.Religious.ReligionState religion)
+        {
+            religionState = religion;
+
+            if (religion == null || religion.FaithCount == 0)
+                return;
+
+            // Generate faith palette: evenly spaced hues, high saturation
+            faithPaletteColors = new Color[religion.FaithCount];
+            for (int f = 0; f < religion.FaithCount; f++)
+            {
+                float hue = (float)f / religion.FaithCount;
+                faithPaletteColors[f] = Color.HSVToRGB(hue, 0.65f, 0.85f);
+            }
+
+            InvalidateModeColorResolveCache(MapView.MapMode.Religion);
+
+            Debug.Log($"MapOverlayManager: Set religion state with {religion.FaithCount} faiths, " +
+                $"{religion.Parishes.Length - 1} parishes, {religion.Dioceses.Length - 1} dioceses, " +
+                $"{religion.Archdioceses.Length - 1} archdioceses");
+        }
+
+        public void InvalidateReligionOverlay()
+        {
+            InvalidateModeColorResolveCache(MapView.MapMode.Religion);
         }
 
         private void GenerateMarketBorderDistTexture()
@@ -3817,6 +3918,9 @@ public class MapOverlayManager
                     break;
                 case MapView.MapMode.MarketAccess:
                     shaderMode = 9;
+                    break;
+                case MapView.MapMode.Religion:
+                    shaderMode = 10;
                     break;
                 default:
                     shaderMode = 1;
