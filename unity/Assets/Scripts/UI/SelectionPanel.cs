@@ -737,6 +737,9 @@ namespace EconSim.UI
                 case TitleRank.Realm: rankLabel = "King"; break;
                 case TitleRank.Province: rankLabel = "Duke"; break;
                 case TitleRank.County: rankLabel = "Count"; break;
+                case TitleRank.Archdiocese: rankLabel = "Archbishop"; break;
+                case TitleRank.Diocese: rankLabel = "Bishop"; break;
+                case TitleRank.Parish: rankLabel = "Prior"; break;
                 default: rankLabel = ""; break;
             }
             return $"{rankLabel} {actor.Name}";

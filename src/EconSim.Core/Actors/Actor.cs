@@ -7,6 +7,7 @@ namespace EconSim.Core.Actors
         public string GivenName;   // First name only
         public int BirthDay;       // Simulation day (for age calculation)
         public bool IsFemale;
+        public Estate Estate;      // Nobility, Clergy
         public int CultureId;
         public int ReligionId;
         public int TitleId;        // Primary (highest-rank) title held (0 = unlanded)

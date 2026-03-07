@@ -218,6 +218,7 @@ namespace EconSim.Core.Actors
                     GivenName = givenName,
                     BirthDay = birthDay,
                     IsFemale = isFemale,
+                    Estate = Estate.Nobility,
                     CultureId = cultureId,
                     ReligionId = GetReligionId(cultureId),
                     TitleId = titleId,
