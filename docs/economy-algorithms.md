@@ -65,7 +65,7 @@ Durables and durable-input goods use fixed base pricing instead.
 
 | Durable        | Unit Weight | Base Price | Target Stock |
 | -------------- | ----------- | ---------- | ------------ |
-| Pottery        | 1.0 kg      | 0.15 Cr    | 3.0 /person  |
+| Pottery        | 1.0 kg      | 0.15 Cr    | 1.0 /person  |
 | Furniture      | 10.0 kg     | 1.50 Cr    | 0.5 /person  |
 | Tools          | 3.0 kg      | 3.00 Cr    | 1.0 /person  |
 | Wool Clothes   | 2.0 kg      | 2.50 Cr    | 2.0 /person  |
@@ -90,7 +90,7 @@ target faster.
 | Alcohol       | Wine, Mead              | 0.05 kg/day   | consumption |
 | Prepared Food | Bread, Bacon            | 0.10 kg/day   | consumption |
 | Pantry        | Honey, Butter           | 0.02 kg/day   | consumption |
-| Pottery       | Pottery                 | 3.0 units     | stock       |
+| Pottery       | Pottery                 | 1.0 units     | stock       |
 | Furniture     | Furniture               | 0.5 units     | stock       |
 | Tools         | Tools                   | 1.0 units     | stock       |
 | Clothing      | Wool C., Linen C., Fur, Silk C. | 2.0 units | stock       |
@@ -115,28 +115,35 @@ Each estate has a fixed share of the total population and a per-need-category
 consumption multiplier. The multipliers create **effective population** — a
 weighted sum that replaces raw headcount in all consumption and demand formulas.
 
-| Estate          | Share  | Staple | Basic | Comfort | Luxury |
-| --------------- | ------ | ------ | ----- | ------- | ------ |
-| Lower Commoner  | 91.0%  | 1.0×   | 1.0×  | 0.5×    | 0.0×   |
-| Upper Commoner  | 5.0%   | 1.0×   | 1.0×  | 2.0×    | 0.5×   |
-| Lower Nobility  | 1.8%   | 1.0×   | 1.0×  | 3.0×    | 1.0×   |
-| Upper Nobility  | 0.2%   | 1.0×   | 1.0×  | 5.0×    | 3.0×   |
-| Lower Clergy    | 1.8%   | 1.0×   | 1.0×  | 1.0×    | 0.0×   |
-| Upper Clergy    | 0.2%   | 1.0×   | 1.0×  | 3.0×    | 1.0×   |
+| Estate          | Share  | Staple | Basic | Comfort | Luxury | Labor Role       |
+| --------------- | ------ | ------ | ----- | ------- | ------ | ---------------- |
+| Lower Commoner  | 81.0%  | 1.0×   | 1.0×  | 0.5×    | 0.0×   | Extraction       |
+| Upper Commoner  | 15.0%  | 1.0×   | 1.0×  | 2.0×    | 0.5×   | Facility (shared pool) |
+| Lower Nobility  | 1.8%   | 1.0×   | 1.0×  | 3.0×    | 1.0×   | —                |
+| Upper Nobility  | 0.2%   | 1.0×   | 1.0×  | 5.0×    | 3.0×   | —                |
+| Lower Clergy    | 1.8%   | 1.0×   | 1.0×  | 1.0×    | 0.0×   | —                |
+| Upper Clergy    | 0.2%   | 1.0×   | 1.0×  | 3.0×    | 1.0×   | —                |
+
+Lower Commoners are the extraction workforce (peasants, villeins). Upper
+Commoners are the facility workforce (freemen, burghers) and form a **shared
+labor pool** — facilities draw workers from the same pool in priority order
+(durable-chain intermediates first, then remaining facilities).
 
 For a county of 1,000 people the effective populations are:
 
 - **Staple/Basic**: 1,000 (everyone eats equally)
-- **Comfort**: 910×0.5 + 50×2 + 18×3 + 2×5 + 18×1 + 2×3 = **635**
-- **Luxury**: 910×0 + 50×0.5 + 18×1 + 2×3 + 18×0 + 2×1 = **51**
+- **Comfort**: 810×0.5 + 150×2 + 18×3 + 2×5 + 18×1 + 2×3 = **783**
+- **Luxury**: 810×0 + 150×0.5 + 18×1 + 2×3 + 18×0 + 2×1 = **101**
 
 Key effects:
 
-- Comfort demand is ~64% of raw population (lower commoners consume at half
-  rate, but nobility amplifies)
-- Luxury demand is ~5% of raw population (only upper estates consume)
+- Comfort demand is ~78% of raw population (lower commoners consume at half
+  rate, but the larger upper commoner class and nobility amplify)
+- Luxury demand is ~10% of raw population (only upper estates consume)
 - Staple and basic demand are unchanged from raw population
 - Estate populations are recomputed monthly when total population changes
+- Extraction uses only the LowerCommoner population (81%)
+- Facility processing uses only the UpperCommoner population (15%) as a shared pool
 
     For each county:
         For each need category (Staple, Basic, Comfort, Luxury, None):
@@ -346,12 +353,13 @@ Production capacity is always computed (even on rest days) because it represents
 structural capacity used for price discovery, not actual daily output.
 
     For each county:
+        extractionPop = estatePop[LowerCommoner]
         For each good:
-            capacity = population × productivity × seasonal_modifier
+            capacity = extractionPop × productivity × seasonal_modifier
             Add capacity to total extraction capacity
     For each county's facilities:
-        For each facility that has labor and output:
-            Add its maximum labor-constrained output to total capacity for that output good
+        For each facility with output:
+            Add population × max_labor_fraction × output_amount to capacity for that output good
 
 These totals feed into price discovery (in InterRealmTradeSystem).
 
@@ -362,9 +370,8 @@ These totals feed into price discovery (in InterRealmTradeSystem).
             Zero out all production, skip extraction and facility processing
             (Fall through to consumption below)
 
-        Compute the workforce fraction available for extraction:
-            workforce_fraction = (population - facility_workers) / population
-            (facility_workers is from the previous tick; on tick 1 it is zero)
+        Extraction uses LowerCommoner population (81% of total)
+        Facility processing uses UpperCommoner population (15%) as a shared labor pool
 
 #### Compute Facility Input Demand (two-pass)
 
@@ -373,7 +380,7 @@ governs demand-driven extraction and trade retain calculations.
 
         Pass 1 — Durable outputs (pottery, furniture, tools, wool clothes, shoes, etc.):
             For each facility that produces a durable good:
-                Compute labor-constrained max output
+                max_by_labor = population × max_labor_fraction × output_amount
                 Compute target stock (effPop[good's need category] × target_stock_per_pop)
                 Compute maintenance need (current_stock × spoilage_rate)
                 Compute stock gap (target - current, floored at 0)
@@ -387,7 +394,7 @@ governs demand-driven extraction and trade retain calculations.
             charcoal demand already includes smelter's needs when charcoal burner runs)
 
             For each facility that produces a non-durable good:
-                Compute labor-constrained max output
+                max_by_labor = population × max_labor_fraction × output_amount
                 If this good is a durable-chain input (iron, charcoal, etc.):
                     Throughput is capped by downstream demand:
                         target_stock = downstream_facility_demand × 7 days buffer
@@ -400,7 +407,7 @@ governs demand-driven extraction and trade retain calculations.
 #### Extraction (Raw Good Production)
 
         For each good:
-            produced = population × productivity × workforce_fraction × seasonal_modifier
+            produced = extractionPop × productivity × seasonal_modifier
 
             If this good is a durable-chain raw input (iron ore, timber for charcoal, etc.):
                 Cap extraction to local facility demand:
@@ -416,25 +423,31 @@ governs demand-driven extraction and trade retain calculations.
                     produced = min(produced, daily_need)
 
             Else if this good has no direct population demand and has a base price:
-                Price-throttle extraction (uses local market price):
+                Gentle price-throttle extraction (uses local market price):
                     price_ratio = local_market_price / base_price
-                    If ratio < 1: produced *= ratio
-                    (When prices are depressed, workers produce less;
+                    If ratio < 0.5: produced *= sqrt(ratio × 2)
+                    (Only kicks in below 50% of base price, using sqrt curve;
                      local_market_price = PerMarketPrices[county's market][good])
 
             Add produced to county stock
 
 #### Facility Processing
 
-        For each facility in the county:
+        Initialize shared labor pool: remainingFacLabor = estatePop[UpperCommoner]
+        Two-pass processing: durable-chain intermediates first (pass 0), then rest (pass 1)
+
+        For each facility in the county (in current pass):
             Compute material constraint:
                 For each input good, how many output units could be made from available stock?
                 Take the minimum across all inputs
 
-            Compute labor constraint:
-                max_by_labor = population × max_labor_fraction / labor_per_unit × output_amount
+            Compute per-facility labor constraint:
+                max_by_labor = population × max_labor_fraction × output_amount
 
-            throughput = min(material_constraint, labor_constraint), floored at 0
+            Compute shared pool constraint:
+                max_by_pool = remainingFacLabor × output_amount
+
+            throughput = min(material_constraint, max_by_labor, max_by_pool), floored at 0
 
             If output is a durable:
                 Cap throughput by stock-gap need (same formula as Pass 1):
@@ -444,11 +457,13 @@ governs demand-driven extraction and trade retain calculations.
                 Cap throughput by downstream demand (same formula as Pass 2)
 
             If output is a normal commodity (not durable, not durable-input):
-                Price-throttle: if local_market_price / base_price < 1, scale down throughput
+                Gentle price-throttle: if local_market_price / base_price < 0.5,
+                    throughput *= sqrt(price_ratio × 2)
 
             Consume input goods proportionally to throughput
             Add output to county stock
-            Record workers assigned to this facility
+            Record workers: workforce = throughput / output_amount
+            Deduct workforce from remainingFacLabor
         Sum total facility workers across all facilities
 
 #### Consumption
@@ -847,7 +862,8 @@ per market zone, creating geographic price variation.
     For each market zone:
         Compute per-market production capacity:
             For each county in this market:
-                Add extraction capacity and facility output capacity
+                Add LowerCommoner extraction capacity (extractionPop × productivity)
+                Add facility output capacity (population × max_labor_fraction × output_amount)
 
         For each eligible good:
             Compute demand (from counties in this market only):
@@ -937,43 +953,46 @@ into refined or finished goods. Each has a recipe (inputs → output), a labor
 requirement, and a max labor fraction (cap on what share of the county
 population can work there).
 
-| Facility        | Inputs                      | Output        | Labor | Max Pop % |
-| --------------- | --------------------------- | ------------- | ----- | --------- |
-| Kiln            | 2.0 clay                    | 1 pottery     | 3     | 5%        |
-| Carpenter       | 15.0 timber                 | 1 furniture   | 1     | 10%       |
-| Charcoal Burner | 5.0 timber                  | 2.0 charcoal  | 1     | 10%       |
-| Smelter         | 3.0 iron ore + 0.4 charcoal | 2.0 iron      | 1     | 5%        |
-| Smithy          | 5.0 iron + 0.5 charcoal     | 1 tool set    | 1     | 5%        |
-| Weaver          | 4.0 wool                    | 1 outfit      | 2     | 10%       |
-| Butcher         | 1.0 pork + 0.2 salt         | 3.0 sausage   | 1     | 15%       |
-| Smokehouse      | 2.0 pork                    | 3.0 bacon     | 1     | 15%       |
-| Cheesemaker     | 3.0 milk + 0.3 salt         | 1.5 cheese    | 1     | 15%       |
-| Salter          | 1.0 fish + 0.5 salt         | 3.0 s.fish    | 1     | 15%       |
-| Drying Rack     | 2.0 fish                    | 1.5 stkfish   | 1     | 10%       |
-| Bakery          | 2.0 wheat + 0.03 salt       | 2.8 bread     | 1     | 15%       |
-| Brewery         | 2.0 barley                  | 4.0 ale       | 1     | 15%       |
-| Gold Jeweler    | 0.01 gold                   | 1 g.jewelry   | 1     | 2%        |
-| Silver Jeweler  | 0.05 silver                 | 1 s.jewelry   | 1     | 2%        |
-| Winery          | 2.0 grapes                  | 1.5 wine      | 1     | 10%       |
-| Meadery         | 2.0 honey                   | 2.0 mead      | 1     | 10%       |
-| Churn           | 3.0 milk                    | 1.0 butter    | 1     | 10%       |
-| Spice Blender   | 2.0 wine + 0.1 spices       | 2.0 sp.wine   | 1     | 5%        |
-| Amber Carver    | 0.5 amber                   | 1 a.jewelry   | 1     | 2%        |
-| Silk Weaver     | 3.0 silk                    | 1 silk outfit | 2     | 5%        |
-| Tanner          | 3.0 hides                   | 1.0 leather   | 1     | 10%       |
-| Cobbler         | 2.0 leather                 | 1 pair shoes  | 1     | 8%        |
-| Linen Weaver    | 4.0 flax                    | 1 linen outfit| 2     | 5%        |
+| Facility        | Inputs                       | Output/worker/day | Max Pop % |
+| --------------- | ---------------------------- | ----------------- | --------- |
+| Kiln            | 4.0 clay                     | 2 pottery         | 1.7%      |
+| Carpenter       | 30.0 timber                  | 2 furniture       | 10%       |
+| Charcoal Burner | 10.0 timber                  | 4.0 charcoal      | 10%       |
+| Smelter         | 6.0 iron ore + 0.8 charcoal  | 4.0 iron          | 5%        |
+| Smithy          | 10.0 iron + 1.0 charcoal     | 2 tool sets       | 5%        |
+| Weaver          | 8.0 wool                     | 2 outfits         | 5%        |
+| Butcher         | 2.0 pork + 0.4 salt          | 6.0 sausage       | 15%       |
+| Smokehouse      | 4.0 pork                     | 6.0 bacon         | 15%       |
+| Cheesemaker     | 6.0 milk + 0.6 salt          | 3.0 cheese        | 15%       |
+| Salter          | 2.0 fish + 1.0 salt          | 6.0 s.fish        | 15%       |
+| Drying Rack     | 4.0 fish                     | 3.0 stkfish       | 10%       |
+| Bakery          | 8.0 wheat + 0.12 salt        | 11.2 bread        | 15%       |
+| Brewery         | 4.0 barley                   | 8.0 ale           | 15%       |
+| Gold Jeweler    | 0.02 gold                    | 2 g.jewelry       | 2%        |
+| Silver Jeweler  | 0.10 silver                  | 2 s.jewelry       | 2%        |
+| Winery          | 4.0 grapes                   | 3.0 wine          | 10%       |
+| Meadery         | 4.0 honey                    | 4.0 mead          | 10%       |
+| Churn           | 6.0 milk                     | 2.0 butter        | 10%       |
+| Spice Blender   | 4.0 wine + 0.2 spices        | 4.0 sp.wine       | 5%        |
+| Amber Carver    | 1.0 amber                    | 2 a.jewelry       | 2%        |
+| Silk Weaver     | 6.0 silk                     | 2 silk outfits    | 2.5%      |
+| Tanner          | 6.0 hides                    | 2.0 leather       | 10%       |
+| Cobbler         | 4.0 leather                  | 2 pair shoes      | 8%        |
+| Linen Weaver    | 8.0 flax                     | 2 linen outfits   | 2.5%      |
 
 Durable outputs (pottery, furniture, tools, wool clothes, linen clothes, shoes,
 gold jewelry, silver jewelry, amber jewelry, silk clothes) are in units; all
-other outputs are in kg.
+other outputs are in kg. **OutputAmount** represents output per worker per day —
+inputs and outputs scale together (one worker consumes the listed inputs and
+produces the listed output each day).
 
 Throughput is constrained by the minimum of:
 
 - **Material**: available stock of each input, scaled proportionally
-- **Labor**: population × max_labor_fraction / labor_per_unit × output_amount
+- **Per-facility labor**: population × max_labor_fraction × output_amount
+- **Shared labor pool**: remaining UpperCommoner workers × output_amount
 - **Demand** (durables only): stock-gap cap prevents overproduction
-- **Price** (commodities only): price-throttle reduces output when prices are low
+- **Price** (commodities only): gentle sqrt throttle below 50% of base price
 
 ## Money Supply
 
