@@ -20,7 +20,6 @@ namespace EconSim.Renderer
     public class MapView : MonoBehaviour
     {
         [Header("Rendering Settings")]
-        [SerializeField] private float heightScale = 15f;
         [SerializeField] private float cellScale = 0.01f;  // Scale from map data pixels to Unity units
         public float CellScale => cellScale;
         [SerializeField] private Material flatTerrainMaterial;
@@ -80,7 +79,8 @@ namespace EconSim.Renderer
         private const float ProvinceZoomedInMax = 0.75f;
         private const float PoliticalZoomHysteresis = 0.02f;
         private const float DefaultModeHeightScale = 0f;
-        private const float BiomesModeHeightScale = 0.3f;
+        [Header("Height")]
+        [SerializeField] [Range(0f, 2f)] private float biomesModeHeightScale = 0.3f;
         private const float HeightScaleTransitionSpeed = 2f;
         private float currentAnimatedHeightScale = DefaultModeHeightScale;
         private float targetHeightScale = DefaultModeHeightScale;
@@ -402,7 +402,7 @@ namespace EconSim.Renderer
         {
             return mode switch
             {
-                MapMode.Biomes => BiomesModeHeightScale,
+                MapMode.Biomes => biomesModeHeightScale,
                 _ => DefaultModeHeightScale
             };
         }
@@ -423,6 +423,9 @@ namespace EconSim.Renderer
         {
             if (overlayManager == null)
                 return;
+
+            // Re-resolve target each frame so Inspector changes take effect live
+            targetHeightScale = ResolveHeightScaleForMode(currentMode);
 
             currentAnimatedHeightScale = Mathf.MoveTowards(
                 currentAnimatedHeightScale,
@@ -1678,9 +1681,8 @@ namespace EconSim.Renderer
 
         private float GetCellHeight(Cell cell)
         {
-            // Use world-scale normalized signed height so displacement remains consistent across map scales.
             float normalizedSignedHeight = Elevation.GetNormalizedSignedHeight(cell, mapData.Info);
-            return normalizedSignedHeight * heightScale;
+            return normalizedSignedHeight * gridHeightScale;
         }
 
         private Color32 GetCellColor(Cell cell)
