@@ -18,8 +18,8 @@ namespace EconSim.Core.Economy
         /// <summary>Population fraction per estate. Sum = 1.0.</summary>
         public static readonly float[] DefaultShare = new float[Count]
         {
-            0.91f,  // LowerCommoner
-            0.05f,  // UpperCommoner
+            0.81f,  // LowerCommoner — peasants, villeins; extraction labor
+            0.15f,  // UpperCommoner — freemen, burghers; facility labor
             0.018f, // LowerNobility
             0.002f, // UpperNobility
             0.018f, // LowerClergy

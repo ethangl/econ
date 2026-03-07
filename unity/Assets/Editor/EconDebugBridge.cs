@@ -1275,7 +1275,6 @@ namespace EconSim.Editor
                 j.ArrClose();
                 j.KV("outputGood", Goods.Names[(int)def.OutputGood]);
                 j.KV("outputAmount", def.OutputAmount);
-                j.KV("laborPerUnit", def.LaborPerUnit);
                 j.KV("maxLaborFraction", def.MaxLaborFraction);
                 j.KV("expectedThroughput", kv.Value * def.OutputAmount);
                 throughputByType.TryGetValue(kv.Key, out float actualTp);
