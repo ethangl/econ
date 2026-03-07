@@ -149,11 +149,11 @@ Material:
     - _Glossiness: 0.5
     - _GlossyReflections: 1
     - _HalftoneScale: 0.15
-    - _HeightScale: 0.3
+    - _HeightScale: 0.5
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.0000017243922
+    - _HoverIntensity: 0.000017603175
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
@@ -169,7 +169,7 @@ Material:
     - _PoliticalEdgeDarkening: 0.777
     - _PoliticalEdgeOpacity: 0.8
     - _PoliticalGradientRadius: 64
-    - _ReliefAmbient: 0.333
+    - _ReliefAmbient: 0.4
     - _ReliefNormalStrength: 0.6
     - _ReliefShadeStrength: 0.6
     - _RiverDarken: 1

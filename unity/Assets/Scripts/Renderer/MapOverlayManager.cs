@@ -167,8 +167,18 @@ public class MapOverlayManager
         private const float ReliefLocalReliefInfluence = 1.25f;
         private const float ReliefValleyHeightExponent = 0.70f;
         private const float ReliefLandMinAboveSea = 0.001f;
-        private const int ReliefNormalPreBlurPasses = 1;
-        private const float ReliefNormalDerivativeScale = 0.12f;
+        private const int ReliefNormalPreBlurPasses = 0;
+        private const float ReliefNormalDerivativeScale = 0.45f;
+
+        // Terrain detail noise parameters (sub-cell variation for sharper normals).
+        private const float DetailNoiseAmplitude = 0.012f;      // Max height perturbation in 0-1 space
+        private const float DetailNoiseFrequency = 0.035f;       // Base frequency (texels^-1)
+        private const int DetailNoiseOctaves = 4;
+        private const float DetailNoiseLacunarity = 2.17f;
+        private const float DetailNoisePersistence = 0.48f;
+        private const float DetailNoiseRiverFadeRadius = 18f;    // Suppress noise near rivers (texels)
+        private const float DetailNoiseRiverFadeMin = 0.15f;     // Minimum noise scale near rivers
+        private const float DetailNoiseHighElevationBoost = 1.8f; // Extra noise at high elevations
         private static readonly float[] ReliefGaussianKernel = { 1f, 8f, 28f, 56f, 70f, 56f, 28f, 8f, 1f };
 
         // Road state (cached for regeneration)
@@ -219,7 +229,7 @@ public class MapOverlayManager
         private const float DefaultNoisyEdgeAmplitudeCap = 8.0f;
         private const float DefaultNoisyEdgeBandPaddingPx = 1.5f;
 
-        private const int OverlayTextureCacheVersion = 9;
+        private const int OverlayTextureCacheVersion = 10;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
         private const string CacheSpatialGridFile = "spatial_grid.bin";
         private const string CachePoliticalIdsFile = "political_ids.bin";
@@ -1441,7 +1451,11 @@ public class MapOverlayManager
                 heightData[i] = Mathf.Clamp(heightData[i], seaLevel01 + ReliefLandMinAboveSea, 1f);
             });
 
-            GenerateReliefNormalTexture(heightData, isLand);
+            // Inject sub-cell detail noise for sharper normals. This creates a separate
+            // "normal-only" heightfield so the visual heightmap (water shading, displacement)
+            // stays clean while the normal map captures fine terrain detail.
+            float[] normalHeightData = ApplyDetailNoise(heightData, isLand, riverDistance, seaLevel01);
+            GenerateReliefNormalTexture(normalHeightData, isLand);
 
             // Create texture
             heightmapTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RFloat, false);
@@ -1452,6 +1466,111 @@ public class MapOverlayManager
             heightmapTexture.Apply();
 
             Debug.Log($"MapOverlayManager: Generated heightmap {gridWidth}x{gridHeight} with relief synthesis");
+        }
+
+        /// <summary>
+        /// Add multi-octave noise to a copy of the heightfield for normal map derivation.
+        /// Noise is suppressed near rivers (valleys are smooth/eroded) and boosted at high
+        /// elevation (ridges/mountains have more rugged terrain).
+        /// </summary>
+        private float[] ApplyDetailNoise(float[] heightData, bool[] isLand, float[] riverDistance, float seaLevel01)
+        {
+            float[] result = (float[])heightData.Clone();
+            float invLandSpan = 1f / Mathf.Max(0.0001f, 1f - seaLevel01);
+            int seed = mapData?.Info?.RootSeed ?? 0;
+            float offsetX = (seed * 7919) % 10000;
+            float offsetY = (seed * 6271) % 10000;
+
+            Parallel.For(0, gridHeight, y =>
+            {
+                int row = y * gridWidth;
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = row + x;
+                    if (!isLand[idx])
+                        continue;
+
+                    // River proximity suppression: smooth valleys, rugged ridges.
+                    float riverFade = 1f;
+                    if (riverDistance != null && idx < riverDistance.Length)
+                    {
+                        float dist = riverDistance[idx];
+                        float t = Mathf.Clamp01(dist / DetailNoiseRiverFadeRadius);
+                        riverFade = Mathf.Lerp(DetailNoiseRiverFadeMin, 1f, t * t);
+                    }
+
+                    // Elevation boost: more noise at higher elevations (mountains are rugged).
+                    float landHeight01 = Mathf.Clamp01((heightData[idx] - seaLevel01) * invLandSpan);
+                    float elevationScale = Mathf.Lerp(0.5f, DetailNoiseHighElevationBoost, landHeight01);
+
+                    // Multi-octave noise (value noise via hash, deterministic).
+                    float noiseVal = 0f;
+                    float freq = DetailNoiseFrequency;
+                    float amp = 1f;
+                    float ampSum = 0f;
+                    for (int o = 0; o < DetailNoiseOctaves; o++)
+                    {
+                        float nx = (x + offsetX) * freq;
+                        float ny = (y + offsetY) * freq;
+                        noiseVal += GradientNoise2D(nx, ny) * amp;
+                        ampSum += amp;
+                        freq *= DetailNoiseLacunarity;
+                        amp *= DetailNoisePersistence;
+                    }
+
+                    noiseVal /= ampSum; // Normalized to roughly -1..1
+
+                    float displacement = noiseVal * DetailNoiseAmplitude * riverFade * elevationScale;
+                    result[idx] = Mathf.Clamp(result[idx] + displacement, seaLevel01 + ReliefLandMinAboveSea, 1f);
+                }
+            });
+
+            return result;
+        }
+
+        /// <summary>
+        /// 2D gradient noise (smooth, deterministic). Returns value in approximately -1..1 range.
+        /// Uses bitwise hash for speed in Parallel.For context.
+        /// </summary>
+        private static float GradientNoise2D(float x, float y)
+        {
+            int ix = Mathf.FloorToInt(x);
+            int iy = Mathf.FloorToInt(y);
+            float fx = x - ix;
+            float fy = y - iy;
+
+            // Smoothstep interpolation for C1 continuity
+            float sx = fx * fx * (3f - 2f * fx);
+            float sy = fy * fy * (3f - 2f * fy);
+
+            float n00 = GradDot(ix, iy, fx, fy);
+            float n10 = GradDot(ix + 1, iy, fx - 1f, fy);
+            float n01 = GradDot(ix, iy + 1, fx, fy - 1f);
+            float n11 = GradDot(ix + 1, iy + 1, fx - 1f, fy - 1f);
+
+            float nx0 = n00 + sx * (n10 - n00);
+            float nx1 = n01 + sx * (n11 - n01);
+            return nx0 + sy * (nx1 - nx0);
+        }
+
+        private static float GradDot(int ix, int iy, float dx, float dy)
+        {
+            // Hash to pick a gradient direction
+            int h = HashCoord(ix, iy) & 3;
+            switch (h)
+            {
+                case 0: return dx + dy;
+                case 1: return -dx + dy;
+                case 2: return dx - dy;
+                default: return -dx - dy;
+            }
+        }
+
+        private static int HashCoord(int x, int y)
+        {
+            int h = x * 374761393 + y * 668265263;
+            h = (h ^ (h >> 13)) * 1274126177;
+            return h ^ (h >> 16);
         }
 
         private void GenerateReliefNormalTexture(float[] heightData, bool[] isLand)
