@@ -5,9 +5,9 @@
             <!-- Generation fields (initial mode) -->
             <ui:VisualElement name="generation-fields">
                 <ui:DropdownField name="template-dropdown" label="Template" class="startup-field" />
-                <ui:IntegerField name="seed-field" label="Seed" value="12345" class="startup-field" />
+                <ui:IntegerField name="seed-field" label="Seed" value="424242" class="startup-field" />
                 <ui:IntegerField name="cellcount-field" label="Cells" value="100000" class="startup-field" />
-                <ui:FloatField name="aspect-ratio-field" label="Aspect Ratio" value="1.5" class="startup-field" />
+                <ui:FloatField name="aspect-ratio-field" label="Aspect Ratio" value="1.77778" class="startup-field" />
                 <ui:FloatField name="latitude-field" label="Latitude" value="50" class="startup-field" />
                 <ui:VisualElement name="startup-buttons" class="startup-buttons">
                     <ui:Button name="generate-button" text="Generate New" class="startup-button" />
