@@ -21,7 +21,7 @@ namespace EconSim.Core.Economy
         Iron = 12,
         Tools = 13,
         Charcoal = 14,
-        Clothes = 15,
+        WoolClothes = 15,
         Pork = 16,
         Sausage = 17,
         Bacon = 18,
@@ -44,6 +44,15 @@ namespace EconSim.Core.Economy
         Spices = 35,
         SpicedWine = 36,
         Fur = 37,
+        Amber = 38,
+        AmberJewelry = 39,
+        Silk = 40,
+        SilkClothes = 41,
+        Hides = 42,
+        Leather = 43,
+        Shoes = 44,
+        Flax = 45,
+        LinenClothes = 46,
     }
 
     public static class Goods
@@ -167,8 +176,10 @@ namespace EconSim.Core.Economy
             (int)GoodType.Stockfish,
             (int)GoodType.Tools,
             (int)GoodType.Salt,
-            (int)GoodType.Clothes,
+            (int)GoodType.WoolClothes,
+            (int)GoodType.LinenClothes,
             (int)GoodType.Fur,
+            (int)GoodType.Shoes,
             (int)GoodType.Timber,
             (int)GoodType.Cheese,
             (int)GoodType.Bacon,
@@ -179,12 +190,19 @@ namespace EconSim.Core.Economy
             (int)GoodType.IronOre,
             (int)GoodType.Iron,
             (int)GoodType.Charcoal,
+            (int)GoodType.Hides,
+            (int)GoodType.Leather,
+            (int)GoodType.Flax,
             (int)GoodType.Honey,
             (int)GoodType.Spices,
             (int)GoodType.Mead,
             (int)GoodType.Butter,
             (int)GoodType.GoldJewelry,
             (int)GoodType.SilverJewelry,
+            (int)GoodType.Silk,
+            (int)GoodType.SilkClothes,
+            (int)GoodType.Amber,
+            (int)GoodType.AmberJewelry,
             (int)GoodType.Gold,
             (int)GoodType.Silver,
         };
@@ -296,7 +314,7 @@ namespace EconSim.Core.Economy
                 new GoodDef(GoodType.Iron,       "iron",      GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.50f, 0.025f, 10.0f, true, false),
                 new GoodDef(GoodType.Tools,      "tools",     GoodCategory.Refined, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0005f, 0.001f, 3.00f, 0.15f, 60.0f, true, false, 0.001f, 1.0f, unitWeight: 3.0f, comfortCategory: ComfortCategory.Tools),
                 new GoodDef(GoodType.Charcoal,   "charcoal",  GoodCategory.Refined, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.06f, 0.003f, 1.2f, true, false),
-                new GoodDef(GoodType.Clothes,    "clothes",   GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0f, 0.002f, 2.50f, 0.125f, 50.0f, true, false, 0.002f, 2.0f, unitWeight: 2.0f, comfortCategory: ComfortCategory.Clothing),
+                new GoodDef(GoodType.WoolClothes, "woolClothes", GoodCategory.Finished, NeedCategory.Comfort, 0.0f, 0.0005f, 0.0f, 0.002f, 2.50f, 0.125f, 50.0f, true, false, 0.002f, 2.0f, unitWeight: 2.0f, comfortCategory: ComfortCategory.Clothing),
                 new GoodDef(GoodType.Pork, "pork", GoodCategory.Raw, NeedCategory.None, 0.0f, 0.0f, 0.0f, 0.0f, 0.08f, 0.004f, 1.6f, true, false, 0.02f, 0f, seasonalSensitivity: 0.4f, minTemperature: -5f, maxTemperature: 35f,
                     biomeYields: new Dictionary<int, float> {
                         { (int)BiomeId.Tundra, 0.02f }, { (int)BiomeId.CoastalMarsh, 0.08f },
@@ -367,6 +385,67 @@ namespace EconSim.Core.Economy
                         { (int)BiomeId.MountainShrub, 0.03f },
                         { (int)BiomeId.ColdDesert, 0.02f },
                     }),
+                new GoodDef(GoodType.Amber, "amber", GoodCategory.Raw, NeedCategory.None,
+                    0.0f, 0.0f, 0.0f, 0.0f, 0.80f, 0.04f, 16.0f, true, false, 0f, 0f,
+                    seasonalSensitivity: 0.3f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.CoastalMarsh, 0.04f },
+                        { (int)BiomeId.BorealForest, 0.02f },
+                        { (int)BiomeId.Wetland, 0.01f },
+                        { (int)BiomeId.Tundra, 0.005f },
+                    }),
+                new GoodDef(GoodType.AmberJewelry, "amberJewelry", GoodCategory.Finished, NeedCategory.Luxury,
+                    0.0f, 0.0f, 0.0f, 0.0f, 12.0f, 0.60f, 240.0f, true, false,
+                    0.0005f, 0.1f, unitWeight: 0.05f, comfortCategory: ComfortCategory.Jewelry),
+                new GoodDef(GoodType.Silk, "silk", GoodCategory.Raw, NeedCategory.None,
+                    0.0f, 0.0f, 0.0f, 0.0f, 1.50f, 0.075f, 30.0f, true, false, 0.001f, 0f,
+                    seasonalSensitivity: 0.5f, minTemperature: 15f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.TropicalRainforest, 0.06f },
+                        { (int)BiomeId.TropicalDryForest, 0.05f },
+                        { (int)BiomeId.Savanna, 0.03f },
+                        { (int)BiomeId.Woodland, 0.02f },
+                        { (int)BiomeId.TemperateForest, 0.01f },
+                    }),
+                new GoodDef(GoodType.SilkClothes, "silkClothes", GoodCategory.Finished, NeedCategory.Luxury,
+                    0.0f, 0.0f, 0.0f, 0.0f, 8.0f, 0.40f, 160.0f, true, false,
+                    0.001f, 0.5f, unitWeight: 1.5f, comfortCategory: ComfortCategory.Clothing),
+                new GoodDef(GoodType.Hides, "hides", GoodCategory.Raw, NeedCategory.None,
+                    0.0f, 0.0f, 0.0f, 0.0f, 0.06f, 0.003f, 1.2f, true, false, 0.01f, 0f,
+                    seasonalSensitivity: 0.3f, minTemperature: -5f, maxTemperature: 35f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.Grassland, 0.12f },
+                        { (int)BiomeId.Savanna, 0.10f },
+                        { (int)BiomeId.Woodland, 0.08f },
+                        { (int)BiomeId.Floodplain, 0.08f },
+                        { (int)BiomeId.TemperateForest, 0.06f },
+                        { (int)BiomeId.Scrubland, 0.06f },
+                        { (int)BiomeId.TropicalDryForest, 0.05f },
+                        { (int)BiomeId.MountainShrub, 0.04f },
+                        { (int)BiomeId.BorealForest, 0.03f },
+                        { (int)BiomeId.Tundra, 0.02f },
+                        { (int)BiomeId.ColdDesert, 0.02f },
+                    }),
+                new GoodDef(GoodType.Leather, "leather", GoodCategory.Refined, NeedCategory.None,
+                    0.0f, 0.0f, 0.0f, 0.0f, 0.80f, 0.04f, 16.0f, true, false),
+                new GoodDef(GoodType.Shoes, "shoes", GoodCategory.Finished, NeedCategory.Comfort,
+                    0.0f, 0.0005f, 0.0f, 0.0f, 2.00f, 0.10f, 40.0f, true, false,
+                    0.002f, 1.5f, unitWeight: 1.0f, comfortCategory: ComfortCategory.Footwear),
+                new GoodDef(GoodType.Flax, "flax", GoodCategory.Raw, NeedCategory.None,
+                    0.0f, 0.0f, 0.0f, 0.0f, 0.60f, 0.03f, 12.0f, true, false, 0.001f, 0f,
+                    seasonalSensitivity: 0.8f, minTemperature: 5f, maxTemperature: 30f,
+                    biomeYields: new Dictionary<int, float> {
+                        { (int)BiomeId.Floodplain, 0.30f },
+                        { (int)BiomeId.Wetland, 0.15f },
+                        { (int)BiomeId.CoastalMarsh, 0.12f },
+                        { (int)BiomeId.Grassland, 0.10f },
+                        { (int)BiomeId.TemperateForest, 0.08f },
+                        { (int)BiomeId.Woodland, 0.06f },
+                        { (int)BiomeId.Savanna, 0.04f },
+                    }),
+                new GoodDef(GoodType.LinenClothes, "linenClothes", GoodCategory.Finished, NeedCategory.Comfort,
+                    0.0f, 0.0005f, 0.0f, 0.001f, 2.00f, 0.10f, 40.0f, true, false,
+                    0.002f, 2.0f, unitWeight: 1.5f, comfortCategory: ComfortCategory.Clothing),
             };
 
             Count = Defs.Length;
@@ -399,7 +478,7 @@ namespace EconSim.Core.Economy
             {
                 var d = Defs[i];
                 IsDurable[i]           = d.TargetStockPerPop > 0f;
-                IsDurableInput[i]      = d.Name is "ironOre" or "wool" or "clay" or "timber" or "iron" or "charcoal" or "gold" or "silver";
+                IsDurableInput[i]      = d.Name is "ironOre" or "wool" or "clay" or "timber" or "iron" or "charcoal" or "gold" or "silver" or "amber" or "silk" or "hides" or "leather" or "flax";
                 ConsumptionPerPop[i]   = d.ConsumptionPerPop;
                 Names[i]               = d.Name;
                 BasePrice[i]           = d.BasePrice;
@@ -475,6 +554,7 @@ namespace EconSim.Core.Economy
                 new ComfortCategoryDef(ComfortCategory.Clothing,     2.0f,  true),
                 new ComfortCategoryDef(ComfortCategory.Jewelry,      0.2f,  true),
                 new ComfortCategoryDef(ComfortCategory.Pantry,       0.02f, false),
+                new ComfortCategoryDef(ComfortCategory.Footwear,     1.5f,  true),
             };
             ComfortCategories = catDefs;
             ComfortCategoryGoods = new int[catDefs.Length][];
@@ -529,6 +609,12 @@ namespace EconSim.Core.Economy
             RockYieldModifier[3, (int)GoodType.SilverOre] = 0.5f;
             RockYieldModifier[3, (int)GoodType.Stone]     = 1.3f;
             RockYieldModifier[3, (int)GoodType.Clay]      = 0.8f;
+
+            // Amber: fossilized resin in sedimentary/limestone deposits
+            RockYieldModifier[0, (int)GoodType.Amber]      = 0.3f;  // Granite: wrong geology
+            // Sedimentary (index 1): 1.0 default — primary amber geology
+            RockYieldModifier[2, (int)GoodType.Amber]      = 1.3f;  // Limestone: sometimes found
+            RockYieldModifier[3, (int)GoodType.Amber]      = 0.2f;  // Volcanic: wrong geology
         }
 
         static int[] BuildBuyPriority()

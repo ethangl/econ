@@ -33,21 +33,21 @@ prevent stalls when running at high speed.
 
 ## Goods
 
-There are 38 goods, each belonging to a **need category**:
+There are 47 goods, each belonging to a **need category**:
 
 - **Staple** (wheat, sausage, cheese, salted fish, stockfish, ale) — pooled
   food budget, starvation if unmet
 - **Basic** (salt, barley) — individually consumed, contributes to basic
   satisfaction
 - **Comfort** (bread, wine, mead, bacon, honey, butter, pottery, furniture,
-  tools, clothes, fur, silver jewelry) — grouped into 8 substitute categories;
-  drives migration pull
-- **Luxury** (gold jewelry, spices, spiced wine) — consumed only by upper
-  estates (nobility, clergy); no comfort satisfaction effect yet, but creates
-  trade-driven economic activity
+  tools, wool clothes, linen clothes, fur, shoes, silver jewelry) — grouped
+  into 9 substitute categories; drives migration pull
+- **Luxury** (gold jewelry, amber jewelry, silk clothes, spices, spiced wine)
+  — consumed only by upper estates (nobility, clergy); no comfort satisfaction
+  effect yet, but creates trade-driven economic activity
 - **None** (timber, iron ore, gold ore, silver ore, stone, clay, wool, pork,
-  milk, fish, gold, silver, iron, charcoal, grapes) — intermediate or facility
-  inputs, no direct population demand
+  milk, fish, gold, silver, iron, charcoal, grapes, amber, silk, hides,
+  leather, flax) — intermediate or facility inputs, no direct population demand
 
 Demand for each good is driven by **effective population** (see Estates below),
 not raw headcount. Staples and basics use effective population ≈ actual
@@ -67,10 +67,14 @@ Durables and durable-input goods use fixed base pricing instead.
 | Pottery        | 1.0 kg      | 0.15 Cr    | 3.0 /person  |
 | Furniture      | 10.0 kg     | 1.50 Cr    | 0.5 /person  |
 | Tools          | 3.0 kg      | 3.00 Cr    | 1.0 /person  |
-| Clothes        | 2.0 kg      | 2.50 Cr    | 2.0 /person  |
+| Wool Clothes   | 2.0 kg      | 2.50 Cr    | 2.0 /person  |
+| Linen Clothes  | 1.5 kg      | 2.00 Cr    | 2.0 /person  |
 | Fur            | 2.0 kg      | 4.00 Cr    | 1.0 /person  |
+| Shoes          | 1.0 kg      | 2.00 Cr    | 1.5 /person  |
 | Gold Jewelry   | 0.05 kg     | 15.00 Cr   | 0.2 /person  |
 | Silver Jewelry | 0.10 kg     | 8.00 Cr    | 0.3 /person  |
+| Amber Jewelry  | 0.05 kg     | 12.00 Cr   | 0.1 /person  |
+| Silk Clothes   | 1.5 kg      | 8.00 Cr    | 0.5 /person  |
 
 ### Comfort Categories
 
@@ -88,11 +92,12 @@ target faster.
 | Pottery       | Pottery                 | 3.0 units     | stock       |
 | Furniture     | Furniture               | 0.5 units     | stock       |
 | Tools         | Tools                   | 1.0 units     | stock       |
-| Clothing      | Clothes, Fur            | 2.0 units     | stock       |
-| Jewelry       | Gold Jewelry, Silver J. | 0.2 units     | stock       |
+| Clothing      | Wool C., Linen C., Fur, Silk C. | 2.0 units | stock       |
+| Jewelry       | Gold J., Silver J., Amber J. | 0.2 units     | stock       |
+| Footwear      | Shoes                   | 1.5 units     | stock       |
 
 Category fulfillment = min(1, sum of member goods / (population × target)).
-Overall comfort = average across all 8 categories.
+Overall comfort = average across all 9 categories.
 
 ### Staple Pool
 
@@ -138,14 +143,23 @@ Key effects:
 
 ### Durable Goods
 
-Durables (pottery, furniture, tools, clothes) are tracked in abstract units
-(pots, chairs, tool sets, outfits), not kilograms. Each person needs a
-**target stock level** in units (e.g. 1.0 tool set per person). All internal
-accounting — stock, production, consumption, unmet need — uses units. Weight
-only matters for transport cost calculation (see Transport Costs). Stock
-degrades at a daily spoilage rate (wear). Production aims to maintain stock at
-the target, with a catch-up rate tied to durability: lower spoilage means
-slower catch-up, preventing overproduction of very durable items.
+Durables (pottery, furniture, tools, wool clothes, shoes, etc.) are tracked in
+abstract units (pots, chairs, tool sets, outfits, pairs), not kilograms. Each
+person needs a **target stock level** in units (e.g. 1.0 tool set per person).
+All internal accounting — stock, production, consumption, unmet need — uses
+units. Weight only matters for transport cost calculation (see Transport Costs).
+
+Target stock is computed using **effective population** for the good's need
+category, not raw headcount. Comfort durables target ~635 units per 1,000 raw
+population; luxury durables target ~51 per 1,000. Both production caps and
+consumption use the same effective population, ensuring stock converges to the
+intended level.
+
+Stock degrades at a daily spoilage rate (wear). Production aims to maintain
+stock at the target, with a catch-up rate tied to durability: lower spoilage
+means slower catch-up, preventing overproduction of very durable items. Raw
+durables (e.g. fur, which is extracted directly rather than facility-produced)
+use the same stock-gap cap on extraction.
 
 ### Seasonal Extraction Modifier
 
@@ -183,9 +197,13 @@ raw material availability.
 | Barley    | 0.9         | 1.25×       | 0.75×       | 1.05×          | 0.95×          |
 | Spices    | 0.7         | 1.20×       | 0.80×       | 1.04×          | 0.96×          |
 | Honey     | 0.6         | 1.17×       | 0.83×       | 1.03×          | 0.97×          |
+| Flax      | 0.8         | 1.22×       | 0.78×       | 1.04×          | 0.96×          |
+| Silk      | 0.5         | 1.14×       | 0.86×       | 1.03×          | 0.97×          |
 | Milk      | 0.5         | 1.14×       | 0.86×       | 1.03×          | 0.97×          |
 | Pork      | 0.4         | 1.11×       | 0.89×       | 1.02×          | 0.98×          |
+| Hides     | 0.3         | 1.08×       | 0.92×       | 1.02×          | 0.98×          |
 | Fish      | 0.3         | 1.08×       | 0.92×       | 1.02×          | 0.98×          |
+| Amber     | 0.3         | 1.08×       | 0.92×       | 1.02×          | 0.98×          |
 | Wool      | 0.4         | 1.11×       | 0.89×       | 1.02×          | 0.98×          |
 | Fur       | 0.2         | 1.06×       | 0.94×       | 1.01×          | 0.99×          |
 | Salt      | 0.2         | 1.06×       | 0.94×       | 1.01×          | 0.99×          |
@@ -201,7 +219,9 @@ range, that cell contributes zero yield for that good.
 | Good      | Min Temp | Max Temp |
 | --------- | -------- | -------- |
 | Spices    | 18°C     | —        |
+| Silk      | 15°C     | —        |
 | Grapes    | 12°C     | —        |
+| Flax      | 5°C      | 30°C     |
 | Fur       | —        | 12°C     |
 | Honey     | 8°C      | —        |
 | Wheat     | 5°C      | 35°C     |
@@ -209,6 +229,7 @@ range, that cell contributes zero yield for that good.
 | Wool      | -10°C    | 30°C     |
 | Pork      | -5°C     | 35°C     |
 | Milk      | -5°C     | 35°C     |
+| Hides     | -5°C     | 35°C     |
 
 This creates geographic specialization: spices require tropical heat (≥18°C),
 grapes only grow in warm climates, wheat fails in extreme cold or heat, and
@@ -240,8 +261,9 @@ When the simulation starts, EconomySystem sets up all economic state:
     Place one of every facility type in every county:
         (Every county gets a kiln, carpenter, smelter, smithy, charcoal burner,
          weaver, butcher, smokehouse, cheesemaker, salter, drying rack, bakery,
-         brewery, gold jeweler, silver jeweler, winery, meadery, churn, and
-         spice blender — whether they can actually operate depends on input
+         brewery, gold jeweler, silver jeweler, winery, meadery, churn,
+         spice blender, amber carver, silk weaver, tanner, cobbler, and
+         linen weaver — whether they can actually operate depends on input
          availability)
 
     Initialize province and realm economies (empty treasuries and granaries)
@@ -345,10 +367,10 @@ These totals feed into price discovery (in InterRealmTradeSystem).
 This determines how much raw material each facility needs, which in turn
 governs demand-driven extraction and trade retain calculations.
 
-        Pass 1 — Durable outputs (pottery, furniture, tools, clothes):
+        Pass 1 — Durable outputs (pottery, furniture, tools, wool clothes, shoes, etc.):
             For each facility that produces a durable good:
                 Compute labor-constrained max output
-                Compute target stock (population × target_stock_per_pop)
+                Compute target stock (effPop[good's need category] × target_stock_per_pop)
                 Compute maintenance need (current_stock × spoilage_rate)
                 Compute stock gap (target - current, floored at 0)
                 Daily need = maintenance + gap × catch_up_rate
@@ -381,6 +403,14 @@ governs demand-driven extraction and trade retain calculations.
                     target_stock = local_facility_demand × 14 days buffer
                     produced = min(produced, max(0, target_stock - current_stock))
 
+            Else if this good is a raw durable (e.g. fur — extracted directly, not facility-produced):
+                Cap extraction by stock-gap need (same formula as facility durables):
+                    target_stock = effPop[good's need category] × target_stock_per_pop
+                    maintenance = current_stock × spoilage_rate
+                    gap = max(0, target_stock - current_stock)
+                    daily_need = maintenance + gap × catch_up_rate × 3.0
+                    produced = min(produced, daily_need)
+
             Else if this good has no direct population demand and has a base price:
                 Price-throttle extraction (uses local market price):
                     price_ratio = local_market_price / base_price
@@ -403,7 +433,8 @@ governs demand-driven extraction and trade retain calculations.
             throughput = min(material_constraint, labor_constraint), floored at 0
 
             If output is a durable:
-                Cap throughput by stock-gap need (same formula as Pass 1)
+                Cap throughput by stock-gap need (same formula as Pass 1):
+                    target_stock = effPop[good's need category] × target_stock_per_pop
 
             If output is a durable-chain intermediate:
                 Cap throughput by downstream demand (same formula as Pass 2)
@@ -923,9 +954,15 @@ population can work there).
 | Meadery         | 2.0 honey                   | 2.0 mead      | 1     | 10%       |
 | Churn           | 3.0 milk                    | 1.0 butter    | 1     | 10%       |
 | Spice Blender   | 2.0 wine + 0.1 spices       | 2.0 sp.wine   | 1     | 5%        |
+| Amber Carver    | 0.5 amber                   | 1 a.jewelry   | 1     | 2%        |
+| Silk Weaver     | 3.0 silk                    | 1 silk outfit | 2     | 5%        |
+| Tanner          | 3.0 hides                   | 1.0 leather   | 1     | 10%       |
+| Cobbler         | 2.0 leather                 | 1 pair shoes  | 1     | 8%        |
+| Linen Weaver    | 4.0 flax                    | 1 linen outfit| 2     | 5%        |
 
-Durable outputs (pottery, furniture, tools, clothes, gold jewelry, silver
-jewelry) are in units; all other outputs are in kg.
+Durable outputs (pottery, furniture, tools, wool clothes, linen clothes, shoes,
+gold jewelry, silver jewelry, amber jewelry, silk clothes) are in units; all
+other outputs are in kg.
 
 Throughput is constrained by the minimum of:
 

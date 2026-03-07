@@ -374,7 +374,7 @@ namespace EconSim.Core.Economy
                                 ? pop * def.MaxLaborFraction / def.LaborPerUnit * def.OutputAmount
                                 : float.MaxValue;
 
-                            float targetStock = pop * Goods.TargetStockPerPop[output];
+                            float targetStock = effPop[(int)Goods.Defs[output].Need] * Goods.TargetStockPerPop[output];
                             float maintenance = ce.Stock[output] * Goods.Defs[output].SpoilageRate;
                             float gap = Math.Max(0f, targetStock - ce.Stock[output]);
                             float dailyNeed = maintenance + gap * Goods.DurableCatchUpRate[output] * DurableBufferMultiplier;
@@ -434,6 +434,15 @@ namespace EconSim.Core.Economy
                             float gap = Math.Max(0f, targetStock - ce.Stock[g]);
                             produced = Math.Min(produced, gap);
                         }
+                        // Stock-gap cap for raw durables (e.g. fur — extracted directly, not facility-produced)
+                        else if (Goods.IsDurable[g])
+                        {
+                            float targetStock = effPop[(int)Goods.Defs[g].Need] * Goods.TargetStockPerPop[g];
+                            float maintenance = ce.Stock[g] * Goods.Defs[g].SpoilageRate;
+                            float gap = Math.Max(0f, targetStock - ce.Stock[g]);
+                            float dailyNeed = maintenance + gap * Goods.DurableCatchUpRate[g] * 3.0f;
+                            produced = Math.Min(produced, dailyNeed);
+                        }
                         // Price-based extraction throttle for commodity intermediates
                         else if (!Goods.HasDirectDemand[g] && Goods.BasePrice[g] > 0f)
                         {
@@ -480,7 +489,7 @@ namespace EconSim.Core.Economy
                             // Stock-gap production cap for durables
                             if (Goods.IsDurable[output])
                             {
-                                float targetStock = pop * Goods.TargetStockPerPop[output];
+                                float targetStock = effPop[(int)Goods.Defs[output].Need] * Goods.TargetStockPerPop[output];
                                 float currentStock = ce.Stock[output];
                                 float maintenance = currentStock * Goods.Defs[output].SpoilageRate;
                                 float gap = Math.Max(0f, targetStock - currentStock);
@@ -874,6 +883,16 @@ namespace EconSim.Core.Economy
             vm.Stock[furIdx] = 0f;              // starts empty — demand only
             vm.SellPrice[furIdx] = Goods.BasePrice[furIdx];
             vm.BuyPrice[furIdx] = Goods.BasePrice[furIdx] * 0.75f / distancePriceFactor;
+
+            // Silk: scarce luxury import (Silk Road)
+            int silkIdx = (int)GoodType.Silk;
+            vm.TradedGoods.Add(silkIdx);
+            vm.TargetStock[silkIdx] = 8000f * volumeScale;
+            vm.ReplenishRate[silkIdx] = 300f * volumeScale;
+            vm.MaxStock[silkIdx] = 20000f * volumeScale;
+            vm.Stock[silkIdx] = vm.TargetStock[silkIdx];
+            vm.SellPrice[silkIdx] = Goods.BasePrice[silkIdx] * distancePriceFactor;
+            vm.BuyPrice[silkIdx] = Goods.BasePrice[silkIdx] * 0.75f;
 
             vm.OverseasSurcharge = trade?.OverseasSurcharge ?? 0.02f;
 
