@@ -369,16 +369,41 @@ namespace EconSim.Core.Religious
                 }
             }
 
-            // Count new actors needed
-            int clergyCount = 0;
-            for (int i = 1; i < religion.Parishes.Length; i++)
-                if (religion.Parishes[i] != null) clergyCount++;
-            for (int i = 1; i < religion.Dioceses.Length; i++)
-                if (religion.Dioceses[i] != null) clergyCount++;
-            for (int i = 1; i < religion.Archdioceses.Length; i++)
-                if (religion.Archdioceses[i] != null) clergyCount++;
+            // Count religious territories
+            int parishCount = religion.Parishes.Length - 1; // slot 0 unused
+            int dioceseCount = religion.Dioceses.Length - 1;
+            int archdioceseCount = religion.Archdioceses.Length - 1;
+            int clergyCount = parishCount + dioceseCount + archdioceseCount;
 
             if (clergyCount == 0) return;
+
+            // Create religious titles
+            int oldTitleCount = actors.TitleCount;
+            int newTitleCount = oldTitleCount + clergyCount;
+            var newTitles = new Title[newTitleCount + 1];
+            Array.Copy(actors.Titles, newTitles, actors.Titles.Length);
+            actors.Titles = newTitles;
+            actors.TitleCount = newTitleCount;
+            actors.ParishTitleCount = parishCount;
+            actors.DioceseTitleCount = dioceseCount;
+            actors.ArchdioceseTitleCount = archdioceseCount;
+
+            // Initialize religious title objects
+            for (int i = 1; i <= parishCount; i++)
+            {
+                int tid = actors.GetParishTitleId(i);
+                actors.Titles[tid] = new Title { Id = tid, Rank = TitleRank.Parish, TerritoryId = i };
+            }
+            for (int i = 1; i <= dioceseCount; i++)
+            {
+                int tid = actors.GetDioceseTitleId(i);
+                actors.Titles[tid] = new Title { Id = tid, Rank = TitleRank.Diocese, TerritoryId = i };
+            }
+            for (int i = 1; i <= archdioceseCount; i++)
+            {
+                int tid = actors.GetArchdioceseTitleId(i);
+                actors.Titles[tid] = new Title { Id = tid, Rank = TitleRank.Archdiocese, TerritoryId = i };
+            }
 
             // Expand actor array
             int oldCount = actors.ActorCount;
@@ -390,39 +415,28 @@ namespace EconSim.Core.Religious
 
             int nextId = oldCount + 1;
 
-            // Spawn priests for parishes
-            for (int i = 1; i < religion.Parishes.Length; i++)
-            {
-                var parish = religion.Parishes[i];
-                if (parish == null) continue;
-
-                int religionId = religion.FaithIndexToReligion[parish.FaithIndex];
-                int cultureId = GetDominantCulture(parish.SeatCellId, mapData);
-                var actor = SpawnClergyActor(
-                    nextId++, cultureId, religionId, parish.SeatCellId,
-                    GetCountyForCell(parish.SeatCellId, mapData),
-                    seed, cultureTypeByName, popSeed, usedNames, mapData);
-                actors.Actors[actor.Id] = actor;
-                parish.PriestActorId = actor.Id;
-            }
-
-            // Spawn bishops for dioceses
+            // Build parish → diocese lookup for liege assignment
+            var parishToDiocese = new Dictionary<int, int>(); // parishId -> dioceseId
             for (int i = 1; i < religion.Dioceses.Length; i++)
             {
                 var diocese = religion.Dioceses[i];
                 if (diocese == null) continue;
-
-                int religionId = religion.FaithIndexToReligion[diocese.FaithIndex];
-                int cultureId = GetDominantCulture(diocese.CathedralCellId, mapData);
-                var actor = SpawnClergyActor(
-                    nextId++, cultureId, religionId, diocese.CathedralCellId,
-                    GetCountyForCell(diocese.CathedralCellId, mapData),
-                    seed, cultureTypeByName, popSeed, usedNames, mapData);
-                actors.Actors[actor.Id] = actor;
-                diocese.BishopActorId = actor.Id;
+                foreach (int pid in diocese.ParishIds)
+                    parishToDiocese[pid] = diocese.Id;
             }
 
-            // Spawn archbishops for archdioceses
+            // Build diocese → archdiocese lookup
+            var dioceseToArchdiocese = new Dictionary<int, int>();
+            for (int i = 1; i < religion.Archdioceses.Length; i++)
+            {
+                var arch = religion.Archdioceses[i];
+                if (arch == null) continue;
+                foreach (int did in arch.DioceseIds)
+                    dioceseToArchdiocese[did] = arch.Id;
+            }
+
+            // Spawn archbishops first (so we have their actor IDs for bishop liege)
+            var archdioceseActorId = new Dictionary<int, int>(); // archdioceseId -> actorId
             for (int i = 1; i < religion.Archdioceses.Length; i++)
             {
                 var arch = religion.Archdioceses[i];
@@ -430,17 +444,73 @@ namespace EconSim.Core.Religious
 
                 int religionId = religion.FaithIndexToReligion[arch.FaithIndex];
                 int cultureId = GetDominantCulture(arch.SeatCellId, mapData);
+                int titleId = actors.GetArchdioceseTitleId(arch.Id);
                 var actor = SpawnClergyActor(
                     nextId++, cultureId, religionId, arch.SeatCellId,
                     GetCountyForCell(arch.SeatCellId, mapData),
+                    titleId, 0, // archbishops have no liege (top of church hierarchy)
                     seed, cultureTypeByName, popSeed, usedNames, mapData);
                 actors.Actors[actor.Id] = actor;
+                actors.Titles[titleId].HolderActorId = actor.Id;
+                actors.Titles[titleId].DeJureActorId = actor.Id;
                 arch.ArchbishopActorId = actor.Id;
+                archdioceseActorId[arch.Id] = actor.Id;
+            }
+
+            // Spawn bishops (liege = archbishop)
+            var dioceseActorId = new Dictionary<int, int>(); // dioceseId -> actorId
+            for (int i = 1; i < religion.Dioceses.Length; i++)
+            {
+                var diocese = religion.Dioceses[i];
+                if (diocese == null) continue;
+
+                int religionId = religion.FaithIndexToReligion[diocese.FaithIndex];
+                int cultureId = GetDominantCulture(diocese.CathedralCellId, mapData);
+                int titleId = actors.GetDioceseTitleId(diocese.Id);
+                int liegeId = 0;
+                if (dioceseToArchdiocese.TryGetValue(diocese.Id, out int archId))
+                    archdioceseActorId.TryGetValue(archId, out liegeId);
+
+                var actor = SpawnClergyActor(
+                    nextId++, cultureId, religionId, diocese.CathedralCellId,
+                    GetCountyForCell(diocese.CathedralCellId, mapData),
+                    titleId, liegeId,
+                    seed, cultureTypeByName, popSeed, usedNames, mapData);
+                actors.Actors[actor.Id] = actor;
+                actors.Titles[titleId].HolderActorId = actor.Id;
+                actors.Titles[titleId].DeJureActorId = actor.Id;
+                diocese.BishopActorId = actor.Id;
+                dioceseActorId[diocese.Id] = actor.Id;
+            }
+
+            // Spawn priests (liege = bishop)
+            for (int i = 1; i < religion.Parishes.Length; i++)
+            {
+                var parish = religion.Parishes[i];
+                if (parish == null) continue;
+
+                int religionId = religion.FaithIndexToReligion[parish.FaithIndex];
+                int cultureId = GetDominantCulture(parish.SeatCellId, mapData);
+                int titleId = actors.GetParishTitleId(parish.Id);
+                int liegeId = 0;
+                if (parishToDiocese.TryGetValue(parish.Id, out int dioId))
+                    dioceseActorId.TryGetValue(dioId, out liegeId);
+
+                var actor = SpawnClergyActor(
+                    nextId++, cultureId, religionId, parish.SeatCellId,
+                    GetCountyForCell(parish.SeatCellId, mapData),
+                    titleId, liegeId,
+                    seed, cultureTypeByName, popSeed, usedNames, mapData);
+                actors.Actors[actor.Id] = actor;
+                actors.Titles[titleId].HolderActorId = actor.Id;
+                actors.Titles[titleId].DeJureActorId = actor.Id;
+                parish.PriestActorId = actor.Id;
             }
         }
 
         static Actor SpawnClergyActor(
             int actorId, int cultureId, int religionId, int seatCellId, int countyId,
+            int titleId, int liegeActorId,
             int seed, Dictionary<string, CultureType> cultureTypeByName,
             PopGenSeed popSeed, HashSet<string> usedNames, MapData mapData)
         {
@@ -475,10 +545,11 @@ namespace EconSim.Core.Religious
                 GivenName = givenName,
                 BirthDay = birthDay,
                 IsFemale = isFemale,
+                Estate = Estate.Clergy,
                 CultureId = cultureId,
                 ReligionId = religionId,
-                TitleId = 0, // clergy don't hold political titles
-                LiegeActorId = 0,
+                TitleId = titleId,
+                LiegeActorId = liegeActorId,
                 CountyId = countyId,
             };
         }

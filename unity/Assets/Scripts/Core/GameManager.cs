@@ -534,6 +534,7 @@ namespace EconSim.Core
                 if (county.Id > maxCountyIdForReligion) maxCountyIdForReligion = county.Id;
             simStateForActors.Religion = ReligionInitializer.Initialize(MapData, maxCountyIdForReligion);
             ReligionBootstrap.Generate(simStateForActors.Religion, MapData, simStateForActors.Actors, MapData.Info.PopGenSeed);
+            SimLog.Log("Actors", $"After clergy: {simStateForActors.Actors.ActorCount} actors, {simStateForActors.Actors.TitleCount} titles ({simStateForActors.Actors.ParishTitleCount} parish + {simStateForActors.Actors.DioceseTitleCount} diocese + {simStateForActors.Actors.ArchdioceseTitleCount} archdiocese)");
 
             // Register religion spread and tithe collection after religion state is initialized
             runner.RegisterSystem(new ReligionSpreadSystem());

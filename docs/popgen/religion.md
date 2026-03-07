@@ -186,11 +186,11 @@ all religions produce the same kind of clergy.
 
 Clergy peerage maps to the political hierarchy (see Estates & Actors):
 
-| Level    | Title       | Role                                        |
-| -------- | ----------- | ------------------------------------------- |
-| County   | Prior/Abbot | Local religious authority, parish/monastery |
-| Province | Bishop      | Regional authority, diocese                 |
-| Realm    | Archbishop  | National/major authority                    |
+| Level       | Title      | Role                                        |
+| ----------- | ---------- | ------------------------------------------- |
+| Parish      | Priest     | Local religious authority, parish/monastery |
+| Diocese     | Bishop     | Regional authority, diocese                 |
+| Archdiocese | Archbishop | National/major authority                    |
 
 Religions without strong hierarchy (e.g., animist traditions) may have
 flatter structures — a local shaman with no formal superior. The peerage
@@ -396,11 +396,11 @@ parish and 40% to Faith B's.
 
 Collected tithes flow upward through the hierarchy:
 
-| Level        | Keeps | Passes Up |
-| ------------ | ----- | --------- |
-| Parish       | 60%   | 40% → Diocese |
-| Diocese      | 70%   | 30% → Archdiocese |
-| Archdiocese  | 100%  | — (top of hierarchy) |
+| Level       | Keeps | Passes Up            |
+| ----------- | ----- | -------------------- |
+| Parish      | 60%   | 40% → Diocese        |
+| Diocese     | 70%   | 30% → Archdiocese    |
+| Archdiocese | 100%  | — (top of hierarchy) |
 
 ### Church Wages
 
