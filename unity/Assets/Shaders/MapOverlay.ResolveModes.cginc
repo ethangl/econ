@@ -77,6 +77,54 @@ float3 ApplyMarketModeStyle(float2 uv, float3 marketColor)
     return modeColor;
 }
 
+float3 ApplyReligionModeStyle(float2 uv, float3 territoryColor)
+{
+    // Gradient fill using archdiocese borders (analogous to realm gradient in political mode)
+    float archDist = tex2D(_ArchdioceseBorderDistTex, uv).r * 255.0;
+    float edgeProximity = saturate(archDist / _GradientRadius);
+
+    float edgeDarkening = saturate(_GradientEdgeDarkening);
+    float3 edgeColor = territoryColor * (1.0 - edgeDarkening);
+    float3 modeColor = lerp(edgeColor, territoryColor, edgeProximity);
+
+    // Parish border band overlay (thinnest — drawn first, only in parish mode)
+    if (_MapMode >= 12)
+    {
+        float parishBorderDist = tex2D(_ParishBorderDistTex, uv).r * 255.0;
+        float parishBorderAA = fwidth(parishBorderDist);
+        float parishBorderFactor = 1.0 - smoothstep(_CountyBorderWidth - parishBorderAA, _CountyBorderWidth + parishBorderAA, parishBorderDist);
+        if (parishBorderFactor > 0.001)
+        {
+            float3 parishBorderColor = territoryColor * (1.0 - _CountyBorderDarkening);
+            modeColor = lerp(modeColor, parishBorderColor, parishBorderFactor);
+        }
+    }
+
+    // Diocese border band overlay (shown in diocese and parish modes)
+    if (_MapMode >= 11)
+    {
+        float dioceseBorderDist = tex2D(_DioceseBorderDistTex, uv).r * 255.0;
+        float dioceseBorderAA = fwidth(dioceseBorderDist);
+        float dioceseBorderFactor = 1.0 - smoothstep(_ProvinceBorderWidth - dioceseBorderAA, _ProvinceBorderWidth + dioceseBorderAA, dioceseBorderDist);
+        if (dioceseBorderFactor > 0.001)
+        {
+            float3 dioceseBorderColor = territoryColor * (1.0 - _ProvinceBorderDarkening);
+            modeColor = lerp(modeColor, dioceseBorderColor, dioceseBorderFactor);
+        }
+    }
+
+    // Archdiocese border band overlay (always shown in religion modes)
+    float archBorderAA = fwidth(archDist);
+    float archBorderFactor = 1.0 - smoothstep(_RealmBorderWidth - archBorderAA, _RealmBorderWidth + archBorderAA, archDist);
+    if (archBorderFactor > 0.001)
+    {
+        float3 archBorderColor = territoryColor * (1.0 - _RealmBorderDarkening);
+        modeColor = lerp(modeColor, archBorderColor, archBorderFactor);
+    }
+
+    return modeColor;
+}
+
 float4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, float realmId, float provinceId, float countyId, float marketId)
 {
     // No map mode overlay on water, rivers, height mode (0), or biomes mode (6).
@@ -126,10 +174,10 @@ float4 ComputeMapModeFromResolvedBase(float2 uv, bool isCellWater, bool isRiver,
         // Transport heatmaps are already fully resolved in C#.
         modeColor = resolvedBaseColor;
     }
-    else if (_MapMode == 10)
+    else if (_MapMode >= 10 && _MapMode <= 12)
     {
-        // Religion mode: faith colors with political border gradients for context.
-        modeColor = ApplyPoliticalModeStyle(uv, resolvedBaseColor);
+        // Religion modes (archdiocese/diocese/parish): territory colors with religious border gradients.
+        modeColor = ApplyReligionModeStyle(uv, resolvedBaseColor);
     }
     else
     {

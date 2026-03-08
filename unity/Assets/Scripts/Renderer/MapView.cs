@@ -119,20 +119,26 @@ namespace EconSim.Renderer
         private float[] vertexHeights;
 
         // Selection state
-        public enum SelectionScope { None, Realm, Province, County, Market }
-        private enum ModeSelectionTarget { Realm, Province, County, Market }
+        public enum SelectionScope { None, Realm, Province, County, Market, Archdiocese, Diocese, Parish }
+        private enum ModeSelectionTarget { Realm, Province, County, Market, Archdiocese, Diocese, Parish }
 
         private SelectionScope selectionScope = SelectionScope.None;
         private int selectedRealmId = -1;
         private int selectedProvinceId = -1;
         private int selectedCountyId = -1;
         private int selectedMarketId = -1;
+        private int selectedArchdioceseId = -1;
+        private int selectedDioceseId = -1;
+        private int selectedParishId = -1;
 
         public SelectionScope CurrentSelectionScope => selectionScope;
         public int SelectedRealmId => selectedRealmId;
         public int SelectedProvinceId => selectedProvinceId;
         public int SelectedCountyId => selectedCountyId;
         public int SelectedMarketId => selectedMarketId;
+        public int SelectedArchdioceseId => selectedArchdioceseId;
+        public int SelectedDioceseId => selectedDioceseId;
+        public int SelectedParishId => selectedParishId;
 
         public enum MapMode
         {
@@ -144,7 +150,9 @@ namespace EconSim.Renderer
             ChannelInspector = 5, // Debug channel visualization (key: 0)
             TransportCost = 6, // Local per-cell transport difficulty heatmap (key: 5)
             MarketAccess = 7,  // Transport cost heatmap from market hub (key: 6)
-            Religion = 8,      // Colored by majority faith (key: 4)
+            Religion = 8,      // Colored by archdiocese (zoomed out) (key: 4)
+            ReligionDiocese = 9,  // Colored by diocese (mid zoom)
+            ReligionParish = 10,  // Colored by parish (zoomed in)
         }
 
         public MapMode CurrentMode => currentMode;
@@ -160,7 +168,9 @@ namespace EconSim.Renderer
             "Channel Inspector",
             "Transport Cost",
             "Market Access",
-            "Religion"
+            "Religion",
+            "Diocese",
+            "Parish"
         };
 
         private static readonly MapOverlayManager.OverlayLayer[] NoOverlayCycle =
@@ -184,6 +194,8 @@ namespace EconSim.Renderer
                 { MapMode.TransportCost, NoOverlayCycle },
                 { MapMode.MarketAccess, NoOverlayCycle },
                 { MapMode.Religion, NoOverlayCycle },
+                { MapMode.ReligionDiocese, NoOverlayCycle },
+                { MapMode.ReligionParish, NoOverlayCycle },
             };
 
         private readonly Dictionary<MapMode, MapOverlayManager.OverlayLayer> selectedOverlayByScope =
@@ -231,7 +243,7 @@ namespace EconSim.Renderer
             RefreshNoisyEdgeStyleFromInspector();
 
             // Refresh religion overlay when spread system marks adherence as meaningfully changed
-            if (currentMode == MapMode.Religion && overlayManager != null
+            if (IsReligionFamilyMode(currentMode) && overlayManager != null
                 && religionStateRef != null && religionStateRef.OverlayDirty)
             {
                 religionStateRef.OverlayDirty = false;
@@ -264,7 +276,15 @@ namespace EconSim.Renderer
             }
             else if (Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4))
             {
-                SetMapMode(MapMode.Religion);
+                if (IsReligionFamilyMode(currentMode))
+                {
+                    CycleOverlayForMode(currentMode, "4");
+                }
+                else
+                {
+                    MapMode religionBandMode = ResolveZoomDrivenReligionMode();
+                    SetMapMode(religionBandMode);
+                }
             }
             else if (Input.GetKeyDown(KeyCode.Alpha5) || Input.GetKeyDown(KeyCode.Keypad5))
             {
@@ -280,6 +300,7 @@ namespace EconSim.Renderer
             }
 
             ApplyZoomDrivenPoliticalMode();
+            ApplyZoomDrivenReligionMode();
 
             if (Input.GetKeyDown(cycleDebugChannelKey))
             {
@@ -328,6 +349,11 @@ namespace EconSim.Renderer
             return mode == MapMode.Political || mode == MapMode.Province || mode == MapMode.County;
         }
 
+        private static bool IsReligionFamilyMode(MapMode mode)
+        {
+            return mode == MapMode.Religion || mode == MapMode.ReligionDiocese || mode == MapMode.ReligionParish;
+        }
+
         private static bool IsMarketFamilyMode(MapMode mode)
         {
             return mode == MapMode.Market || mode == MapMode.MarketAccess;
@@ -336,6 +362,8 @@ namespace EconSim.Renderer
         private static bool ShouldPreserveSelectionOnModeChange(MapMode previousMode, MapMode nextMode)
         {
             if (IsPoliticalFamilyMode(previousMode) && IsPoliticalFamilyMode(nextMode))
+                return true;
+            if (IsReligionFamilyMode(previousMode) && IsReligionFamilyMode(nextMode))
                 return true;
             if (IsMarketFamilyMode(previousMode) && IsMarketFamilyMode(nextMode))
                 return true;
@@ -350,6 +378,9 @@ namespace EconSim.Renderer
                 MapMode.Province => ModeSelectionTarget.Province,
                 MapMode.Market => ModeSelectionTarget.Market,
                 MapMode.MarketAccess => ModeSelectionTarget.Market,
+                MapMode.Religion => ModeSelectionTarget.Archdiocese,
+                MapMode.ReligionDiocese => ModeSelectionTarget.Diocese,
+                MapMode.ReligionParish => ModeSelectionTarget.Parish,
                 _ => ModeSelectionTarget.County
             };
         }
@@ -361,6 +392,9 @@ namespace EconSim.Renderer
                 ModeSelectionTarget.Realm => SelectionScope.Realm,
                 ModeSelectionTarget.Province => SelectionScope.Province,
                 ModeSelectionTarget.Market => SelectionScope.Market,
+                ModeSelectionTarget.Archdiocese => SelectionScope.Archdiocese,
+                ModeSelectionTarget.Diocese => SelectionScope.Diocese,
+                ModeSelectionTarget.Parish => SelectionScope.Parish,
                 _ => SelectionScope.County
             };
         }
@@ -455,7 +489,9 @@ namespace EconSim.Renderer
 
         private static MapMode ResolveOverlayScope(MapMode mode)
         {
-            return IsPoliticalFamilyMode(mode) ? MapMode.Political : mode;
+            if (IsPoliticalFamilyMode(mode)) return MapMode.Political;
+            if (IsReligionFamilyMode(mode)) return MapMode.Religion;
+            return mode;
         }
 
         private static MapOverlayManager.OverlayLayer[] GetOverlayCycle(MapMode mode)
@@ -574,6 +610,61 @@ namespace EconSim.Renderer
                 SetMapMode(zoomDrivenMode);
         }
 
+        private MapMode ResolveZoomDrivenReligionMode()
+        {
+            if (mapCameraController == null)
+                return MapMode.Religion;
+
+            float zoomedIn01 = mapCameraController.GetZoomedIn01();
+            if (zoomedIn01 < RealmZoomedInMax)
+                return MapMode.Religion;
+            if (zoomedIn01 < ProvinceZoomedInMax)
+                return MapMode.ReligionDiocese;
+            return MapMode.ReligionParish;
+        }
+
+        private static MapMode ResolveZoomDrivenReligionModeWithHysteresis(MapMode currentReligionMode, float zoomedIn01)
+        {
+            float archLower = RealmZoomedInMax - PoliticalZoomHysteresis;
+            float archUpper = RealmZoomedInMax + PoliticalZoomHysteresis;
+            float dioceseLower = ProvinceZoomedInMax - PoliticalZoomHysteresis;
+            float dioceseUpper = ProvinceZoomedInMax + PoliticalZoomHysteresis;
+
+            switch (currentReligionMode)
+            {
+                case MapMode.Religion:
+                    return zoomedIn01 >= archUpper ? MapMode.ReligionDiocese : MapMode.Religion;
+                case MapMode.ReligionDiocese:
+                    if (zoomedIn01 < archLower)
+                        return MapMode.Religion;
+                    if (zoomedIn01 >= dioceseUpper)
+                        return MapMode.ReligionParish;
+                    return MapMode.ReligionDiocese;
+                case MapMode.ReligionParish:
+                    return zoomedIn01 < dioceseLower ? MapMode.ReligionDiocese : MapMode.ReligionParish;
+                default:
+                    if (zoomedIn01 < RealmZoomedInMax)
+                        return MapMode.Religion;
+                    if (zoomedIn01 < ProvinceZoomedInMax)
+                        return MapMode.ReligionDiocese;
+                    return MapMode.ReligionParish;
+            }
+        }
+
+        private void ApplyZoomDrivenReligionMode()
+        {
+            if (!IsReligionFamilyMode(currentMode))
+                return;
+
+            if (mapCameraController == null)
+                return;
+
+            float zoomedIn01 = mapCameraController.GetZoomedIn01();
+            MapMode zoomDrivenMode = ResolveZoomDrivenReligionModeWithHysteresis(currentMode, zoomedIn01);
+            if (zoomDrivenMode != currentMode)
+                SetMapMode(zoomDrivenMode);
+        }
+
         private void SetSelectionActive(bool active)
         {
             hasActiveSelection = active;
@@ -658,6 +749,33 @@ namespace EconSim.Renderer
                     else
                         hasActiveHover = false;
                     break;
+                case ModeSelectionTarget.Archdiocese:
+                {
+                    int archId = overlayManager.GetCellArchdioceseId(cellId);
+                    if (archId > 0)
+                        overlayManager.SetHoveredReligiousTerritory(archId);
+                    else
+                        hasActiveHover = false;
+                    break;
+                }
+                case ModeSelectionTarget.Diocese:
+                {
+                    int dioId = overlayManager.GetCellDioceseId(cellId);
+                    if (dioId > 0)
+                        overlayManager.SetHoveredReligiousTerritory(dioId);
+                    else
+                        hasActiveHover = false;
+                    break;
+                }
+                case ModeSelectionTarget.Parish:
+                {
+                    int parId = overlayManager.GetCellParishId(cellId);
+                    if (parId > 0)
+                        overlayManager.SetHoveredReligiousTerritory(parId);
+                    else
+                        hasActiveHover = false;
+                    break;
+                }
                 case ModeSelectionTarget.County:
                 default:
                     overlayManager.SetHoveredCounty(cell.CountyId);
@@ -945,6 +1063,30 @@ namespace EconSim.Renderer
                     if (marketId > 0)
                         overlayManager.SetSelectedMarket(marketId);
                     break;
+                case SelectionScope.Archdiocese:
+                {
+                    int archId = overlayManager.GetCellArchdioceseId(cell.Id);
+                    selectedArchdioceseId = archId;
+                    if (archId > 0)
+                        overlayManager.SetSelectedReligiousTerritory(archId);
+                    break;
+                }
+                case SelectionScope.Diocese:
+                {
+                    int dioId = overlayManager.GetCellDioceseId(cell.Id);
+                    selectedDioceseId = dioId;
+                    if (dioId > 0)
+                        overlayManager.SetSelectedReligiousTerritory(dioId);
+                    break;
+                }
+                case SelectionScope.Parish:
+                {
+                    int parId = overlayManager.GetCellParishId(cell.Id);
+                    selectedParishId = parId;
+                    if (parId > 0)
+                        overlayManager.SetSelectedReligiousTerritory(parId);
+                    break;
+                }
                 case SelectionScope.County:
                     overlayManager.SetSelectedCounty(cell.CountyId);
                     break;
@@ -964,6 +1106,9 @@ namespace EconSim.Renderer
             selectedProvinceId = -1;
             selectedCountyId = -1;
             selectedMarketId = -1;
+            selectedArchdioceseId = -1;
+            selectedDioceseId = -1;
+            selectedParishId = -1;
             SetSelectionActive(false);
             overlayManager?.ClearSelection();
 

@@ -79,6 +79,11 @@ Shader "EconSim/MapOverlayFlat"
         _MarketBorderWidth ("Market Border Width", Range(0, 4)) = 1
         _MarketBorderDarkening ("Market Border Darkening", Range(0, 1)) = 0.5
 
+        // Religious territory borders (archdiocese/diocese/parish — analogous to realm/province/county)
+        _ArchdioceseBorderDistTex ("Archdiocese Border Distance", 2D) = "white" {}
+        _DioceseBorderDistTex ("Diocese Border Distance", 2D) = "white" {}
+        _ParishBorderDistTex ("Parish Border Distance", 2D) = "white" {}
+
         // Path overlay (market mode only, direct mask: 0=no path, 1=path)
         _RoadMaskTex ("Road Mask", 2D) = "black" {}
         _PathOpacity ("Path Opacity", Range(0, 1)) = 0.75
@@ -146,11 +151,18 @@ Shader "EconSim/MapOverlayFlat"
             TEXTURE2D(_RealmBorderDistTex);
             SAMPLER(sampler_RealmBorderDistTex);
             TEXTURE2D(_ProvinceBorderDistTex);
-            SAMPLER(sampler_ProvinceBorderDistTex);
             TEXTURE2D(_CountyBorderDistTex);
-            SAMPLER(sampler_CountyBorderDistTex);
             TEXTURE2D(_MarketBorderDistTex);
-            SAMPLER(sampler_MarketBorderDistTex);
+            TEXTURE2D(_ArchdioceseBorderDistTex);
+            TEXTURE2D(_DioceseBorderDistTex);
+            TEXTURE2D(_ParishBorderDistTex);
+            // All border distance textures share a single sampler (Metal limit: 16 fragment samplers).
+            #define sampler_ProvinceBorderDistTex sampler_RealmBorderDistTex
+            #define sampler_CountyBorderDistTex sampler_RealmBorderDistTex
+            #define sampler_MarketBorderDistTex sampler_RealmBorderDistTex
+            #define sampler_ArchdioceseBorderDistTex sampler_RealmBorderDistTex
+            #define sampler_DioceseBorderDistTex sampler_RealmBorderDistTex
+            #define sampler_ParishBorderDistTex sampler_RealmBorderDistTex
 
             TEXTURE2D(_RoadMaskTex);
             SAMPLER(sampler_RoadMaskTex);
@@ -388,10 +400,24 @@ Shader "EconSim/MapOverlayFlat"
                 }
                 else if (_MapMode == 10)
                 {
-                    // Religion mode: show realm and province borders for context
-                    float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
-                    float provinceBorderDist = tex2D(_ProvinceBorderDistTex, IN.dataUV).r * 255.0;
-                    if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth) discard;
+                    // Archdiocese mode: show archdiocese borders only
+                    float archBorderDist = tex2D(_ArchdioceseBorderDistTex, IN.dataUV).r * 255.0;
+                    if (archBorderDist >= _RealmBorderWidth) discard;
+                }
+                else if (_MapMode == 11)
+                {
+                    // Diocese mode: show archdiocese and diocese borders
+                    float archBorderDist = tex2D(_ArchdioceseBorderDistTex, IN.dataUV).r * 255.0;
+                    float dioceseBorderDist = tex2D(_DioceseBorderDistTex, IN.dataUV).r * 255.0;
+                    if (archBorderDist >= _RealmBorderWidth && dioceseBorderDist >= _ProvinceBorderWidth) discard;
+                }
+                else if (_MapMode == 12)
+                {
+                    // Parish mode: show archdiocese, diocese, and parish borders
+                    float archBorderDist = tex2D(_ArchdioceseBorderDistTex, IN.dataUV).r * 255.0;
+                    float dioceseBorderDist = tex2D(_DioceseBorderDistTex, IN.dataUV).r * 255.0;
+                    float parishBorderDist = tex2D(_ParishBorderDistTex, IN.dataUV).r * 255.0;
+                    if (archBorderDist >= _RealmBorderWidth && dioceseBorderDist >= _ProvinceBorderWidth && parishBorderDist >= _CountyBorderWidth) discard;
                 }
                 else
                 {
