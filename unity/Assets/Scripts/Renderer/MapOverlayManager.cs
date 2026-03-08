@@ -160,6 +160,12 @@ public class MapOverlayManager
         private int[] cellArchdioceseIdById;           // cellId → archdioceseId
         private Dictionary<int, int> parishToDioceseId;    // parishId → dioceseId
         private Dictionary<int, int> dioceseToArchdioceseId; // dioceseId → archdioceseId
+        private Texture2D archdioceseBorderDistTexture;
+        private Texture2D dioceseBorderDistTexture;
+        private Texture2D parishBorderDistTexture;
+        private static readonly int ArchdioceseBorderDistTexId = Shader.PropertyToID("_ArchdioceseBorderDistTex");
+        private static readonly int DioceseBorderDistTexId = Shader.PropertyToID("_DioceseBorderDistTex");
+        private static readonly int ParishBorderDistTexId = Shader.PropertyToID("_ParishBorderDistTex");
 
         // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
         private const int ReliefBlurRadius = 4;
@@ -2314,6 +2320,12 @@ public class MapOverlayManager
             styleMaterial.SetTexture(RoadMaskTexId, roadDistTexture);
             styleMaterial.SetTexture(MarketPaletteTexId, marketPaletteTexture);
             styleMaterial.SetTexture(MarketBorderDistTexId, marketBorderDistTexture);
+            if (archdioceseBorderDistTexture != null)
+                styleMaterial.SetTexture(ArchdioceseBorderDistTexId, archdioceseBorderDistTexture);
+            if (dioceseBorderDistTexture != null)
+                styleMaterial.SetTexture(DioceseBorderDistTexId, dioceseBorderDistTexture);
+            if (parishBorderDistTexture != null)
+                styleMaterial.SetTexture(ParishBorderDistTexId, parishBorderDistTexture);
         }
 
         /// <summary>
@@ -3385,10 +3397,15 @@ public class MapOverlayManager
                     ? faithPaletteColors[arch.FaithIndex]
                     : Color.gray;
 
-                // Vary slightly per archdiocese to distinguish same-faith archdioceses
+                // Vary per archdiocese to distinguish same-faith archdioceses (matches realm color variance)
                 Color.RGBToHSV(baseColor, out float h, out float s, out float v);
                 float hShift = ((a * 0.618034f) % 1f - 0.5f) * 0.06f; // golden ratio spread
                 h = (h + hShift + 1f) % 1f;
+                // S/V variance matching PoliticalPalette (±0.08)
+                float sHash = ((a * 2654435761u) & 0xFFFF) / 65535f; // simple hash 0-1
+                float vHash = (((a + 1000) * 2654435761u) & 0xFFFF) / 65535f;
+                s = Mathf.Clamp(s + (sHash - 0.5f) * 2f * 0.08f, 0.28f, 0.55f);
+                v = Mathf.Clamp(v + (vHash - 0.5f) * 2f * 0.08f, 0.58f, 0.85f);
                 colors[arch.Id] = Color.HSVToRGB(h, s, v);
             }
 
@@ -3655,7 +3672,7 @@ public class MapOverlayManager
             for (int f = 0; f < religion.FaithCount; f++)
             {
                 float hue = (float)f / religion.FaithCount;
-                faithPaletteColors[f] = Color.HSVToRGB(hue, 0.65f, 0.85f);
+                faithPaletteColors[f] = Color.HSVToRGB(hue, 0.33f, 0.77f);
             }
 
             // Build reverse lookups: parish→diocese, diocese→archdiocese
@@ -3722,6 +3739,17 @@ public class MapOverlayManager
                     if (dioceseToArchdioceseId.TryGetValue(dioId, out int archId))
                         cellArchdioceseIdById[cellId] = archId;
                 }
+            }
+
+            // Generate religious territory border distance textures
+            GenerateReligiousBorderDistTextures();
+
+            // Bind border textures to material
+            if (styleMaterial != null)
+            {
+                styleMaterial.SetTexture(ArchdioceseBorderDistTexId, archdioceseBorderDistTexture);
+                styleMaterial.SetTexture(DioceseBorderDistTexId, dioceseBorderDistTexture);
+                styleMaterial.SetTexture(ParishBorderDistTexId, parishBorderDistTexture);
             }
 
             InvalidateModeColorResolveCache(MapView.MapMode.Religion);
@@ -3835,6 +3863,103 @@ public class MapOverlayManager
             marketBorderDistTexture.Apply();
         }
 
+        private void GenerateReligiousBorderDistTextures()
+        {
+            if (archdioceseBorderDistTexture != null) DestroyTexture(archdioceseBorderDistTexture);
+            if (dioceseBorderDistTexture != null) DestroyTexture(dioceseBorderDistTexture);
+            if (parishBorderDistTexture != null) DestroyTexture(parishBorderDistTexture);
+
+            int size = gridWidth * gridHeight;
+
+            // Build per-pixel grids from spatial grid
+            int[] archGrid = new int[size];
+            int[] dioGrid = new int[size];
+            int[] parGrid = new int[size];
+            bool[] isLand = new bool[size];
+
+            for (int i = 0; i < size; i++)
+            {
+                int cellId = spatialGrid[i];
+                if (cellId >= 0 && cellId < cellIsLandById.Length && cellIsLandById[cellId])
+                {
+                    isLand[i] = true;
+                    archGrid[i] = (cellArchdioceseIdById != null && cellId < cellArchdioceseIdById.Length)
+                        ? cellArchdioceseIdById[cellId] : 0;
+                    dioGrid[i] = (cellDioceseIdById != null && cellId < cellDioceseIdById.Length)
+                        ? cellDioceseIdById[cellId] : 0;
+                    parGrid[i] = (cellParishIdById != null && cellId < cellParishIdById.Length)
+                        ? cellParishIdById[cellId] : 0;
+                }
+                else
+                {
+                    archGrid[i] = -1;
+                    dioGrid[i] = -1;
+                    parGrid[i] = -1;
+                    isLand[i] = false;
+                }
+            }
+
+            // Seed boundaries and run chamfer transforms
+            float[] archDist = new float[size];
+            float[] dioDist = new float[size];
+            float[] parDist = new float[size];
+            Array.Fill(archDist, 255f);
+            Array.Fill(dioDist, 255f);
+            Array.Fill(parDist, 255f);
+
+            System.Threading.Tasks.Parallel.For(0, gridHeight, y =>
+            {
+                int row = y * gridWidth;
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = row + x;
+                    if (!isLand[idx]) continue;
+
+                    int myArch = archGrid[idx];
+                    int myDio = dioGrid[idx];
+                    int myPar = parGrid[idx];
+                    bool archBoundary = false;
+                    bool dioBoundary = false;
+                    bool parBoundary = false;
+
+                    for (int dy = -1; dy <= 1 && !(archBoundary && dioBoundary && parBoundary); dy++)
+                    {
+                        for (int dx = -1; dx <= 1 && !(archBoundary && dioBoundary && parBoundary); dx++)
+                        {
+                            if (dx == 0 && dy == 0) continue;
+                            int nx = x + dx;
+                            int ny = y + dy;
+                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
+                            int nIdx = ny * gridWidth + nx;
+                            if (!isLand[nIdx]) continue;
+
+                            if (!archBoundary && archGrid[nIdx] != myArch)
+                                archBoundary = true;
+                            if (!dioBoundary && dioGrid[nIdx] != myDio)
+                                dioBoundary = true;
+                            if (!parBoundary && parGrid[nIdx] != myPar)
+                                parBoundary = true;
+                        }
+                    }
+
+                    if (archBoundary) archDist[idx] = 0f;
+                    if (dioBoundary) dioDist[idx] = 0f;
+                    if (parBoundary) parDist[idx] = 0f;
+                }
+            });
+
+            Task archTask = Task.Run(() => RunChamferTransform(archDist, isLand));
+            Task dioTask = Task.Run(() => RunChamferTransform(dioDist, isLand));
+            Task parTask = Task.Run(() => RunChamferTransform(parDist, isLand));
+            Task.WaitAll(archTask, dioTask, parTask);
+
+            archdioceseBorderDistTexture = CreateBorderDistTexture("ArchdioceseBorderDistTexture", DistToBytes(archDist), "archdiocese_border_dist");
+            dioceseBorderDistTexture = CreateBorderDistTexture("DioceseBorderDistTexture", DistToBytes(dioDist), "diocese_border_dist");
+            parishBorderDistTexture = CreateBorderDistTexture("ParishBorderDistTexture", DistToBytes(parDist), "parish_border_dist");
+
+            Debug.Log($"MapOverlayManager: Generated religious border distance textures {gridWidth}x{gridHeight}");
+        }
+
         public IEnumerator RunDeferredStartupWork()
         {
             // Warm up political hierarchy modes after initial load so first user switch is instant.
@@ -3941,6 +4066,9 @@ public class MapOverlayManager
             DestroyTexture(realmBorderDistTexture);
             DestroyTexture(provinceBorderDistTexture);
             DestroyTexture(countyBorderDistTexture);
+            DestroyTexture(archdioceseBorderDistTexture);
+            DestroyTexture(dioceseBorderDistTexture);
+            DestroyTexture(parishBorderDistTexture);
             GenerateDataTextures();
             GenerateRiverMaskTexture();
             GenerateHeightmapTexture();
@@ -3952,6 +4080,9 @@ public class MapOverlayManager
 
             if (economyState?.CountyToMarket != null && economyState.Markets != null)
                 GenerateMarketBorderDistTexture();
+
+            if (cellParishIdById != null)
+                GenerateReligiousBorderDistTextures();
 
             if (overlayTextureCacheByLayer.Count > 0)
             {
@@ -3972,6 +4103,9 @@ public class MapOverlayManager
             InvalidateModeColorResolveCache(MapView.MapMode.Market);
             InvalidateModeColorResolveCache(MapView.MapMode.TransportCost);
             InvalidateModeColorResolveCache(MapView.MapMode.MarketAccess);
+            InvalidateModeColorResolveCache(MapView.MapMode.Religion);
+            InvalidateModeColorResolveCache(MapView.MapMode.ReligionDiocese);
+            InvalidateModeColorResolveCache(MapView.MapMode.ReligionParish);
 
             if (currentOverlayLayer == OverlayLayer.None)
             {
@@ -4500,6 +4634,9 @@ public class MapOverlayManager
             AddTextureForDestroy(texturesToDestroy, roadDistTexture);
             AddTextureForDestroy(texturesToDestroy, marketPaletteTexture);
             AddTextureForDestroy(texturesToDestroy, marketBorderDistTexture);
+            AddTextureForDestroy(texturesToDestroy, archdioceseBorderDistTexture);
+            AddTextureForDestroy(texturesToDestroy, dioceseBorderDistTexture);
+            AddTextureForDestroy(texturesToDestroy, parishBorderDistTexture);
             AddTextureForDestroy(texturesToDestroy, modeColorResolveTexture);
             foreach (var cachedResolve in modeColorResolveCacheByMode.Values)
                 AddTextureForDestroy(texturesToDestroy, cachedResolve);
@@ -4528,6 +4665,9 @@ public class MapOverlayManager
             roadDistTexture = null;
             marketPaletteTexture = null;
             marketBorderDistTexture = null;
+            archdioceseBorderDistTexture = null;
+            dioceseBorderDistTexture = null;
+            parishBorderDistTexture = null;
             modeColorResolveTexture = null;
             riverMaskPixels = null;
         }
