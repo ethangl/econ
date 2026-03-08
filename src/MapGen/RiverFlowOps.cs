@@ -1,12 +1,23 @@
+using System;
 using System.Collections.Generic;
 
 namespace MapGen.Core
 {
     /// <summary>
-    /// River generation based on signed-meter elevation and climate fields.
+    /// mapgen4-style flow accumulation on the Voronoi vertex graph.
+    /// Rivers flow along cell boundaries (edges), computed via vertices
+    /// (Delaunay triangle circumcenters).
+    ///
+    /// Algorithm:
+    /// 1. Interpolate elevation + moisture from cells to vertices
+    /// 2. BFS from ocean vertices uphill (priority flood) to build a downslope DAG
+    /// 3. Reverse-traverse DAG (leaves first) to accumulate flow
     /// </summary>
     public static class RiverFlowOps
     {
+        /// <summary>Flow contribution multiplier applied to moisture^2 per vertex.</summary>
+        const float FlowScale = 1.0f;
+
         public static void Compute(
             RiverField data,
             ElevationField elevation,
@@ -14,37 +25,16 @@ namespace MapGen.Core
             MapGenConfig config)
         {
             InterpolateVertexData(data, elevation, climate, config);
-            var vertexPairToEdge = BuildVertexPairToEdge(data.Mesh);
-            DepressionFill(data);
-            FlowAccumulate(data);
-            AssignEdgeFlux(data, vertexPairToEdge);
+            BuildVertexEdgeLookup(data.Mesh, out var vertexEdges, out var edgeOtherVertex);
+            AssignDownslope(data, vertexEdges, edgeOtherVertex);
+            AssignFlow(data, config);
             data.RiverThreshold = config.EffectiveRiverThreshold;
             data.RiverTraceThreshold = config.EffectiveRiverTraceThreshold;
             ExtractRivers(
                 data,
-                vertexPairToEdge,
                 config.EffectiveRiverThreshold,
                 config.EffectiveRiverTraceThreshold,
                 config.EffectiveMinRiverVertices);
-        }
-
-        static long PairKey(int a, int b)
-        {
-            int lo = a < b ? a : b;
-            int hi = a > b ? a : b;
-            return ((long)lo << 32) | (uint)hi;
-        }
-
-        static Dictionary<long, int> BuildVertexPairToEdge(CellMesh mesh)
-        {
-            var map = new Dictionary<long, int>(mesh.EdgeCount);
-            for (int e = 0; e < mesh.EdgeCount; e++)
-            {
-                var (v0, v1) = mesh.EdgeVertices[e];
-                map[PairKey(v0, v1)] = e;
-            }
-
-            return map;
         }
 
         static void InterpolateVertexData(
@@ -54,9 +44,8 @@ namespace MapGen.Core
             MapGenConfig config)
         {
             var mesh = data.Mesh;
-            float fluxScale = config.MaxAnnualPrecipitationMm / 100f;
-            if (fluxScale < 1e-6f)
-                fluxScale = 1f;
+            float maxPrecip = config.MaxAnnualPrecipitationMm;
+            if (maxPrecip < 1f) maxPrecip = 1f;
 
             ParallelOps.For(0, mesh.VertexCount, v =>
             {
@@ -64,7 +53,6 @@ namespace MapGen.Core
                 if (cells == null || cells.Length == 0)
                 {
                     data.VertexElevationMeters[v] = 0f;
-                    data.VertexPrecipFlux[v] = 0f;
                     return;
                 }
 
@@ -79,246 +67,301 @@ namespace MapGen.Core
                         continue;
 
                     sumH += elevation[c];
-                    sumP += climate.PrecipitationMmYear[c] / fluxScale;
+                    sumP += climate.PrecipitationMmYear[c];
                     count++;
                 }
 
                 if (count > 0)
                 {
                     data.VertexElevationMeters[v] = sumH / count;
-                    data.VertexPrecipFlux[v] = sumP / count;
+                    // Store normalized moisture [0,1] in WaterLevelMeters temporarily.
+                    // Will be overwritten with actual water levels during AssignDownslope.
+                    data.WaterLevelMeters[v] = (sumP / count) / maxPrecip;
                 }
             });
         }
 
-        static void DepressionFill(RiverField data)
+        /// <summary>
+        /// Build per-vertex edge adjacency: for each vertex, which edges touch it
+        /// and what vertex is on the other end.
+        /// </summary>
+        static void BuildVertexEdgeLookup(
+            CellMesh mesh,
+            out int[][] vertexEdges,
+            out int[][] edgeOtherVertex)
+        {
+            int vCount = mesh.VertexCount;
+            var edgeLists = new List<int>[vCount];
+            var otherLists = new List<int>[vCount];
+
+            for (int e = 0; e < mesh.EdgeCount; e++)
+            {
+                var (v0, v1) = mesh.EdgeVertices[e];
+                if (v0 < 0 || v0 >= vCount || v1 < 0 || v1 >= vCount)
+                    continue;
+
+                (edgeLists[v0] ??= new List<int>()).Add(e);
+                (otherLists[v0] ??= new List<int>()).Add(v1);
+
+                (edgeLists[v1] ??= new List<int>()).Add(e);
+                (otherLists[v1] ??= new List<int>()).Add(v0);
+            }
+
+            vertexEdges = new int[vCount][];
+            edgeOtherVertex = new int[vCount][];
+            for (int v = 0; v < vCount; v++)
+            {
+                vertexEdges[v] = edgeLists[v]?.ToArray() ?? Array.Empty<int>();
+                edgeOtherVertex[v] = otherLists[v]?.ToArray() ?? Array.Empty<int>();
+            }
+        }
+
+        /// <summary>
+        /// Priority-flood BFS from ocean vertices uphill.
+        /// Builds the downslope DAG (DownslopeEdge per vertex) and traversal order.
+        /// Also computes WaterLevelMeters for lake detection.
+        /// </summary>
+        static void AssignDownslope(
+            RiverField data,
+            int[][] vertexEdges,
+            int[][] edgeOtherVertex)
         {
             var mesh = data.Mesh;
             int n = mesh.VertexCount;
 
+            // Read moisture before we overwrite WaterLevelMeters
+            var moisture = new float[n];
+            Array.Copy(data.WaterLevelMeters, moisture, n);
+
+            // Initialize water levels
             for (int v = 0; v < n; v++)
                 data.WaterLevelMeters[v] = data.VertexElevationMeters[v];
 
+            // Priority queue: (elevation, vertex)
+            // Use SortedSet with tiebreaker to avoid duplicate-key issues
+            var queue = new SortedSet<(float elev, int vertex)>();
             var visited = new bool[n];
-            var queue = new SortedSet<(float level, int vertex)>();
+            var order = new List<int>(n);
 
+            // Seed: all ocean vertices (elevation <= 0)
             for (int v = 0; v < n; v++)
             {
-                if (data.IsOcean(v))
+                if (data.VertexElevationMeters[v] <= 0f)
+                {
                     visited[v] = true;
+                    order.Add(v);
+
+                    // Ocean vertices: find lowest neighbor for downslope (like mapgen4)
+                    float bestElev = data.VertexElevationMeters[v];
+                    int bestEdge = -1;
+                    int[] edges = vertexEdges[v];
+                    int[] others = edgeOtherVertex[v];
+                    for (int i = 0; i < edges.Length; i++)
+                    {
+                        float ne = data.VertexElevationMeters[others[i]];
+                        if (ne < bestElev)
+                        {
+                            bestElev = ne;
+                            bestEdge = edges[i];
+                        }
+                    }
+                    data.DownslopeEdge[v] = bestEdge;
+                    data.WaterLevelMeters[v] = 0f; // ocean water level = 0
+                    queue.Add((data.VertexElevationMeters[v], v));
+                }
             }
 
+            // Also seed boundary-adjacent land vertices (map edges drain off)
             for (int v = 0; v < n; v++)
             {
-                if (data.IsOcean(v))
+                if (visited[v])
                     continue;
 
-                bool seed = false;
-                int[] neighbors = mesh.VertexNeighbors[v];
-                if (neighbors != null)
+                bool isBoundaryVertex = false;
+                int[] cells = mesh.VertexCells[v];
+                if (cells != null)
                 {
-                    for (int i = 0; i < neighbors.Length; i++)
+                    for (int i = 0; i < cells.Length; i++)
                     {
-                        if (data.IsOcean(neighbors[i]))
+                        int c = cells[i];
+                        if (c >= 0 && c < mesh.CellCount && mesh.CellIsBoundary[c])
                         {
-                            seed = true;
+                            isBoundaryVertex = true;
                             break;
                         }
                     }
                 }
 
-                if (!seed)
+                if (isBoundaryVertex)
                 {
-                    int[] cells = mesh.VertexCells[v];
-                    if (cells != null)
-                    {
-                        for (int i = 0; i < cells.Length; i++)
-                        {
-                            int c = cells[i];
-                            if (c >= 0 && c < mesh.CellCount && mesh.CellIsBoundary[c])
-                            {
-                                seed = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (seed)
-                {
-                    queue.Add((data.WaterLevelMeters[v], v));
                     visited[v] = true;
+                    order.Add(v);
+                    data.DownslopeEdge[v] = -1; // drains off map
+                    data.WaterLevelMeters[v] = data.VertexElevationMeters[v];
+                    queue.Add((data.VertexElevationMeters[v], v));
                 }
             }
 
+            // BFS: process in elevation order, flood uphill
             while (queue.Count > 0)
             {
                 var min = queue.Min;
                 queue.Remove(min);
-                var (_, vert) = min;
+                int current = min.vertex;
 
-                int[] neighbors = mesh.VertexNeighbors[vert];
-                if (neighbors == null)
-                    continue;
+                int[] edges = vertexEdges[current];
+                int[] others = edgeOtherVertex[current];
 
-                for (int i = 0; i < neighbors.Length; i++)
+                for (int i = 0; i < edges.Length; i++)
                 {
-                    int nb = neighbors[i];
+                    int nb = others[i];
                     if (visited[nb])
                         continue;
-                    if (data.IsOcean(nb))
-                    {
-                        visited[nb] = true;
-                        continue;
-                    }
 
                     visited[nb] = true;
-                    if (data.VertexElevationMeters[nb] >= data.WaterLevelMeters[vert])
-                    {
-                        data.WaterLevelMeters[nb] = data.VertexElevationMeters[nb];
-                    }
-                    else
-                    {
-                        data.WaterLevelMeters[nb] = data.WaterLevelMeters[vert];
-                        data.FlowTarget[nb] = vert;
-                    }
+                    order.Add(nb);
 
-                    queue.Add((data.WaterLevelMeters[nb], nb));
+                    // Downslope edge points back toward current (water flows from nb → current)
+                    data.DownslopeEdge[nb] = edges[i];
+
+                    // Derive FlowTarget: nb flows toward current
+                    data.FlowTarget[nb] = current;
+
+                    // Water level for lake detection: max of own elevation and parent's water level
+                    // (priority flood — depressions fill to their spillway level)
+                    float parentWaterLevel = data.WaterLevelMeters[current];
+                    float ownElevation = data.VertexElevationMeters[nb];
+                    data.WaterLevelMeters[nb] = Math.Max(ownElevation, parentWaterLevel);
+
+                    queue.Add((data.VertexElevationMeters[nb], nb));
                 }
             }
+
+            // Store moisture back for flow computation
+            // (we temporarily used WaterLevelMeters for moisture, now it has water levels)
+            // Moisture goes into a local used by AssignFlow
+            data.VertexOrder = order.ToArray();
+
+            // Stash moisture in VertexFlux temporarily (will be overwritten in AssignFlow)
+            for (int v = 0; v < n; v++)
+                data.VertexFlux[v] = moisture[v];
         }
 
-        static void FlowAccumulate(RiverField data)
+        /// <summary>
+        /// Reverse-traverse the DAG (leaves first) to accumulate flow.
+        /// flow = FlowScale * moisture^2 for land vertices, 0 for ocean.
+        /// </summary>
+        static void AssignFlow(
+            RiverField data,
+            MapGenConfig config)
         {
             var mesh = data.Mesh;
             int n = mesh.VertexCount;
+            var order = data.VertexOrder;
 
-            var landVerts = new List<int>(n);
+            // Read moisture from VertexFlux (stashed by AssignDownslope)
+            var moisture = new float[n];
+            Array.Copy(data.VertexFlux, moisture, n);
+
+            // Initialize flow per vertex
+            float fluxScale = config.MaxAnnualPrecipitationMm / 100f;
+            if (fluxScale < 1f) fluxScale = 1f;
+
             for (int v = 0; v < n; v++)
             {
-                if (!data.IsOcean(v))
-                    landVerts.Add(v);
-            }
-
-            landVerts.Sort((a, b) =>
-            {
-                int cmp = data.WaterLevelMeters[b].CompareTo(data.WaterLevelMeters[a]);
-                if (cmp != 0) return cmp;
-                return data.VertexElevationMeters[a].CompareTo(data.VertexElevationMeters[b]);
-            });
-
-            foreach (int v in landVerts)
-            {
-                data.VertexFlux[v] += data.VertexPrecipFlux[v];
-
-                if (data.FlowTarget[v] < 0)
+                if (data.VertexElevationMeters[v] > 0f)
                 {
-                    float minLevel = float.MaxValue;
-                    int target = -1;
-
-                    int[] neighbors = mesh.VertexNeighbors[v];
-                    if (neighbors != null)
-                    {
-                        for (int i = 0; i < neighbors.Length; i++)
-                        {
-                            int nb = neighbors[i];
-                            float nbLevel = data.IsOcean(nb)
-                                ? data.VertexElevationMeters[nb]
-                                : data.WaterLevelMeters[nb];
-                            if (nbLevel < minLevel)
-                            {
-                                minLevel = nbLevel;
-                                target = nb;
-                            }
-                        }
-                    }
-
-                    data.FlowTarget[v] = target;
+                    float m = moisture[v];
+                    data.VertexFlux[v] = FlowScale * m * m * fluxScale;
                 }
-
-                int ft = data.FlowTarget[v];
-                if (ft >= 0 && !data.IsOcean(ft))
-                    data.VertexFlux[ft] += data.VertexFlux[v];
+                else
+                {
+                    data.VertexFlux[v] = 0f;
+                }
             }
-        }
 
-        static void AssignEdgeFlux(RiverField data, Dictionary<long, int> vertexPairToEdge)
-        {
-            for (int v = 0; v < data.VertexCount; v++)
+            // Clear edge flux
+            Array.Clear(data.EdgeFlux, 0, data.EdgeFlux.Length);
+
+            // Reverse traversal: leaves first, accumulate toward ocean
+            for (int i = order.Length - 1; i >= 0; i--)
             {
-                if (data.IsOcean(v))
+                int v = order[i];
+                int downslopeEdge = data.DownslopeEdge[v];
+                if (downslopeEdge < 0)
                     continue;
 
-                int ft = data.FlowTarget[v];
-                if (ft < 0)
+                // Find the trunk vertex (other end of the downslope edge)
+                int trunk = data.FlowTarget[v];
+                if (trunk < 0)
                     continue;
 
-                long key = PairKey(v, ft);
-                if (vertexPairToEdge.TryGetValue(key, out int edgeIdx))
-                    data.EdgeFlux[edgeIdx] = data.VertexFlux[v];
+                // Accumulate flow
+                data.VertexFlux[trunk] += data.VertexFlux[v];
+                data.EdgeFlux[downslopeEdge] += data.VertexFlux[v];
+
+                // Fix backward slopes: if trunk is higher than tributary, lower it
+                if (data.VertexElevationMeters[trunk] > data.VertexElevationMeters[v]
+                    && data.VertexElevationMeters[v] > 0f)
+                {
+                    data.VertexElevationMeters[trunk] = data.VertexElevationMeters[v];
+                }
             }
         }
 
+        /// <summary>
+        /// Extract river polylines by tracing edges from ocean mouths upstream.
+        /// </summary>
         static void ExtractRivers(
             RiverField data,
-            Dictionary<long, int> vertexPairToEdge,
             float threshold,
             float traceThreshold,
             int minVertices)
         {
             int n = data.VertexCount;
+
+            // Build inflow graph: for each vertex, which vertices flow INTO it
             var inflow = new List<int>[n];
             for (int v = 0; v < n; v++)
             {
+                int target = data.FlowTarget[v];
+                if (target < 0 || target >= n)
+                    continue;
                 if (data.IsOcean(v))
                     continue;
 
-                int ft = data.FlowTarget[v];
-                if (ft < 0 || ft >= n)
-                    continue;
-
-                if (inflow[ft] == null)
-                    inflow[ft] = new List<int>();
-                inflow[ft].Add(v);
+                (inflow[target] ??= new List<int>()).Add(v);
             }
 
-            var vertexRiver = new int[n];
-            for (int v = 0; v < n; v++)
-                vertexRiver[v] = -1;
-
+            // Find mouths: land vertices that flow into ocean with flux >= threshold
             var mouths = new List<int>();
             for (int v = 0; v < n; v++)
             {
                 if (data.IsOcean(v))
                     continue;
-
                 int ft = data.FlowTarget[v];
                 if (ft < 0 || !data.IsOcean(ft))
                     continue;
                 if (data.VertexFlux[v] < threshold)
                     continue;
-
                 mouths.Add(v);
             }
-
             mouths.Sort((a, b) => data.VertexFlux[b].CompareTo(data.VertexFlux[a]));
+
+            var vertexRiver = new int[n];
+            for (int v = 0; v < n; v++)
+                vertexRiver[v] = -1;
 
             var rivers = new List<RiverPath>();
             int nextId = 1;
 
+            // Trace main rivers from mouths upstream
             foreach (int mouth in mouths)
             {
                 if (vertexRiver[mouth] >= 0)
                     continue;
 
-                var (verts, source) = TraceUpstream(
-                    mouth,
-                    nextId,
-                    data,
-                    inflow,
-                    vertexRiver,
-                    traceThreshold);
-
+                var (verts, source) = TraceUpstream(mouth, nextId, data, inflow, vertexRiver, traceThreshold);
                 rivers.Add(new RiverPath
                 {
                     Id = nextId,
@@ -330,16 +373,13 @@ namespace MapGen.Core
                 nextId++;
             }
 
+            // Trace tributaries
             var worklist = new Queue<int>();
             var seen = new HashSet<int>();
             foreach (var r in rivers)
-            {
                 foreach (int v in r.Vertices)
-                {
                     if (seen.Add(v))
                         worklist.Enqueue(v);
-                }
-            }
 
             while (worklist.Count > 0)
             {
@@ -354,19 +394,10 @@ namespace MapGen.Core
                     if (data.VertexFlux[up] < traceThreshold)
                         continue;
 
-                    var (verts, source) = TraceUpstream(
-                        up,
-                        nextId,
-                        data,
-                        inflow,
-                        vertexRiver,
-                        traceThreshold);
-
+                    var (verts, source) = TraceUpstream(up, nextId, data, inflow, vertexRiver, traceThreshold);
                     foreach (int v in verts)
-                    {
                         if (seen.Add(v))
                             worklist.Enqueue(v);
-                    }
 
                     rivers.Add(new RiverPath
                     {
