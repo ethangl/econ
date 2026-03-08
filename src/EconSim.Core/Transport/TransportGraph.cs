@@ -49,11 +49,18 @@ namespace EconSim.Core.Transport
         // Road state for applying road bonuses (set after economy initialization)
         private RoadState _roadState;
 
+        // Edge-based river flux data (set at map generation, immutable)
+        private readonly Dictionary<(int, int), float> _edgeRiverFlux;
+        private readonly HashSet<int> _riversideCells;
+
         // Default movement cost if per-cell data missing
         private const float DefaultMovementCost = 10.0f;
 
-        // River crossing bonus (multiplier < 1 means easier)
-        private const float RiverCrossingBonus = 0.8f;
+        /// <summary>
+        /// Cost multiplier when traveling between two riverside cells without crossing a river.
+        /// Represents the benefit of river valley roads, towpaths, and flat terrain near rivers.
+        /// </summary>
+        private const float RiverFollowingMultiplier = 0.7f;
 
         // Sea transport costs
         private const float SeaMovementCost = 12f;     // ~3.5x cheaper than flat grassland per cell
@@ -71,6 +78,8 @@ namespace EconSim.Core.Transport
             _maxCacheSize = maxCacheSize;
             _pathCache = new Dictionary<(int, int), PathResult>();
             _distanceNormalizationKm = WorldScale.ResolveDistanceNormalizationKm(mapData.Info);
+            _edgeRiverFlux = mapData.EdgeRiverFlux;
+            _riversideCells = mapData.RiversideCells;
         }
 
         /// <summary>
@@ -132,16 +141,24 @@ namespace EconSim.Core.Transport
                 totalCost += PortTransitionCost;
             }
 
-            // River and road bonuses: take the better one, don't stack
+            // River following and road bonuses: take the best, don't stack
             // Only applies to land travel
             if (from.IsLand && to.IsLand)
             {
                 float bestMultiplier = 1f;
 
-                // Check river bonus
-                if (from.HasRiver && to.HasRiver && from.RiverId == to.RiverId)
+                // River following bonus: both cells border a major river, but this edge
+                // is NOT itself a river crossing. This represents traveling along the
+                // river valley (flat terrain, towpaths, etc.).
+                // Crossing penalty is already baked into Cell.MovementCost by BiomeGenerationOps.
+                if (_riversideCells != null && _riversideCells.Contains(from.Id) && _riversideCells.Contains(to.Id))
                 {
-                    bestMultiplier = Math.Min(bestMultiplier, RiverCrossingBonus);
+                    var edgeKey = RoadState.NormalizeKey(from.Id, to.Id);
+                    bool crossingRiver = _edgeRiverFlux != null && _edgeRiverFlux.ContainsKey(edgeKey);
+                    if (!crossingRiver)
+                    {
+                        bestMultiplier = Math.Min(bestMultiplier, RiverFollowingMultiplier);
+                    }
                 }
 
                 // Check road bonus

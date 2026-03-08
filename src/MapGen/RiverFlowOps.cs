@@ -18,6 +18,8 @@ namespace MapGen.Core
             DepressionFill(data);
             FlowAccumulate(data);
             AssignEdgeFlux(data, vertexPairToEdge);
+            data.RiverThreshold = config.EffectiveRiverThreshold;
+            data.RiverTraceThreshold = config.EffectiveRiverTraceThreshold;
             ExtractRivers(
                 data,
                 vertexPairToEdge,

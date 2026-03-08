@@ -33,6 +33,23 @@ namespace EconSim.Core.Data
         [NonSerialized] public Dictionary<int, Culture> CultureById;
         [NonSerialized] public Dictionary<int, Religion> ReligionById;
 
+        /// <summary>
+        /// Per-cell-edge river flux. Key is normalized (smaller cell ID first).
+        /// Only edges with flux above the trace threshold are stored.
+        /// </summary>
+        [NonSerialized] public Dictionary<(int, int), float> EdgeRiverFlux;
+
+        /// <summary>
+        /// Cells that border at least one edge with flux above the major river threshold.
+        /// Used for river-following transport bonus.
+        /// </summary>
+        [NonSerialized] public HashSet<int> RiversideCells;
+
+        /// <summary>
+        /// Flux at or above which an edge is considered a major river (for transport bonus, borders).
+        /// </summary>
+        [NonSerialized] public float RiverFluxThreshold;
+
         public void BuildLookups()
         {
             CellById = new Dictionary<int, Cell>();
@@ -249,10 +266,6 @@ namespace EconSim.Core.Data
         public int BurgId;              // 0 = no settlement
         public int CountyId;            // County this cell belongs to (assigned during map generation)
 
-        // Rivers
-        public int RiverId;             // 0 = no river
-        public int RiverFlow;           // Water flux
-
         // Economic (will be expanded)
         public float Population;
         public int CultureId;
@@ -261,7 +274,6 @@ namespace EconSim.Core.Data
         // Boundary
         public bool IsBoundary;             // True if cell is on map edge
 
-        public bool HasRiver => RiverId > 0;
         public bool HasBurg => BurgId > 0;
     }
 

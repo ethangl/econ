@@ -63,6 +63,7 @@ crashlytics-build.properties
 **/[Ss]creenshots.meta
 
 # Reference maps (large files, download separately)
+/reference
 /reference/*.json
 /reference/*.map
 /reference/*.svg

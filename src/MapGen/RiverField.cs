@@ -20,8 +20,14 @@ namespace MapGen.Core
         /// <summary>Per-edge flux crossing this edge.</summary>
         public float[] EdgeFlux;
 
-        /// <summary>Extracted river polylines.</summary>
+        /// <summary>Extracted river polylines (legacy — will be replaced by edge-based rendering).</summary>
         public RiverPath[] Rivers;
+
+        /// <summary>Flux threshold for "major river" (mouth-level).</summary>
+        public float RiverThreshold;
+
+        /// <summary>Flux threshold for "any visible stream" (trace-level).</summary>
+        public float RiverTraceThreshold;
 
         public CellMesh Mesh { get; }
         public int VertexCount => Mesh.VertexCount;

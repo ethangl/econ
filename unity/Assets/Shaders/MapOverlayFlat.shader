@@ -9,8 +9,9 @@ Shader "EconSim/MapOverlayFlat"
         _SeaLevel ("Sea Level (Normalized)", Float) = 0.5
         _UseHeightDisplacement ("Use Height Displacement", Int) = 0
 
-        // River mask (Phase 8) - knocks out rivers from land, showing water underneath
-        _RiverMaskTex ("River Mask", 2D) = "black" {}
+        // River distance field - distance from nearest river edge (0 = on river edge)
+        _RiverMaskTex ("River Distance", 2D) = "white" {}
+        _RiverWidth ("River Width", Range(0, 6)) = 0.1
 
         // Split core textures (M3-S1)
         // Sampler budget note:
@@ -193,6 +194,7 @@ Shader "EconSim/MapOverlayFlat"
                 // Water layer uniforms
                 half4 _WaterShallowColor;
                 float _WaterShallowAlpha;
+                float _RiverWidth;
 
                 float _SelectedRealmId;
                 float _SelectedProvinceId;
@@ -263,8 +265,10 @@ Shader "EconSim/MapOverlayFlat"
 
                 bool isCellWater = geographyBase.a >= 0.5;
 
-                float riverMask = tex2D(_RiverMaskTex, IN.dataUV).r;
-                bool isRiver = riverMask > 0.5;
+                float riverDist = tex2D(_RiverMaskTex, IN.dataUV).r * 255.0;
+                float riverAA = fwidth(riverDist);
+                float riverMask = 1.0 - smoothstep(_RiverWidth - riverAA, _RiverWidth + riverAA, riverDist);
+                bool isRiver = riverDist < _RiverWidth;
 
                 // isWater combines both sources (used for selection/hover land checks)
                 bool isWater = isCellWater || isRiver;

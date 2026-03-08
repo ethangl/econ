@@ -175,6 +175,28 @@ namespace EconSim.Core.Import
                 }
             };
 
+            // Build per-cell-edge river flux from MapGen's edge data
+            var edgeRiverFlux = new Dictionary<(int, int), float>();
+            var riversideCells = new HashSet<int>();
+            float majorThreshold = rivers.RiverThreshold;
+            float traceThreshold = rivers.RiverTraceThreshold;
+            for (int e = 0; e < mesh.EdgeCount; e++)
+            {
+                float flux = rivers.EdgeFlux[e];
+                if (flux < traceThreshold)
+                    continue;
+                var (c0, c1) = mesh.EdgeCells[e];
+                if (c0 < 0 || c1 < 0)
+                    continue; // boundary edge
+                var key = c0 < c1 ? (c0, c1) : (c1, c0);
+                edgeRiverFlux[key] = flux;
+                if (flux >= majorThreshold)
+                {
+                    riversideCells.Add(c0);
+                    riversideCells.Add(c1);
+                }
+            }
+
             var mapData = new MapData
             {
                 Info = info,
@@ -188,7 +210,10 @@ namespace EconSim.Core.Import
                 Features = features,
                 Counties = counties,
                 Cultures = cultures,
-                Religions = religions
+                Religions = religions,
+                EdgeRiverFlux = edgeRiverFlux,
+                RiversideCells = riversideCells,
+                RiverFluxThreshold = majorThreshold
             };
 
             mapData.BuildLookups();
