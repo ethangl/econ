@@ -59,6 +59,7 @@ namespace EconSim.Mapgen4
         const int LandPassLayer = 26;
         const int DepthPassLayer = 27;
         const int TextureSize = 2048;
+        const float DisplayAspectRatio = 1f;
 
         readonly ElevationParams _elevation = new ElevationParams();
         readonly BiomesParams _biomes = new BiomesParams();
@@ -92,6 +93,8 @@ namespace EconSim.Mapgen4
         bool _regenerateData = true;
         bool _updateRender = true;
         bool _isInitialized;
+        int _lastScreenWidth;
+        int _lastScreenHeight;
 
         Mapgen4RuntimeData _runtime;
 
@@ -101,6 +104,7 @@ namespace EconSim.Mapgen4
             _colormap = Mapgen4Colormap.CreateTexture();
             _displayCamera = EnsureDisplayCamera();
             ConfigureDisplayCamera(_displayCamera, FinalLayer);
+            CacheScreenSize();
 
             _riverTexture = CreateRenderTexture("Mapgen4RiverRT", RenderTextureFormat.ARGB32);
             _landTexture = CreateRenderTexture("Mapgen4LandRT", RenderTextureFormat.ARGBHalf);
@@ -166,6 +170,8 @@ namespace EconSim.Mapgen4
                 RenderPasses();
                 _updateRender = false;
             }
+
+            SyncDisplayViewportRect();
         }
 
         void Regenerate()
@@ -292,6 +298,7 @@ namespace EconSim.Mapgen4
             camera.orthographicSize = 500f;
             camera.transform.position = new Vector3(500f, 500f, -10f);
             camera.transform.rotation = Quaternion.identity;
+            camera.rect = CalculateDisplayViewportRect();
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = new Color(0.3f, 0.3f, 0.35f, 1f);
             camera.cullingMask = 1 << layer;
@@ -381,6 +388,43 @@ namespace EconSim.Mapgen4
             mesh.bounds = new Bounds(Vector3.zero, new Vector3(1000f, 1000f, 1000f));
             mesh.UploadMeshData(false);
             return mesh;
+        }
+
+        Rect CalculateDisplayViewportRect()
+        {
+            float screenWidth = Mathf.Max(1f, Screen.width);
+            float screenHeight = Mathf.Max(1f, Screen.height);
+            float screenAspect = screenWidth / screenHeight;
+            if (screenAspect > DisplayAspectRatio)
+            {
+                float normalizedWidth = DisplayAspectRatio / screenAspect;
+                return new Rect(0.5f * (1f - normalizedWidth), 0f, normalizedWidth, 1f);
+            }
+
+            float normalizedHeight = screenAspect / DisplayAspectRatio;
+            return new Rect(0f, 0.5f * (1f - normalizedHeight), 1f, normalizedHeight);
+        }
+
+        void SyncDisplayViewportRect()
+        {
+            int screenWidth = Screen.width;
+            int screenHeight = Screen.height;
+            if (screenWidth == _lastScreenWidth && screenHeight == _lastScreenHeight)
+            {
+                return;
+            }
+
+            CacheScreenSize();
+            if (_displayCamera != null)
+            {
+                _displayCamera.rect = CalculateDisplayViewportRect();
+            }
+        }
+
+        void CacheScreenSize()
+        {
+            _lastScreenWidth = Screen.width;
+            _lastScreenHeight = Screen.height;
         }
 
         Matrix4x4 CalculateTopdownMatrix()

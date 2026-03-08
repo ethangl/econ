@@ -19,6 +19,7 @@ Shader "EconSim/Mapgen4/Final"
 
             TEXTURE2D(_MainTex);
             SAMPLER(sampler_MainTex);
+            float4 _MainTex_TexelSize;
 
             struct Attributes
             {
@@ -47,12 +48,15 @@ Shader "EconSim/Mapgen4/Final"
             half4 frag(Varyings input) : SV_Target
             {
                 float2 uv = input.uv;
-                #if UNITY_UV_STARTS_AT_TOP
+                if (_MainTex_TexelSize.y < 0.0)
+                {
                 uv.y = 1.0 - uv.y;
                 uv += float2(_Offset.x, -_Offset.y);
-                #else
+                }
+                else
+                {
                 uv += _Offset;
-                #endif
+                }
                 return SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, uv);
             }
             ENDHLSL
