@@ -46,7 +46,14 @@ Shader "EconSim/Mapgen4/Final"
 
             half4 frag(Varyings input) : SV_Target
             {
-                return SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv + _Offset);
+                float2 uv = input.uv;
+                #if UNITY_UV_STARTS_AT_TOP
+                uv.y = 1.0 - uv.y;
+                uv += float2(_Offset.x, -_Offset.y);
+                #else
+                uv += _Offset;
+                #endif
+                return SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, uv);
             }
             ENDHLSL
         }
