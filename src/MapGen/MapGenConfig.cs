@@ -88,8 +88,8 @@ namespace MapGen.Core
         };
 
         // River extraction thresholds in normalized flux space.
-        public float RiverThreshold = 240f;
-        public float RiverTraceThreshold = 12f;
+        public float RiverThreshold = 96f;
+        public float RiverTraceThreshold = 40f;
         public int MinRiverVertices = 12;
         const float RiverTuningReferenceCellCount = 5000f;
 

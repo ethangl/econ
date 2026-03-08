@@ -59,6 +59,8 @@ public class MapOverlayManager
         private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
         private static readonly int ReliefNormalTexId = Shader.PropertyToID("_ReliefNormalTex");
         private static readonly int RiverMaskTexId = Shader.PropertyToID("_RiverMaskTex");
+        private static readonly int RiverWidthId = Shader.PropertyToID("_RiverWidth");
+        private static readonly int RiverMinWidthId = Shader.PropertyToID("_RiverMinWidth");
         private static readonly int RealmPaletteTexId = Shader.PropertyToID("_RealmPaletteTex");
         private static readonly int BiomePaletteTexId = Shader.PropertyToID("_BiomePaletteTex");
         private static readonly int RealmBorderDistTexId = Shader.PropertyToID("_RealmBorderDistTex");
@@ -123,7 +125,7 @@ public class MapOverlayManager
         public Texture2D PoliticalIdsTexture => politicalIdsTexture;
         private Texture2D heightmapTexture;     // RFloat: smoothed height values
         private Texture2D reliefNormalTexture;  // RGBA32: normal map derived from visual height
-        private Texture2D riverMaskTexture;     // R8: river mask (1 = river, 0 = not river)
+        private Texture2D riverMaskTexture;     // RG16: R=distance from river, G=normalized flux
         private Texture2D realmPaletteTexture;  // 256x1: realm colors
         private Texture2D biomePaletteTexture;  // 256x1: biome colors
         private Texture2D realmBorderDistTexture; // R8: distance to nearest realm boundary (texels)
@@ -169,6 +171,18 @@ public class MapOverlayManager
 
         // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
         private const int ReliefBlurRadius = 4;
+        /// <summary>
+        /// Max river half-width in distance-field texels. The distance field is offset by this
+        /// value so that pixels inside rivers have dist &lt; MaxRiverHalfWidth.
+        /// Used by both shader (_RiverWidth) and C# mode-color resolve.
+        /// </summary>
+        /// <summary>
+        /// Max river half-width in distance-field texels (for the largest rivers).
+        /// </summary>
+        private const float MaxRiverHalfWidth = 0.5f;
+        /// <summary>Min half-width for the smallest visible tributaries (texels).</summary>
+        private const float MinRiverHalfWidth = 0.0f;
+
         private const float ReliefBlurCrossClassWeight = 0.25f;
         private const float ReliefChannelRadiusTexels = 2.6f;
         private const float ReliefChannelStrength = 0.022f;
@@ -640,7 +654,7 @@ public class MapOverlayManager
                     Path.Combine(cacheDirectory, CacheRiverMaskFile),
                     gridWidth,
                     gridHeight,
-                    TextureFormat.R8,
+                    TextureFormat.RG16,
                     FilterMode.Bilinear,
                     TextureWrapMode.Clamp,
                     out byte[] loadedRiverMaskPixels);
@@ -1814,7 +1828,10 @@ public class MapOverlayManager
 
         private float[] BuildRiverDistanceField(bool[] isLand)
         {
-            if (riverMaskPixels == null || riverMaskPixels.Length != isLand.Length)
+            // RG16 river mask: R = distance from centerline, G = normalized flux.
+            // Raw bytes are interleaved [R0, G0, R1, G1, ...].
+            // For erosion we only need the R channel (distance).
+            if (riverMaskPixels == null || riverMaskPixels.Length != isLand.Length * 2)
                 return null;
 
             int size = isLand.Length;
@@ -1823,22 +1840,12 @@ public class MapOverlayManager
 
             for (int i = 0; i < size; i++)
             {
-                if (!isLand[i])
-                {
-                    dist[i] = 255f;
-                    continue;
-                }
-
-                bool isRiver = riverMaskPixels[i] >= 8;
-                dist[i] = isRiver ? 0f : 255f;
-                hasRiver |= isRiver;
+                dist[i] = riverMaskPixels[i * 2]; // R channel
+                if (dist[i] < 1f && isLand[i])
+                    hasRiver = true;
             }
 
-            if (!hasRiver)
-                return null;
-
-            RunChamferTransform(dist, isLand);
-            return dist;
+            return hasRiver ? dist : null;
         }
 
         /// <summary>
@@ -1847,7 +1854,7 @@ public class MapOverlayManager
         /// </summary>
         private void GenerateRiverMaskTexture()
         {
-            riverMaskTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+            riverMaskTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RG16, false);
             riverMaskTexture.name = "RiverMaskTexture";
             riverMaskTexture.filterMode = FilterMode.Bilinear;
             riverMaskTexture.wrapMode = TextureWrapMode.Clamp;
@@ -1857,44 +1864,114 @@ public class MapOverlayManager
             riverMaskTexture.Apply();
 
             TextureDebugger.SaveTexture(riverMaskTexture, "river_mask");
-            Debug.Log($"MapOverlayManager: Generated river mask {gridWidth}x{gridHeight} ({mapData.Rivers.Count} rivers)");
+            int edgeCount = mapData.EdgeRiverFlux != null ? mapData.EdgeRiverFlux.Count : 0;
+            Debug.Log($"MapOverlayManager: Generated river distance field {gridWidth}x{gridHeight} ({edgeCount} river edges)");
         }
 
         private byte[] GenerateRiverMaskPixels()
         {
-            var pixels = new byte[gridWidth * gridHeight];
-
-            float scale = resolutionMultiplier;
-
-            // River width settings
-            float baseWidth = 0.6f * resolutionMultiplier;  // Minimum river width in pixels
-            float widthScale = 0.3f * resolutionMultiplier; // Scale factor for discharge-based width
-
-            foreach (var river in mapData.Rivers)
+            // RG8 river texture:
+            //   R = chamfer distance from nearest river centerline (0 = on river, 255 = far)
+            //   G = normalized river width at nearest river pixel (0 = thinnest, 255 = widest)
+            // Shader uses both: isRiver = dist < width * MaxRiverHalfWidth
+            var edgeFlux = mapData.EdgeRiverFlux;
+            float visualThreshold = mapData.RiverTraceFluxThreshold;
+            float majorThreshold = mapData.RiverFluxThreshold;
+            if (edgeFlux == null || edgeFlux.Count == 0)
             {
-                List<Vector2> pathPoints = BuildRiverControlPoints(river, scale);
-                if (pathPoints.Count < 2)
-                    continue;
-
-                uint riverSeed = BuildMapSeed(river.Id);
-                var smoothedPoints = BuildNoisyRasterPath(pathPoints, riverSeed, amplitudeScale: 1f, smoothSamplesPerSegment: 4);
-                if (smoothedPoints == null || smoothedPoints.Count < 2)
-                    continue;
-
-                // Calculate max width for this river
-                float maxWidth = baseWidth + river.Width * widthScale;
-
-                // Width tapers from 30% at source to 100% at mouth.
-                RasterizeSolidPath(
-                    pixels,
-                    smoothedPoints,
-                    (segmentIndex, segmentCount) =>
-                    {
-                        float t = segmentCount <= 0 ? 1f : (float)segmentIndex / segmentCount;
-                        return maxWidth * (0.3f + 0.7f * t);
-                    });
+                // R=255 (max distance = no river), G=0
+                byte[] empty = new byte[gridWidth * gridHeight * 2];
+                for (int i = 0; i < empty.Length; i += 2)
+                    empty[i] = 255;
+                return empty;
             }
 
+            // Compute log-flux range for width interpolation
+            float logMax = Mathf.Log(majorThreshold + 1f);
+            foreach (var kv in edgeFlux)
+                if (kv.Value > majorThreshold)
+                    logMax = Mathf.Max(logMax, Mathf.Log(kv.Value + 1f));
+            float logTrace = Mathf.Log(visualThreshold + 1f);
+            float logRange = Mathf.Max(0.01f, logMax - logTrace);
+
+            int size = gridWidth * gridHeight;
+            float[] dist = new float[size];
+            byte[] fluxNorm = new byte[size]; // normalized flux → width
+            Array.Fill(dist, 255f);
+            bool[] isLand = new bool[size];
+
+            for (int i = 0; i < size; i++)
+            {
+                int cellId = spatialGrid[i];
+                if (cellId >= 0 && cellId < cellIsLandById.Length && cellIsLandById[cellId])
+                    isLand[i] = true;
+            }
+
+            // Seed scan: mark pixels adjacent to river edges as distance 0
+            // and record normalized flux for width modulation
+            Parallel.For(0, gridHeight, y =>
+            {
+                int row = y * gridWidth;
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = row + x;
+                    if (!isLand[idx])
+                        continue;
+
+                    int cellId = spatialGrid[idx];
+                    float bestFlux = -1f;
+
+                    for (int dy = -1; dy <= 1; dy++)
+                    {
+                        for (int dx = -1; dx <= 1; dx++)
+                        {
+                            if (dx == 0 && dy == 0)
+                                continue;
+
+                            int nx = x + dx;
+                            int ny = y + dy;
+                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight)
+                                continue;
+
+                            int nIdx = ny * gridWidth + nx;
+                            int neighborCellId = spatialGrid[nIdx];
+                            if (neighborCellId == cellId || neighborCellId < 0)
+                                continue;
+
+                            var key = cellId < neighborCellId
+                                ? (cellId, neighborCellId)
+                                : (neighborCellId, cellId);
+                            if (edgeFlux.TryGetValue(key, out float flux) && flux >= visualThreshold)
+                            {
+                                if (flux > bestFlux)
+                                    bestFlux = flux;
+                            }
+                        }
+                    }
+
+                    if (bestFlux >= 0f)
+                    {
+                        dist[idx] = 0f;
+                        float t = (Mathf.Log(bestFlux + 1f) - logTrace) / logRange;
+                        t = Mathf.Clamp01(t);
+                        fluxNorm[idx] = (byte)Mathf.RoundToInt(t * 255f);
+                    }
+                }
+            });
+
+            // Propagate flux values from seed pixels to neighbors via nearest-seed.
+            // We run the chamfer and simultaneously track which seed each pixel is closest to.
+            // Simpler approach: after chamfer, flood-fill flux from nearest seed.
+            RunChamferTransform(dist, isLand);
+            PropagateNearestFlux(dist, fluxNorm, isLand);
+
+            // Interleave into RG8
+            byte[] pixels = new byte[size * 2];
+            for (int i = 0; i < size; i++)
+            {
+                pixels[i * 2] = (byte)Mathf.Min(255, Mathf.RoundToInt(dist[i]));
+                pixels[i * 2 + 1] = fluxNorm[i];
+            }
             return pixels;
         }
 
@@ -2063,6 +2140,18 @@ public class MapOverlayManager
         }
 
         /// <summary>
+        /// Check if a pixel from the RG16 river mask texture represents a river.
+        /// R = distance from centerline (0-1 → 0-255 texels), G = normalized flux (0-1).
+        /// River if distance &lt; flux-scaled half-width.
+        /// </summary>
+        private static bool IsRiverPixel(Color riverPixel)
+        {
+            float dist = riverPixel.r * 255f;
+            float width = Mathf.Lerp(MinRiverHalfWidth, MaxRiverHalfWidth, riverPixel.g);
+            return dist < width;
+        }
+
+        /// <summary>
         /// Convert float distance field to byte array, capping at 255.
         /// </summary>
         private static byte[] DistToBytes(float[] dist)
@@ -2071,6 +2160,76 @@ public class MapOverlayManager
             for (int i = 0; i < dist.Length; i++)
                 pixels[i] = (byte)Mathf.Min(255, Mathf.RoundToInt(dist[i]));
             return pixels;
+        }
+
+        /// <summary>
+        /// Propagate flux values from seed pixels (dist=0) to all other pixels,
+        /// so each pixel inherits the flux of its nearest river edge.
+        /// Uses the same two-pass chamfer pattern as the distance transform.
+        /// </summary>
+        private void PropagateNearestFlux(float[] dist, byte[] fluxNorm, bool[] isLand)
+        {
+            const float orthCost = 1f;
+            const float diagCost = 1.414f;
+
+            // Forward pass: top-to-bottom, left-to-right
+            for (int y = 1; y < gridHeight; y++)
+            {
+                for (int x = 0; x < gridWidth; x++)
+                {
+                    int idx = y * gridWidth + x;
+                    if (!isLand[idx] || dist[idx] < 0.5f) continue; // skip seeds and water
+
+                    // Check neighbors that were already processed; adopt flux from nearest
+                    float bestDist = dist[idx];
+                    int bestIdx = idx;
+
+                    if (x > 0 && dist[idx - 1] + orthCost <= bestDist)
+                    { bestDist = dist[idx - 1] + orthCost; bestIdx = idx - 1; }
+
+                    int prevRow = (y - 1) * gridWidth;
+                    if (x > 0 && dist[prevRow + x - 1] + diagCost <= bestDist)
+                    { bestDist = dist[prevRow + x - 1] + diagCost; bestIdx = prevRow + x - 1; }
+
+                    if (dist[prevRow + x] + orthCost <= bestDist)
+                    { bestDist = dist[prevRow + x] + orthCost; bestIdx = prevRow + x; }
+
+                    if (x < gridWidth - 1 && dist[prevRow + x + 1] + diagCost <= bestDist)
+                    { bestIdx = prevRow + x + 1; }
+
+                    if (bestIdx != idx)
+                        fluxNorm[idx] = fluxNorm[bestIdx];
+                }
+            }
+
+            // Backward pass: bottom-to-top, right-to-left
+            for (int y = gridHeight - 2; y >= 0; y--)
+            {
+                for (int x = gridWidth - 1; x >= 0; x--)
+                {
+                    int idx = y * gridWidth + x;
+                    if (!isLand[idx] || dist[idx] < 0.5f) continue;
+
+                    float bestDist = dist[idx];
+                    int bestIdx = idx;
+
+                    if (x < gridWidth - 1 && dist[idx + 1] + orthCost <= bestDist)
+                    { bestDist = dist[idx + 1] + orthCost; bestIdx = idx + 1; }
+
+                    int nextRow = (y + 1) * gridWidth;
+                    if (x < gridWidth - 1 && dist[nextRow + x + 1] + diagCost <= bestDist)
+                    { bestDist = dist[nextRow + x + 1] + diagCost; bestIdx = nextRow + x + 1; }
+
+                    if (dist[nextRow + x] + orthCost <= bestDist)
+                    { bestDist = dist[nextRow + x] + orthCost; bestIdx = nextRow + x; }
+
+                    if (x > 0 && dist[nextRow + x - 1] + diagCost <= bestDist)
+                    { bestIdx = nextRow + x - 1; }
+
+                    if (bestIdx != idx)
+                        fluxNorm[idx] = fluxNorm[bestIdx];
+                }
+            }
         }
 
         private readonly struct AdministrativeBorderDistPixels
@@ -2312,6 +2471,8 @@ public class MapOverlayManager
             styleMaterial.SetTexture(HeightmapTexId, heightmapTexture);
             styleMaterial.SetTexture(ReliefNormalTexId, reliefNormalTexture);
             styleMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
+            styleMaterial.SetFloat(RiverWidthId, MaxRiverHalfWidth);
+            styleMaterial.SetFloat(RiverMinWidthId, MinRiverHalfWidth);
             styleMaterial.SetTexture(RealmPaletteTexId, realmPaletteTexture);
             styleMaterial.SetTexture(BiomePaletteTexId, biomePaletteTexture);
             styleMaterial.SetTexture(RealmBorderDistTexId, realmBorderDistTexture);
@@ -2544,7 +2705,7 @@ public class MapOverlayManager
                     if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
                         continue;
 
-                    if (!cell.IsLand || rivers[i].r > 0.5f)
+                    if (!cell.IsLand || IsRiverPixel(rivers[i]))
                         continue;
 
                     int marketId = (cellMarketIdById != null && cellId < cellMarketIdById.Length)
@@ -2588,7 +2749,7 @@ public class MapOverlayManager
                             int cellId = spatialGrid[i];
                             if (cellId < 0) continue;
                             if (cellId >= cellIsLandById.Length || !cellIsLandById[cellId]) continue;
-                            if (rivers[i].r > 0.5f) continue;
+                            if (IsRiverPixel(rivers[i])) continue;
 
                             int cellMarketId = (cellMarketIdById != null && cellId < cellMarketIdById.Length)
                                 ? cellMarketIdById[cellId] : 0;
@@ -2618,7 +2779,7 @@ public class MapOverlayManager
                     int cellId = spatialGrid[i];
                     if (cellId < 0) continue;
                     if (cellId >= cellIsLandById.Length || !cellIsLandById[cellId]) continue;
-                    if (rivers[i].r > 0.5f) continue;
+                    if (IsRiverPixel(rivers[i])) continue;
 
                     float cost = costValues[i];
                     if (float.IsNaN(cost) || float.IsInfinity(cost))
@@ -2655,7 +2816,7 @@ public class MapOverlayManager
                     if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
                         continue;
 
-                    if (!cell.IsLand || rivers[i].r > 0.5f)
+                    if (!cell.IsLand || IsRiverPixel(rivers[i]))
                         continue;
 
                     float value = ComputeTransportCost(cell);
@@ -2684,7 +2845,7 @@ public class MapOverlayManager
                     if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
                         continue;
 
-                    if (!cell.IsLand || rivers[i].r > 0.5f)
+                    if (!cell.IsLand || IsRiverPixel(rivers[i]))
                         continue;
 
                     float value = values[i];
@@ -2731,7 +2892,7 @@ public class MapOverlayManager
                     if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
                         continue;
 
-                    if (!cell.IsLand || rivers[i].r > 0.5f)
+                    if (!cell.IsLand || IsRiverPixel(rivers[i]))
                         continue;
 
                     Color territoryColor;
@@ -2789,7 +2950,7 @@ public class MapOverlayManager
                         continue;
 
                     bool isCellWater = !cell.IsLand;
-                    bool isRiver = rivers[i].r > 0.5f;
+                    bool isRiver = IsRiverPixel(rivers[i]);
                     if (isCellWater || isRiver)
                         continue;
 
@@ -3266,7 +3427,7 @@ public class MapOverlayManager
                 if (cellId < 0 || cellId >= cellIsLandById.Length || !cellIsLandById[cellId])
                     continue;
 
-                if (riverPixels != null && i < riverPixels.Length && riverPixels[i].r > 0.5f)
+                if (riverPixels != null && i < riverPixels.Length && IsRiverPixel(riverPixels[i]))
                     continue;
 
                 int countyId = (cellId >= 0 && cellId < cellCountyIdById.Length) ? cellCountyIdById[cellId] : 0;

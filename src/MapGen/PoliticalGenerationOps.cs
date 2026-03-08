@@ -186,8 +186,7 @@ namespace MapGen.Core
             }
 
             int[][] sharedNeighborEdges = BuildNeighborEdgeLookup(mesh);
-            float nominalMovementCost = EstimateNominalMovementCost(landCells, biomes);
-            float[] riverPenaltyByEdge = BuildRiverCrossingPenaltyByEdge(mesh, rivers, config, nominalMovementCost);
+            float[] riverMultiplierByEdge = BuildRiverCrossingMultiplierByEdge(mesh, rivers, config);
             float nominalNeighborDistance = EstimateNominalNeighborDistance(mesh, landMask);
 
             int targetCounties = Clamp((int)Math.Round((landCells.Count / 120f) * countyScale), 1, 4096);
@@ -216,7 +215,7 @@ namespace MapGen.Core
                 mesh,
                 biomes,
                 sharedNeighborEdges,
-                riverPenaltyByEdge,
+                riverMultiplierByEdge,
                 nominalNeighborDistance,
                 targetCountyPopulation);
             MergeCountyOrphans(
@@ -225,7 +224,7 @@ namespace MapGen.Core
                 mesh,
                 biomes,
                 sharedNeighborEdges,
-                riverPenaltyByEdge,
+                riverMultiplierByEdge,
                 nominalNeighborDistance,
                 targetCountyPopulation);
 
@@ -396,10 +395,14 @@ namespace MapGen.Core
                 countyRealm[county] = pol.RealmId[cell];
             }
 
-            // Build county adjacency graph
+            // Build county adjacency graph and county-pair river multipliers
             var neighborSets = new HashSet<int>[countyCount + 1];
             for (int i = 1; i <= countyCount; i++)
                 neighborSets[i] = new HashSet<int>();
+
+            // Track max river flux crossing each county-pair boundary
+            float[] edgeMultiplier = BuildRiverCrossingMultiplierByEdge(mesh, rivers, config);
+            var countyPairMaxMultiplier = new Dictionary<long, float>();
 
             for (int cell = 0; cell < n; cell++)
             {
@@ -414,8 +417,24 @@ namespace MapGen.Core
                     int nb = neighbors[ni];
                     if ((uint)nb >= (uint)n) continue;
                     int nbCounty = pol.CountyId[nb];
-                    if (nbCounty > 0 && nbCounty != county)
-                        neighborSets[county].Add(nbCounty);
+                    if (nbCounty <= 0 || nbCounty == county) continue;
+
+                    neighborSets[county].Add(nbCounty);
+
+                    // Track the max river multiplier across this county boundary
+                    int edgeIdx = FindSharedEdge(mesh, cell, nb);
+                    if (edgeIdx >= 0 && (uint)edgeIdx < (uint)edgeMultiplier.Length)
+                    {
+                        float mult = edgeMultiplier[edgeIdx];
+                        if (mult > 1f)
+                        {
+                            long key = county < nbCounty
+                                ? ((long)county << 32) | (uint)nbCounty
+                                : ((long)nbCounty << 32) | (uint)county;
+                            if (!countyPairMaxMultiplier.TryGetValue(key, out float existing) || mult > existing)
+                                countyPairMaxMultiplier[key] = mult;
+                        }
+                    }
                 }
             }
 
@@ -520,7 +539,7 @@ namespace MapGen.Core
                         // Stay within realm
                         if (countyRealm[nbCounty] != realm) continue;
 
-                        float edgeCost = ComputeCountyEdgeCost(curCounty, nbCounty, mesh, biomes, seatCell);
+                        float edgeCost = ComputeCountyEdgeCost(curCounty, nbCounty, mesh, biomes, seatCell, countyPairMaxMultiplier);
                         if (!(edgeCost > 0f) || float.IsNaN(edgeCost) || float.IsInfinity(edgeCost))
                             continue;
 
@@ -635,7 +654,8 @@ namespace MapGen.Core
         static float ComputeCountyEdgeCost(
             int countyA, int countyB,
             CellMesh mesh, BiomeField biomes,
-            int[] seatCell)
+            int[] seatCell,
+            Dictionary<long, float> countyPairMaxMultiplier)
         {
             int seatA = seatCell[countyA];
             int seatB = seatCell[countyB];
@@ -647,7 +667,19 @@ namespace MapGen.Core
             if (movB < 1f) movB = 1f;
             float avgMovement = 0.5f * (movA + movB);
 
-            return distance * avgMovement;
+            float cost = distance * avgMovement;
+
+            // Apply river crossing multiplier
+            if (countyPairMaxMultiplier != null)
+            {
+                long key = countyA < countyB
+                    ? ((long)countyA << 32) | (uint)countyB
+                    : ((long)countyB << 32) | (uint)countyA;
+                if (countyPairMaxMultiplier.TryGetValue(key, out float mult))
+                    cost *= mult;
+            }
+
+            return cost;
         }
 
         // ────────────────────────────────────────────────────────────────
@@ -713,7 +745,7 @@ namespace MapGen.Core
             CellMesh mesh,
             BiomeField biomes,
             int[][] neighborEdges,
-            float[] riverPenaltyByEdge,
+            float[] riverMultiplierByEdge,
             float nominalNeighborDistance,
             float targetCountyPopulation)
         {
@@ -781,7 +813,7 @@ namespace MapGen.Core
                         ni < edgeLookup.Length ? edgeLookup[ni] : -1,
                         mesh,
                         biomes,
-                        riverPenaltyByEdge,
+                        riverMultiplierByEdge,
                         nominalNeighborDistance);
                     if (!(edgeCost > 0f) || float.IsNaN(edgeCost) || float.IsInfinity(edgeCost))
                         continue;
@@ -850,7 +882,7 @@ namespace MapGen.Core
                         ni < edgeLookup.Length ? edgeLookup[ni] : -1,
                         mesh,
                         biomes,
-                        riverPenaltyByEdge,
+                        riverMultiplierByEdge,
                         nominalNeighborDistance);
                     if (!(edgeCost > 0f) || float.IsNaN(edgeCost) || float.IsInfinity(edgeCost))
                         continue;
@@ -906,7 +938,7 @@ namespace MapGen.Core
                             ni < edgeLookup.Length ? edgeLookup[ni] : -1,
                             mesh,
                             biomes,
-                            riverPenaltyByEdge,
+                            riverMultiplierByEdge,
                             nominalNeighborDistance);
                         if (edgeCost < bestEdge)
                         {
@@ -971,7 +1003,7 @@ namespace MapGen.Core
             CellMesh mesh,
             BiomeField biomes,
             int[][] neighborEdges,
-            float[] riverPenaltyByEdge,
+            float[] riverMultiplierByEdge,
             float nominalNeighborDistance,
             float targetCountyPopulation)
         {
@@ -1025,7 +1057,7 @@ namespace MapGen.Core
                         mesh,
                         biomes,
                         neighborEdges,
-                        riverPenaltyByEdge,
+                        riverMultiplierByEdge,
                         nominalNeighborDistance,
                         countyCellCount,
                         countyPopulation,
@@ -1040,7 +1072,7 @@ namespace MapGen.Core
                             mesh,
                             biomes,
                             neighborEdges,
-                            riverPenaltyByEdge,
+                            riverMultiplierByEdge,
                             nominalNeighborDistance,
                             countyCellCount,
                             countyPopulation,
@@ -1073,7 +1105,7 @@ namespace MapGen.Core
             CellMesh mesh,
             BiomeField biomes,
             int[][] neighborEdges,
-            float[] riverPenaltyByEdge,
+            float[] riverMultiplierByEdge,
             float nominalNeighborDistance,
             int[] countyCellCount,
             float[] countyPopulation,
@@ -1117,7 +1149,7 @@ namespace MapGen.Core
                         ni < edgeLookup.Length ? edgeLookup[ni] : -1,
                         mesh,
                         biomes,
-                        riverPenaltyByEdge,
+                        riverMultiplierByEdge,
                         nominalNeighborDistance);
 
                     if (score < bestScore || (Math.Abs(score - bestScore) <= 1e-4f && targetCounty < bestTarget))
@@ -1340,8 +1372,7 @@ namespace MapGen.Core
             MapGenConfig config)
         {
             int[][] neighborEdges = BuildNeighborEdgeLookup(mesh);
-            float nominalMovementCost = EstimateNominalMovementCost(cells, biomes);
-            float[] riverPenaltyByEdge = BuildRiverCrossingPenaltyByEdge(mesh, rivers, config, nominalMovementCost);
+            float[] riverMultiplierByEdge = BuildRiverCrossingMultiplierByEdge(mesh, rivers, config);
             var includeCell = new bool[mesh.CellCount];
             for (int i = 0; i < cells.Count; i++)
             {
@@ -1358,7 +1389,7 @@ namespace MapGen.Core
                 mesh,
                 biomes,
                 neighborEdges,
-                riverPenaltyByEdge,
+                riverMultiplierByEdge,
                 nominalNeighborDistance);
         }
 
@@ -1369,7 +1400,7 @@ namespace MapGen.Core
             CellMesh mesh,
             BiomeField biomes,
             int[][] neighborEdges,
-            float[] riverPenaltyByEdge,
+            float[] riverMultiplierByEdge,
             float nominalNeighborDistance)
         {
             if (cells.Count == 0 || seeds.Count == 0)
@@ -1431,7 +1462,7 @@ namespace MapGen.Core
                         ni < edgeLookup.Length ? edgeLookup[ni] : -1,
                         mesh,
                         biomes,
-                        riverPenaltyByEdge,
+                        riverMultiplierByEdge,
                         nominalNeighborDistance);
 
                     if (!(edgeCost > 0f) || float.IsNaN(edgeCost) || float.IsInfinity(edgeCost))
@@ -1488,7 +1519,7 @@ namespace MapGen.Core
             int sharedEdge,
             CellMesh mesh,
             BiomeField biomes,
-            float[] riverPenaltyByEdge,
+            float[] riverMultiplierByEdge,
             float nominalNeighborDistance)
         {
             float fromMovement = biomes.MovementCost[fromCell];
@@ -1504,8 +1535,8 @@ namespace MapGen.Core
             if (distanceFactor > 2.5f) distanceFactor = 2.5f;
 
             float total = baseMovementCost * distanceFactor;
-            if ((uint)sharedEdge < (uint)riverPenaltyByEdge.Length)
-                total += riverPenaltyByEdge[sharedEdge];
+            if ((uint)sharedEdge < (uint)riverMultiplierByEdge.Length)
+                total *= riverMultiplierByEdge[sharedEdge];
 
             return total;
         }
@@ -1555,21 +1586,18 @@ namespace MapGen.Core
             return -1;
         }
 
-        static float[] BuildRiverCrossingPenaltyByEdge(CellMesh mesh, RiverField rivers, MapGenConfig config, float nominalMovementCost)
+        /// <summary>
+        /// Build per-edge river crossing multiplier. 1.0 = no river;
+        /// scales with (flux/trace)² so major rivers are strong barriers.
+        /// </summary>
+        static float[] BuildRiverCrossingMultiplierByEdge(CellMesh mesh, RiverField rivers, MapGenConfig config)
         {
-            var penalty = new float[mesh.EdgeCount];
+            var multiplier = new float[mesh.EdgeCount];
+            Array.Fill(multiplier, 1f);
             if (rivers == null || rivers.EdgeFlux == null)
-                return penalty;
+                return multiplier;
 
             float traceThreshold = config != null ? Math.Max(1f, config.EffectiveRiverTraceThreshold) : 1f;
-            float majorThreshold = config != null ? Math.Max(traceThreshold * 8f, config.EffectiveRiverThreshold) : traceThreshold * 8f;
-
-            float clampedNominalMovement = nominalMovementCost;
-            if (clampedNominalMovement < 5f) clampedNominalMovement = 5f;
-            if (clampedNominalMovement > 120f) clampedNominalMovement = 120f;
-
-            float basePenalty = clampedNominalMovement * 0.15f;
-            float maxAdditionalPenalty = clampedNominalMovement * 0.65f;
 
             int count = Math.Min(mesh.EdgeCount, rivers.EdgeFlux.Length);
             for (int edge = 0; edge < count; edge++)
@@ -1578,40 +1606,11 @@ namespace MapGen.Core
                 if (flux <= traceThreshold)
                     continue;
 
-                float t = (flux - traceThreshold) / Math.Max(1f, majorThreshold - traceThreshold);
-                if (t < 0f) t = 0f;
-                if (t > 1f) t = 1f;
-                penalty[edge] = basePenalty + maxAdditionalPenalty * t;
+                float ratio = flux / traceThreshold;
+                multiplier[edge] = ratio * ratio;
             }
 
-            return penalty;
-        }
-
-        static float EstimateNominalMovementCost(List<int> cells, BiomeField biomes)
-        {
-            if (cells == null || cells.Count == 0)
-                return 10f;
-
-            double total = 0d;
-            int count = 0;
-            for (int i = 0; i < cells.Count; i++)
-            {
-                int cell = cells[i];
-                if ((uint)cell >= (uint)biomes.MovementCost.Length)
-                    continue;
-
-                float movement = biomes.MovementCost[cell];
-                if (!(movement > 0f) || float.IsNaN(movement) || float.IsInfinity(movement))
-                    continue;
-
-                total += movement;
-                count++;
-            }
-
-            if (count <= 0 || total <= 0d)
-                return 10f;
-
-            return (float)(total / count);
+            return multiplier;
         }
 
         static float EstimateNominalNeighborDistance(CellMesh mesh, bool[] includeCell)
