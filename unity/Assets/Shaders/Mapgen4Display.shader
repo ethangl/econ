@@ -4,7 +4,7 @@ Shader "EconSim/Mapgen4/Display"
     {
         Tags { "RenderType"="Opaque" "RenderPipeline"="UniversalPipeline" }
         Cull Off
-        ZWrite Off
+        ZWrite On
 
         Pass
         {
@@ -56,6 +56,19 @@ Shader "EconSim/Mapgen4/Display"
                 float _BiomeColors;
             CBUFFER_END
 
+            float4 ConvertClipDepth(float4 clipPos)
+            {
+                #if UNITY_UV_STARTS_AT_TOP
+                float ndcZ = clipPos.z / max(clipPos.w, 1e-6);
+                    #if UNITY_REVERSED_Z
+                    clipPos.z = saturate(0.5 * (1.0 - ndcZ)) * clipPos.w;
+                    #else
+                    clipPos.z = saturate(0.5 * (ndcZ + 1.0)) * clipPos.w;
+                    #endif
+                #endif
+                return clipPos;
+            }
+
             Varyings vert(Attributes input)
             {
                 Varyings output;
@@ -68,6 +81,7 @@ Shader "EconSim/Mapgen4/Display"
                     output.em = float2(0.0, 0.0);
                 }
                 float4 pos = mul(_ProjectionMatrix, float4(xyClamped, output.z, 1.0));
+                pos = ConvertClipDepth(pos);
                 output.positionHCS = pos;
                 output.uv = input.positionOS.xy / 1000.0;
                 output.xy = (1.0 + pos.xy) * 0.5;

@@ -1,10 +1,11 @@
-Shader "EconSim/Mapgen4/DepthPass"
+Shader "EconSim/Mapgen4/Final"
 {
     SubShader
     {
         Tags { "RenderType"="Opaque" "RenderPipeline"="UniversalPipeline" }
         Cull Off
-        ZWrite On
+        ZWrite Off
+        ZTest Always
 
         Pass
         {
@@ -16,47 +17,36 @@ Shader "EconSim/Mapgen4/DepthPass"
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
+            TEXTURE2D(_MainTex);
+            SAMPLER(sampler_MainTex);
+
             struct Attributes
             {
                 float4 positionOS : POSITION;
-                float2 em : TEXCOORD0;
+                float2 uv : TEXCOORD0;
             };
 
             struct Varyings
             {
                 float4 positionHCS : SV_POSITION;
-                float z : TEXCOORD0;
+                float2 uv : TEXCOORD0;
             };
 
             CBUFFER_START(UnityPerMaterial)
-                float4x4 _ProjectionMatrix;
+                float2 _Offset;
             CBUFFER_END
-
-            float4 ConvertClipDepth(float4 clipPos)
-            {
-                #if UNITY_UV_STARTS_AT_TOP
-                float ndcZ = clipPos.z / max(clipPos.w, 1e-6);
-                    #if UNITY_REVERSED_Z
-                    clipPos.z = saturate(0.5 * (1.0 - ndcZ)) * clipPos.w;
-                    #else
-                    clipPos.z = saturate(0.5 * (ndcZ + 1.0)) * clipPos.w;
-                    #endif
-                #endif
-                return clipPos;
-            }
 
             Varyings vert(Attributes input)
             {
                 Varyings output;
-                output.z = input.em.x;
-                float4 pos = mul(_ProjectionMatrix, float4(input.positionOS.xy, max(0.0, input.em.x), 1.0));
-                output.positionHCS = ConvertClipDepth(pos);
+                output.uv = input.uv;
+                output.positionHCS = float4(2.0 * input.uv - 1.0, 0.0, 1.0);
                 return output;
             }
 
             half4 frag(Varyings input) : SV_Target
             {
-                return half4(input.z, 0, 0, 1);
+                return SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv + _Offset);
             }
             ENDHLSL
         }

@@ -53,10 +53,11 @@ namespace EconSim.Mapgen4
             public float BiomeColors = 1f;
         }
 
-        const int DisplayLayer = 23;
-        const int RiverLayer = 24;
-        const int LandPassLayer = 25;
-        const int DepthPassLayer = 26;
+        const int FinalLayer = 23;
+        const int DrapeLayer = 24;
+        const int RiverLayer = 25;
+        const int LandPassLayer = 26;
+        const int DepthPassLayer = 27;
         const int TextureSize = 2048;
 
         readonly ElevationParams _elevation = new ElevationParams();
@@ -68,18 +69,22 @@ namespace EconSim.Mapgen4
         UnityEngine.Camera _riverCamera;
         UnityEngine.Camera _landCamera;
         UnityEngine.Camera _depthCamera;
+        UnityEngine.Camera _drapeCamera;
 
         Material _riverPassMaterial;
         Material _landPassMaterial;
         Material _depthPassMaterial;
         Material _displayMaterial;
+        Material _finalMaterial;
 
         Mesh _landMesh;
         Mesh _riverMesh;
+        Mesh _fullscreenMesh;
 
         RenderTexture _riverTexture;
         RenderTexture _landTexture;
         RenderTexture _depthTexture;
+        RenderTexture _drapeTexture;
         Texture2D _colormap;
 
         Vector2 _scroll;
@@ -95,21 +100,25 @@ namespace EconSim.Mapgen4
             _runtime = Mapgen4RuntimeData.Build();
             _colormap = Mapgen4Colormap.CreateTexture();
             _displayCamera = EnsureDisplayCamera();
-            ConfigureDisplayCamera(_displayCamera, DisplayLayer);
+            ConfigureDisplayCamera(_displayCamera, FinalLayer);
 
             _riverTexture = CreateRenderTexture("Mapgen4RiverRT", RenderTextureFormat.ARGB32);
             _landTexture = CreateRenderTexture("Mapgen4LandRT", RenderTextureFormat.ARGBHalf);
             _depthTexture = CreateRenderTexture("Mapgen4DepthRT", RenderTextureFormat.ARGBHalf);
+            _drapeTexture = CreateRenderTexture("Mapgen4DrapeRT", RenderTextureFormat.ARGB32);
 
             _riverPassMaterial = CreateMaterial("EconSim/Mapgen4/RiverPass");
             _landPassMaterial = CreateMaterial("EconSim/Mapgen4/LandPass");
             _depthPassMaterial = CreateMaterial("EconSim/Mapgen4/DepthPass");
             _displayMaterial = CreateMaterial("EconSim/Mapgen4/Display");
+            _finalMaterial = CreateMaterial("EconSim/Mapgen4/Final");
 
             _landMesh = new Mesh { name = "Mapgen4LandMesh", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
             _riverMesh = new Mesh { name = "Mapgen4RiverMesh", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            _fullscreenMesh = CreateFullscreenMesh();
 
-            CreatePassObject("Mapgen4Display", DisplayLayer, _landMesh, _displayMaterial);
+            CreatePassObject("Mapgen4DrapePass", DrapeLayer, _landMesh, _displayMaterial);
+            CreatePassObject("Mapgen4FinalPass", FinalLayer, _fullscreenMesh, _finalMaterial);
             CreatePassObject("Mapgen4LandPass", LandPassLayer, _landMesh, _landPassMaterial);
             CreatePassObject("Mapgen4DepthPass", DepthPassLayer, _landMesh, _depthPassMaterial);
             CreatePassObject("Mapgen4RiverPass", RiverLayer, _riverMesh, _riverPassMaterial);
@@ -117,6 +126,7 @@ namespace EconSim.Mapgen4
             _riverCamera = CreatePassCamera("Mapgen4RiverCamera", RiverLayer, _riverTexture, new Color(0f, 0f, 0f, 0f));
             _landCamera = CreatePassCamera("Mapgen4LandCamera", LandPassLayer, _landTexture, Color.black);
             _depthCamera = CreatePassCamera("Mapgen4DepthCamera", DepthPassLayer, _depthTexture, Color.black);
+            _drapeCamera = CreatePassCamera("Mapgen4DrapeCamera", DrapeLayer, _drapeTexture, new Color(0.3f, 0.3f, 0.35f, 1f));
 
             _isInitialized = true;
             Regenerate();
@@ -127,13 +137,16 @@ namespace EconSim.Mapgen4
             DestroyImmediate(_riverTexture);
             DestroyImmediate(_landTexture);
             DestroyImmediate(_depthTexture);
+            DestroyImmediate(_drapeTexture);
             DestroyImmediate(_colormap);
             DestroyImmediate(_riverPassMaterial);
             DestroyImmediate(_landPassMaterial);
             DestroyImmediate(_depthPassMaterial);
             DestroyImmediate(_displayMaterial);
+            DestroyImmediate(_finalMaterial);
             DestroyImmediate(_landMesh);
             DestroyImmediate(_riverMesh);
+            DestroyImmediate(_fullscreenMesh);
         }
 
         void Update()
@@ -249,6 +262,9 @@ namespace EconSim.Mapgen4
             _displayMaterial.SetFloat("_OutlineCoast", _render.OutlineCoast);
             _displayMaterial.SetFloat("_OutlineWater", _render.OutlineWater);
             _displayMaterial.SetFloat("_BiomeColors", _render.BiomeColors);
+
+            _finalMaterial.SetTexture("_MainTex", _drapeTexture);
+            _finalMaterial.SetVector("_Offset", new Vector2(0.5f / TextureSize, 0.5f / TextureSize));
         }
 
         void RenderPasses()
@@ -256,6 +272,7 @@ namespace EconSim.Mapgen4
             _riverCamera.Render();
             _landCamera.Render();
             _depthCamera.Render();
+            _drapeCamera.Render();
         }
 
         UnityEngine.Camera EnsureDisplayCamera()
@@ -345,6 +362,27 @@ namespace EconSim.Mapgen4
             return texture;
         }
 
+        Mesh CreateFullscreenMesh()
+        {
+            var mesh = new Mesh { name = "Mapgen4FullscreenMesh" };
+            mesh.vertices = new[]
+            {
+                new Vector3(-2f, 0f, 0f),
+                new Vector3(0f, -2f, 0f),
+                new Vector3(2f, 2f, 0f),
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(-2f, 0f),
+                new Vector2(0f, -2f),
+                new Vector2(2f, 2f),
+            };
+            mesh.triangles = new[] { 0, 1, 2 };
+            mesh.bounds = new Bounds(Vector3.zero, new Vector3(1000f, 1000f, 1000f));
+            mesh.UploadMeshData(false);
+            return mesh;
+        }
+
         Matrix4x4 CalculateTopdownMatrix()
         {
             Matrix4x4 translate = Matrix4x4.Translate(new Vector3(-1f, -1f, 0f));
@@ -354,11 +392,16 @@ namespace EconSim.Mapgen4
 
         Matrix4x4 CalculateProjectionMatrix()
         {
-            Matrix4x4 rotateX = Matrix4x4.Rotate(Quaternion.Euler(_render.TiltDeg, 0f, 0f));
-            Matrix4x4 rotateZ = Matrix4x4.Rotate(Quaternion.Euler(0f, 0f, _render.RotateDeg));
+            Matrix4x4 projection =
+                Matrix4x4.Rotate(Quaternion.Euler(180f + _render.TiltDeg, 0f, 0f)) *
+                Matrix4x4.Rotate(Quaternion.Euler(0f, 0f, _render.RotateDeg));
+
+            // gl-matrix's projection[9] corresponds to row 1, column 2.
+            projection.m12 = 1f;
+
             Matrix4x4 scale = Matrix4x4.Scale(new Vector3(_render.Zoom / 100f, _render.Zoom / 100f, _render.MountainHeight * _render.Zoom / 100f));
             Matrix4x4 translate = Matrix4x4.Translate(new Vector3(-_render.X, -_render.Y, 0f));
-            return rotateX * rotateZ * scale * translate;
+            return projection * scale * translate;
         }
 
         void OnGUI()
