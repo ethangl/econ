@@ -213,7 +213,8 @@ namespace EconSim.Core.Import
                 Religions = religions,
                 EdgeRiverFlux = edgeRiverFlux,
                 RiversideCells = riversideCells,
-                RiverFluxThreshold = majorThreshold
+                RiverFluxThreshold = majorThreshold,
+                RiverTraceFluxThreshold = traceThreshold
             };
 
             mapData.BuildLookups();

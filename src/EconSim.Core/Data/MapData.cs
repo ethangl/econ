@@ -50,6 +50,12 @@ namespace EconSim.Core.Data
         /// </summary>
         [NonSerialized] public float RiverFluxThreshold;
 
+        /// <summary>
+        /// Flux at or above which an edge is a visible stream (tributaries, small rivers).
+        /// Lower than RiverFluxThreshold.
+        /// </summary>
+        [NonSerialized] public float RiverTraceFluxThreshold;
+
         public void BuildLookups()
         {
             CellById = new Dictionary<int, Cell>();
