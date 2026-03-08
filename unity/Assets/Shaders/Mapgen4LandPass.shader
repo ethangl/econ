@@ -50,7 +50,11 @@ Shader "EconSim/Mapgen4/LandPass"
             half4 frag(Varyings input) : SV_Target
             {
                 float e = 0.5 * (1.0 + input.e);
-                float river = SAMPLE_TEXTURE2D(_WaterTex, sampler_WaterTex, input.xy).a;
+                float2 waterUv = input.xy;
+                #if UNITY_UV_STARTS_AT_TOP
+                waterUv.y = 1.0 - waterUv.y;
+                #endif
+                float river = SAMPLE_TEXTURE2D(_WaterTex, sampler_WaterTex, waterUv).a;
                 if (e >= 0.5)
                 {
                     float bump = _OutlineWater / 256.0;

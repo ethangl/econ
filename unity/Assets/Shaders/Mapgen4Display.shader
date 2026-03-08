@@ -78,21 +78,32 @@ Shader "EconSim/Mapgen4/Display"
             {
                 float2 sampleOffset = 0.5 * _InverseTextureSize;
                 float2 pos = input.uv + sampleOffset;
+                float2 rtPos = pos;
+                float2 rtScreen = input.xy;
+                #if UNITY_UV_STARTS_AT_TOP
+                rtPos.y = 1.0 - rtPos.y;
+                rtScreen.y = 1.0 - rtScreen.y;
+                #endif
                 float2 dx = float2(_InverseTextureSize.x, 0);
                 float2 dy = float2(0, _InverseTextureSize.y);
+                float2 dxUv = float2(dx.x, 0.0);
+                float2 dyUv = float2(0.0, dy.y);
+                #if UNITY_UV_STARTS_AT_TOP
+                dyUv.y = -dyUv.y;
+                #endif
 
-                float z = SAMPLE_TEXTURE2D(_ElevationTex, sampler_ElevationTex, pos).x;
-                float zE = SAMPLE_TEXTURE2D(_ElevationTex, sampler_ElevationTex, pos + dx).x;
-                float zN = SAMPLE_TEXTURE2D(_ElevationTex, sampler_ElevationTex, pos - dy).x;
-                float zW = SAMPLE_TEXTURE2D(_ElevationTex, sampler_ElevationTex, pos - dx).x;
-                float zS = SAMPLE_TEXTURE2D(_ElevationTex, sampler_ElevationTex, pos + dy).x;
+                float z = SAMPLE_TEXTURE2D(_ElevationTex, sampler_ElevationTex, rtPos).x;
+                float zE = SAMPLE_TEXTURE2D(_ElevationTex, sampler_ElevationTex, rtPos + dxUv).x;
+                float zN = SAMPLE_TEXTURE2D(_ElevationTex, sampler_ElevationTex, rtPos - dyUv).x;
+                float zW = SAMPLE_TEXTURE2D(_ElevationTex, sampler_ElevationTex, rtPos - dxUv).x;
+                float zS = SAMPLE_TEXTURE2D(_ElevationTex, sampler_ElevationTex, rtPos + dyUv).x;
                 float3 slopeVector = normalize(float3(zS - zN, zE - zW, _Overhead * (_InverseTextureSize.x + _InverseTextureSize.y)));
                 float3 lightVector = normalize(float3(_LightAngle.xy, lerp(_Slope, _Flat, slopeVector.z)));
                 float light = _Ambient + max(0.0, dot(lightVector, slopeVector));
                 float3 neutralLandBiome = float3(0.9, 0.8, 0.7);
                 float3 neutralWaterBiome = 0.8 * neutralLandBiome;
                 float3 neutralBiome = neutralLandBiome;
-                float4 waterColor = SAMPLE_TEXTURE2D(_WaterTex, sampler_WaterTex, pos);
+                float4 waterColor = SAMPLE_TEXTURE2D(_WaterTex, sampler_WaterTex, rtPos);
                 if (z >= 0.5 && input.z >= 0.0)
                 {
                     z -= _OutlineWater / 256.0 * (1.0 - waterColor.a);
@@ -116,20 +127,20 @@ Shader "EconSim/Mapgen4/Display"
                     light = 1.0 - 0.3 * smoothstep(0.8, 1.0, frac((input.em.x - input.z) * 20.0));
                 }
 
-                float depth0 = SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, input.xy).x;
-                float depth1 = max(max(SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, input.xy + _OutlineDepth * (-dy - dx)).x,
-                                       SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, input.xy + _OutlineDepth * (-dy + dx)).x),
-                                   SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, input.xy + _OutlineDepth * (-dy)).x);
-                float depth2 = max(max(SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, input.xy + _OutlineDepth * (dy - dx)).x,
-                                       SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, input.xy + _OutlineDepth * (dy + dx)).x),
-                                   SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, input.xy + _OutlineDepth * (dy)).x);
+                float depth0 = SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, rtScreen).x;
+                float depth1 = max(max(SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, rtScreen + _OutlineDepth * (-dyUv - dxUv)).x,
+                                       SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, rtScreen + _OutlineDepth * (-dyUv + dxUv)).x),
+                                   SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, rtScreen + _OutlineDepth * (-dyUv)).x);
+                float depth2 = max(max(SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, rtScreen + _OutlineDepth * (dyUv - dxUv)).x,
+                                       SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, rtScreen + _OutlineDepth * (dyUv + dxUv)).x),
+                                   SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, rtScreen + _OutlineDepth * (dyUv)).x);
                 float outline = 1.0 + _OutlineStrength * (max(_OutlineThreshold, depth1 - depth0) - _OutlineThreshold);
 
                 float neighboringRiver = max(
-                    max(SAMPLE_TEXTURE2D(_WaterTex, sampler_WaterTex, pos + _OutlineDepth * dx).a,
-                        SAMPLE_TEXTURE2D(_WaterTex, sampler_WaterTex, pos - _OutlineDepth * dx).a),
-                    max(SAMPLE_TEXTURE2D(_WaterTex, sampler_WaterTex, pos + _OutlineDepth * dy).a,
-                        SAMPLE_TEXTURE2D(_WaterTex, sampler_WaterTex, pos - _OutlineDepth * dy).a)
+                    max(SAMPLE_TEXTURE2D(_WaterTex, sampler_WaterTex, rtPos + _OutlineDepth * dxUv).a,
+                        SAMPLE_TEXTURE2D(_WaterTex, sampler_WaterTex, rtPos - _OutlineDepth * dxUv).a),
+                    max(SAMPLE_TEXTURE2D(_WaterTex, sampler_WaterTex, rtPos + _OutlineDepth * dyUv).a,
+                        SAMPLE_TEXTURE2D(_WaterTex, sampler_WaterTex, rtPos - _OutlineDepth * dyUv).a)
                 );
                 if (z <= 0.5 && max(depth1, depth2) > 1.0 / 256.0 && neighboringRiver <= 0.2)
                 {

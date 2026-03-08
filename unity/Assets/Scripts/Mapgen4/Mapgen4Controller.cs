@@ -354,13 +354,11 @@ namespace EconSim.Mapgen4
 
         Matrix4x4 CalculateProjectionMatrix()
         {
-            Matrix4x4 rotateX = Matrix4x4.Rotate(Quaternion.Euler(180f + _render.TiltDeg, 0f, 0f));
+            Matrix4x4 rotateX = Matrix4x4.Rotate(Quaternion.Euler(_render.TiltDeg, 0f, 0f));
             Matrix4x4 rotateZ = Matrix4x4.Rotate(Quaternion.Euler(0f, 0f, _render.RotateDeg));
-            Matrix4x4 oblique = Matrix4x4.identity;
-            oblique.m21 = 1f;
             Matrix4x4 scale = Matrix4x4.Scale(new Vector3(_render.Zoom / 100f, _render.Zoom / 100f, _render.MountainHeight * _render.Zoom / 100f));
             Matrix4x4 translate = Matrix4x4.Translate(new Vector3(-_render.X, -_render.Y, 0f));
-            return rotateX * rotateZ * oblique * scale * translate;
+            return rotateX * rotateZ * scale * translate;
         }
 
         void OnGUI()
