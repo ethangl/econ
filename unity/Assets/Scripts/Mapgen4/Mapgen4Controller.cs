@@ -1,10 +1,20 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace EconSim.Mapgen4
 {
     public sealed class Mapgen4Controller : MonoBehaviour
     {
+        sealed class RenderTextureSet
+        {
+            public int Size;
+            public RenderTexture River;
+            public RenderTexture Land;
+            public RenderTexture Depth;
+            public RenderTexture Drape;
+        }
+
         public sealed class ElevationParams
         {
             public int Seed = 187;
@@ -63,7 +73,10 @@ namespace EconSim.Mapgen4
         const int RiverLayer = 25;
         const int LandPassLayer = 26;
         const int DepthPassLayer = 27;
-        const int TextureSize = 2048;
+        const float DefaultRenderZoom = 100f / 480f;
+        const int MinTextureSize = 2048;
+        const int MaxTextureSize = 16384;
+        const int PreallocatedMaxTextureSize = 4096;
         const float DisplayAspectRatio = 1f;
         const float DefaultMountainSpacingRatio = Mapgen4Constants.MountainSpacing / Mapgen4Constants.Spacing;
         const float MinTargetCellCount = 5000f;
@@ -106,6 +119,8 @@ namespace EconSim.Mapgen4
         int _lastScreenHeight;
         bool _rebuildRuntime = true;
         float _defaultTargetCellCount;
+        int _textureSize;
+        readonly List<RenderTextureSet> _renderTextureSets = new List<RenderTextureSet>();
 
         Mapgen4RuntimeData _runtime;
 
@@ -116,11 +131,9 @@ namespace EconSim.Mapgen4
             _displayCamera = EnsureDisplayCamera();
             ConfigureDisplayCamera(_displayCamera, FinalLayer);
             CacheScreenSize();
-
-            _riverTexture = CreateRenderTexture("Mapgen4RiverRT", RenderTextureFormat.ARGB32);
-            _landTexture = CreateRenderTexture("Mapgen4LandRT", RenderTextureFormat.ARGBHalf);
-            _depthTexture = CreateRenderTexture("Mapgen4DepthRT", RenderTextureFormat.ARGBHalf);
-            _drapeTexture = CreateRenderTexture("Mapgen4DrapeRT", RenderTextureFormat.ARGB32);
+            _textureSize = CalculateRenderTextureSize();
+            PreallocateRenderTextures();
+            ApplyRenderTextureSet(_textureSize);
 
             _riverPassMaterial = CreateMaterial("EconSim/Mapgen4/RiverPass");
             _landPassMaterial = CreateMaterial("EconSim/Mapgen4/LandPass");
@@ -149,10 +162,7 @@ namespace EconSim.Mapgen4
 
         void OnDestroy()
         {
-            DestroyImmediate(_riverTexture);
-            DestroyImmediate(_landTexture);
-            DestroyImmediate(_depthTexture);
-            DestroyImmediate(_drapeTexture);
+            DestroyRenderTextureSets();
             DestroyImmediate(_colormap);
             DestroyImmediate(_riverPassMaterial);
             DestroyImmediate(_landPassMaterial);
@@ -169,6 +179,11 @@ namespace EconSim.Mapgen4
             if (!_isInitialized)
             {
                 return;
+            }
+
+            if (EnsureRenderTextureSize())
+            {
+                _updateRender = true;
             }
 
             if (_regenerateData)
@@ -257,7 +272,7 @@ namespace EconSim.Mapgen4
             Matrix4x4 projection = CalculateProjectionMatrix();
             float lightAngleRadians = Mathf.Deg2Rad * (_render.LightAngleDeg + _render.RotateDeg);
             Vector2 lightAngle = new Vector2(Mathf.Cos(lightAngleRadians), Mathf.Sin(lightAngleRadians));
-            Vector2 inverseTextureSize = new Vector2(1.5f / TextureSize, 1.5f / TextureSize);
+            Vector2 inverseTextureSize = new Vector2(1.5f / _textureSize, 1.5f / _textureSize);
 
             _riverPassMaterial.SetMatrix("_TopdownMatrix", topdown);
 
@@ -286,7 +301,7 @@ namespace EconSim.Mapgen4
             _displayMaterial.SetFloat("_BiomeColors", _render.BiomeColors);
 
             _finalMaterial.SetTexture("_MainTex", _drapeTexture);
-            _finalMaterial.SetVector("_Offset", new Vector2(0.5f / TextureSize, 0.5f / TextureSize));
+            _finalMaterial.SetVector("_Offset", new Vector2(0.5f / _textureSize, 0.5f / _textureSize));
         }
 
         void RenderPasses()
@@ -371,9 +386,9 @@ namespace EconSim.Mapgen4
             return new Material(shader) { hideFlags = HideFlags.DontSave };
         }
 
-        RenderTexture CreateRenderTexture(string name, RenderTextureFormat format)
+        RenderTexture CreateRenderTexture(string name, int size, RenderTextureFormat format)
         {
-            var texture = new RenderTexture(TextureSize, TextureSize, 24, format, RenderTextureReadWrite.Linear)
+            var texture = new RenderTexture(size, size, 24, format, RenderTextureReadWrite.Linear)
             {
                 name = name,
                 filterMode = FilterMode.Bilinear,
@@ -383,6 +398,81 @@ namespace EconSim.Mapgen4
             };
             texture.Create();
             return texture;
+        }
+
+        bool EnsureRenderTextureSize()
+        {
+            int desiredTextureSize = CalculateRenderTextureSize();
+            if (desiredTextureSize == _textureSize)
+            {
+                return false;
+            }
+
+            _textureSize = desiredTextureSize;
+            ApplyRenderTextureSet(_textureSize);
+            return true;
+        }
+
+        void PreallocateRenderTextures()
+        {
+            _renderTextureSets.Clear();
+            for (int size = MinTextureSize; size <= PreallocatedMaxTextureSize; size *= 2)
+            {
+                _renderTextureSets.Add(CreateRenderTextureSet(size));
+            }
+        }
+
+        void ApplyRenderTextureSet(int size)
+        {
+            RenderTextureSet set = _renderTextureSets.Find(candidate => candidate.Size == size);
+            if (set == null)
+            {
+                set = CreateRenderTextureSet(size);
+                _renderTextureSets.Add(set);
+            }
+
+            _riverTexture = set.River;
+            _landTexture = set.Land;
+            _depthTexture = set.Depth;
+            _drapeTexture = set.Drape;
+
+            if (_riverCamera != null) _riverCamera.targetTexture = _riverTexture;
+            if (_landCamera != null) _landCamera.targetTexture = _landTexture;
+            if (_depthCamera != null) _depthCamera.targetTexture = _depthTexture;
+            if (_drapeCamera != null) _drapeCamera.targetTexture = _drapeTexture;
+        }
+
+        RenderTextureSet CreateRenderTextureSet(int size)
+        {
+            return new RenderTextureSet
+            {
+                Size = size,
+                River = CreateRenderTexture($"Mapgen4RiverRT_{size}", size, RenderTextureFormat.ARGB32),
+                Land = CreateRenderTexture($"Mapgen4LandRT_{size}", size, RenderTextureFormat.ARGBHalf),
+                Depth = CreateRenderTexture($"Mapgen4DepthRT_{size}", size, RenderTextureFormat.ARGBHalf),
+                Drape = CreateRenderTexture($"Mapgen4DrapeRT_{size}", size, RenderTextureFormat.ARGB32),
+            };
+        }
+
+        void DestroyRenderTextureSets()
+        {
+            foreach (RenderTextureSet set in _renderTextureSets)
+            {
+                DestroyImmediate(set.River);
+                DestroyImmediate(set.Land);
+                DestroyImmediate(set.Depth);
+                DestroyImmediate(set.Drape);
+            }
+
+            _renderTextureSets.Clear();
+        }
+
+        int CalculateRenderTextureSize()
+        {
+            float zoomRatio = Mathf.Max(1f, _render.Zoom / DefaultRenderZoom);
+            float desiredSize = MinTextureSize * zoomRatio;
+            int roundedSize = Mathf.NextPowerOfTwo(Mathf.CeilToInt(desiredSize));
+            return Mathf.Clamp(roundedSize, MinTextureSize, MaxTextureSize);
         }
 
         Mesh CreateFullscreenMesh()
@@ -560,6 +650,7 @@ namespace EconSim.Mapgen4
         void DrawRenderControls()
         {
             GUILayout.Label("render", GUI.skin.box);
+            GUILayout.Label($"rt_size: {_textureSize}");
             DrawSlider("zoom", ref _render.Zoom, 100f / 1000f, 100f / 50f, false);
             DrawSlider("x", ref _render.X, 0f, 1000f, false);
             DrawSlider("y", ref _render.Y, 0f, 1000f, false);
