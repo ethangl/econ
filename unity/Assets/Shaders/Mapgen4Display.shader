@@ -124,7 +124,9 @@ Shader "EconSim/Mapgen4/Display"
                 }
 
                 float3 biomeColor = SAMPLE_TEXTURE2D(_ColorMap, sampler_ColorMap, float2(z, input.em.y)).rgb;
-                waterColor = lerp(float4(neutralWaterBiome * (1.2 - waterColor.a), waterColor.a), waterColor, _BiomeColors);
+                float3 neutralRiverBiome = neutralWaterBiome;
+                float3 neutralWaterColor = lerp(neutralWaterBiome, neutralRiverBiome, waterColor.a);
+                waterColor = lerp(float4(neutralWaterColor, waterColor.a), waterColor, _BiomeColors);
                 biomeColor = lerp(neutralBiome, biomeColor, _BiomeColors);
 
                 float depth0 = SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, rtScreen).x;
