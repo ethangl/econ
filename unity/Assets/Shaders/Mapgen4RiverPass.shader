@@ -16,6 +16,7 @@ Shader "EconSim/Mapgen4/RiverPass"
             #pragma fragment frag
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
 
             struct Attributes
             {
@@ -50,7 +51,8 @@ Shader "EconSim/Mapgen4/RiverPass"
                 float dist = sqrt(input.barycentric.z * input.barycentric.z + input.barycentric.x * input.barycentric.x + input.barycentric.z * input.barycentric.x);
                 float width = 0.35 * lerp(input.widths.x, input.widths.y, xt);
                 float inRiver = smoothstep(width + 0.025, max(0.0, width - 0.05), abs(dist - 0.5));
-                return half4(0.2 * inRiver, 0.5 * inRiver, 0.7 * inRiver, inRiver);
+                float3 riverColor = SRGBToLinear(float3(0.2, 0.5, 0.7));
+                return half4(riverColor * inRiver, inRiver);
             }
             ENDHLSL
         }

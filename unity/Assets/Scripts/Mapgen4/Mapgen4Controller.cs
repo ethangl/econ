@@ -124,6 +124,12 @@ namespace EconSim.Mapgen4
 
         Mapgen4RuntimeData _runtime;
 
+        static Color DisplayColor(float r, float g, float b, float a = 1f)
+        {
+            Color color = new Color(r, g, b, a);
+            return QualitySettings.activeColorSpace == ColorSpace.Linear ? color.linear : color;
+        }
+
         void Start()
         {
             RebuildRuntime();
@@ -154,7 +160,7 @@ namespace EconSim.Mapgen4
             _riverCamera = CreatePassCamera("Mapgen4RiverCamera", RiverLayer, _riverTexture, new Color(0f, 0f, 0f, 0f));
             _landCamera = CreatePassCamera("Mapgen4LandCamera", LandPassLayer, _landTexture, Color.black);
             _depthCamera = CreatePassCamera("Mapgen4DepthCamera", DepthPassLayer, _depthTexture, Color.black);
-            _drapeCamera = CreatePassCamera("Mapgen4DrapeCamera", DrapeLayer, _drapeTexture, new Color(0.3f, 0.3f, 0.35f, 1f));
+            _drapeCamera = CreatePassCamera("Mapgen4DrapeCamera", DrapeLayer, _drapeTexture, DisplayColor(0.3f, 0.3f, 0.35f));
 
             _isInitialized = true;
             Regenerate();
@@ -331,7 +337,7 @@ namespace EconSim.Mapgen4
             camera.transform.rotation = Quaternion.identity;
             camera.rect = CalculateDisplayViewportRect();
             camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color(0.3f, 0.3f, 0.35f, 1f);
+            camera.backgroundColor = DisplayColor(0.3f, 0.3f, 0.35f);
             camera.cullingMask = 1 << layer;
             camera.nearClipPlane = 0.01f;
             camera.farClipPlane = 50f;

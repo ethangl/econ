@@ -15,6 +15,7 @@ Shader "EconSim/Mapgen4/Display"
             #pragma fragment frag
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
 
             TEXTURE2D(_ColorMap);
             SAMPLER(sampler_ColorMap);
@@ -108,7 +109,7 @@ Shader "EconSim/Mapgen4/Display"
                 float3 slopeVector = normalize(float3(zS - zN, zE - zW, _Overhead * (_InverseTextureSize.x + _InverseTextureSize.y)));
                 float3 lightVector = normalize(float3(_LightAngle.xy, lerp(_Slope, _Flat, slopeVector.z)));
                 float light = _Ambient + max(0.0, dot(lightVector, slopeVector));
-                float3 neutralLandBiome = float3(0.9, 0.8, 0.7);
+                float3 neutralLandBiome = SRGBToLinear(float3(0.9, 0.8, 0.7));
                 float3 neutralWaterBiome = 0.8 * neutralLandBiome;
                 float3 neutralBiome = neutralLandBiome;
                 float4 waterColor = SAMPLE_TEXTURE2D(_WaterTex, sampler_WaterTex, rtPos);
