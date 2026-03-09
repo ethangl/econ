@@ -72,15 +72,9 @@ Shader "EconSim/Mapgen4/Display"
             Varyings vert(Attributes input)
             {
                 Varyings output;
-                float2 xyClamped = clamp(input.positionOS.xy, float2(0, 0), float2(1000, 1000));
                 output.em = input.em;
                 output.z = max(0.0, input.em.x);
-                if (any(xyClamped != input.positionOS.xy))
-                {
-                    output.z = -0.5;
-                    output.em = float2(0.0, 0.0);
-                }
-                float4 pos = mul(_ProjectionMatrix, float4(xyClamped, output.z, 1.0));
+                float4 pos = mul(_ProjectionMatrix, float4(input.positionOS.xy, output.z, 1.0));
                 pos = ConvertClipDepth(pos);
                 output.positionHCS = pos;
                 output.uv = input.positionOS.xy / 1000.0;
@@ -131,15 +125,6 @@ Shader "EconSim/Mapgen4/Display"
                 float3 biomeColor = SAMPLE_TEXTURE2D(_ColorMap, sampler_ColorMap, float2(z, input.em.y)).rgb;
                 waterColor = lerp(float4(neutralWaterBiome * (1.2 - waterColor.a), waterColor.a), waterColor, _BiomeColors);
                 biomeColor = lerp(neutralBiome, biomeColor, _BiomeColors);
-                if (input.z < 0.0)
-                {
-                    float landOrWater = smoothstep(0.0, -0.001, input.em.x - input.z);
-                    float3 soilColor = float3(0.4, 0.3, 0.2);
-                    float3 undergroundColor = lerp(soilColor, lerp(neutralWaterBiome, float3(0.1, 0.1, 0.2), _BiomeColors), landOrWater) * smoothstep(-0.7, -0.1, input.z);
-                    float3 highlightColor = lerp(float3(0, 0, 0), lerp(float3(0.8, 0.8, 0.8), float3(0.4, 0.5, 0.7), _BiomeColors), landOrWater);
-                    biomeColor = lerp(undergroundColor, highlightColor, 0.5 * smoothstep(-0.025, 0.0, input.z));
-                    light = 1.0 - 0.3 * smoothstep(0.8, 1.0, frac((input.em.x - input.z) * 20.0));
-                }
 
                 float depth0 = SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, rtScreen).x;
                 float depth1 = max(max(SAMPLE_TEXTURE2D(_DepthTex, sampler_DepthTex, rtScreen + _OutlineDepth * (-dyUv - dxUv)).x,
