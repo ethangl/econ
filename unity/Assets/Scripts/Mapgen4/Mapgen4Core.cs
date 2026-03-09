@@ -495,6 +495,7 @@ namespace EconSim.Mapgen4
 
         readonly Mapgen4TriangleMesh _mesh;
         readonly int[] _trianglePeaks;
+        readonly float _spacing;
         int _seed = int.MinValue;
         float _mountainJaggedness = float.NegativeInfinity;
         float _windAngleDegrees = float.PositiveInfinity;
@@ -515,10 +516,11 @@ namespace EconSim.Mapgen4
 
         internal Mapgen4TriangleMesh Mesh => _mesh;
 
-        public Mapgen4Map(Mapgen4TriangleMesh mesh, int[] trianglePeaks)
+        public Mapgen4Map(Mapgen4TriangleMesh mesh, int[] trianglePeaks, float spacing)
         {
             _mesh = mesh;
             _trianglePeaks = trianglePeaks;
+            _spacing = spacing;
             ElevationT = new float[mesh.NumTriangles];
             ElevationR = new float[mesh.NumRegions];
             HumidityR = new float[mesh.NumRegions];
@@ -538,7 +540,7 @@ namespace EconSim.Mapgen4
             if (_seed != parameters.Seed || !Mathf.Approximately(_mountainJaggedness, parameters.MountainJagged))
             {
                 _mountainJaggedness = parameters.MountainJagged;
-                CalculateMountainDistance(_mesh, _trianglePeaks, Mapgen4Constants.Spacing, _mountainJaggedness, new Mapgen4Random(parameters.Seed), MountainDistanceT);
+                CalculateMountainDistance(_mesh, _trianglePeaks, _spacing, _mountainJaggedness, new Mapgen4Random(parameters.Seed), MountainDistanceT);
             }
 
             if (_seed != parameters.Seed)
@@ -987,14 +989,14 @@ namespace EconSim.Mapgen4
             return indices;
         }
 
-        public static Mapgen4RiverVertex[] BuildRiverVertices(Mapgen4TriangleMesh mesh, Mapgen4Map map, Mapgen4Controller.RiversParams parameters)
+        public static Mapgen4RiverVertex[] BuildRiverVertices(Mapgen4TriangleMesh mesh, Mapgen4Map map, Mapgen4Controller.RiversParams parameters, float spacing)
         {
             float minFlow = Mathf.Exp(parameters.LogMinFlow);
             float riverWidth = Mathf.Exp(parameters.LogRiverWidth);
             float RiverSize(int side, float flow)
             {
                 if (side < 0) return 1f;
-                float width = Mathf.Sqrt(flow - minFlow) * Mapgen4Constants.Spacing * riverWidth;
+                float width = Mathf.Sqrt(flow - minFlow) * spacing * riverWidth;
                 return width / mesh.LengthS[side];
             }
 
@@ -1111,12 +1113,14 @@ namespace EconSim.Mapgen4
         public int[] TrianglePeaks;
         public Vector2[] VertexPositions;
         public Mapgen4Map Map;
+        public float CellSpacing;
+        public float MountainSpacing;
 
-        public static Mapgen4RuntimeData Build()
+        public static Mapgen4RuntimeData Build(float cellSpacing, float mountainSpacing)
         {
-            GenerateBoundaryPoints(Mapgen4Constants.Spacing * Mathf.Sqrt(2f), out List<Vector2> exteriorBoundary, out List<Vector2> interiorBoundary);
+            GenerateBoundaryPoints(cellSpacing * Mathf.Sqrt(2f), out List<Vector2> exteriorBoundary, out List<Vector2> interiorBoundary);
 
-            var mountainGenerator = new Mapgen4PoissonDisk(new Vector2(Mapgen4Constants.MapSize, Mapgen4Constants.MapSize), Mapgen4Constants.MountainSpacing, 30, new Mapgen4Random(Mapgen4Constants.MeshSeed));
+            var mountainGenerator = new Mapgen4PoissonDisk(new Vector2(Mapgen4Constants.MapSize, Mapgen4Constants.MapSize), mountainSpacing, 30, new Mapgen4Random(Mapgen4Constants.MeshSeed));
             foreach (Vector2 point in interiorBoundary)
             {
                 mountainGenerator.AddPoint(point);
@@ -1124,7 +1128,7 @@ namespace EconSim.Mapgen4
             List<Vector2> mountainPointsAndBoundary = mountainGenerator.Fill();
             int numMountainPoints = mountainPointsAndBoundary.Count - interiorBoundary.Count;
 
-            var generator = new Mapgen4PoissonDisk(new Vector2(Mapgen4Constants.MapSize, Mapgen4Constants.MapSize), Mapgen4Constants.Spacing, 6, new Mapgen4Random(Mapgen4Constants.MeshSeed));
+            var generator = new Mapgen4PoissonDisk(new Vector2(Mapgen4Constants.MapSize, Mapgen4Constants.MapSize), cellSpacing, 6, new Mapgen4Random(Mapgen4Constants.MeshSeed));
             foreach (Vector2 point in mountainPointsAndBoundary)
             {
                 generator.AddPoint(point);
@@ -1162,7 +1166,9 @@ namespace EconSim.Mapgen4
                 Mesh = mesh,
                 TrianglePeaks = peaks,
                 VertexPositions = Mapgen4Geometry.BuildVertexPositions(mesh),
-                Map = new Mapgen4Map(mesh, peaks),
+                Map = new Mapgen4Map(mesh, peaks, cellSpacing),
+                CellSpacing = cellSpacing,
+                MountainSpacing = mountainSpacing,
             };
         }
 

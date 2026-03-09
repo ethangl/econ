@@ -32,6 +32,11 @@ namespace EconSim.Mapgen4
             public float Flow = 0.2f;
         }
 
+        public sealed class MeshParams
+        {
+            public float TargetCellCount = 0f;
+        }
+
         public sealed class RenderParams
         {
             public float Zoom = 100f / 480f;
@@ -60,7 +65,11 @@ namespace EconSim.Mapgen4
         const int DepthPassLayer = 27;
         const int TextureSize = 2048;
         const float DisplayAspectRatio = 1f;
+        const float DefaultMountainSpacingRatio = Mapgen4Constants.MountainSpacing / Mapgen4Constants.Spacing;
+        const float MinTargetCellCount = 5000f;
+        const float MaxTargetCellCount = 80000f;
 
+        readonly MeshParams _mesh = new MeshParams();
         readonly ElevationParams _elevation = new ElevationParams();
         readonly BiomesParams _biomes = new BiomesParams();
         readonly RiversParams _rivers = new RiversParams();
@@ -95,12 +104,14 @@ namespace EconSim.Mapgen4
         bool _isInitialized;
         int _lastScreenWidth;
         int _lastScreenHeight;
+        bool _rebuildRuntime = true;
+        float _defaultTargetCellCount;
 
         Mapgen4RuntimeData _runtime;
 
         void Start()
         {
-            _runtime = Mapgen4RuntimeData.Build();
+            RebuildRuntime();
             _colormap = Mapgen4Colormap.CreateTexture();
             _displayCamera = EnsureDisplayCamera();
             ConfigureDisplayCamera(_displayCamera, FinalLayer);
@@ -176,6 +187,11 @@ namespace EconSim.Mapgen4
 
         void Regenerate()
         {
+            if (_rebuildRuntime)
+            {
+                RebuildRuntime();
+            }
+
             var constraints = Mapgen4Constraints.Generate(_elevation.Seed, _elevation.Island);
             _runtime.Map.AssignElevation(_elevation, constraints);
             _runtime.Map.AssignRainfall(_biomes);
@@ -185,7 +201,7 @@ namespace EconSim.Mapgen4
             int[] landIndices = Mapgen4Geometry.BuildLandIndices(_runtime.Map, _elevation.MountainFolds, out elevationRainfall);
             UpdateLandMesh(_runtime.VertexPositions, elevationRainfall, landIndices);
 
-            Mapgen4RiverVertex[] riverVertices = Mapgen4Geometry.BuildRiverVertices(_runtime.Mesh, _runtime.Map, _rivers);
+            Mapgen4RiverVertex[] riverVertices = Mapgen4Geometry.BuildRiverVertices(_runtime.Mesh, _runtime.Map, _rivers, _runtime.CellSpacing);
             UpdateRiverMesh(riverVertices);
 
             _regenerateData = false;
@@ -467,6 +483,7 @@ namespace EconSim.Mapgen4
                 ResetDefaults();
             }
 
+            DrawMeshControls();
             DrawElevationControls();
             DrawBiomesControls();
             DrawRiversControls();
@@ -500,6 +517,27 @@ namespace EconSim.Mapgen4
             DrawSlider("mountain_sharpness", ref _elevation.MountainSharpness, 9.1f, 12.5f, true);
             DrawSlider("mountain_folds", ref _elevation.MountainFolds, 0f, 0.5f, true);
             DrawSlider("ocean_depth", ref _elevation.OceanDepth, 1f, 3f, true);
+        }
+
+        void DrawMeshControls()
+        {
+            GUILayout.Label("mesh", GUI.skin.box);
+            if (_runtime != null)
+            {
+                GUILayout.Label($"actual_cells: {_runtime.Mesh.NumSolidRegions}");
+                GUILayout.Label($"cell_spacing: {_runtime.CellSpacing:0.00}");
+            }
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("target_cells", GUILayout.Width(140f));
+            float next = GUILayout.HorizontalSlider(_mesh.TargetCellCount, MinTargetCellCount, MaxTargetCellCount, GUILayout.Width(120f));
+            GUILayout.Label(Mathf.RoundToInt(next).ToString(), GUILayout.Width(52f));
+            GUILayout.EndHorizontal();
+            if (!Mathf.Approximately(next, _mesh.TargetCellCount))
+            {
+                _mesh.TargetCellCount = Mathf.Round(next);
+                MarkRuntimeDirty();
+            }
         }
 
         void DrawBiomesControls()
@@ -576,8 +614,15 @@ namespace EconSim.Mapgen4
             _regenerateData = true;
         }
 
+        void MarkRuntimeDirty()
+        {
+            _rebuildRuntime = true;
+            _regenerateData = true;
+        }
+
         void ResetDefaults()
         {
+            _mesh.TargetCellCount = _defaultTargetCellCount > 0f ? _defaultTargetCellCount : EstimateDefaultTargetCellCount();
             _seedText = "187";
             _elevation.Seed = 187;
             _elevation.Island = 0.5f;
@@ -611,7 +656,34 @@ namespace EconSim.Mapgen4
             _render.OutlineCoast = 0f;
             _render.OutlineWater = 13f;
             _render.BiomeColors = 1f;
-            MarkGeneratorDirty();
+            MarkRuntimeDirty();
+        }
+
+        void RebuildRuntime()
+        {
+            float cellSpacing = CalculateCellSpacing();
+            float mountainSpacing = cellSpacing * DefaultMountainSpacingRatio;
+            _runtime = Mapgen4RuntimeData.Build(cellSpacing, mountainSpacing);
+            _rebuildRuntime = false;
+
+            if (_defaultTargetCellCount <= 0f)
+            {
+                _defaultTargetCellCount = _runtime.Mesh.NumSolidRegions;
+                _mesh.TargetCellCount = _defaultTargetCellCount;
+            }
+        }
+
+        float CalculateCellSpacing()
+        {
+            float baselineTarget = _defaultTargetCellCount > 0f ? _defaultTargetCellCount : EstimateDefaultTargetCellCount();
+            float clampedTarget = Mathf.Clamp(_mesh.TargetCellCount > 0f ? _mesh.TargetCellCount : baselineTarget, MinTargetCellCount, MaxTargetCellCount);
+            return Mapgen4Constants.Spacing * Mathf.Sqrt(baselineTarget / clampedTarget);
+        }
+
+        static float EstimateDefaultTargetCellCount()
+        {
+            float mapArea = Mapgen4Constants.MapSize * Mapgen4Constants.MapSize;
+            return mapArea / (Mapgen4Constants.Spacing * Mapgen4Constants.Spacing);
         }
     }
 }
