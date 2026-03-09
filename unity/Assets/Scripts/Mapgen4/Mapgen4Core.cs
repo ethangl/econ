@@ -1095,7 +1095,7 @@ namespace EconSim.Mapgen4
                 }
             }
 
-            var texture = new Texture2D(width, height, TextureFormat.RGBA32, false, true)
+            var texture = new Texture2D(width, height, TextureFormat.RGBA32, false, false)
             {
                 filterMode = FilterMode.Point,
                 wrapMode = TextureWrapMode.Clamp,
