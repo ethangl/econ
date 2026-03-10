@@ -15,6 +15,8 @@ namespace EconSim.Core.Economy.V4
         PeasantSurplus,
         /// <summary>Facility sell order — revenue to upper commoner coin (M).</summary>
         Facility,
+        /// <summary>Upper nobility buy order for serf feeding — funded from upper noble treasury.</summary>
+        SerfFeeding,
         /// <summary>Upper nobility buy order — funded from upper noble treasury.</summary>
         UpperNobility,
         /// <summary>Lower nobility buy order — funded from lower noble treasury.</summary>

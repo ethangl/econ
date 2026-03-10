@@ -78,6 +78,20 @@ namespace EconSim.Core.Economy.V4
         /// <summary>True if local staple production &lt; staple need.</summary>
         public bool FoodDeficit;
 
+        // ── Phase 2: per-tick tracking (reset each tick) ──
+
+        /// <summary>Food (kg) bought by lord and given to serfs this tick.</summary>
+        public float SerfFoodProvided;
+
+        /// <summary>Total coin spent by upper noble this tick (buys + stipend).</summary>
+        public float UpperNobleSpend;
+
+        /// <summary>Total coin received by upper noble this tick (surplus sales + minting).</summary>
+        public float UpperNobleIncome;
+
+        /// <summary>Total coin spent by lower noble this tick.</summary>
+        public float LowerNobleSpend;
+
         public CountyEconomyV4()
         {
             int n = GoodsV4.Count;

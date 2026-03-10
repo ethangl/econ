@@ -1153,6 +1153,28 @@ def print_economy_v4(data: dict):
               f"Max: {sat.get('max', 0):.3f}  "
               f"Counties: {sat.get('counties', 0)}")
 
+    # Noble satisfaction
+    nsat = v4.get("nobleSatisfaction", {})
+    if nsat and nsat.get("counties", 0) > 0:
+        print(f"\n  ── Noble Satisfaction ──")
+        print(f"  Upper noble mean: {nsat.get('upperNobleMean', 0):.3f}  "
+              f"Lower noble mean: {nsat.get('lowerNobleMean', 0):.3f}  "
+              f"Counties: {nsat.get('counties', 0)}")
+
+    # Coin flows
+    cf = v4.get("coinFlows", {})
+    if cf:
+        print(f"\n  ── Coin Flows (last tick) ──")
+        print(f"  Total coin in system:   {cf.get('totalCoinInSystem', 0):>12,.2f}")
+        print(f"  Upper noble treasuries: {v4.get('totalUpperNobleTreasury', 0):>12,.2f}")
+        print(f"  Lower noble treasuries: {v4.get('totalLowerNobleTreasury', 0):>12,.2f}")
+        print(f"  Upper clergy treasuries: {v4.get('totalUpperClergyTreasury', 0):>12,.2f}")
+        print(f"  Money supply (M):       {v4.get('totalMoneySupply', 0):>12,.2f}")
+        print(f"  Upper noble spend:      {cf.get('totalUpperNobleSpend', 0):>12,.2f}")
+        print(f"  Upper noble income:     {cf.get('totalUpperNobleIncome', 0):>12,.2f}")
+        print(f"  Lower noble spend:      {cf.get('totalLowerNobleSpend', 0):>12,.2f}")
+        print(f"  Serf food provided:     {cf.get('totalSerfFoodProvided', 0):>12,.1f} kg")
+
     # County details (worst/best)
     details = v4.get("countyDetails", [])
     if details:
@@ -1163,33 +1185,50 @@ def print_economy_v4(data: dict):
 
         if deficit_counties:
             print(f"\n  ── Sample Deficit Counties (worst {len(deficit_counties)}) ──")
-            print(f"  {'County':>8s}  {'Pop':>8s}  {'Satisf':>7s}  Top production")
+            print(f"  {'County':>8s}  {'Pop':>8s}  {'Satisf':>7s}  {'Treasury':>10s}  {'SerfFood':>8s}  Top production")
             for d in deficit_counties[:10]:
                 prod_items = d.get("production", {})
                 top = sorted(prod_items.items(), key=lambda x: -x[1])[:3]
                 top_str = ", ".join(f"{g}={v:.0f}" for g, v in top)
                 print(f"  {d['countyId']:>8d}  {d.get('lowerCommonerPop', 0):>8,.0f}  "
-                      f"{d.get('satisfaction', 0):>7.3f}  {top_str}")
+                      f"{d.get('satisfaction', 0):>7.3f}  "
+                      f"{d.get('upperNobleTreasury', 0):>10,.1f}  "
+                      f"{d.get('serfFoodProvided', 0):>8,.1f}  {top_str}")
 
         if surplus_counties:
             print(f"\n  ── Sample Surplus Counties (best {len(surplus_counties)}) ──")
-            print(f"  {'County':>8s}  {'Pop':>8s}  {'Satisf':>7s}  Top surplus")
+            print(f"  {'County':>8s}  {'Pop':>8s}  {'Satisf':>7s}  {'Treasury':>10s}  {'Income':>10s}  Top surplus")
             for d in surplus_counties[-10:]:
                 surp_items = d.get("surplus", {})
                 top = sorted(surp_items.items(), key=lambda x: -x[1])[:3]
                 top_str = ", ".join(f"{g}={v:.0f}" for g, v in top)
                 print(f"  {d['countyId']:>8d}  {d.get('lowerCommonerPop', 0):>8,.0f}  "
-                      f"{d.get('satisfaction', 0):>7.3f}  {top_str}")
+                      f"{d.get('satisfaction', 0):>7.3f}  "
+                      f"{d.get('upperNobleTreasury', 0):>10,.1f}  "
+                      f"{d.get('upperNobleIncome', 0):>10,.1f}  {top_str}")
 
     # Markets
     markets = v4.get("markets", [])
     if markets:
         print(f"\n  ── Markets ({len(markets)}) ──")
-        print(f"  {'ID':>4s}  {'Realm':>6s}  {'Counties':>8s}  {'PriceLevel':>10s}  {'M':>10s}")
+        print(f"  {'ID':>4s}  {'Realm':>6s}  {'Counties':>8s}  {'PriceLevel':>10s}  {'M':>10s}  {'Q':>10s}")
         for m in markets:
             print(f"  {m['id']:>4d}  {m.get('hubRealmId', 0):>6d}  "
                   f"{m.get('counties', 0):>8d}  {m.get('priceLevel', 0):>10.2f}  "
-                  f"{m.get('totalM', 0):>10.2f}")
+                  f"{m.get('totalM', 0):>10.2f}  {m.get('totalQ', 0):>10.0f}")
+
+        # Clearing prices for first market (sample)
+        first = markets[0]
+        prices = first.get("clearingPrices", {})
+        if prices:
+            print(f"\n  ── Clearing Prices (market {first['id']}, sample) ──")
+            print(f"  {'Good':>12s}  {'Price':>8s}  {'BaseVal':>8s}  {'Ratio':>6s}")
+            goods_meta = {g["name"]: g for g in v4.get("goods", [])}
+            for name in sorted(prices.keys()):
+                price = prices[name]
+                base_val = goods_meta.get(name, {}).get("value", 0)
+                ratio = f"{price / base_val:.2f}" if base_val > 0 else "—"
+                print(f"  {name:>12s}  {price:>8.2f}  {base_val:>8.1f}  {ratio:>6s}")
 
 
 def main():

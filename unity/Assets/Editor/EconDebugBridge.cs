@@ -1490,6 +1490,14 @@ namespace EconSim.Editor
             float satisfactionMin = float.MaxValue;
             float satisfactionMax = float.MinValue;
             int satisfactionCount = 0;
+            // Phase 2 aggregates
+            float totalUpperNobleSpend = 0f;
+            float totalUpperNobleIncome = 0f;
+            float totalLowerNobleSpend = 0f;
+            float totalSerfFoodProvided = 0f;
+            float upperNobleSatSum = 0f;
+            float lowerNobleSatSum = 0f;
+            int nobleSatCount = 0;
 
             foreach (var ce in econ.Counties)
             {
@@ -1517,6 +1525,18 @@ namespace EconSim.Editor
                     if (ce.LowerCommonerSatisfaction > satisfactionMax)
                         satisfactionMax = ce.LowerCommonerSatisfaction;
                     satisfactionCount++;
+                }
+
+                // Phase 2 tracking
+                totalUpperNobleSpend += ce.UpperNobleSpend;
+                totalUpperNobleIncome += ce.UpperNobleIncome;
+                totalLowerNobleSpend += ce.LowerNobleSpend;
+                totalSerfFoodProvided += ce.SerfFoodProvided;
+                if (ce.UpperNobilityPop > 0f)
+                {
+                    upperNobleSatSum += ce.UpperNobilitySatisfaction;
+                    lowerNobleSatSum += ce.LowerNobilitySatisfaction;
+                    nobleSatCount++;
                 }
             }
             j.KV("countyCount", countyCount);
@@ -1551,6 +1571,22 @@ namespace EconSim.Editor
             j.KV("counties", satisfactionCount);
             j.ObjClose();
 
+            // Phase 2: coin flows
+            j.Key("coinFlows"); j.ObjOpen();
+            j.KV("totalCoinInSystem", totalUpperNobleTreasury + totalLowerNobleTreasury + totalUpperClergyTreasury + totalM);
+            j.KV("totalUpperNobleSpend", totalUpperNobleSpend);
+            j.KV("totalUpperNobleIncome", totalUpperNobleIncome);
+            j.KV("totalLowerNobleSpend", totalLowerNobleSpend);
+            j.KV("totalSerfFoodProvided", totalSerfFoodProvided);
+            j.ObjClose();
+
+            // Phase 2: noble satisfaction
+            j.Key("nobleSatisfaction"); j.ObjOpen();
+            j.KV("upperNobleMean", nobleSatCount > 0 ? upperNobleSatSum / nobleSatCount : 0f);
+            j.KV("lowerNobleMean", nobleSatCount > 0 ? lowerNobleSatSum / nobleSatCount : 0f);
+            j.KV("counties", nobleSatCount);
+            j.ObjClose();
+
             // Per-county top deficit/surplus (sample: worst 10 deficit + best 10 surplus)
             j.Key("countyDetails"); j.ArrOpen();
             // Collect county IDs sorted by satisfaction
@@ -1576,6 +1612,13 @@ namespace EconSim.Editor
                 j.KV("lowerCommonerPop", ce.LowerCommonerPop);
                 j.KV("satisfaction", ce.LowerCommonerSatisfaction);
                 j.KV("foodDeficit", ce.FoodDeficit);
+                j.KV("upperNobleTreasury", ce.UpperNobleTreasury);
+                j.KV("lowerNobleTreasury", ce.LowerNobleTreasury);
+                j.KV("upperNobleSpend", ce.UpperNobleSpend);
+                j.KV("upperNobleIncome", ce.UpperNobleIncome);
+                j.KV("serfFoodProvided", ce.SerfFoodProvided);
+                j.KV("upperNobleSatisfaction", ce.UpperNobilitySatisfaction);
+                j.KV("lowerNobleSatisfaction", ce.LowerNobilitySatisfaction);
 
                 j.Key("production"); j.ObjOpen();
                 for (int g = 0; g < GoodsV4.Count; g++)
@@ -1603,6 +1646,15 @@ namespace EconSim.Editor
                 j.KV("counties", market.CountyIds.Count);
                 j.KV("priceLevel", market.PriceLevel);
                 j.KV("totalM", market.TotalMoneySupply);
+                j.KV("totalQ", market.TotalRealOutput);
+
+                // Clearing prices (only non-zero)
+                j.Key("clearingPrices"); j.ObjOpen();
+                for (int g = 0; g < GoodsV4.Count; g++)
+                    if (market.ClearingPrice[g] > 0f)
+                        j.KV(GoodsV4.Names[g], market.ClearingPrice[g]);
+                j.ObjClose();
+
                 j.ObjClose();
             }
             j.ArrClose();
