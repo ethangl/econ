@@ -87,9 +87,11 @@ def section(title: str):
 
 def print_header(data: dict):
     section("SIMULATION SUMMARY")
-    s = data["summary"]
-    print(f"  Date:        Day {data['day']} (Year {data['year']}, Month {data['month']}, Day {data['dayOfMonth']})")
-    print(f"  Ticks:       {data['totalTicks']}")
+    print(f"  Date:        Day {data.get('day', '?')} (Year {data.get('year', '?')}, Month {data.get('month', '?')}, Day {data.get('dayOfMonth', '?')})")
+    print(f"  Ticks:       {data.get('totalTicks', '?')}")
+    s = data.get("summary")
+    if not s:
+        return
     print(f"  Population:  {fmt(s['totalPopulation'], 0)}")
     print(f"  Counties:    {s['totalCounties']}")
     print(f"  Provinces:   {s['totalProvinces']}")
@@ -98,6 +100,8 @@ def print_header(data: dict):
 
 
 def print_performance(data: dict):
+    if "performance" not in data:
+        return
     section("PERFORMANCE")
     p = data["performance"]
     print(f"  Avg tick:    {p['avgTickMs']:.3f} ms")
@@ -1111,6 +1115,83 @@ def print_tithes(data: dict):
             print(f"    {label:>6s}  {f.get('parishes', 0):>8d}  {f.get('dioceses', 0):>8d}  {f.get('archdioceses', 0):>8d}  {fmt(f.get('totalTreasury', 0)):>12s}")
 
 
+def print_economy_v4(data: dict):
+    v4 = data.get("economyV4")
+    if not v4 or not v4.get("initialized"):
+        return
+
+    print("\n══════════════════════════════════════════════════════════")
+    print("  ECONOMY V4")
+    print("══════════════════════════════════════════════════════════")
+    print(f"  Counties: {v4.get('countyCount', 0)}  Markets: {v4.get('marketCount', 0)}  "
+          f"Goods: {v4.get('goodCount', 0)}  Facilities: {v4.get('facilityCount', 0)}")
+    print(f"  Total pop: {v4.get('totalPopulation', 0):,.0f}  "
+          f"Money supply: {v4.get('totalMoneySupply', 0):,.2f}  "
+          f"Food-deficit counties: {v4.get('foodDeficitCounties', 0)}")
+
+    # Production / consumption / surplus
+    prod = v4.get("production", {})
+    cons = v4.get("consumption", {})
+    surp = v4.get("surplus", {})
+    if prod:
+        print("\n  ── Daily Production / Consumption / Surplus (kg/day) ──")
+        all_goods = sorted(set(list(prod.keys()) + list(cons.keys()) + list(surp.keys())))
+        print(f"  {'Good':>12s}  {'Production':>12s}  {'Consumption':>12s}  {'Surplus':>12s}  {'Surplus%':>8s}")
+        for g in all_goods:
+            p = prod.get(g, 0)
+            c = cons.get(g, 0)
+            s = surp.get(g, 0)
+            pct = f"{s / p * 100:.0f}%" if p > 0 else "—"
+            print(f"  {g:>12s}  {p:>12,.1f}  {c:>12,.1f}  {s:>12,.1f}  {pct:>8s}")
+
+    # Satisfaction
+    sat = v4.get("survivalSatisfaction", {})
+    if sat:
+        print(f"\n  ── Survival Satisfaction (lower commoners) ──")
+        print(f"  Mean: {sat.get('mean', 0):.3f}  "
+              f"Min: {sat.get('min', 0):.3f}  "
+              f"Max: {sat.get('max', 0):.3f}  "
+              f"Counties: {sat.get('counties', 0)}")
+
+    # County details (worst/best)
+    details = v4.get("countyDetails", [])
+    if details:
+        # Sort by satisfaction for display
+        details = sorted(details, key=lambda x: x.get("satisfaction", 0))
+        deficit_counties = [d for d in details if d.get("foodDeficit")]
+        surplus_counties = [d for d in details if not d.get("foodDeficit")]
+
+        if deficit_counties:
+            print(f"\n  ── Sample Deficit Counties (worst {len(deficit_counties)}) ──")
+            print(f"  {'County':>8s}  {'Pop':>8s}  {'Satisf':>7s}  Top production")
+            for d in deficit_counties[:10]:
+                prod_items = d.get("production", {})
+                top = sorted(prod_items.items(), key=lambda x: -x[1])[:3]
+                top_str = ", ".join(f"{g}={v:.0f}" for g, v in top)
+                print(f"  {d['countyId']:>8d}  {d.get('lowerCommonerPop', 0):>8,.0f}  "
+                      f"{d.get('satisfaction', 0):>7.3f}  {top_str}")
+
+        if surplus_counties:
+            print(f"\n  ── Sample Surplus Counties (best {len(surplus_counties)}) ──")
+            print(f"  {'County':>8s}  {'Pop':>8s}  {'Satisf':>7s}  Top surplus")
+            for d in surplus_counties[-10:]:
+                surp_items = d.get("surplus", {})
+                top = sorted(surp_items.items(), key=lambda x: -x[1])[:3]
+                top_str = ", ".join(f"{g}={v:.0f}" for g, v in top)
+                print(f"  {d['countyId']:>8d}  {d.get('lowerCommonerPop', 0):>8,.0f}  "
+                      f"{d.get('satisfaction', 0):>7.3f}  {top_str}")
+
+    # Markets
+    markets = v4.get("markets", [])
+    if markets:
+        print(f"\n  ── Markets ({len(markets)}) ──")
+        print(f"  {'ID':>4s}  {'Realm':>6s}  {'Counties':>8s}  {'PriceLevel':>10s}  {'M':>10s}")
+        for m in markets:
+            print(f"  {m['id']:>4d}  {m.get('hubRealmId', 0):>6d}  "
+                  f"{m.get('counties', 0):>8d}  {m.get('priceLevel', 0):>10.2f}  "
+                  f"{m.get('totalM', 0):>10.2f}")
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else None
     data = load(path)
@@ -1118,24 +1199,30 @@ def main():
 
     print_header(data)
     print_performance(data)
-    print_economy(data)
-    print_stocks(data)
-    print_fiscal(data)
-    print_trade_snapshot(data)
-    print_treasury(data)
-    print_tithes(data)
-    print_intra_province_trade(data)
-    print_cross_province_trade(data)
-    print_cross_market_trade(data)
-    print_market_fees(data)
-    print_transport_costs(data)
-    print_virtual_market(data)
-    print_inter_realm_trade(data)
-    print_roads(data)
-    print_facilities(data)
-    print_production_chains(data)
-    print_population(data)
-    print_convergence(data)
+
+    # V4 economy (if present)
+    print_economy_v4(data)
+
+    # V3 systems (skip if v4-only dump)
+    if "economy" in data:
+        print_economy(data)
+        print_stocks(data)
+        print_fiscal(data)
+        print_trade_snapshot(data)
+        print_treasury(data)
+        print_tithes(data)
+        print_intra_province_trade(data)
+        print_cross_province_trade(data)
+        print_cross_market_trade(data)
+        print_market_fees(data)
+        print_transport_costs(data)
+        print_virtual_market(data)
+        print_inter_realm_trade(data)
+        print_roads(data)
+        print_facilities(data)
+        print_production_chains(data)
+        print_population(data)
+        print_convergence(data)
     print()
 
 

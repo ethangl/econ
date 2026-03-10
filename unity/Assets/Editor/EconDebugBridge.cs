@@ -1482,6 +1482,15 @@ namespace EconSim.Editor
             float totalUpperNobleTreasury = 0f;
             float totalLowerNobleTreasury = 0f;
             float totalUpperClergyTreasury = 0f;
+            int deficitCount = 0;
+            float[] totalProduction = new float[GoodsV4.Count];
+            float[] totalConsumption = new float[GoodsV4.Count];
+            float[] totalSurplus = new float[GoodsV4.Count];
+            float satisfactionSum = 0f;
+            float satisfactionMin = float.MaxValue;
+            float satisfactionMax = float.MinValue;
+            int satisfactionCount = 0;
+
             foreach (var ce in econ.Counties)
             {
                 if (ce == null) continue;
@@ -1491,6 +1500,24 @@ namespace EconSim.Editor
                 totalUpperNobleTreasury += ce.UpperNobleTreasury;
                 totalLowerNobleTreasury += ce.LowerNobleTreasury;
                 totalUpperClergyTreasury += ce.UpperClergyTreasury;
+                if (ce.FoodDeficit) deficitCount++;
+
+                for (int g = 0; g < GoodsV4.Count; g++)
+                {
+                    totalProduction[g] += ce.Production[g];
+                    totalConsumption[g] += ce.Consumption[g];
+                    totalSurplus[g] += ce.Surplus[g];
+                }
+
+                if (ce.LowerCommonerPop > 0f)
+                {
+                    satisfactionSum += ce.LowerCommonerSatisfaction;
+                    if (ce.LowerCommonerSatisfaction < satisfactionMin)
+                        satisfactionMin = ce.LowerCommonerSatisfaction;
+                    if (ce.LowerCommonerSatisfaction > satisfactionMax)
+                        satisfactionMax = ce.LowerCommonerSatisfaction;
+                    satisfactionCount++;
+                }
             }
             j.KV("countyCount", countyCount);
             j.KV("totalPopulation", totalPop);
@@ -1498,6 +1525,71 @@ namespace EconSim.Editor
             j.KV("totalUpperNobleTreasury", totalUpperNobleTreasury);
             j.KV("totalLowerNobleTreasury", totalLowerNobleTreasury);
             j.KV("totalUpperClergyTreasury", totalUpperClergyTreasury);
+            j.KV("foodDeficitCounties", deficitCount);
+
+            // Phase 1: aggregate production/consumption/surplus
+            j.Key("production"); j.ObjOpen();
+            for (int g = 0; g < GoodsV4.Count; g++)
+                if (totalProduction[g] > 0f) j.KV(GoodsV4.Names[g], totalProduction[g]);
+            j.ObjClose();
+
+            j.Key("consumption"); j.ObjOpen();
+            for (int g = 0; g < GoodsV4.Count; g++)
+                if (totalConsumption[g] > 0f) j.KV(GoodsV4.Names[g], totalConsumption[g]);
+            j.ObjClose();
+
+            j.Key("surplus"); j.ObjOpen();
+            for (int g = 0; g < GoodsV4.Count; g++)
+                if (totalSurplus[g] != 0f) j.KV(GoodsV4.Names[g], totalSurplus[g]);
+            j.ObjClose();
+
+            // Phase 1: survival satisfaction summary
+            j.Key("survivalSatisfaction"); j.ObjOpen();
+            j.KV("mean", satisfactionCount > 0 ? satisfactionSum / satisfactionCount : 0f);
+            j.KV("min", satisfactionCount > 0 ? satisfactionMin : 0f);
+            j.KV("max", satisfactionCount > 0 ? satisfactionMax : 0f);
+            j.KV("counties", satisfactionCount);
+            j.ObjClose();
+
+            // Per-county top deficit/surplus (sample: worst 10 deficit + best 10 surplus)
+            j.Key("countyDetails"); j.ArrOpen();
+            // Collect county IDs sorted by satisfaction
+            var countyIds = new System.Collections.Generic.List<int>();
+            for (int ci = 0; ci < econ.Counties.Length; ci++)
+                if (econ.Counties[ci] != null && econ.Counties[ci].LowerCommonerPop > 0f)
+                    countyIds.Add(ci);
+            countyIds.Sort((a, b) => econ.Counties[a].LowerCommonerSatisfaction.CompareTo(
+                econ.Counties[b].LowerCommonerSatisfaction));
+
+            // Worst 10 + best 10
+            int sampleSize = System.Math.Min(10, countyIds.Count);
+            var sampleIds = new System.Collections.Generic.HashSet<int>();
+            for (int s = 0; s < sampleSize; s++) sampleIds.Add(countyIds[s]);
+            for (int s = System.Math.Max(0, countyIds.Count - sampleSize); s < countyIds.Count; s++)
+                sampleIds.Add(countyIds[s]);
+
+            foreach (int ci in sampleIds)
+            {
+                var ce = econ.Counties[ci];
+                j.ObjOpen();
+                j.KV("countyId", ci);
+                j.KV("lowerCommonerPop", ce.LowerCommonerPop);
+                j.KV("satisfaction", ce.LowerCommonerSatisfaction);
+                j.KV("foodDeficit", ce.FoodDeficit);
+
+                j.Key("production"); j.ObjOpen();
+                for (int g = 0; g < GoodsV4.Count; g++)
+                    if (ce.Production[g] > 0f) j.KV(GoodsV4.Names[g], ce.Production[g]);
+                j.ObjClose();
+
+                j.Key("surplus"); j.ObjOpen();
+                for (int g = 0; g < GoodsV4.Count; g++)
+                    if (ce.Surplus[g] != 0f) j.KV(GoodsV4.Names[g], ce.Surplus[g]);
+                j.ObjClose();
+
+                j.ObjClose();
+            }
+            j.ArrClose();
 
             // Per-market summary
             j.Key("markets"); j.ArrOpen();

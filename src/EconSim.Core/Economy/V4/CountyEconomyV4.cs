@@ -64,9 +64,27 @@ namespace EconSim.Core.Economy.V4
         public float LowerClergySatisfaction;
         public float UpperClergySatisfaction;
 
+        // ── Phase 1: daily production / consumption / surplus ──
+
+        /// <summary>Raw daily production per good (kg/day). LowerCommonerPop × Productivity[g].</summary>
+        public float[] Production;
+
+        /// <summary>Subsistence consumption per good (kg/day).</summary>
+        public float[] Consumption;
+
+        /// <summary>Production − consumption per good (kg/day). Available for sell orders.</summary>
+        public float[] Surplus;
+
+        /// <summary>True if local staple production &lt; staple need.</summary>
+        public bool FoodDeficit;
+
         public CountyEconomyV4()
         {
-            Productivity = new float[GoodsV4.Count];
+            int n = GoodsV4.Count;
+            Productivity = new float[n];
+            Production = new float[n];
+            Consumption = new float[n];
+            Surplus = new float[n];
         }
     }
 }
