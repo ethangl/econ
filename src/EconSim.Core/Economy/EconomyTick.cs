@@ -1,18 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using EconSim.Core.Data;
 using EconSim.Core.Simulation;
 using EconSim.Core.Simulation.Systems;
 
-namespace EconSim.Core.Economy.V4
+namespace EconSim.Core.Economy
 {
     /// <summary>
     /// V4 economy tick system. Runs all 4 phases each day.
     /// Phase 4: cross-market trade (surplus→deficit, price convergence, tariffs).
     /// </summary>
-    public class EconomyTickV4 : ITickSystem
+    public class EconomyTick : ITickSystem
     {
-        public string Name => "EconomyV4";
+        public string Name => "Economy";
         public int TickInterval => 1;
 
         // ── Subsistence consumption rates (kg/person/day) ──
@@ -76,8 +77,8 @@ namespace EconSim.Core.Economy.V4
         const float TradeTariffRate = 0.05f;     // lord skims 5% of import value
 
         // ── Worship goods ──
-        static readonly int[] WorshipGoods = { (int)GoodTypeV4.Candles, (int)GoodTypeV4.Wine };
-        static readonly int[] LowerClergyWorshipGoods = { (int)GoodTypeV4.Candles };
+        static readonly int[] WorshipGoods = { (int)GoodType.Candles, (int)GoodType.Wine };
+        static readonly int[] LowerClergyWorshipGoods = { (int)GoodType.Candles };
 
         // ── Phase 5: Satisfaction weights ──
         const float WeightSurvival = 0.40f;
@@ -98,7 +99,7 @@ namespace EconSim.Core.Economy.V4
         const float UpperMobility = 1.0f;
         const float LowerMobility = 0.05f;
 
-        private EconomyStateV4 _econ;
+        private EconomyState _econ;
 
         // Reusable per-market scratch lists (avoid alloc per tick)
         private List<int>[] _buyByGood;
@@ -107,12 +108,17 @@ namespace EconSim.Core.Economy.V4
         // Scratch array for computing facility input needs per county
         private float[] _facilityInputNeed;
 
+        // Scratch arrays for ResolveMarkets (avoid per-market allocation)
+        private float[] _domSell;
+        private float[] _domBuy;
+        private float[] _domFilledBuy;
+
         public void Initialize(SimulationState state, MapData mapData)
         {
-            _econ = EconomyInitializerV4.Initialize(state, mapData);
-            state.EconomyV4 = _econ;
+            _econ = EconomyInitializer.Initialize(state, mapData);
+            state.Economy = _econ;
 
-            int gc = GoodsV4.Count;
+            int gc = Goods.Count;
             _buyByGood = new List<int>[gc];
             _sellByGood = new List<int>[gc];
             for (int g = 0; g < gc; g++)
@@ -122,15 +128,34 @@ namespace EconSim.Core.Economy.V4
             }
 
             _facilityInputNeed = new float[gc];
+            _domSell = new float[gc];
+            _domBuy = new float[gc];
+            _domFilledBuy = new float[gc];
         }
+
+        private readonly Stopwatch _phaseSw = new Stopwatch();
 
         public void Tick(SimulationState state, MapData mapData)
         {
+            _phaseSw.Restart();
             GenerateOrders(state, mapData);
+            _econ.PhaseGenerateOrdersMs = (float)_phaseSw.Elapsed.TotalMilliseconds;
+
+            _phaseSw.Restart();
             ResolveMarkets(state, mapData);
+            _econ.PhaseResolveMarketsMs = (float)_phaseSw.Elapsed.TotalMilliseconds;
+
+            _phaseSw.Restart();
             UpdateMoney(state, mapData);
+            _econ.PhaseUpdateMoneyMs = (float)_phaseSw.Elapsed.TotalMilliseconds;
+
+            _phaseSw.Restart();
             UpdateSatisfaction(state, mapData);
+            _econ.PhaseUpdateSatisfactionMs = (float)_phaseSw.Elapsed.TotalMilliseconds;
+
+            _phaseSw.Restart();
             UpdatePopulation(state, mapData);
+            _econ.PhaseUpdatePopulationMs = (float)_phaseSw.Elapsed.TotalMilliseconds;
         }
 
         // ════════════════════════════════════════════════════════════
@@ -143,8 +168,8 @@ namespace EconSim.Core.Economy.V4
             for (int m = 1; m <= _econ.MarketCount; m++)
                 _econ.Markets[m].Orders.Clear();
 
-            int gc = GoodsV4.Count;
-            int fc = FacilitiesV4.Count;
+            int gc = Goods.Count;
+            int fc = Facilities.Count;
 
             for (int i = 0; i < _econ.Counties.Length; i++)
             {
@@ -179,25 +204,25 @@ namespace EconSim.Core.Economy.V4
                 float totalStapleProd = 0f;
                 if (pop > 0f)
                 {
-                    for (int s = 0; s < GoodsV4.StapleGoods.Length; s++)
-                        totalStapleProd += ce.Production[GoodsV4.StapleGoods[s]];
+                    for (int s = 0; s < Goods.StapleGoods.Length; s++)
+                        totalStapleProd += ce.Production[Goods.StapleGoods[s]];
 
                     float totalStapleNeed = pop * StapleNeedPerCapita;
 
                     if (totalStapleProd > 0f && totalStapleNeed > 0f)
                     {
                         float ratio = Math.Min(totalStapleNeed / totalStapleProd, 1.0f);
-                        for (int s = 0; s < GoodsV4.StapleGoods.Length; s++)
+                        for (int s = 0; s < Goods.StapleGoods.Length; s++)
                         {
-                            int g = GoodsV4.StapleGoods[s];
+                            int g = Goods.StapleGoods[s];
                             ce.Consumption[g] = ce.Production[g] * ratio;
                         }
                     }
 
                     // Salt and timber
-                    int saltId = (int)GoodTypeV4.Salt;
+                    int saltId = (int)GoodType.Salt;
                     ce.Consumption[saltId] = Math.Min(ce.Production[saltId], pop * SaltNeedPerCapita);
-                    int timberId = (int)GoodTypeV4.Timber;
+                    int timberId = (int)GoodType.Timber;
                     ce.Consumption[timberId] = Math.Min(ce.Production[timberId], pop * TimberNeedPerCapita);
 
                     // 3. Surplus
@@ -220,7 +245,7 @@ namespace EconSim.Core.Economy.V4
 
                 for (int g = 0; g < gc; g++)
                 {
-                    if (g == (int)GoodTypeV4.Gold)
+                    if (g == (int)GoodType.Gold)
                     {
                         // Gold: jewelry fraction sold as raw material, rest minted in UpdateMoney
                         float jewelryGold = ce.Surplus[g] * GoldJewelryFraction;
@@ -237,7 +262,7 @@ namespace EconSim.Core.Economy.V4
                         }
                         continue;
                     }
-                    if (g == (int)GoodTypeV4.Silver)
+                    if (g == (int)GoodType.Silver)
                         continue; // Silver: 100% minted in UpdateMoney, not sold on market
                     if (ce.Surplus[g] > 0.001f)
                     {
@@ -266,12 +291,12 @@ namespace EconSim.Core.Economy.V4
                     if (ce.FoodDeficit && pop > 0f)
                     {
                         float deficit = pop * StapleNeedPerCapita - totalStapleProd;
-                        float perStaple = deficit / GoodsV4.StapleGoods.Length;
+                        float perStaple = deficit / Goods.StapleGoods.Length;
 
                         // Budget: up to SerfBudgetCap of treasury
                         float serfNeedValue = 0f;
-                        for (int s = 0; s < GoodsV4.StapleGoods.Length; s++)
-                            serfNeedValue += perStaple * GoodsV4.Value[GoodsV4.StapleGoods[s]];
+                        for (int s = 0; s < Goods.StapleGoods.Length; s++)
+                            serfNeedValue += perStaple * Goods.Value[Goods.StapleGoods[s]];
 
                         serfBudget = Math.Min(serfNeedValue * priceLevel * 2f,
                             unTreasury * SerfBudgetCap);
@@ -279,9 +304,9 @@ namespace EconSim.Core.Economy.V4
                             ? serfBudget / (serfNeedValue * priceLevel)
                             : 0f;
 
-                        for (int s = 0; s < GoodsV4.StapleGoods.Length; s++)
+                        for (int s = 0; s < Goods.StapleGoods.Length; s++)
                         {
-                            int g = GoodsV4.StapleGoods[s];
+                            int g = Goods.StapleGoods[s];
                             if (perStaple <= 0f) continue;
                             orders.Add(new Order
                             {
@@ -290,7 +315,7 @@ namespace EconSim.Core.Economy.V4
                                 Side = OrderSide.Buy,
                                 Source = OrderSource.SerfFeeding,
                                 Quantity = perStaple,
-                                MaxBid = GoodsV4.Value[g] * priceLevel * serfBidScale,
+                                MaxBid = Goods.Value[g] * priceLevel * serfBidScale,
                             });
                         }
                     }
@@ -303,13 +328,13 @@ namespace EconSim.Core.Economy.V4
 
                     // Tier allocation: 5/5/15/75
                     PostTierOrders(orders, i, OrderSource.UpperNobility,
-                        remaining * 0.05f, unPop, GoodsV4.StapleGoods, UpperNobleStaplePerGood, priceLevel);
+                        remaining * 0.05f, unPop, Goods.StapleGoods, UpperNobleStaplePerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.UpperNobility,
-                        remaining * 0.05f, unPop, GoodsV4.BasicGoods, UpperNobleBasicPerGood, priceLevel);
+                        remaining * 0.05f, unPop, Goods.BasicGoods, UpperNobleBasicPerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.UpperNobility,
-                        remaining * 0.15f, unPop, GoodsV4.ComfortGoods, UpperNobleComfortPerGood, priceLevel);
+                        remaining * 0.15f, unPop, Goods.ComfortGoods, UpperNobleComfortPerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.UpperNobility,
-                        remaining * 0.75f, unPop, GoodsV4.LuxuryGoods, UpperNobleLuxuryPerGood, priceLevel);
+                        remaining * 0.75f, unPop, Goods.LuxuryGoods, UpperNobleLuxuryPerGood, priceLevel);
                 }
 
                 // 6. Lower noble buy orders
@@ -318,13 +343,13 @@ namespace EconSim.Core.Economy.V4
                 {
                     // Tier allocation: 15/10/25/50
                     PostTierOrders(orders, i, OrderSource.LowerNobility,
-                        lnTreasury * 0.15f, lnPop, GoodsV4.StapleGoods, LowerNobleStaplePerGood, priceLevel);
+                        lnTreasury * 0.15f, lnPop, Goods.StapleGoods, LowerNobleStaplePerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.LowerNobility,
-                        lnTreasury * 0.10f, lnPop, GoodsV4.BasicGoods, LowerNobleBasicPerGood, priceLevel);
+                        lnTreasury * 0.10f, lnPop, Goods.BasicGoods, LowerNobleBasicPerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.LowerNobility,
-                        lnTreasury * 0.25f, lnPop, GoodsV4.ComfortGoods, LowerNobleComfortPerGood, priceLevel);
+                        lnTreasury * 0.25f, lnPop, Goods.ComfortGoods, LowerNobleComfortPerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.LowerNobility,
-                        lnTreasury * 0.50f, lnPop, GoodsV4.LuxuryGoods, LowerNobleLuxuryPerGood, priceLevel);
+                        lnTreasury * 0.50f, lnPop, Goods.LuxuryGoods, LowerNobleLuxuryPerGood, priceLevel);
                 }
 
                 // 7. Facility sell orders + input buy orders
@@ -340,7 +365,7 @@ namespace EconSim.Core.Economy.V4
 
                     for (int f = 0; f < fc; f++)
                     {
-                        var fac = FacilitiesV4.Defs[f];
+                        var fac = Facilities.Defs[f];
                         int outputGoodId = (int)fac.Output;
 
                         // Compute input fill = min across all input goods
@@ -387,7 +412,7 @@ namespace EconSim.Core.Economy.V4
                     for (int g = 0; g < gc; g++)
                     {
                         if (_facilityInputNeed[g] <= 0f) continue;
-                        totalInputNeedValue += _facilityInputNeed[g] * GoodsV4.Value[g];
+                        totalInputNeedValue += _facilityInputNeed[g] * Goods.Value[g];
                     }
 
                     if (totalInputNeedValue > 0f)
@@ -403,7 +428,7 @@ namespace EconSim.Core.Economy.V4
                                 Side = OrderSide.Buy,
                                 Source = OrderSource.FacilityInput,
                                 Quantity = _facilityInputNeed[g],
-                                MaxBid = GoodsV4.Value[g] * priceLevel,
+                                MaxBid = Goods.Value[g] * priceLevel,
                             });
                         }
                     }
@@ -416,13 +441,13 @@ namespace EconSim.Core.Economy.V4
                     {
                         // Tier allocation: 40% staples, 10% basics, 35% comforts, 15% luxuries
                         PostStapleOrdersEqual(orders, i, OrderSource.UpperCommoner,
-                            householdBudget * 0.40f, ucPop, GoodsV4.StapleGoods, UpperCommonerStaplePerGood, priceLevel);
+                            householdBudget * 0.40f, ucPop, Goods.StapleGoods, UpperCommonerStaplePerGood, priceLevel);
                         PostTierOrders(orders, i, OrderSource.UpperCommoner,
-                            householdBudget * 0.10f, ucPop, GoodsV4.BasicGoods, UpperCommonerBasicPerGood, priceLevel);
+                            householdBudget * 0.10f, ucPop, Goods.BasicGoods, UpperCommonerBasicPerGood, priceLevel);
                         PostTierOrders(orders, i, OrderSource.UpperCommoner,
-                            householdBudget * 0.35f, ucPop, GoodsV4.ComfortGoods, UpperCommonerComfortPerGood, priceLevel);
+                            householdBudget * 0.35f, ucPop, Goods.ComfortGoods, UpperCommonerComfortPerGood, priceLevel);
                         PostTierOrders(orders, i, OrderSource.UpperCommoner,
-                            householdBudget * 0.15f, ucPop, GoodsV4.LuxuryGoods, UpperCommonerLuxuryPerGood, priceLevel);
+                            householdBudget * 0.15f, ucPop, Goods.LuxuryGoods, UpperCommonerLuxuryPerGood, priceLevel);
                     }
                 }
 
@@ -443,11 +468,11 @@ namespace EconSim.Core.Economy.V4
                         PostTierOrders(orders, i, OrderSource.UpperClergy,
                             clergyRemaining * 0.40f, uclergyPop, WorshipGoods, UpperClergyWorshipPerGood, priceLevel);
                         PostTierOrders(orders, i, OrderSource.UpperClergy,
-                            clergyRemaining * 0.15f, uclergyPop, GoodsV4.StapleGoods, UpperClergyStaplePerGood, priceLevel);
+                            clergyRemaining * 0.15f, uclergyPop, Goods.StapleGoods, UpperClergyStaplePerGood, priceLevel);
                         PostTierOrders(orders, i, OrderSource.UpperClergy,
-                            clergyRemaining * 0.10f, uclergyPop, GoodsV4.BasicGoods, UpperClergyBasicPerGood, priceLevel);
+                            clergyRemaining * 0.10f, uclergyPop, Goods.BasicGoods, UpperClergyBasicPerGood, priceLevel);
                         PostTierOrders(orders, i, OrderSource.UpperClergy,
-                            clergyRemaining * 0.35f, uclergyPop, GoodsV4.ComfortGoods, UpperClergyComfortPerGood, priceLevel);
+                            clergyRemaining * 0.35f, uclergyPop, Goods.ComfortGoods, UpperClergyComfortPerGood, priceLevel);
                     }
                 }
 
@@ -457,9 +482,9 @@ namespace EconSim.Core.Economy.V4
                 {
                     // Tier allocation: 50% staples, 25% basics, 25% worship (candles)
                     PostTierOrders(orders, i, OrderSource.LowerClergy,
-                        lcCoin * 0.50f, lclergyPop, GoodsV4.StapleGoods, LowerClergyStaplePerGood, priceLevel);
+                        lcCoin * 0.50f, lclergyPop, Goods.StapleGoods, LowerClergyStaplePerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.LowerClergy,
-                        lcCoin * 0.25f, lclergyPop, GoodsV4.BasicGoods, LowerClergyBasicPerGood, priceLevel);
+                        lcCoin * 0.25f, lclergyPop, Goods.BasicGoods, LowerClergyBasicPerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.LowerClergy,
                         lcCoin * 0.25f, lclergyPop, LowerClergyWorshipGoods, LowerClergyWorshipPerGood, priceLevel);
                 }
@@ -473,7 +498,7 @@ namespace EconSim.Core.Economy.V4
 
         void GenerateTradeOrders()
         {
-            int gc = GoodsV4.Count;
+            int gc = Goods.Count;
 
             for (int mA = 1; mA <= _econ.MarketCount; mA++)
             {
@@ -486,7 +511,7 @@ namespace EconSim.Core.Economy.V4
 
                     for (int g = 0; g < gc; g++)
                     {
-                        if (g == (int)GoodTypeV4.Gold || g == (int)GoodTypeV4.Silver) continue;
+                        if (g == (int)GoodType.Gold || g == (int)GoodType.Silver) continue;
 
                         // Try A→B (A exports to B)
                         TryPostTrade(mA, mB, g, marketA, marketB, distance);
@@ -498,14 +523,14 @@ namespace EconSim.Core.Economy.V4
         }
 
         void TryPostTrade(int srcId, int dstId, int g,
-            MarketStateV4 src, MarketStateV4 dst, float distance)
+            MarketState src, MarketState dst, float distance)
         {
             float surplus = src.LastSurplus[g];
             float deficit = dst.LastDeficit[g];
             if (surplus <= 0f || deficit <= 0f) return;
 
             float priceDiff = dst.ClearingPrice[g] - src.ClearingPrice[g];
-            float transportCost = distance * GoodsV4.Bulk[g] * TransportRate;
+            float transportCost = distance * Goods.Bulk[g] * TransportRate;
             float profit = priceDiff - transportCost;
             if (profit <= 0f) return;
 
@@ -552,8 +577,8 @@ namespace EconSim.Core.Economy.V4
             for (int i = 0; i < tierGoods.Length; i++)
             {
                 int g = tierGoods[i];
-                if (GoodsV4.Value[g] <= 0f) continue; // skip Gold
-                totalNeedValue += pop * perCapitaPerGood * GoodsV4.Value[g];
+                if (Goods.Value[g] <= 0f) continue; // skip Gold
+                totalNeedValue += pop * perCapitaPerGood * Goods.Value[g];
             }
 
             if (totalNeedValue <= 0f) return;
@@ -565,7 +590,7 @@ namespace EconSim.Core.Economy.V4
             for (int i = 0; i < tierGoods.Length; i++)
             {
                 int g = tierGoods[i];
-                if (GoodsV4.Value[g] <= 0f) continue;
+                if (Goods.Value[g] <= 0f) continue;
                 float qty = pop * perCapitaPerGood;
                 if (qty <= 0f) continue;
 
@@ -576,7 +601,7 @@ namespace EconSim.Core.Economy.V4
                     Side = OrderSide.Buy,
                     Source = source,
                     Quantity = qty,
-                    MaxBid = GoodsV4.Value[g] * priceLevel * bidScale,
+                    MaxBid = Goods.Value[g] * priceLevel * bidScale,
                 });
             }
         }
@@ -593,7 +618,7 @@ namespace EconSim.Core.Economy.V4
 
             int validCount = 0;
             for (int i = 0; i < tierGoods.Length; i++)
-                if (GoodsV4.Value[tierGoods[i]] > 0f) validCount++;
+                if (Goods.Value[tierGoods[i]] > 0f) validCount++;
             if (validCount == 0) return;
 
             float perGoodBudget = budget / validCount;
@@ -601,13 +626,13 @@ namespace EconSim.Core.Economy.V4
             for (int i = 0; i < tierGoods.Length; i++)
             {
                 int g = tierGoods[i];
-                if (GoodsV4.Value[g] <= 0f) continue;
+                if (Goods.Value[g] <= 0f) continue;
                 float qty = pop * perCapitaPerGood;
                 if (qty <= 0f) continue;
 
-                float needValue = qty * GoodsV4.Value[g] * priceLevel;
+                float needValue = qty * Goods.Value[g] * priceLevel;
                 float maxBid = needValue > 0f
-                    ? GoodsV4.Value[g] * priceLevel * (perGoodBudget / needValue)
+                    ? Goods.Value[g] * priceLevel * (perGoodBudget / needValue)
                     : 0f;
 
                 orders.Add(new Order
@@ -628,29 +653,53 @@ namespace EconSim.Core.Economy.V4
 
         void ResolveMarkets(SimulationState state, MapData mapData)
         {
-            int gc = GoodsV4.Count;
+            int gc = Goods.Count;
 
             for (int m = 1; m <= _econ.MarketCount; m++)
             {
                 var market = _econ.Markets[m];
                 var orders = market.Orders;
+                int orderCount = orders.Count;
 
                 // Compute M for this market
                 float totalM = 0f;
-                for (int c = 0; c < market.CountyIds.Count; c++)
+                var countyIds = market.CountyIds;
+                for (int c = 0; c < countyIds.Count; c++)
                 {
-                    var ce = _econ.Counties[market.CountyIds[c]];
+                    var ce = _econ.Counties[countyIds[c]];
                     if (ce != null) totalM += ce.MoneySupply;
                 }
                 market.TotalMoneySupply = totalM;
 
-                // Compute Q (total real output)
+                // ── Single pass: compute Q, bucket orders by good, track totals ──
                 float Q = 0f;
-                for (int i = 0; i < orders.Count; i++)
+                float[] totalSellByGood = market.LastSurplus;  // reuse as scratch, overwritten below
+                float[] totalBuyByGood = market.LastDeficit;   // reuse as scratch, overwritten below
+                float[] qualBuyByGood = _domSell;              // scratch: buy qty where maxBid will qualify
+                for (int g = 0; g < gc; g++)
+                {
+                    _buyByGood[g].Clear();
+                    _sellByGood[g].Clear();
+                    totalSellByGood[g] = 0f;
+                    totalBuyByGood[g] = 0f;
+                    qualBuyByGood[g] = 0f;
+                }
+
+                for (int i = 0; i < orderCount; i++)
                 {
                     var o = orders[i];
+                    int gid = o.GoodId;
                     if (o.Side == OrderSide.Sell)
-                        Q += o.Quantity * GoodsV4.Value[o.GoodId];
+                    {
+                        _sellByGood[gid].Add(i);
+                        totalSellByGood[gid] += o.Quantity;
+                        Q += o.Quantity * Goods.Value[gid];
+                    }
+                    else
+                    {
+                        _buyByGood[gid].Add(i);
+                        totalBuyByGood[gid] += o.Quantity;
+                    }
                 }
                 market.TotalRealOutput = Q;
 
@@ -660,75 +709,57 @@ namespace EconSim.Core.Economy.V4
                     : 1.0f;
                 market.PriceLevel = priceLevel;
 
-                // Bucket orders by good
+                // ── Per-good resolution: price discovery + proportional fill (no sort) ──
                 for (int g = 0; g < gc; g++)
                 {
-                    _buyByGood[g].Clear();
-                    _sellByGood[g].Clear();
-                }
-                for (int i = 0; i < orders.Count; i++)
-                {
-                    var o = orders[i];
-                    if (o.Side == OrderSide.Buy)
-                        _buyByGood[o.GoodId].Add(i);
-                    else
-                        _sellByGood[o.GoodId].Add(i);
-                }
-
-                // Resolve per good
-                for (int g = 0; g < gc; g++)
-                {
-                    var buys = _buyByGood[g];
-                    var sells = _sellByGood[g];
-
-                    float totalSell = 0f;
-                    for (int i = 0; i < sells.Count; i++)
-                        totalSell += orders[sells[i]].Quantity;
-
-                    float totalBuy = 0f;
-                    for (int i = 0; i < buys.Count; i++)
-                        totalBuy += orders[buys[i]].Quantity;
+                    float totalSell = totalSellByGood[g];
+                    float totalBuy = totalBuyByGood[g];
 
                     if (totalSell <= 0f && totalBuy <= 0f)
                     {
-                        market.ClearingPrice[g] = GoodsV4.Value[g] * priceLevel;
+                        market.ClearingPrice[g] = Goods.Value[g] * priceLevel;
                         continue;
                     }
 
-                    // Scarcity
+                    // Scarcity-based clearing price
                     float denom = Math.Max(Math.Min(totalBuy, totalSell), 1f);
                     float scarcity = Math.Max(-1f, Math.Min(1f,
                         (totalBuy - totalSell) / denom));
-                    float clearingPrice = GoodsV4.Value[g] * (1f + 0.75f * scarcity) * priceLevel;
+                    float clearingPrice = Goods.Value[g] * (1f + 0.75f * scarcity) * priceLevel;
                     market.ClearingPrice[g] = clearingPrice;
 
                     if (clearingPrice <= 0f || totalSell <= 0f) continue;
 
-                    // Sort buy orders by maxBid descending
-                    buys.Sort((a, b) => orders[b].MaxBid.CompareTo(orders[a].MaxBid));
+                    // Sum qualifying buy demand (maxBid >= clearingPrice)
+                    var buys = _buyByGood[g];
+                    float qualifiedDemand = 0f;
+                    for (int bi = 0; bi < buys.Count; bi++)
+                    {
+                        if (orders[buys[bi]].MaxBid >= clearingPrice)
+                            qualifiedDemand += orders[buys[bi]].Quantity;
+                    }
 
-                    // Fill buy orders top-down
-                    float remainingSupply = totalSell;
+                    if (qualifiedDemand <= 0f) continue;
+
+                    // Fill ratio: if demand > supply, ration proportionally among qualified buyers
+                    float buyFillRatio = qualifiedDemand <= totalSell ? 1f : totalSell / qualifiedDemand;
                     float totalFilledBuy = 0f;
 
                     for (int bi = 0; bi < buys.Count; bi++)
                     {
                         int idx = buys[bi];
                         var o = orders[idx];
+                        if (o.MaxBid < clearingPrice) continue;
 
-                        if (o.MaxBid < clearingPrice || remainingSupply <= 0f)
-                            break;
-
-                        float filled = Math.Min(o.Quantity, remainingSupply);
+                        float filled = o.Quantity * buyFillRatio;
                         o.FilledQuantity = filled;
                         orders[idx] = o;
-
-                        remainingSupply -= filled;
                         totalFilledBuy += filled;
                     }
 
                     // Fill sell orders proportionally
-                    float sellFillRatio = Math.Min(totalFilledBuy / totalSell, 1f);
+                    float sellFillRatio = totalSell > 0f ? Math.Min(totalFilledBuy / totalSell, 1f) : 0f;
+                    var sells = _sellByGood[g];
                     for (int si = 0; si < sells.Count; si++)
                     {
                         int idx = sells[si];
@@ -738,37 +769,78 @@ namespace EconSim.Core.Economy.V4
                     }
                 }
 
-                // Route coin for all filled orders + apply tax/tithe
-                for (int i = 0; i < orders.Count; i++)
+                // ── Reset facility fill rates for all counties in this market ──
+                for (int c = 0; c < countyIds.Count; c++)
+                {
+                    var ce = _econ.Counties[countyIds[c]];
+                    if (ce == null) continue;
+                    for (int g = 0; g < gc; g++)
+                    {
+                        ce.FacilityInputGoodFill[g] = 0f;
+                        ce.FacilityOutputGoodFill[g] = 0f;
+                    }
+                }
+
+                // ── Merged pass: coin routing + fill rates + domestic surplus/deficit ──
+                for (int g = 0; g < gc; g++)
+                {
+                    _domSell[g] = 0f;
+                    _domBuy[g] = 0f;
+                    _domFilledBuy[g] = 0f;
+                }
+
+                for (int i = 0; i < orderCount; i++)
                 {
                     var o = orders[i];
+
+                    // Domestic surplus/deficit tracking (skip trade orders)
+                    if (o.Source != OrderSource.Trade)
+                    {
+                        if (o.Side == OrderSide.Sell)
+                            _domSell[o.GoodId] += o.Quantity;
+                        else
+                        {
+                            _domBuy[o.GoodId] += o.Quantity;
+                            _domFilledBuy[o.GoodId] += o.FilledQuantity;
+                        }
+                    }
+
+                    // Fill rate tracking
+                    if (o.Quantity > 0f)
+                    {
+                        var ceF = _econ.Counties[o.CountyId];
+                        if (ceF != null)
+                        {
+                            if (o.Source == OrderSource.FacilityInput && o.Side == OrderSide.Buy)
+                                ceF.FacilityInputGoodFill[o.GoodId] = o.FilledQuantity / o.Quantity;
+                            else if (o.Source == OrderSource.Facility && o.Side == OrderSide.Sell)
+                                ceF.FacilityOutputGoodFill[o.GoodId] = o.FilledQuantity / o.Quantity;
+                        }
+                    }
+
+                    // Coin routing — skip unfilled orders
                     if (o.FilledQuantity <= 0f) continue;
 
                     float amount = o.FilledQuantity * market.ClearingPrice[o.GoodId];
 
-                    // ── Cross-market trade coin routing ──
+                    // Cross-market trade coin routing
                     if (o.Source == OrderSource.Trade)
                     {
                         if (o.Side == OrderSide.Buy)
                         {
-                            // Trade buy in exporting market: importing market's lord pays
-                            var importMarket = _econ.Markets[o.SourceMarketId];
-                            var importHub = _econ.Counties[importMarket.HubCountyId];
+                            var importHub = _econ.Counties[_econ.Markets[o.SourceMarketId].HubCountyId];
                             if (importHub != null)
                                 importHub.UpperNobleTreasury -= amount;
                         }
-                        else // Sell
+                        else
                         {
-                            // Trade sell in importing market: exporting market's lord receives (minus tariff)
-                            var exportMarket = _econ.Markets[o.SourceMarketId];
-                            var exportHub = _econ.Counties[exportMarket.HubCountyId];
+                            var exportHub = _econ.Counties[_econ.Markets[o.SourceMarketId].HubCountyId];
                             float tariff = amount * TradeTariffRate;
                             if (exportHub != null)
                             {
                                 exportHub.UpperNobleTreasury += (amount - tariff);
                                 exportHub.UpperNobleIncome += (amount - tariff);
                             }
-                            // Tariff stays with importing market's lord
                             var importHub = _econ.Counties[market.HubCountyId];
                             if (importHub != null)
                             {
@@ -785,7 +857,6 @@ namespace EconSim.Core.Economy.V4
 
                     if (o.Side == OrderSide.Buy)
                     {
-                        // Deduct from buyer
                         switch (o.Source)
                         {
                             case OrderSource.SerfFeeding:
@@ -812,11 +883,9 @@ namespace EconSim.Core.Economy.V4
                                 break;
                         }
 
-                        // Track serf feeding for satisfaction
                         if (o.Source == OrderSource.SerfFeeding)
                             ce.SerfFoodProvided += o.FilledQuantity;
 
-                        // Tax + tithe on upper commoner purchases (lower clergy exempt)
                         if (o.Source == OrderSource.UpperCommoner || o.Source == OrderSource.FacilityInput)
                         {
                             float tax = amount * TaxRate;
@@ -830,9 +899,8 @@ namespace EconSim.Core.Economy.V4
                             ce.TitheRevenue += tithe;
                         }
                     }
-                    else // Sell
+                    else
                     {
-                        // Credit to seller
                         switch (o.Source)
                         {
                             case OrderSource.PeasantSurplus:
@@ -847,62 +915,10 @@ namespace EconSim.Core.Economy.V4
                     }
                 }
 
-                // Compute facility fill rates for each county in this market
-                // Reset to 0 — only goods with actual orders get fill rates
-                for (int c = 0; c < market.CountyIds.Count; c++)
-                {
-                    var ce = _econ.Counties[market.CountyIds[c]];
-                    if (ce == null) continue;
-                    for (int g = 0; g < gc; g++)
-                    {
-                        ce.FacilityInputGoodFill[g] = 0f;
-                        ce.FacilityOutputGoodFill[g] = 0f;
-                    }
-                }
-
-                // Set fill rates from actual orders
-                for (int i = 0; i < orders.Count; i++)
-                {
-                    var o = orders[i];
-                    if (o.Quantity <= 0f) continue;
-
-                    var ce = _econ.Counties[o.CountyId];
-                    if (ce == null) continue;
-
-                    if (o.Source == OrderSource.FacilityInput && o.Side == OrderSide.Buy)
-                    {
-                        ce.FacilityInputGoodFill[o.GoodId] = o.FilledQuantity / o.Quantity;
-                    }
-                    else if (o.Source == OrderSource.Facility && o.Side == OrderSide.Sell)
-                    {
-                        ce.FacilityOutputGoodFill[o.GoodId] = o.FilledQuantity / o.Quantity;
-                    }
-                }
-
-                // Compute domestic surplus/deficit for next tick's trade orders.
-                // Single pass: accumulate per-good domestic sell/buy/filledBuy.
-                var domSell = new float[gc];
-                var domBuy = new float[gc];
-                var domFilledBuy = new float[gc];
-
-                for (int i = 0; i < orders.Count; i++)
-                {
-                    var o = orders[i];
-                    if (o.Source == OrderSource.Trade) continue;
-
-                    if (o.Side == OrderSide.Sell)
-                        domSell[o.GoodId] += o.Quantity;
-                    else
-                    {
-                        domBuy[o.GoodId] += o.Quantity;
-                        domFilledBuy[o.GoodId] += o.FilledQuantity;
-                    }
-                }
-
                 for (int g = 0; g < gc; g++)
                 {
-                    market.LastSurplus[g] = Math.Max(0f, domSell[g] - domFilledBuy[g]);
-                    market.LastDeficit[g] = Math.Max(0f, domBuy[g] - domFilledBuy[g]);
+                    market.LastSurplus[g] = Math.Max(0f, _domSell[g] - _domFilledBuy[g]);
+                    market.LastDeficit[g] = Math.Max(0f, _domBuy[g] - _domFilledBuy[g]);
                 }
             }
         }
@@ -919,7 +935,7 @@ namespace EconSim.Core.Economy.V4
                 if (ce == null) continue;
 
                 // 1. Gold + silver minting → upper noble treasury
-                float goldProd = ce.Production[(int)GoodTypeV4.Gold];
+                float goldProd = ce.Production[(int)GoodType.Gold];
                 if (goldProd > 0f)
                 {
                     float mintableGold = goldProd * (1f - GoldJewelryFraction);
@@ -927,7 +943,7 @@ namespace EconSim.Core.Economy.V4
                     ce.UpperNobleTreasury += minted;
                     ce.UpperNobleIncome += minted;
                 }
-                float silverProd = ce.Production[(int)GoodTypeV4.Silver];
+                float silverProd = ce.Production[(int)GoodType.Silver];
                 if (silverProd > 0f)
                 {
                     float minted = silverProd * SilverCoinPerKg;
@@ -1039,8 +1055,8 @@ namespace EconSim.Core.Economy.V4
                     var o = orders[i];
                     if (o.Side != OrderSide.Buy) continue;
 
-                    float desiredVal = o.Quantity * GoodsV4.Value[o.GoodId];
-                    float filledVal = o.FilledQuantity * GoodsV4.Value[o.GoodId];
+                    float desiredVal = o.Quantity * Goods.Value[o.GoodId];
+                    float filledVal = o.FilledQuantity * Goods.Value[o.GoodId];
 
                     int srcIdx;
                     switch (o.Source)
@@ -1061,9 +1077,9 @@ namespace EconSim.Core.Economy.V4
                     }
 
                     int idx = o.CountyId * SrcCount + srcIdx;
-                    var tier = GoodsV4.Tier[o.GoodId];
+                    var tier = Goods.Tier[o.GoodId];
 
-                    if (tier == NeedTierV4.Staple)
+                    if (tier == NeedTier.Staple)
                     {
                         // Quantity-weighted for survival: a kg of food is a kg of food
                         stapleDesired[idx] += o.Quantity;
@@ -1074,9 +1090,9 @@ namespace EconSim.Core.Economy.V4
                         // Economic component: comfort+luxury for UC/clergy, luxury only for nobles
                         bool isEcon;
                         if (srcIdx <= 1) // nobles
-                            isEcon = tier == NeedTierV4.Luxury;
+                            isEcon = tier == NeedTier.Luxury;
                         else // UC, clergy
-                            isEcon = tier >= NeedTierV4.Comfort;
+                            isEcon = tier >= NeedTier.Comfort;
 
                         if (isEcon)
                         {
@@ -1087,7 +1103,7 @@ namespace EconSim.Core.Economy.V4
 
                     // Worship tracking (clergy orders for candles/wine → shared religion)
                     if ((srcIdx == 3 || srcIdx == 4) &&
-                        (o.GoodId == (int)GoodTypeV4.Candles || o.GoodId == (int)GoodTypeV4.Wine))
+                        (o.GoodId == (int)GoodType.Candles || o.GoodId == (int)GoodType.Wine))
                     {
                         worshipDesired[o.CountyId] += desiredVal;
                         worshipFilled[o.CountyId] += filledVal;
@@ -1116,8 +1132,8 @@ namespace EconSim.Core.Economy.V4
                 if (ce.LowerCommonerPop > 0f)
                 {
                     float totalStapleProd = 0f;
-                    for (int s = 0; s < GoodsV4.StapleGoods.Length; s++)
-                        totalStapleProd += ce.Production[GoodsV4.StapleGoods[s]];
+                    for (int s = 0; s < Goods.StapleGoods.Length; s++)
+                        totalStapleProd += ce.Production[Goods.StapleGoods[s]];
                     float totalStapleNeed = ce.LowerCommonerPop * StapleNeedPerCapita;
                     lcSurvival = totalStapleNeed > 0f
                         ? Math.Min((totalStapleProd + ce.SerfFoodProvided) / totalStapleNeed, 1f)
@@ -1211,7 +1227,7 @@ namespace EconSim.Core.Economy.V4
             totalDeaths += deaths;
         }
 
-        void MigrateWithinMarket(MarketStateV4 market, bool isUpper, float mobility)
+        void MigrateWithinMarket(MarketState market, bool isUpper, float mobility)
         {
             var ids = market.CountyIds;
             int n = ids.Count;

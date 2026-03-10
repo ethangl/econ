@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 
-namespace EconSim.Core.Economy.V4
+namespace EconSim.Core.Economy
 {
     /// <summary>
     /// Per-market state for economy v4. Each market has an order book and price data.
     /// </summary>
-    public class MarketStateV4
+    public class MarketState
     {
         /// <summary>Market ID (1-based, matches v3 MarketInfo.Id).</summary>
         public int Id;
@@ -22,7 +22,7 @@ namespace EconSim.Core.Economy.V4
         /// <summary>Current price level from quantity theory: max((M*V)/Q, 1.0).</summary>
         public float PriceLevel = 1.0f;
 
-        /// <summary>Last clearing price per good, indexed by GoodTypeV4.</summary>
+        /// <summary>Last clearing price per good, indexed by GoodType.</summary>
         public float[] ClearingPrice;
 
         /// <summary>Total M across all counties in this market.</summary>
@@ -43,10 +43,10 @@ namespace EconSim.Core.Economy.V4
         /// <summary>Unmet domestic demand per good from last tick (buy posted - buy filled).</summary>
         public float[] LastDeficit;
 
-        public MarketStateV4(int id)
+        public MarketState(int id)
         {
             Id = id;
-            int gc = GoodsV4.Count;
+            int gc = Goods.Count;
             ClearingPrice = new float[gc];
             LastSurplus = new float[gc];
             LastDeficit = new float[gc];
@@ -55,7 +55,7 @@ namespace EconSim.Core.Economy.V4
 
             // Seed clearing prices at base value
             for (int g = 0; g < gc; g++)
-                ClearingPrice[g] = GoodsV4.Value[g];
+                ClearingPrice[g] = Goods.Value[g];
         }
     }
 }

@@ -1,4 +1,4 @@
-namespace EconSim.Core.Economy.V4
+namespace EconSim.Core.Economy
 {
     public enum OrderSide : byte
     {
