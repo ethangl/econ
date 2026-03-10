@@ -8,9 +8,9 @@
 4. **Honest abstraction.** Everything executes in one tick. Don't fake temporal ordering with phase sequencing. If we can't model causation within a tick, accept that and let the market absorb it.
 5. **Simplicity over fidelity.** Fewer goods, fewer systems, fewer interactions. Complexity should come from emergent behavior, not from hand-tuned subsystems.
 
-## Goods (20)
+## Goods (25)
 
-**Design rule:** No intermediates. If a raw material only exists to feed one finished good, collapse it — the finished good comes directly from the biome.
+**Design rule:** No intermediates for comfort goods. If a raw material only exists to feed one finished good, collapse it — the finished good comes directly from the biome. Luxury goods are the exception: they require rare inputs (silk, spices, gold) to create a separate noble consumption track.
 
 ### Biome-Extracted (14)
 
@@ -19,19 +19,19 @@
 | Wheat   | Staple   | Primary staple, bakery input                  |
 | Barley  | Staple   | Secondary staple, brewery input               |
 | Fish    | Staple   | Coastal regions                               |
-| Meat    | Staple   | Livestock regions                             |
+| Meat    | Staple   | Livestock regions, kitchen input               |
 | Salt    | Basic    | Universal need                                |
 | Timber  | Basic    | Construction, carpentry input                 |
 | Stone   | Basic    | Construction                                  |
 | Iron    | Basic    | Mountain regions, smithy input                |
 | Wool    | Basic    | Pastoral regions, weaver input                |
+| Spices  | Basic    | Tropical biomes, kitchen input (rare)         |
+| Silk    | Basic    | Tropical biomes, tailor input (rare)          |
 | Leather | Comfort  | Livestock regions (hides+tanning collapsed)   |
-| Wine    | Luxury   | Mediterranean biomes (grapes collapsed)       |
-| Spices  | Luxury   | Rare tropical biomes or trade-only            |
-| Silk    | Luxury   | Rare biomes or trade-only                     |
+| Grapes  | Basic    | Temperate woodland/scrubland, vintner input   |
 | Candles | Comfort  | Pastoral/forest biomes (tallow/wax collapsed) |
 
-### Facility-Produced (5)
+### Facility-Produced — Comfort (5)
 
 | Good      | Category | Facility  | Inputs        |
 | --------- | -------- | --------- | ------------- |
@@ -41,17 +41,27 @@
 | Clothes   | Comfort  | Weaver    | Wool          |
 | Furniture | Comfort  | Carpenter | Timber        |
 
+### Facility-Produced — Luxury (4)
+
+| Good           | Category | Facility       | Inputs          |
+| -------------- | -------- | -------------- | --------------- |
+| Feast          | Luxury   | Kitchen        | Spices + Meat   |
+| Fine Clothes   | Luxury   | Tailor         | Silk            |
+| Jewelry        | Luxury   | Jeweler        | Gold            |
+| Fine Furniture | Luxury   | Fine Carpenter | Timber + Silk   |
+| Wine           | Luxury   | Vintner        | Grapes          |
+
+Luxury goods are the noble consumption track — expensive processed goods that require rare inputs. Nobles spend most of their budget here, leaving staples and comforts for commoners. This structural separation prevents nobles from outbidding commoners on everyday goods.
+
 ### Special (1)
 
-| Good | Notes                                                 |
-| ---- | ----------------------------------------------------- |
-| Gold | Mined, minted into coin. Not traded as a normal good. |
+| Good | Notes                                                                    |
+| ---- | ------------------------------------------------------------------------ |
+| Gold | Mined. 75% minted into coin, 25% reserved as jeweler input. Dual role.  |
 
-No intermediates. All 1:1 chains collapsed into biome extraction. Smithy uses Timber directly (fuel for the forge).
+No intermediates for comfort goods. All 1:1 chains collapsed into biome extraction. Smithy uses Timber directly (fuel for the forge). Luxury goods intentionally require rare inputs to create scarcity and geographic specialization.
 
-**20 goods total.** (14 biome + 5 facility + 1 special)
-
-**Future:** A resource-capacity concept for biomes could allow goods like Jewelry to emerge from biomes with amber or silver deposits, without adding those raw materials as explicit goods.
+**25 goods total.** (14 biome + 5 comfort facility + 5 luxury facility + 1 special)
 
 ## Population Classes (Estates)
 
@@ -68,10 +78,10 @@ Six estates from the existing `Estate` enum, with distinct economic roles and re
 
 ### Upper Commoners (artisans, merchants) — ~15% of population
 
-- **Production:** facility operation. Sell order volume based on last tick's input availability.
-- **Consumption:** staples + basics + comforts. Post buy orders with coin budgets.
-- **Coin:** upper commoners hold their own coin, earned from facility sales. They are the market participants — the only class that both earns and spends coin.
-- **Inputs:** facilities generate buy orders for raw inputs (wheat for bakery, iron for smithy).
+- **Production:** facility operation. Sell order volume based on last tick's input availability. Runs both comfort facilities (bakery, smithy, etc.) and luxury facilities (kitchen, tailor, jeweler, fine carpenter).
+- **Consumption:** staples + basics + comforts. Post buy orders with coin budgets. Nobles primarily buy luxuries, so commoners face less competition for staples and comforts.
+- **Coin:** upper commoners hold their own coin, earned from facility sales and noble wages. They are the market participants — the only class that both earns and spends coin.
+- **Inputs:** facilities generate buy orders for raw inputs (wheat for bakery, silk for tailor, gold for jeweler).
 - **Tax:** lord skims a percentage of upper commoner buy-side transactions.
 - **Satisfaction:** based on buy order fulfillment across need tiers.
 - **Migration:** most mobile class. Attracted to counties with facilities, demand for processed goods, and high satisfaction.
@@ -83,8 +93,10 @@ Four elite estates, each with separate treasuries and spending priorities:
 **Upper Nobility (count/duke) — ~0.2% of population**
 
 - **Income:** peasant surplus revenue, transaction tax on upper commoner buys, trade tariffs
-- **Spending priority:** serf feeding → lower noble stipends → staples → basics → comforts → luxuries (future: clergy endowments, military)
-- **Effect:** the lord is the intermediary between the subsistence economy and the money economy. Peasants never touch coin. The lord converts grain surplus into purchasing power.
+- **Spending priority:** serf feeding → lower noble stipends → commoner wages → staples → basics → comforts → luxuries (future: clergy endowments, military)
+- **Noble wages:** the lord pays upper commoners a daily wage (`noble_wage_per_capita` per commoner per day, capped by remaining treasury after stipend). This represents employment of servants, estate managers, and craftsmen-on-retainer — historically the primary mechanism for coin entering the commoner economy.
+- **Budget allocation:** 75% luxuries, 15% comforts, 5% basics, 5% staples. Nobles spend most of their wealth on luxury goods (feasts, fine clothes, jewelry, wine, fine furniture), leaving everyday goods for commoners.
+- **Effect:** the lord is the intermediary between the subsistence economy and the money economy. Peasants never touch coin. Coin reaches commoners through two channels: (1) noble wages (direct transfer), and (2) noble purchases of facility-produced luxury goods (artisan income).
 
 **Lower Nobility (knights, minor lords) — ~1.8% of population**
 
@@ -112,11 +124,11 @@ Five pools per county:
 
 | Pool                          | Funded by                                                                      | Spent on                                                                            |
 | ----------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| **Upper noble treasury**      | Peasant surplus sales, transaction tax, trade tariffs                          | Serf feeding, lower noble stipends, staples, basics, comforts, luxuries             |
+| **Upper noble treasury**      | Peasant surplus sales, transaction tax, trade tariffs                          | Serf feeding, lower noble stipends, commoner wages, staples, basics, comforts, luxuries |
 | **Lower noble treasury**      | Stipend from upper nobility                                                    | Staples, basics, comforts, luxuries                                                 |
 | **Upper clergy treasury**     | Tithe on upper commoner buys                                                   | Lower clergy wages, candles, wine, staples, comforts                                |
 | **Lower clergy coin**         | Wages from upper clergy treasury                                               | Staples, basics, candles                                                            |
-| **Upper commoner coin (= M)** | Facility sales revenue (from elite purchases + other upper commoner purchases) | Facility inputs, staples, basics, comforts                                          |
+| **Upper commoner coin (= M)** | Facility sales revenue, noble wages                                            | Facility inputs, staples, basics, comforts                                          |
 
 Lower commoners have no coin. They exist entirely in the subsistence economy.
 
@@ -156,7 +168,9 @@ Two production modes, one per productive class:
 
 Production generates sell orders (throttled by last tick's fills) and facility input buy orders (scaled to production). That's it.
 
-### Facilities (5)
+### Facilities (10)
+
+**Comfort facilities (5):**
 
 | Facility  | Input         | Output    |
 | --------- | ------------- | --------- |
@@ -166,17 +180,26 @@ Production generates sell orders (throttled by last tick's fills) and facility i
 | Weaver    | Wool          | Clothes   |
 | Carpenter | Timber        | Furniture |
 
-All other goods (Wine, Leather, Candles, etc.) come directly from biome extraction — no facility needed.
+**Luxury facilities (4):**
 
-**Facility assignment:** every county has access to all 5 facilities. Whether a facility operates depends on whether upper commoners can source inputs and sell output profitably. A bakery in a county with no wheat access will post buy orders that go unfilled — natural selection through the market.
+| Facility       | Input           | Output         |
+| -------------- | --------------- | -------------- |
+| Kitchen        | Spices + Meat   | Feast          |
+| Tailor         | Silk            | Fine Clothes   |
+| Jeweler        | Gold            | Jewelry        |
+| Fine Carpenter | Timber + Silk   | Fine Furniture |
+
+All other goods (Leather, Candles, etc.) come directly from biome extraction — no facility needed.
+
+**Facility assignment:** every county has access to all 10 facilities. Whether a facility operates depends on whether upper commoners can source inputs and sell output profitably. A tailor in a county with no silk access will post buy orders that go unfilled — natural selection through the market. Luxury facilities naturally concentrate in regions with access to rare inputs (tropical for silk/spices, mountains for gold).
 
 ## Tick Structure
 
 ```
 1. GENERATE ORDERS
    - Biome extraction (lower commoners) → sell orders (surplus after subsistence)
-   - Facility production from last tick's inputs (upper commoners) → sell orders
-   - Upper noble buy orders (from treasury — serf feeding, stipends, staples, basics, comforts, luxuries)
+   - Facility production from last tick's inputs (upper commoners) → sell orders (comfort + luxury)
+   - Upper noble buy orders (from treasury — serf feeding, staples, basics, comforts, luxuries)
    - Lower noble buy orders (from treasury — staples, basics, comforts, luxuries)
    - Upper clergy buy orders (from treasury — lower clergy wages, church needs, candles, wine)
    - Lower clergy buy orders (from coin balance — staples, basics, candles)
@@ -193,10 +216,10 @@ All other goods (Wine, Leather, Candles, etc.) come directly from biome extracti
    - Tithe: clergy treasury += tithe_rate × transaction value on upper commoner buys
 
 3. UPDATE MONEY
-   - Minting: gold production → new coin enters upper noble treasury
+   - Minting: gold production (minus jewelry fraction) → new coin enters upper noble treasury
    - Stipend: upper noble treasury → lower noble treasury (fixed amount per tick)
+   - Noble wages: upper noble treasury → upper commoner coin (fixed amount per tick)
    - Clergy wages: upper clergy treasury → lower clergy coin (fixed amount per tick)
-   - Trade coin flows: net importers lose coin to net exporters
    - Wear: small constant drain on M (upper commoner circulating coin)
 
 4. UPDATE SATISFACTION
@@ -223,12 +246,12 @@ Each good has two designer-set constants:
 
 These are independent. Silk is valuable but light. Wheat is cheap but heavy.
 
-| Tier     | Goods                                                   | Value range | Bulk   |
-| -------- | ------------------------------------------------------- | ----------- | ------ |
-| Staples  | Wheat, Barley, Fish, Meat                               | 1–2         | high   |
-| Basics   | Salt, Timber, Stone, Iron, Wool                         | 2–5         | high   |
-| Comforts | Bread, Ale, Tools, Clothes, Furniture, Leather, Candles | 5–15        | medium |
-| Luxuries | Wine, Spices, Silk                                      | 20–50       | low    |
+| Tier     | Goods                                                                       | Value range | Bulk   |
+| -------- | --------------------------------------------------------------------------- | ----------- | ------ |
+| Staples  | Wheat, Barley, Fish, Meat                                                   | 1–2         | high   |
+| Basics   | Salt, Timber, Stone, Iron, Wool, Spices, Silk                               | 2–10        | varies |
+| Comforts | Bread, Ale, Tools, Clothes, Furniture, Leather, Candles                     | 5–15        | medium |
+| Luxuries | Wine, Feast, Fine Clothes, Jewelry, Fine Furniture                          | 20–80       | low-med |
 
 Exact values TBD through playtesting.
 
@@ -296,12 +319,13 @@ Five types of buyers with separate budgets:
 **Upper nobility:** budget = upper noble treasury. Priority:
 
 ```
-1. Serf deficit  — buy food to cover shortfall in lower commoner subsistence
-2. Stipends      — pay lower nobility (fixed transfer, not a buy order)
-3. Staples       — household food
-4. Basics        — household basics
-5. Comforts      — processed goods
-6. Luxuries      — wine, spices, silk
+1. Serf deficit      — buy food to cover shortfall in lower commoner subsistence
+2. Stipends          — pay lower nobility (fixed transfer, not a buy order)
+3. Commoner wages    — pay upper commoners daily wage (fixed transfer, not a buy order)
+4. Staples           — household food (5% of remaining)
+5. Basics            — household basics (5% of remaining)
+6. Comforts          — processed goods (15% of remaining)
+7. Luxuries          — feast, fine clothes, jewelry, fine furniture, wine (75% of remaining)
 (future: clergy endowments, military spending)
 ```
 
@@ -310,10 +334,10 @@ Feeding serfs comes first. A lord who lets serfs starve to buy silk will lose hi
 **Lower nobility:** budget = lower noble treasury (stipend from upper noble). Priority:
 
 ```
-1. Staples   — household food
-2. Basics    — household basics
-3. Comforts  — processed goods
-4. Luxuries  — wine, spices, silk
+1. Staples   — household food (15% of budget)
+2. Basics    — household basics (10% of budget)
+3. Comforts  — processed goods (25% of budget)
+4. Luxuries  — feast, fine clothes, jewelry, wine (50% of budget)
 (future: military equipment)
 ```
 
@@ -400,6 +424,7 @@ trade_volume_g = max_volume_g × clamp(margin_g, 0, 1)
 ```
 
 - All trade decisions use last tick's data — prices, surplus, deficit. No circular dependency with current-tick orders.
+- Surplus and deficit are computed from **domestic orders only** (trade orders excluded) to prevent feedback oscillation where trade orders inflate the next tick's surplus/deficit signals.
 - Can't export more than last tick's surplus or more than the destination's unmet demand
 - Merchants scale commitment by profit margin — thin margins move a trickle, fat margins move everything
 - This means:
@@ -417,23 +442,26 @@ Trade is expressed as orders posted to both markets:
 
 ### Coin Flow
 
-Net coin flows opposite to goods:
+Trade coin routing uses the lords of the hub counties as intermediaries:
 
-- Market B (importer) sends coin to Market A (exporter)
-- Amount = trade_volume_g × last_price_g_A (paid at last tick's source market price, consistent with all trade decisions using last tick's data)
-- This is the quantity-theory feedback: gold-rich markets leak coin through imports, naturally equalizing price levels over time
+- **Importing lord pays:** the buy order in the source market is funded by the importing market's hub county lord (upper noble treasury). The lord pays at clearing price.
+- **Exporting lord receives:** the sell order in the destination market earns coin for the exporting market's hub county lord, minus tariff.
+- **Tariff stays with importer:** the importing lord keeps `tariff_rate × transaction value` as tariff revenue.
+- Net effect: coin flows from importing lord's treasury to exporting lord's treasury, with the importing lord skimming a percentage.
+- This is the quantity-theory feedback: gold-rich markets leak coin through imports, naturally equalizing price levels over time.
 
 ### Lord's Cut
 
-The realm controlling a market's territory can impose a tariff (percentage skim on cross-market transactions). This is the only policy lever for trade. Simple, historically appropriate.
+The lord of the importing market's hub county imposes a tariff (`tariff_rate`, currently 5%) on all cross-market trade value. This is automatic — no policy lever yet. The tariff stays in the importing lord's treasury, partially offsetting the coin outflow from imports.
 
 ## Monetary System
 
 ### Money Creation
 
 - Gold mines produce gold based on biome yields and lower commoner population
-- All gold production is minted into coin at a fixed rate (50 Cr per kg of gold)
-- New coin enters the lord's treasury (upper noble) of the county that mines it
+- 75% of gold production is minted into coin at a fixed rate (50 Cr per kg). The remaining 25% is sold as raw material for jewelers.
+- Minted coin enters the lord's treasury (upper noble) of the county that mines it
+- Gold sold to jewelers generates coin when the resulting jewelry is sold to nobles — a slower but more distributed path into the economy
 - **Bootstrap:** Upper commoner coin is seeded at 0.1 Cr per capita at initialization. This provides enough starting coin for initial household spending while artisan credit handles facility inputs.
 
 ### Money Destruction / Drain
@@ -568,11 +596,11 @@ How much of each good a biome produces per lower commoner per tick. Most biome/g
 
 Collapsed goods and their biome sources:
 - **Leather** — from livestock regions (hides + tanning collapsed). Wherever Meat is produced, Leather is a byproduct at lower yield.
-- **Wine** — from Mediterranean biomes (grapes + winemaking collapsed). Direct extraction, no facility.
+- **Grapes** — from temperate woodland/scrubland biomes. Raw material for Vintner (Wine).
 - **Candles** — from pastoral/forest biomes (tallow/wax collapsed). Wherever animals or bees exist.
-- **Silk** — rare Mediterranean/tropical biomes. Trade-dependent for most realms.
-- **Spices** — rare desert/tropical biomes. Trade-dependent for most realms.
-- **Gold** — rare mountain/desert biomes. Minted into coin, not traded as a good.
+- **Silk** — rare tropical biomes. Raw material for Tailor (Fine Clothes) and Fine Carpenter (Fine Furniture). Trade-dependent for most realms.
+- **Spices** — rare tropical biomes. Raw material for Kitchen (Feast). Trade-dependent for most realms.
+- **Gold** — rare mountain biomes. 75% minted into coin, 25% reserved as Jeweler input (Jewelry). Dual role creates tension between monetary expansion and luxury production.
 
 Key balance constraint: a typical grassland county should produce ~120-150% of its staple needs, creating a modest surplus for trade. A specialized county (mining, pastoral) should produce <50% of its staple needs, forcing trade dependency.
 
@@ -630,10 +658,10 @@ What percentage of coin budget each buyer type allocates to each need tier.
 | ----------------------- | --------------- | -------------- | -------------- | ------------ | ------------ |
 | Serf feeding            | —               | first (up to 40% treasury) | — | —            | —            |
 | Stipends/Wages          | —               | reserved after serfs | —     | first priority | —          |
-| Staples                 | 40%             | 10%            | 20%            | 15%          | 50%          |
-| Basics                  | 25%             | 10%            | 15%            | 10%          | 25%          |
-| Comforts                | 30%             | 30%            | 40%            | 35%          | —            |
-| Luxuries                | 5%              | 50%            | 25%            | —            | —            |
+| Staples                 | 40%             | 5%             | 15%            | 15%          | 50%          |
+| Basics                  | 25%             | 5%             | 10%            | 10%          | 25%          |
+| Comforts                | 30%             | 15%            | 25%            | 35%          | —            |
+| Luxuries                | 5%              | 75%            | 50%            | —            | —            |
 | Worship (Candles, Wine) | —               | —              | —              | 40%          | 25%          |
 
 Upper commoner percentages apply to household budget only. Facility inputs are separate (artisan credit, unconstrained by coin).
@@ -649,13 +677,16 @@ Upper commoner percentages apply to household budget only. Facility inputs are s
 | `tithe_rate`       | 0.10   | Percentage clergy skims from upper commoner + facility input buys        |
 | `stipend_per_capita`| 0.5   | Cr per lower noble per day (capped by upper noble treasury)              |
 | `clergy_wage`      | 0.3    | Cr per lower clergy per day (capped by upper clergy treasury)            |
+| `noble_wage`       | 0.10   | Cr per upper commoner per day (capped by upper noble treasury after stipend) |
 | `bootstrap_coin`   | 0.1    | Cr per upper commoner at initialization (household spending seed)        |
+| `gold_jewelry_fraction` | 0.25 | Fraction of gold production reserved for jeweler input (rest minted)  |
 
 ### Trade Parameters
 
-| Parameter        | Meaning                                         |
-| ---------------- | ----------------------------------------------- |
-| `transport_rate` | Base cost per unit of bulk per unit of distance |
+| Parameter        | Value  | Meaning                                          |
+| ---------------- | ------ | ------------------------------------------------ |
+| `transport_rate` | 0.0005 | Base cost per unit of bulk per unit of distance  |
+| `tariff_rate`    | 0.05   | Lord skims 5% of import value as tariff          |
 
 ### Population Parameters
 
@@ -678,7 +709,7 @@ Upper commoner percentages apply to household budget only. Facility inputs are s
 | `throughput_per_capita`     | Yes          | Output per upper commoner per tick                          |
 | `effective_fill_floor`      | No           | 0.1 — minimum production rate (prevents cold-start deadlock) |
 
-Population is split evenly across all 5 facilities. Each facility's effective fill = `max(min(input_fill, max(sell_fill, 0.1)), 0.1)`. Two fill rates are tracked per county per good: `FacilityInputGoodFill` (how much of input buy orders were filled) and `FacilityOutputGoodFill` (how much of output sell orders were absorbed).
+Population is split evenly across all 10 facilities. Each facility's effective fill = `max(min(input_fill, max(sell_fill, 0.1)), 0.1)`. Two fill rates are tracked per county per good: `FacilityInputGoodFill` (how much of input buy orders were filled) and `FacilityOutputGoodFill` (how much of output sell orders were absorbed). Luxury facilities will naturally have low fill rates in regions without access to rare inputs — this is correct behavior, not a bug.
 
 ### Key Balance Relationships
 

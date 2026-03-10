@@ -55,5 +55,10 @@ namespace EconSim.Core.Economy.V4
 
         /// <summary>How much of this order was filled during market resolution.</summary>
         public float FilledQuantity;
+
+        /// <summary>For Trade orders: the partner market ID for cross-market coin routing.
+        /// Trade buy in source market: SourceMarketId = importing market.
+        /// Trade sell in dest market: SourceMarketId = exporting market.</summary>
+        public int SourceMarketId;
     }
 }

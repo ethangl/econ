@@ -8,7 +8,7 @@ namespace EconSim.Core.Economy.V4
 {
     /// <summary>
     /// V4 economy tick system. Runs all 4 phases each day.
-    /// Phase 3: upper commoners + facilities, tax/tithe, clergy economy.
+    /// Phase 4: cross-market trade (surplus→deficit, price convergence, tariffs).
     /// </summary>
     public class EconomyTickV4 : ITickSystem
     {
@@ -48,15 +48,17 @@ namespace EconSim.Core.Economy.V4
         const float LowerClergyWorshipPerGood = 0.01f;   // candles only
 
         // ── Budget allocation (fraction of remaining treasury after serf feeding + stipend reserve) ──
-        // Upper noble: 10% staples, 10% basics, 30% comforts, 50% luxuries
-        // Lower noble: 20% staples, 15% basics, 40% comforts, 25% luxuries
+        // Upper noble: 5% staples, 5% basics, 15% comforts, 75% luxuries
+        // Lower noble: 15% staples, 10% basics, 25% comforts, 50% luxuries
 
         // ── Monetary parameters ──
-        const float GoldCoinPerKg = 50f;     // each kg of gold minted → 50 coins
-        const float StipendPerCapita = 0.5f; // Cr/lower noble/day
-        const float ClergyWagePerCapita = 0.3f; // Cr/lower clergy/day
-        const float CoinWearRate = 0.001f;   // fraction of M lost per day
-        const float BaseVelocity = 4.0f;     // base velocity of money
+        const float GoldCoinPerKg = 50f;         // each kg of gold minted → 50 coins
+        const float GoldJewelryFraction = 0.25f;  // fraction of gold production reserved for jewelers
+        const float StipendPerCapita = 0.5f;      // Cr/lower noble/day
+        const float NobleWagePerCapita = 0.10f;   // Cr/upper commoner/day, paid by upper noble
+        const float ClergyWagePerCapita = 0.3f;   // Cr/lower clergy/day
+        const float CoinWearRate = 0.001f;        // fraction of M lost per day
+        const float BaseVelocity = 4.0f;          // base velocity of money
 
         // ── Tax & tithe ──
         const float TaxRate = 0.10f;         // lord skims 10% of upper commoner buys
@@ -67,6 +69,10 @@ namespace EconSim.Core.Economy.V4
 
         // ── Facility budget ──
         const float FacilityInputBudgetShare = 0.50f; // fraction of upper commoner coin for inputs
+
+        // ── Cross-market trade ──
+        const float TransportRate = 0.0005f;     // cost per unit of bulk per unit of hub-to-hub distance
+        const float TradeTariffRate = 0.05f;     // lord skims 5% of import value
 
         // ── Worship goods ──
         static readonly int[] WorshipGoods = { (int)GoodTypeV4.Candles, (int)GoodTypeV4.Wine };
@@ -133,6 +139,7 @@ namespace EconSim.Core.Economy.V4
                 ce.UpperCommonerSpend = 0f;
                 ce.TaxRevenue = 0f;
                 ce.TitheRevenue = 0f;
+                ce.TariffRevenue = 0f;
                 ce.UpperClergySpend = 0f;
                 ce.UpperClergyIncome = 0f;
                 ce.LowerClergySpend = 0f;
@@ -192,7 +199,23 @@ namespace EconSim.Core.Economy.V4
 
                 for (int g = 0; g < gc; g++)
                 {
-                    if (g == (int)GoodTypeV4.Gold) continue;
+                    if (g == (int)GoodTypeV4.Gold)
+                    {
+                        // Gold: jewelry fraction sold as raw material, rest minted in UpdateMoney
+                        float jewelryGold = ce.Surplus[g] * GoldJewelryFraction;
+                        if (jewelryGold > 0.001f)
+                        {
+                            orders.Add(new Order
+                            {
+                                CountyId = i,
+                                GoodId = g,
+                                Side = OrderSide.Sell,
+                                Source = OrderSource.PeasantSurplus,
+                                Quantity = jewelryGold,
+                            });
+                        }
+                        continue;
+                    }
                     if (ce.Surplus[g] > 0.001f)
                     {
                         orders.Add(new Order
@@ -255,30 +278,30 @@ namespace EconSim.Core.Economy.V4
                     // Remaining budget for household
                     float remaining = Math.Max(0f, unTreasury - serfBudget - stipendReserve);
 
-                    // Tier allocation: 10/10/30/50
+                    // Tier allocation: 5/5/15/75
                     PostTierOrders(orders, i, OrderSource.UpperNobility,
-                        remaining * 0.10f, unPop, GoodsV4.StapleGoods, UpperNobleStaplePerGood, priceLevel);
+                        remaining * 0.05f, unPop, GoodsV4.StapleGoods, UpperNobleStaplePerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.UpperNobility,
-                        remaining * 0.10f, unPop, GoodsV4.BasicGoods, UpperNobleBasicPerGood, priceLevel);
+                        remaining * 0.05f, unPop, GoodsV4.BasicGoods, UpperNobleBasicPerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.UpperNobility,
-                        remaining * 0.30f, unPop, GoodsV4.ComfortGoods, UpperNobleComfortPerGood, priceLevel);
+                        remaining * 0.15f, unPop, GoodsV4.ComfortGoods, UpperNobleComfortPerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.UpperNobility,
-                        remaining * 0.50f, unPop, GoodsV4.LuxuryGoods, UpperNobleLuxuryPerGood, priceLevel);
+                        remaining * 0.75f, unPop, GoodsV4.LuxuryGoods, UpperNobleLuxuryPerGood, priceLevel);
                 }
 
                 // 6. Lower noble buy orders
                 float lnTreasury = ce.LowerNobleTreasury;
                 if (lnPop > 0f && lnTreasury > 0.01f)
                 {
-                    // Tier allocation: 20/15/40/25
+                    // Tier allocation: 15/10/25/50
                     PostTierOrders(orders, i, OrderSource.LowerNobility,
-                        lnTreasury * 0.20f, lnPop, GoodsV4.StapleGoods, LowerNobleStaplePerGood, priceLevel);
+                        lnTreasury * 0.15f, lnPop, GoodsV4.StapleGoods, LowerNobleStaplePerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.LowerNobility,
-                        lnTreasury * 0.15f, lnPop, GoodsV4.BasicGoods, LowerNobleBasicPerGood, priceLevel);
+                        lnTreasury * 0.10f, lnPop, GoodsV4.BasicGoods, LowerNobleBasicPerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.LowerNobility,
-                        lnTreasury * 0.40f, lnPop, GoodsV4.ComfortGoods, LowerNobleComfortPerGood, priceLevel);
+                        lnTreasury * 0.25f, lnPop, GoodsV4.ComfortGoods, LowerNobleComfortPerGood, priceLevel);
                     PostTierOrders(orders, i, OrderSource.LowerNobility,
-                        lnTreasury * 0.25f, lnPop, GoodsV4.LuxuryGoods, LowerNobleLuxuryPerGood, priceLevel);
+                        lnTreasury * 0.50f, lnPop, GoodsV4.LuxuryGoods, LowerNobleLuxuryPerGood, priceLevel);
                 }
 
                 // 7. Facility sell orders + input buy orders
@@ -418,6 +441,78 @@ namespace EconSim.Core.Economy.V4
                         lcCoin * 0.25f, lclergyPop, LowerClergyWorshipGoods, LowerClergyWorshipPerGood, priceLevel);
                 }
             }
+
+            // 12. Cross-market trade orders (uses last tick's surplus/deficit/prices)
+            GenerateTradeOrders();
+        }
+
+        // ── Trade order generation ──
+
+        void GenerateTradeOrders()
+        {
+            int gc = GoodsV4.Count;
+
+            for (int mA = 1; mA <= _econ.MarketCount; mA++)
+            {
+                var marketA = _econ.Markets[mA];
+                for (int mB = mA + 1; mB <= _econ.MarketCount; mB++)
+                {
+                    var marketB = _econ.Markets[mB];
+                    float distance = _econ.HubToHubCost[mA][mB];
+                    if (distance <= 0f) continue;
+
+                    for (int g = 0; g < gc; g++)
+                    {
+                        if (g == (int)GoodTypeV4.Gold) continue;
+
+                        // Try A→B (A exports to B)
+                        TryPostTrade(mA, mB, g, marketA, marketB, distance);
+                        // Try B→A (B exports to A)
+                        TryPostTrade(mB, mA, g, marketB, marketA, distance);
+                    }
+                }
+            }
+        }
+
+        void TryPostTrade(int srcId, int dstId, int g,
+            MarketStateV4 src, MarketStateV4 dst, float distance)
+        {
+            float surplus = src.LastSurplus[g];
+            float deficit = dst.LastDeficit[g];
+            if (surplus <= 0f || deficit <= 0f) return;
+
+            float priceDiff = dst.ClearingPrice[g] - src.ClearingPrice[g];
+            float transportCost = distance * GoodsV4.Bulk[g] * TransportRate;
+            float profit = priceDiff - transportCost;
+            if (profit <= 0f) return;
+
+            float maxVolume = Math.Min(surplus, deficit);
+            float margin = profit / Math.Max(src.ClearingPrice[g], 0.01f);
+            float volume = maxVolume * Math.Min(margin, 1f);
+            if (volume < 0.01f) return;
+
+            // Buy order in source market (goods leaving)
+            src.Orders.Add(new Order
+            {
+                CountyId = src.HubCountyId,
+                GoodId = g,
+                Side = OrderSide.Buy,
+                Source = OrderSource.Trade,
+                Quantity = volume,
+                MaxBid = dst.ClearingPrice[g] - transportCost,
+                SourceMarketId = dstId,
+            });
+
+            // Sell order in dest market (goods arriving)
+            dst.Orders.Add(new Order
+            {
+                CountyId = dst.HubCountyId,
+                GoodId = g,
+                Side = OrderSide.Sell,
+                Source = OrderSource.Trade,
+                Quantity = volume,
+                SourceMarketId = srcId,
+            });
         }
 
         /// <summary>
@@ -585,6 +680,41 @@ namespace EconSim.Core.Economy.V4
                     if (o.FilledQuantity <= 0f) continue;
 
                     float amount = o.FilledQuantity * market.ClearingPrice[o.GoodId];
+
+                    // ── Cross-market trade coin routing ──
+                    if (o.Source == OrderSource.Trade)
+                    {
+                        if (o.Side == OrderSide.Buy)
+                        {
+                            // Trade buy in exporting market: importing market's lord pays
+                            var importMarket = _econ.Markets[o.SourceMarketId];
+                            var importHub = _econ.Counties[importMarket.HubCountyId];
+                            if (importHub != null)
+                                importHub.UpperNobleTreasury -= amount;
+                        }
+                        else // Sell
+                        {
+                            // Trade sell in importing market: exporting market's lord receives (minus tariff)
+                            var exportMarket = _econ.Markets[o.SourceMarketId];
+                            var exportHub = _econ.Counties[exportMarket.HubCountyId];
+                            float tariff = amount * TradeTariffRate;
+                            if (exportHub != null)
+                            {
+                                exportHub.UpperNobleTreasury += (amount - tariff);
+                                exportHub.UpperNobleIncome += (amount - tariff);
+                            }
+                            // Tariff stays with importing market's lord
+                            var importHub = _econ.Counties[market.HubCountyId];
+                            if (importHub != null)
+                            {
+                                importHub.UpperNobleTreasury += tariff;
+                                importHub.UpperNobleIncome += tariff;
+                                importHub.TariffRevenue += tariff;
+                            }
+                        }
+                        continue;
+                    }
+
                     var ce = _econ.Counties[o.CountyId];
                     if (ce == null) continue;
 
@@ -683,6 +813,32 @@ namespace EconSim.Core.Economy.V4
                         ce.FacilityOutputGoodFill[o.GoodId] = o.FilledQuantity / o.Quantity;
                     }
                 }
+
+                // Compute domestic surplus/deficit for next tick's trade orders.
+                // Single pass: accumulate per-good domestic sell/buy/filledBuy.
+                var domSell = new float[gc];
+                var domBuy = new float[gc];
+                var domFilledBuy = new float[gc];
+
+                for (int i = 0; i < orders.Count; i++)
+                {
+                    var o = orders[i];
+                    if (o.Source == OrderSource.Trade) continue;
+
+                    if (o.Side == OrderSide.Sell)
+                        domSell[o.GoodId] += o.Quantity;
+                    else
+                    {
+                        domBuy[o.GoodId] += o.Quantity;
+                        domFilledBuy[o.GoodId] += o.FilledQuantity;
+                    }
+                }
+
+                for (int g = 0; g < gc; g++)
+                {
+                    market.LastSurplus[g] = Math.Max(0f, domSell[g] - domFilledBuy[g]);
+                    market.LastDeficit[g] = Math.Max(0f, domBuy[g] - domFilledBuy[g]);
+                }
             }
         }
 
@@ -697,11 +853,12 @@ namespace EconSim.Core.Economy.V4
                 var ce = _econ.Counties[i];
                 if (ce == null) continue;
 
-                // 1. Gold minting → upper noble treasury
+                // 1. Gold minting → upper noble treasury (after jewelry fraction reserved)
                 float goldProd = ce.Production[(int)GoodTypeV4.Gold];
                 if (goldProd > 0f)
                 {
-                    float minted = goldProd * GoldCoinPerKg;
+                    float mintableGold = goldProd * (1f - GoldJewelryFraction);
+                    float minted = mintableGold * GoldCoinPerKg;
                     ce.UpperNobleTreasury += minted;
                     ce.UpperNobleIncome += minted;
                 }
@@ -717,7 +874,19 @@ namespace EconSim.Core.Economy.V4
                     ce.LowerNobleTreasury += stipend;
                 }
 
-                // 3. Clergy wages: upper clergy → lower clergy
+                // 3. Noble wages: upper noble → upper commoner
+                float commWage = Math.Min(
+                    ce.UpperCommonerPop * NobleWagePerCapita,
+                    Math.Max(0f, ce.UpperNobleTreasury));
+                if (commWage > 0f)
+                {
+                    ce.UpperNobleTreasury -= commWage;
+                    ce.UpperNobleSpend += commWage;
+                    ce.UpperCommonerCoin += commWage;
+                    ce.UpperCommonerIncome += commWage;
+                }
+
+                // 4. Clergy wages: upper clergy → lower clergy
                 float wages = Math.Min(
                     ce.LowerClergyPop * ClergyWagePerCapita,
                     Math.Max(0f, ce.UpperClergyTreasury));
@@ -729,7 +898,7 @@ namespace EconSim.Core.Economy.V4
                     ce.LowerClergyIncome += wages;
                 }
 
-                // 4. Coin wear on M (upper commoner + lower clergy)
+                // 5. Coin wear on M (upper commoner + lower clergy)
                 if (ce.UpperCommonerCoin > 0f)
                     ce.UpperCommonerCoin *= (1f - CoinWearRate);
                 if (ce.LowerClergyCoin > 0f)

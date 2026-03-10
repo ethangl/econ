@@ -1242,6 +1242,40 @@ def print_economy_v4(data: dict):
                       f"{d.get('upperNobleTreasury', 0):>10,.1f}  "
                       f"{d.get('upperNobleIncome', 0):>10,.1f}  {top_str}")
 
+    # Trade flows
+    trade_flows = v4.get("tradeFlows", [])
+    total_trade_vol = v4.get("totalTradeVolume", 0)
+    total_trade_val = v4.get("totalTradeValue", 0)
+    total_tariff = v4.get("totalTariffRevenue", 0)
+    if trade_flows or total_trade_vol > 0:
+        print(f"\n  ── Cross-Market Trade ──")
+        print(f"  Total volume: {total_trade_vol:,.1f} kg  "
+              f"Total value: {total_trade_val:,.2f} Cr  "
+              f"Tariff revenue: {total_tariff:,.2f} Cr")
+        if trade_flows:
+            # Group by good, show top flows
+            by_good = {}
+            for tf in trade_flows:
+                g = tf.get("good", "?")
+                if g not in by_good:
+                    by_good[g] = []
+                by_good[g].append(tf)
+
+            print(f"\n  {'Good':>12s}  {'From→To':>10s}  {'Posted':>10s}  {'Filled':>10s}  {'Value':>10s}")
+            for g in sorted(by_good.keys()):
+                flows = sorted(by_good[g], key=lambda x: -x.get("filled", 0))
+                for tf in flows[:5]:  # top 5 per good
+                    route = f"{tf.get('from', '?')}→{tf.get('to', '?')}"
+                    print(f"  {g:>12s}  {route:>10s}  "
+                          f"{tf.get('posted', 0):>10,.1f}  "
+                          f"{tf.get('filled', 0):>10,.1f}  "
+                          f"{tf.get('value', 0):>10,.2f}")
+    elif cf:
+        tariff_from_cf = cf.get("totalTariffRevenue", 0)
+        if tariff_from_cf > 0:
+            print(f"\n  ── Cross-Market Trade ──")
+            print(f"  Tariff revenue: {tariff_from_cf:,.2f} Cr  (no trade flows this tick)")
+
     # Markets
     markets = v4.get("markets", [])
     if markets:

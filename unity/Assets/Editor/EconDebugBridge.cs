@@ -89,7 +89,8 @@ namespace EconSim.Editor
                 {
                     Seed = p.seed,
                     CellCount = p.cellCount,
-                    Template = ParseTemplate(p.template)
+                    Template = ParseTemplate(p.template),
+                    Latitude = p.latitude != 0f ? p.latitude : 50f
                 };
                 _state = BridgeState.WaitingForMap;
             }
@@ -189,6 +190,8 @@ namespace EconSim.Editor
             int months = cmd.months > 0 ? cmd.months : 6;
             _dumpScope = string.IsNullOrEmpty(cmd.scope) ? "all" : cmd.scope;
 
+            float latitude = cmd.latitude != 0f ? cmd.latitude : 50f;
+
             var pending = new PendingOperation
             {
                 action = "generate_and_run",
@@ -198,7 +201,8 @@ namespace EconSim.Editor
                 cellCount = cellCount,
                 template = cmd.template ?? "Continents",
                 needsGenerate = true,
-                scope = _dumpScope
+                scope = _dumpScope,
+                latitude = latitude
             };
 
             WritePending(pending);
@@ -1509,6 +1513,7 @@ namespace EconSim.Editor
             float totalLowerClergySpend = 0f;
             float totalLowerClergyIncome = 0f;
             float totalLowerClergyCoin = 0f;
+            float totalTariffRevenue = 0f;
             float upperCommonerSatSum = 0f;
             float upperClergySatSum = 0f;
             float lowerClergySatSum = 0f;
@@ -1570,6 +1575,7 @@ namespace EconSim.Editor
                 totalLowerClergySpend += ce.LowerClergySpend;
                 totalLowerClergyIncome += ce.LowerClergyIncome;
                 totalLowerClergyCoin += ce.LowerClergyCoin;
+                totalTariffRevenue += ce.TariffRevenue;
                 if (ce.UpperCommonerPop > 0f)
                 {
                     upperCommonerSatSum += ce.UpperCommonerSatisfaction;
@@ -1638,6 +1644,7 @@ namespace EconSim.Editor
             j.KV("totalUpperNobleIncome", totalUpperNobleIncome);
             j.KV("totalLowerNobleSpend", totalLowerNobleSpend);
             j.KV("totalSerfFoodProvided", totalSerfFoodProvided);
+            j.KV("totalTariffRevenue", totalTariffRevenue);
             j.ObjClose();
 
             // Phase 2: noble satisfaction
@@ -1726,6 +1733,7 @@ namespace EconSim.Editor
                 j.KV("lowerClergyCoin", ce.LowerClergyCoin);
                 j.KV("taxRevenue", ce.TaxRevenue);
                 j.KV("titheRevenue", ce.TitheRevenue);
+                j.KV("tariffRevenue", ce.TariffRevenue);
 
                 j.Key("production"); j.ObjOpen();
                 for (int g = 0; g < GoodsV4.Count; g++)
@@ -1740,6 +1748,56 @@ namespace EconSim.Editor
                 j.ObjClose();
             }
             j.ArrClose();
+
+            // Trade flows: scan order books for Trade orders and aggregate per market pair × good
+            j.Key("tradeFlows"); j.ArrOpen();
+            {
+                // Build a dictionary of trade flows: (srcMarket, dstMarket, good) → (postedVolume, filledVolume, value)
+                var tradeDict = new System.Collections.Generic.Dictionary<(int, int, int), (float posted, float filled, float value)>();
+                for (int m = 1; m <= econ.MarketCount; m++)
+                {
+                    var market = econ.Markets[m];
+                    for (int i = 0; i < market.Orders.Count; i++)
+                    {
+                        var o = market.Orders[i];
+                        if (o.Source != OrderSource.Trade) continue;
+
+                        if (o.Side == OrderSide.Sell)
+                        {
+                            // Sell order in importing market m, SourceMarketId = exporting market
+                            int srcMarket = o.SourceMarketId;
+                            int dstMarket = m;
+                            var key = (srcMarket, dstMarket, o.GoodId);
+                            float val = o.FilledQuantity * market.ClearingPrice[o.GoodId];
+                            if (tradeDict.TryGetValue(key, out var existing))
+                                tradeDict[key] = (existing.posted + o.Quantity, existing.filled + o.FilledQuantity, existing.value + val);
+                            else
+                                tradeDict[key] = (o.Quantity, o.FilledQuantity, val);
+                        }
+                    }
+                }
+
+                float totalTradeVolume = 0f;
+                float totalTradeValue = 0f;
+                foreach (var kv in tradeDict)
+                {
+                    if (kv.Value.filled <= 0f) continue;
+                    totalTradeVolume += kv.Value.filled;
+                    totalTradeValue += kv.Value.value;
+                    j.ObjOpen();
+                    j.KV("from", kv.Key.Item1);
+                    j.KV("to", kv.Key.Item2);
+                    j.KV("good", GoodsV4.Names[kv.Key.Item3]);
+                    j.KV("posted", kv.Value.posted);
+                    j.KV("filled", kv.Value.filled);
+                    j.KV("value", kv.Value.value);
+                    j.ObjClose();
+                }
+                j.ArrClose();
+                j.KV("totalTradeVolume", totalTradeVolume);
+                j.KV("totalTradeValue", totalTradeValue);
+                j.KV("totalTariffRevenue", totalTariffRevenue);
+            }
 
             // Per-market summary
             j.Key("markets"); j.ArrOpen();
@@ -1828,6 +1886,7 @@ namespace EconSim.Editor
             public int cellCount;
             public string template;
             public string scope;
+            public float latitude;
         }
 
         [Serializable]
@@ -1841,6 +1900,7 @@ namespace EconSim.Editor
             public string template;
             public bool needsGenerate;
             public string scope;
+            public float latitude;
         }
 
         // ── Minimal JSON Writer ────────────────────────────────────

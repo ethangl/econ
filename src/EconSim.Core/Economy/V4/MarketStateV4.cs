@@ -37,15 +37,24 @@ namespace EconSim.Core.Economy.V4
         /// <summary>County IDs belonging to this market.</summary>
         public List<int> CountyIds;
 
+        /// <summary>Unsold domestic supply per good from last tick (sell posted - sell filled).</summary>
+        public float[] LastSurplus;
+
+        /// <summary>Unmet domestic demand per good from last tick (buy posted - buy filled).</summary>
+        public float[] LastDeficit;
+
         public MarketStateV4(int id)
         {
             Id = id;
-            ClearingPrice = new float[GoodsV4.Count];
+            int gc = GoodsV4.Count;
+            ClearingPrice = new float[gc];
+            LastSurplus = new float[gc];
+            LastDeficit = new float[gc];
             Orders = new List<Order>();
             CountyIds = new List<int>();
 
             // Seed clearing prices at base value
-            for (int g = 0; g < GoodsV4.Count; g++)
+            for (int g = 0; g < gc; g++)
                 ClearingPrice[g] = GoodsV4.Value[g];
         }
     }

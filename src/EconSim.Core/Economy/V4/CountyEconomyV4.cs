@@ -112,6 +112,9 @@ namespace EconSim.Core.Economy.V4
         /// <summary>Tithe revenue collected from upper commoner purchases this tick.</summary>
         public float TitheRevenue;
 
+        /// <summary>Tariff revenue from cross-market trade this tick.</summary>
+        public float TariffRevenue;
+
         /// <summary>Total coin spent by upper clergy this tick.</summary>
         public float UpperClergySpend;
 

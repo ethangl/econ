@@ -17,17 +17,24 @@ namespace EconSim.Core.Economy.V4
         Iron = 7,
         Wool = 8,
         Leather = 9,
-        Wine = 10,
+        Grapes = 10,
         Spices = 11,
         Silk = 12,
         Candles = 13,
 
-        // Facility-produced (5)
+        // Facility-produced — comfort (5)
         Bread = 14,
         Ale = 15,
         Tools = 16,
         Clothes = 17,
         Furniture = 18,
+
+        // Facility-produced — luxury (5)
+        Feast = 20,
+        FineClothes = 21,
+        Jewelry = 22,
+        FineFurniture = 23,
+        Wine = 24,
 
         // Special (1)
         Gold = 19,
@@ -161,20 +168,23 @@ namespace EconSim.Core.Economy.V4
                         { (int)BiomeId.Woodland, 0.08f }, { (int)BiomeId.Floodplain, 0.08f },
                         { (int)BiomeId.TemperateForest, 0.06f }, { (int)BiomeId.Scrubland, 0.06f },
                     }),
-                new GoodDefV4(GoodTypeV4.Wine, "wine", NeedTierV4.Luxury, 20f, 4f,
+                new GoodDefV4(GoodTypeV4.Grapes, "grapes", NeedTierV4.Basic, 3f, 6f,
                     new Dictionary<int, float> {
                         { (int)BiomeId.Woodland, 0.25f }, { (int)BiomeId.Scrubland, 0.20f },
                         { (int)BiomeId.Grassland, 0.15f }, { (int)BiomeId.TemperateForest, 0.10f },
                     }),
-                new GoodDefV4(GoodTypeV4.Spices, "spices", NeedTierV4.Luxury, 40f, 1f,
+                // Spices and Silk are now raw material inputs for luxury facilities
+                new GoodDefV4(GoodTypeV4.Spices, "spices", NeedTierV4.Basic, 8f, 1f,
                     new Dictionary<int, float> {
                         { (int)BiomeId.TropicalRainforest, 0.06f }, { (int)BiomeId.TropicalDryForest, 0.04f },
-                        { (int)BiomeId.Savanna, 0.01f },
+                        { (int)BiomeId.Savanna, 0.02f },
+                        { (int)BiomeId.Woodland, 0.01f }, { (int)BiomeId.Scrubland, 0.01f },
                     }),
-                new GoodDefV4(GoodTypeV4.Silk, "silk", NeedTierV4.Luxury, 50f, 1f,
+                new GoodDefV4(GoodTypeV4.Silk, "silk", NeedTierV4.Basic, 10f, 1f,
                     new Dictionary<int, float> {
                         { (int)BiomeId.TropicalRainforest, 0.06f }, { (int)BiomeId.TropicalDryForest, 0.05f },
                         { (int)BiomeId.Savanna, 0.03f }, { (int)BiomeId.Woodland, 0.02f },
+                        { (int)BiomeId.TemperateForest, 0.01f },
                     }),
                 new GoodDefV4(GoodTypeV4.Candles, "candles", NeedTierV4.Comfort, 6f, 3f,
                     new Dictionary<int, float> {
@@ -183,7 +193,7 @@ namespace EconSim.Core.Economy.V4
                         { (int)BiomeId.Savanna, 0.05f }, { (int)BiomeId.Floodplain, 0.06f },
                     }),
 
-                // ── Facility-produced (5) ──
+                // ── Facility-produced — comfort (5) ──
                 new GoodDefV4(GoodTypeV4.Bread, "bread", NeedTierV4.Comfort, 6f, 4f),
                 new GoodDefV4(GoodTypeV4.Ale, "ale", NeedTierV4.Comfort, 5f, 6f),
                 new GoodDefV4(GoodTypeV4.Tools, "tools", NeedTierV4.Comfort, 12f, 6f),
@@ -195,6 +205,13 @@ namespace EconSim.Core.Economy.V4
                     new Dictionary<int, float> {
                         { (int)BiomeId.AlpineBarren, 0.02f }, { (int)BiomeId.MountainShrub, 0.01f },
                     }),
+
+                // ── Facility-produced — luxury (4) ──
+                new GoodDefV4(GoodTypeV4.Feast, "feast", NeedTierV4.Luxury, 25f, 4f),
+                new GoodDefV4(GoodTypeV4.FineClothes, "fine clothes", NeedTierV4.Luxury, 35f, 2f),
+                new GoodDefV4(GoodTypeV4.Jewelry, "jewelry", NeedTierV4.Luxury, 80f, 0.5f),
+                new GoodDefV4(GoodTypeV4.FineFurniture, "fine furniture", NeedTierV4.Luxury, 40f, 8f),
+                new GoodDefV4(GoodTypeV4.Wine, "wine", NeedTierV4.Luxury, 20f, 4f),
             };
 
             Count = Defs.Length;

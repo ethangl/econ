@@ -2,11 +2,19 @@ namespace EconSim.Core.Economy.V4
 {
     public enum FacilityTypeV4
     {
+        // Comfort facilities
         Bakery = 0,
         Brewery = 1,
         Smithy = 2,
         Weaver = 3,
         Carpenter = 4,
+
+        // Luxury facilities
+        Kitchen = 5,
+        Tailor = 6,
+        Jeweler = 7,
+        FineCarpenter = 8,
+        Vintner = 9,
     }
 
     public readonly struct FacilityInputV4
@@ -51,6 +59,7 @@ namespace EconSim.Core.Economy.V4
         {
             Defs = new[]
             {
+                // ── Comfort facilities ──
                 new FacilityDefV4(FacilityTypeV4.Bakery, "bakery",
                     new[] { new FacilityInputV4(GoodTypeV4.Wheat, 2.0f) },
                     GoodTypeV4.Bread, 0.10f),
@@ -73,6 +82,33 @@ namespace EconSim.Core.Economy.V4
                 new FacilityDefV4(FacilityTypeV4.Carpenter, "carpenter",
                     new[] { new FacilityInputV4(GoodTypeV4.Timber, 3.0f) },
                     GoodTypeV4.Furniture, 0.04f),
+
+                // ── Luxury facilities ──
+                new FacilityDefV4(FacilityTypeV4.Kitchen, "kitchen",
+                    new[] {
+                        new FacilityInputV4(GoodTypeV4.Spices, 0.5f),
+                        new FacilityInputV4(GoodTypeV4.Meat, 2.0f),
+                    },
+                    GoodTypeV4.Feast, 0.06f),
+
+                new FacilityDefV4(FacilityTypeV4.Tailor, "tailor",
+                    new[] { new FacilityInputV4(GoodTypeV4.Silk, 2.0f) },
+                    GoodTypeV4.FineClothes, 0.05f),
+
+                new FacilityDefV4(FacilityTypeV4.Jeweler, "jeweler",
+                    new[] { new FacilityInputV4(GoodTypeV4.Gold, 1.0f) },
+                    GoodTypeV4.Jewelry, 0.02f),
+
+                new FacilityDefV4(FacilityTypeV4.FineCarpenter, "fine carpenter",
+                    new[] {
+                        new FacilityInputV4(GoodTypeV4.Timber, 3.0f),
+                        new FacilityInputV4(GoodTypeV4.Silk, 0.5f),
+                    },
+                    GoodTypeV4.FineFurniture, 0.03f),
+
+                new FacilityDefV4(FacilityTypeV4.Vintner, "vintner",
+                    new[] { new FacilityInputV4(GoodTypeV4.Grapes, 3.0f) },
+                    GoodTypeV4.Wine, 0.08f),
             };
 
             Count = Defs.Length;
