@@ -7,6 +7,7 @@ using EconSim.Core.Common;
 using EconSim.Core.Import;
 using EconSim.Core.Actors;
 using EconSim.Core.Economy;
+using EconSim.Core.Economy.V4;
 using EconSim.Core.Religious;
 using EconSim.Core.Simulation;
 using EconSim.Renderer;
@@ -521,6 +522,10 @@ namespace EconSim.Core
 
             runner.RegisterSystem(new PopulationSystem());
             runner.RegisterSystem(new SpoilageSystem());
+
+            // V4 economy runs alongside V3 — initializes its own state, ticks are empty stubs for now
+            runner.RegisterSystem(new EconomyTickV4());
+
             _simulation = runner;
 
             // Bootstrap actors and peerage

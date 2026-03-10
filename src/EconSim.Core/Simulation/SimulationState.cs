@@ -1,5 +1,6 @@
 using EconSim.Core.Actors;
 using EconSim.Core.Economy;
+using EconSim.Core.Economy.V4;
 using EconSim.Core.Religious;
 using EconSim.Core.Transport;
 
@@ -59,5 +60,10 @@ namespace EconSim.Core.Simulation
         /// Religion state (adherence, parishes, dioceses, archdioceses).
         /// </summary>
         public ReligionState Religion { get; set; }
+
+        /// <summary>
+        /// V4 economy state (buy/sell orders, quantity theory of money). Null when running v3 only.
+        /// </summary>
+        public EconomyStateV4 EconomyV4 { get; set; }
     }
 }

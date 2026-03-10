@@ -10,6 +10,7 @@ using EconSim.Core.Common;
 using EconSim.Core;
 using EconSim.Core.Data;
 using EconSim.Core.Economy;
+using EconSim.Core.Economy.V4;
 using EconSim.Core.Simulation;
 using EconSim.Core.Religious;
 using EconSim.Core.Transport;
@@ -53,6 +54,7 @@ namespace EconSim.Editor
         static int _startDay;
         static bool _needsGenerate;
         static MapGenConfig _pendingConfig;
+        static string _dumpScope = "all";
 
         // ── Domain Reload Survival ─────────────────────────────────
 
@@ -79,6 +81,7 @@ namespace EconSim.Editor
             _targetDay = p.targetDay;
             _startDay = p.startDay;
             _needsGenerate = p.needsGenerate;
+            _dumpScope = string.IsNullOrEmpty(p.scope) ? "all" : p.scope;
 
             if (_needsGenerate)
             {
@@ -184,6 +187,7 @@ namespace EconSim.Editor
             int seed = cmd.seed > 0 ? cmd.seed : UnityEngine.Random.Range(1, int.MaxValue);
             int cellCount = cmd.cellCount > 0 ? cmd.cellCount : 60000;
             int months = cmd.months > 0 ? cmd.months : 6;
+            _dumpScope = string.IsNullOrEmpty(cmd.scope) ? "all" : cmd.scope;
 
             var pending = new PendingOperation
             {
@@ -193,7 +197,8 @@ namespace EconSim.Editor
                 seed = seed,
                 cellCount = cellCount,
                 template = cmd.template ?? "Continents",
-                needsGenerate = true
+                needsGenerate = true,
+                scope = _dumpScope
             };
 
             WritePending(pending);
@@ -251,6 +256,7 @@ namespace EconSim.Editor
             }
 
             int months = cmd.months > 0 ? cmd.months : 6;
+            _dumpScope = string.IsNullOrEmpty(cmd.scope) ? "all" : cmd.scope;
             var sim = GameManager.Instance.Simulation;
             int currentDay = sim.GetState().CurrentDay;
 
@@ -264,7 +270,8 @@ namespace EconSim.Editor
                 action = "run_months",
                 targetDay = _targetDay,
                 startDay = _startDay,
-                needsGenerate = false
+                needsGenerate = false,
+                scope = _dumpScope
             };
             WritePending(pending);
 
@@ -326,7 +333,7 @@ namespace EconSim.Editor
                     if (currentDay >= _targetDay)
                     {
                         GameManager.Instance.Simulation.IsPaused = true;
-                        DumpState("all");
+                        DumpState(_dumpScope);
                         CleanupAll();
                         WriteStatus("complete", $"Run complete at day {currentDay}");
                     }
@@ -433,7 +440,8 @@ namespace EconSim.Editor
             j.KV("totalTicks", st.TotalTicksProcessed);
             j.KV("timestamp", DateTime.UtcNow.ToString("o"));
 
-            WriteGoodsMetadata(j);
+            if (scope == "all")
+                WriteGoodsMetadata(j);
 
             if (scope == "all" || scope == "summary")
             {
@@ -448,6 +456,8 @@ namespace EconSim.Editor
                 WriteTrade(j, st);
             if (scope == "all" || scope == "facilities")
                 WriteFacilities(j, st);
+            if (scope == "all" || scope == "v4")
+                WriteEconomyV4(j, st);
 
             j.ObjClose();
             File.WriteAllText(OutputPath, j.ToString());
@@ -1411,6 +1421,103 @@ namespace EconSim.Editor
             j.ObjClose();
         }
 
+        static void WriteEconomyV4(JW j, SimulationState st)
+        {
+            j.Key("economyV4"); j.ObjOpen();
+
+            var econ = st.EconomyV4;
+            if (econ == null)
+            {
+                j.KV("initialized", false);
+                j.ObjClose();
+                return;
+            }
+
+            j.KV("initialized", true);
+            j.KV("goodCount", GoodsV4.Count);
+            j.KV("facilityCount", FacilitiesV4.Count);
+            j.KV("marketCount", econ.MarketCount);
+
+            // Goods metadata
+            j.Key("goods"); j.ArrOpen();
+            for (int g = 0; g < GoodsV4.Count; g++)
+            {
+                var d = GoodsV4.Defs[g];
+                j.ObjOpen();
+                j.KV("index", g);
+                j.KV("name", d.Name);
+                j.KV("tier", d.Tier.ToString());
+                j.KV("value", d.Value);
+                j.KV("bulk", d.Bulk);
+                j.ObjClose();
+            }
+            j.ArrClose();
+
+            // Facilities metadata
+            j.Key("facilities"); j.ArrOpen();
+            for (int f = 0; f < FacilitiesV4.Count; f++)
+            {
+                var d = FacilitiesV4.Defs[f];
+                j.ObjOpen();
+                j.KV("name", d.Name);
+                j.KV("output", GoodsV4.Names[(int)d.Output]);
+                j.KV("throughputPerCapita", d.ThroughputPerCapita);
+                j.Key("inputs"); j.ArrOpen();
+                foreach (var inp in d.Inputs)
+                {
+                    j.ObjOpen();
+                    j.KV("good", GoodsV4.Names[(int)inp.Good]);
+                    j.KV("ratio", inp.Ratio);
+                    j.ObjClose();
+                }
+                j.ArrClose();
+                j.ObjClose();
+            }
+            j.ArrClose();
+
+            // County summary
+            int countyCount = 0;
+            float totalPop = 0f;
+            float totalM = 0f;
+            float totalUpperNobleTreasury = 0f;
+            float totalLowerNobleTreasury = 0f;
+            float totalUpperClergyTreasury = 0f;
+            foreach (var ce in econ.Counties)
+            {
+                if (ce == null) continue;
+                countyCount++;
+                totalPop += ce.TotalPopulation;
+                totalM += ce.MoneySupply;
+                totalUpperNobleTreasury += ce.UpperNobleTreasury;
+                totalLowerNobleTreasury += ce.LowerNobleTreasury;
+                totalUpperClergyTreasury += ce.UpperClergyTreasury;
+            }
+            j.KV("countyCount", countyCount);
+            j.KV("totalPopulation", totalPop);
+            j.KV("totalMoneySupply", totalM);
+            j.KV("totalUpperNobleTreasury", totalUpperNobleTreasury);
+            j.KV("totalLowerNobleTreasury", totalLowerNobleTreasury);
+            j.KV("totalUpperClergyTreasury", totalUpperClergyTreasury);
+
+            // Per-market summary
+            j.Key("markets"); j.ArrOpen();
+            for (int m = 1; m <= econ.MarketCount; m++)
+            {
+                var market = econ.Markets[m];
+                j.ObjOpen();
+                j.KV("id", market.Id);
+                j.KV("hubCountyId", market.HubCountyId);
+                j.KV("hubRealmId", market.HubRealmId);
+                j.KV("counties", market.CountyIds.Count);
+                j.KV("priceLevel", market.PriceLevel);
+                j.KV("totalM", market.TotalMoneySupply);
+                j.ObjClose();
+            }
+            j.ArrClose();
+
+            j.ObjClose();
+        }
+
         // ── Helpers ────────────────────────────────────────────────
 
         static bool EnsureReady()
@@ -1482,6 +1589,7 @@ namespace EconSim.Editor
             public int cellCount;
             public string template;
             public bool needsGenerate;
+            public string scope;
         }
 
         // ── Minimal JSON Writer ────────────────────────────────────
