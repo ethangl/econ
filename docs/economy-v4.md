@@ -8,7 +8,7 @@
 4. **Honest abstraction.** Everything executes in one tick. Don't fake temporal ordering with phase sequencing. If we can't model causation within a tick, accept that and let the market absorb it.
 5. **Simplicity over fidelity.** Fewer goods, fewer systems, fewer interactions. Complexity should come from emergent behavior, not from hand-tuned subsystems.
 
-## Goods (25)
+## Goods (26)
 
 **Design rule:** No intermediates for comfort goods. If a raw material only exists to feed one finished good, collapse it — the finished good comes directly from the biome. Luxury goods are the exception: they require rare inputs (silk, spices, gold) to create a separate noble consumption track.
 
@@ -53,15 +53,16 @@
 
 Luxury goods are the noble consumption track — expensive processed goods that require rare inputs. Nobles spend most of their budget here, leaving staples and comforts for commoners. This structural separation prevents nobles from outbidding commoners on everyday goods.
 
-### Special (1)
+### Special (2)
 
-| Good | Notes                                                                    |
-| ---- | ------------------------------------------------------------------------ |
-| Gold | Mined. 75% minted into coin, 25% reserved as jeweler input. Dual role.  |
+| Good   | Notes                                                                    |
+| ------ | ------------------------------------------------------------------------ |
+| Gold   | Mined. 75% minted into coin, 25% reserved as jeweler input. Dual role.  |
+| Silver | Mined. 100% minted into coin (10 Cr/kg). Wider biome distribution than gold — ensures all markets have some monetary base. |
 
 No intermediates for comfort goods. All 1:1 chains collapsed into biome extraction. Smithy uses Timber directly (fuel for the forge). Luxury goods intentionally require rare inputs to create scarcity and geographic specialization.
 
-**25 goods total.** (14 biome + 5 comfort facility + 5 luxury facility + 1 special)
+**26 goods total.** (14 biome + 5 comfort facility + 5 luxury facility + 2 special)
 
 ## Population Classes (Estates)
 
@@ -94,7 +95,7 @@ Four elite estates, each with separate treasuries and spending priorities:
 
 - **Income:** peasant surplus revenue, transaction tax on upper commoner buys, trade tariffs
 - **Spending priority:** serf feeding → lower noble stipends → commoner wages → staples → basics → comforts → luxuries (future: clergy endowments, military)
-- **Noble wages:** the lord pays upper commoners a daily wage (`noble_wage_per_capita` per commoner per day, capped by remaining treasury after stipend). This represents employment of servants, estate managers, and craftsmen-on-retainer — historically the primary mechanism for coin entering the commoner economy.
+- **Noble wages:** the lord pays upper commoners a daily wage (`noble_wage_per_capita` per commoner per day). Wages are **pooled at market level** — total wage bill and total noble treasury within a market are computed, then paid proportionally. This prevents gold-hoarding counties from starving neighboring counties of coin. Historically, wealth was redistributed within a realm through patronage networks.
 - **Budget allocation:** 75% luxuries, 15% comforts, 5% basics, 5% staples. Nobles spend most of their wealth on luxury goods (feasts, fine clothes, jewelry, wine, fine furniture), leaving everyday goods for commoners.
 - **Effect:** the lord is the intermediary between the subsistence economy and the money economy. Peasants never touch coin. Coin reaches commoners through two channels: (1) noble wages (direct transfer), and (2) noble purchases of facility-produced luxury goods (artisan income).
 
@@ -216,7 +217,7 @@ All other goods (Leather, Candles, etc.) come directly from biome extraction —
    - Tithe: clergy treasury += tithe_rate × transaction value on upper commoner buys
 
 3. UPDATE MONEY
-   - Minting: gold production (minus jewelry fraction) → new coin enters upper noble treasury
+   - Minting: gold (minus jewelry fraction) + silver → new coin enters upper noble treasury
    - Stipend: upper noble treasury → lower noble treasury (fixed amount per tick)
    - Noble wages: upper noble treasury → upper commoner coin (fixed amount per tick)
    - Clergy wages: upper clergy treasury → lower clergy coin (fixed amount per tick)
@@ -365,10 +366,10 @@ Feeding serfs comes first. A lord who lets serfs starve to buy silk will lose hi
 2. **Household spending** — budget = `coin / (1 + tax_rate + tithe_rate)` (accounts for tax+tithe overhead). Allocated across tiers:
 
 ```
-1. Staples  — 40% of household budget
-2. Basics   — 25% of household budget
-3. Comforts — 30% of household budget
-4. Luxuries — 5% of household budget (small — aspirational spending)
+1. Staples  — 40% of household budget (equal-budget per good, not value-weighted)
+2. Basics   — 10% of household budget
+3. Comforts — 35% of household budget
+4. Luxuries — 15% of household budget
 ```
 
 Within a tier, bid per unit = budget allocated to that tier / (total need value at price level). A bidScale > 1.0 means the buyer can outbid equilibrium price.
@@ -460,8 +461,10 @@ The lord of the importing market's hub county imposes a tariff (`tariff_rate`, c
 
 - Gold mines produce gold based on biome yields and lower commoner population
 - 75% of gold production is minted into coin at a fixed rate (50 Cr per kg). The remaining 25% is sold as raw material for jewelers.
-- Minted coin enters the lord's treasury (upper noble) of the county that mines it
+- Silver mines produce silver across a wider range of biomes (mountain, scrubland, desert, temperate forest). 100% of silver is minted at 10 Cr per kg.
+- Minted coin (gold + silver) enters the lord's treasury (upper noble) of the county that mines it
 - Gold sold to jewelers generates coin when the resulting jewelry is sold to nobles — a slower but more distributed path into the economy
+- Silver's wider biome distribution ensures most markets have some local minting, preventing money-starved markets from collapsing into pure subsistence
 - **Bootstrap:** Upper commoner coin is seeded at 0.1 Cr per capita at initialization. This provides enough starting coin for initial household spending while artisan credit handles facility inputs.
 
 ### Money Destruction / Drain
@@ -519,14 +522,13 @@ Elite treasuries are money sinks. Coin re-enters M when elites buy goods.
 
 ### Satisfaction Components
 
-| Component      | Weight         | Notes                                                                                                                                     |
-| -------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **Survival**   | heaviest       | Am I eating? Am I alive? Dominates all other factors.                                                                                     |
-| **Religion**   | heavy          | Derived from clergy buy order fulfillment. A well-funded church (candles, wine) provides religious satisfaction. A broke church does not. |
-| **Stability**  | heavy          | Peace vs war, raiding, recent conquest.                                                                                                   |
-| **Economic**   | moderate       | Buy order fulfillment for goods beyond survival. Class-dependent.                                                                         |
-| **Governance** | light          | Tax burden fairness, lord's legitimacy.                                                                                                   |
-| **Health**     | light (future) | Plague, overcrowding. Not in v4 initial.                                                                                                  |
+| Component      | Weight | Notes                                                                                                                                     |
+| -------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Survival**   | 0.40   | Am I eating? Am I alive? Dominates all other factors.                                                                                     |
+| **Religion**   | 0.25   | Derived from clergy buy order fulfillment (candles + wine). Shared across all classes in the county.                                     |
+| **Stability**  | 0.20   | Peace vs war, raiding, recent conquest. Placeholder: always 1.0.                                                                          |
+| **Economic**   | 0.10   | Buy order fulfillment for goods beyond survival. Class-dependent (comfort+luxury for UC, luxury for nobles).                              |
+| **Governance** | 0.05   | Tax burden fairness, lord's legitimacy. Placeholder: always 0.7.                                                                          |
 
 Survival dominates. A well-fed serf in a warzone is unhappy. A comfortable merchant under a heretic lord is unhappy. A starving peasant is desperate regardless of everything else.
 
@@ -583,16 +585,16 @@ All values TBD through simulation. This section enumerates the knobs that exist.
 
 How much of each good a biome produces per lower commoner per tick. Most biome/good combinations are zero.
 
-| Biome         | Wheat | Barley | Fish | Meat | Salt | Timber | Stone | Iron | Wool | Leather | Wine | Candles | Silk | Spices | Gold |
-| ------------- | ----- | ------ | ---- | ---- | ---- | ------ | ----- | ---- | ---- | ------- | ---- | ------- | ---- | ------ | ---- |
-| Grassland     | high  | med    | —    | med  | —    | low    | —     | —    | med  | low     | —    | low     | —    | —      | —    |
-| Coast         | low   | —      | high | —    | high | —      | —     | —    | —    | —       | —    | —       | —    | —      | —    |
-| Forest        | —     | —      | —    | low  | —    | high   | —     | —    | —    | low     | —    | med     | —    | —      | —    |
-| Mountain      | —     | —      | —    | —    | low  | low    | high  | high | —    | —       | —    | —       | —    | —      | low  |
-| Steppe        | low   | med    | —    | high | —    | —      | —     | —    | high | med     | —    | low     | —    | —      | —    |
-| Mediterranean | med   | med    | —    | —    | —    | low    | low   | —    | —    | —       | high | —       | low  | —      | —    |
-| Desert        | —     | —      | —    | —    | med  | —      | low   | —    | —    | —       | —    | —       | —    | low    | low  |
-| Tropical      | low   | —      | —    | —    | —    | med    | —     | —    | —    | —       | —    | —       | med  | med    | —    |
+| Biome         | Wheat | Barley | Fish | Meat | Salt | Timber | Stone | Iron | Wool | Leather | Wine | Candles | Silk | Spices | Gold | Silver |
+| ------------- | ----- | ------ | ---- | ---- | ---- | ------ | ----- | ---- | ---- | ------- | ---- | ------- | ---- | ------ | ---- | ------ |
+| Grassland     | high  | med    | —    | med  | —    | low    | —     | —    | med  | low     | —    | low     | —    | —      | —    | —      |
+| Coast         | low   | —      | high | —    | high | —      | —     | —    | —    | —       | —    | —       | —    | —      | —    | —      |
+| Forest        | —     | —      | —    | low  | —    | high   | —     | —    | —    | low     | —    | med     | —    | —      | —    | low    |
+| Mountain      | —     | —      | —    | —    | low  | low    | high  | high | —    | —       | —    | —       | —    | —      | low  | med    |
+| Steppe        | low   | med    | —    | high | —    | —      | —     | —    | high | med     | —    | low     | —    | —      | —    | low    |
+| Mediterranean | med   | med    | —    | —    | —    | low    | low   | —    | —    | —       | high | —       | low  | —      | —    | —      |
+| Desert        | —     | —      | —    | —    | med  | —      | low   | —    | —    | —       | —    | —       | —    | low    | low  | low    |
+| Tropical      | low   | —      | —    | —    | —    | med    | —     | —    | —    | —       | —    | —       | med  | med    | —    | —      |
 
 Collapsed goods and their biome sources:
 - **Leather** — from livestock regions (hides + tanning collapsed). Wherever Meat is produced, Leather is a byproduct at lower yield.
@@ -601,6 +603,7 @@ Collapsed goods and their biome sources:
 - **Silk** — rare tropical biomes. Raw material for Tailor (Fine Clothes) and Fine Carpenter (Fine Furniture). Trade-dependent for most realms.
 - **Spices** — rare tropical biomes. Raw material for Kitchen (Feast). Trade-dependent for most realms.
 - **Gold** — rare mountain biomes. 75% minted into coin, 25% reserved as Jeweler input (Jewelry). Dual role creates tension between monetary expansion and luxury production.
+- **Silver** — wider distribution than gold (mountain, scrubland, desert, temperate forest). 100% minted into coin at 10 Cr/kg. Ensures most markets have local minting to prevent monetary collapse.
 
 Key balance constraint: a typical grassland county should produce ~120-150% of its staple needs, creating a modest surplus for trade. A specialized county (mining, pastoral) should produce <50% of its staple needs, forcing trade dependency.
 
@@ -659,9 +662,9 @@ What percentage of coin budget each buyer type allocates to each need tier.
 | Serf feeding            | —               | first (up to 40% treasury) | — | —            | —            |
 | Stipends/Wages          | —               | reserved after serfs | —     | first priority | —          |
 | Staples                 | 40%             | 5%             | 15%            | 15%          | 50%          |
-| Basics                  | 25%             | 5%             | 10%            | 10%          | 25%          |
-| Comforts                | 30%             | 15%            | 25%            | 35%          | —            |
-| Luxuries                | 5%              | 75%            | 50%            | —            | —            |
+| Basics                  | 10%             | 5%             | 10%            | 10%          | 25%          |
+| Comforts                | 35%             | 15%            | 25%            | 35%          | —            |
+| Luxuries                | 15%             | 75%            | 50%            | —            | —            |
 | Worship (Candles, Wine) | —               | —              | —              | 40%          | 25%          |
 
 Upper commoner percentages apply to household budget only. Facility inputs are separate (artisan credit, unconstrained by coin).
@@ -671,15 +674,17 @@ Upper commoner percentages apply to household budget only. Facility inputs are s
 | Parameter          | Value  | Meaning                                                                  |
 | ------------------ | ------ | ------------------------------------------------------------------------ |
 | `base_V`           | 4.0    | Base velocity of money (flat, no density scaling yet)                    |
-| `gold_coin_per_kg` | 50     | Coin minted per kg of gold produced (all gold minted, no fraction)      |
+| `gold_coin_per_kg` | 50     | Coin minted per kg of gold produced (75% minted, 25% to jeweler)       |
 | `coin_wear_rate`   | 0.001  | Fraction of M (circulating coin) lost per day                            |
 | `tax_rate`         | 0.10   | Percentage lord skims from upper commoner + facility input buys          |
 | `tithe_rate`       | 0.10   | Percentage clergy skims from upper commoner + facility input buys        |
 | `stipend_per_capita`| 0.5   | Cr per lower noble per day (capped by upper noble treasury)              |
 | `clergy_wage`      | 0.3    | Cr per lower clergy per day (capped by upper clergy treasury)            |
-| `noble_wage`       | 0.10   | Cr per upper commoner per day (capped by upper noble treasury after stipend) |
+| `noble_wage`       | 0.25   | Cr per upper commoner per day (pooled at market level from all noble treasuries) |
 | `bootstrap_coin`   | 0.1    | Cr per upper commoner at initialization (household spending seed)        |
 | `gold_jewelry_fraction` | 0.25 | Fraction of gold production reserved for jeweler input (rest minted)  |
+| `silver_coin_per_kg` | 10   | Coin minted per kg of silver produced (all silver minted)               |
+| `bid_scale_cap`    | 3.0    | Maximum bidScale in PostTierOrders (prevents nobles bidding 600x base)  |
 
 ### Trade Parameters
 
@@ -690,16 +695,16 @@ Upper commoner percentages apply to household budget only. Facility inputs are s
 
 ### Population Parameters
 
-| Parameter                     | Meaning                                                  |
-| ----------------------------- | -------------------------------------------------------- |
-| `base_birth_rate`             | Births per capita per tick at neutral satisfaction       |
-| `base_death_rate`             | Deaths per capita per tick at neutral satisfaction       |
-| `satisfaction_birth_modifier` | How much satisfaction scales birth rate                  |
-| `satisfaction_death_modifier` | How much low satisfaction increases death rate           |
-| `migration_rate`              | Max fraction of population that migrates per tick        |
-| `migration_threshold`         | Satisfaction gap needed to trigger migration             |
-| `upper_mobility`              | Migration rate multiplier for upper commoners            |
-| `lower_mobility`              | Migration rate multiplier for lower commoners (very low) |
+| Parameter                     | Value          | Meaning                                                        |
+| ----------------------------- | -------------- | -------------------------------------------------------------- |
+| `BaseBirthRate`               | 0.04/360/day   | ~4% annual birth rate at neutral satisfaction                  |
+| `BaseDeathRate`               | 0.03/360/day   | ~3% annual death rate (net ~1% growth at equilibrium)          |
+| `SatisfactionBirthMod`        | 0.5            | High satisfaction → 150% of base births                        |
+| `SatisfactionDeathMod`        | 1.0            | Zero satisfaction → 200% of base deaths                        |
+| `MigrationRate`               | 0.001/360/day  | Max 0.1% of pop migrates per day                               |
+| `MigrationThreshold`          | 0.05           | Need 5% satisfaction gap to trigger migration                  |
+| `UpperMobility`               | 1.0            | Upper commoners: full migration rate                           |
+| `LowerMobility`               | 0.05           | Lower commoners: 5% of normal migration rate                   |
 
 ### Facility Parameters
 

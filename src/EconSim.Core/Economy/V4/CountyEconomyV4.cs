@@ -55,7 +55,7 @@ namespace EconSim.Core.Economy.V4
         /// <summary>Average biome yield per good, indexed by GoodTypeV4. kg/person/day.</summary>
         public float[] Productivity;
 
-        // ── Per-class satisfaction (computed each tick in Phase 5) ──
+        // ── Per-class satisfaction (weighted composite, computed each tick) ──
 
         public float LowerCommonerSatisfaction;
         public float UpperCommonerSatisfaction;
@@ -63,6 +63,28 @@ namespace EconSim.Core.Economy.V4
         public float UpperNobilitySatisfaction;
         public float LowerClergySatisfaction;
         public float UpperClergySatisfaction;
+
+        // ── Phase 5: satisfaction breakdown (diagnostic) ──
+
+        /// <summary>LC survival component (local food / staple need).</summary>
+        public float SurvivalSatisfaction;
+
+        /// <summary>Shared religion component (clergy worship goods fulfillment).</summary>
+        public float ReligionSatisfaction;
+
+        /// <summary>UC economic component (comfort+luxury buy order fulfillment).</summary>
+        public float EconomicSatisfaction;
+
+        // ── Phase 5: population change (reset each tick) ──
+
+        /// <summary>Total births this tick across all classes.</summary>
+        public float Births;
+
+        /// <summary>Total deaths this tick across all classes.</summary>
+        public float Deaths;
+
+        /// <summary>Net migration this tick (positive = immigration).</summary>
+        public float NetMigration;
 
         // ── Phase 1: daily production / consumption / surplus ──
 

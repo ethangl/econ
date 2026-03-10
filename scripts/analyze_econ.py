@@ -1199,6 +1199,45 @@ def print_economy_v4(data: dict):
         print(f"  Upper clergy sat mean:   {cle.get('upperClergySatMean', 0):>12.3f}")
         print(f"  Lower clergy sat mean:   {cle.get('lowerClergySatMean', 0):>12.3f}")
 
+    # Population dynamics
+    pd = v4.get("populationDynamics", {})
+    if pd:
+        print(f"\n  ── Population Dynamics ──")
+        print(f"  Initial pop: {pd.get('initialTotalPop', 0):>12,.0f}  "
+              f"Current pop: {pd.get('currentTotalPop', 0):>12,.0f}  "
+              f"Growth: {pd.get('growthPercent', 0):>+.2f}%")
+        print(f"  Daily births:    {pd.get('dailyBirths', 0):>10,.1f}  "
+              f"Daily deaths:   {pd.get('dailyDeaths', 0):>10,.1f}  "
+              f"Net growth: {pd.get('dailyNetGrowth', 0):>+10,.1f}")
+        print(f"  Annual growth rate: {pd.get('annualGrowthRatePercent', 0):>+.2f}%")
+        print(f"  Migration volume:   {pd.get('dailyMigrationVolume', 0):>10,.1f}/day  "
+              f"Counties gaining: {pd.get('countiesGaining', 0)}  "
+              f"Losing: {pd.get('countiesLosing', 0)}")
+
+        pop_class = pd.get("popByClass", {})
+        if pop_class:
+            print(f"\n  ── Population by Class ──")
+            print(f"  {'Class':>16s}  {'Population':>12s}  {'Share':>6s}")
+            total = pd.get("currentTotalPop", 1)
+            for cls, label in [("lowerCommoner", "Lower Commoner"),
+                               ("upperCommoner", "Upper Commoner"),
+                               ("lowerNobility", "Lower Nobility"),
+                               ("upperNobility", "Upper Nobility"),
+                               ("lowerClergy", "Lower Clergy"),
+                               ("upperClergy", "Upper Clergy")]:
+                p = pop_class.get(cls, 0)
+                pct = p / total * 100 if total > 0 else 0
+                print(f"  {label:>16s}  {p:>12,.0f}  {pct:>5.1f}%")
+
+        sb = pd.get("satisfactionBreakdown", {})
+        if sb:
+            print(f"\n  ── Satisfaction Breakdown (component means) ──")
+            print(f"  Survival:   {sb.get('survivalMean', 0):.3f}  (weight 0.40)")
+            print(f"  Religion:   {sb.get('religionMean', 0):.3f}  (weight 0.25)")
+            print(f"  Stability:  {sb.get('stabilityPlaceholder', 1.0):.3f}  (weight 0.20, placeholder)")
+            print(f"  Economic:   {sb.get('economicMean', 0):.3f}  (weight 0.10)")
+            print(f"  Governance: {sb.get('governancePlaceholder', 0.7):.3f}  (weight 0.05, placeholder)")
+
     # Facility throughput
     facs = v4.get("facilities_throughput", [])
     if facs:

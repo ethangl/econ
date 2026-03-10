@@ -36,8 +36,9 @@ namespace EconSim.Core.Economy.V4
         FineFurniture = 23,
         Wine = 24,
 
-        // Special (1)
+        // Special (2)
         Gold = 19,
+        Silver = 25,
     }
 
     public enum NeedTierV4
@@ -200,18 +201,28 @@ namespace EconSim.Core.Economy.V4
                 new GoodDefV4(GoodTypeV4.Clothes, "clothes", NeedTierV4.Comfort, 10f, 3f),
                 new GoodDefV4(GoodTypeV4.Furniture, "furniture", NeedTierV4.Comfort, 15f, 10f),
 
-                // ── Special (1) ──
+                // ── Special ──
                 new GoodDefV4(GoodTypeV4.Gold, "gold", NeedTierV4.Luxury, 0f, 0f,
                     new Dictionary<int, float> {
                         { (int)BiomeId.AlpineBarren, 0.02f }, { (int)BiomeId.MountainShrub, 0.01f },
                     }),
 
-                // ── Facility-produced — luxury (4) ──
+                // ── Facility-produced — luxury (5) ──
                 new GoodDefV4(GoodTypeV4.Feast, "feast", NeedTierV4.Luxury, 25f, 4f),
                 new GoodDefV4(GoodTypeV4.FineClothes, "fine clothes", NeedTierV4.Luxury, 35f, 2f),
                 new GoodDefV4(GoodTypeV4.Jewelry, "jewelry", NeedTierV4.Luxury, 80f, 0.5f),
                 new GoodDefV4(GoodTypeV4.FineFurniture, "fine furniture", NeedTierV4.Luxury, 40f, 8f),
                 new GoodDefV4(GoodTypeV4.Wine, "wine", NeedTierV4.Luxury, 20f, 4f),
+
+                // Silver: wider distribution than gold, minted into coin (Value=0 → not traded/consumed)
+                // Yields ~5-10x gold production volume, but 5x less coin per kg
+                // MUST be last in array: enum Silver=25 must match array index 25
+                new GoodDefV4(GoodTypeV4.Silver, "silver", NeedTierV4.Basic, 0f, 0f,
+                    new Dictionary<int, float> {
+                        { (int)BiomeId.MountainShrub, 0.08f }, { (int)BiomeId.AlpineBarren, 0.06f },
+                        { (int)BiomeId.Scrubland, 0.03f }, { (int)BiomeId.HotDesert, 0.02f },
+                        { (int)BiomeId.ColdDesert, 0.02f }, { (int)BiomeId.TemperateForest, 0.01f },
+                    }),
             };
 
             Count = Defs.Length;

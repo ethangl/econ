@@ -1519,6 +1519,17 @@ namespace EconSim.Editor
             float lowerClergySatSum = 0f;
             int upperCommonerSatCount = 0;
             int clergySatCount = 0;
+            // Phase 5: population dynamics aggregates
+            float totalBirths = 0f;
+            float totalDeaths = 0f;
+            float totalNetMigration = 0f;
+            float totalLCPop = 0f, totalUCPop = 0f;
+            float totalLNPop = 0f, totalUNPop = 0f;
+            float totalLClPop = 0f, totalUClPop = 0f;
+            // Phase 5: satisfaction breakdown aggregates
+            float survivalSatSum = 0f, religionSatSum = 0f, economicSatSum = 0f;
+            int breakdownCount = 0;
+            int migGainCount = 0, migLoseCount = 0;
             // Facility output tracking
             float[] facilityTotalOutput = new float[FacilitiesV4.Count];
             float[] facilityFillSum = new float[FacilitiesV4.Count];
@@ -1604,6 +1615,23 @@ namespace EconSim.Editor
                     lowerClergySatSum += ce.LowerClergySatisfaction;
                     clergySatCount++;
                 }
+
+                // Phase 5: population dynamics
+                totalBirths += ce.Births;
+                totalDeaths += ce.Deaths;
+                totalNetMigration += System.Math.Abs(ce.NetMigration);
+                totalLCPop += ce.LowerCommonerPop;
+                totalUCPop += ce.UpperCommonerPop;
+                totalLNPop += ce.LowerNobilityPop;
+                totalUNPop += ce.UpperNobilityPop;
+                totalLClPop += ce.LowerClergyPop;
+                totalUClPop += ce.UpperClergyPop;
+                survivalSatSum += ce.SurvivalSatisfaction;
+                religionSatSum += ce.ReligionSatisfaction;
+                economicSatSum += ce.EconomicSatisfaction;
+                breakdownCount++;
+                if (ce.NetMigration > 0.001f) migGainCount++;
+                else if (ce.NetMigration < -0.001f) migLoseCount++;
             }
             j.KV("countyCount", countyCount);
             j.KV("totalPopulation", totalPop);
@@ -1678,6 +1706,38 @@ namespace EconSim.Editor
             j.KV("counties", clergySatCount);
             j.ObjClose();
 
+            // Phase 5: population dynamics
+            j.Key("populationDynamics"); j.ObjOpen();
+            j.KV("initialTotalPop", econ.InitialTotalPopulation);
+            j.KV("currentTotalPop", totalPop);
+            float growthPct = econ.InitialTotalPopulation > 0f
+                ? (totalPop - econ.InitialTotalPopulation) / econ.InitialTotalPopulation * 100f : 0f;
+            j.KV("growthPercent", growthPct);
+            j.KV("dailyBirths", totalBirths);
+            j.KV("dailyDeaths", totalDeaths);
+            j.KV("dailyNetGrowth", totalBirths - totalDeaths);
+            float annualRate = totalPop > 0f ? (totalBirths - totalDeaths) / totalPop * 360f * 100f : 0f;
+            j.KV("annualGrowthRatePercent", annualRate);
+            j.KV("dailyMigrationVolume", totalNetMigration);
+            j.KV("countiesGaining", migGainCount);
+            j.KV("countiesLosing", migLoseCount);
+            j.Key("popByClass"); j.ObjOpen();
+            j.KV("lowerCommoner", totalLCPop);
+            j.KV("upperCommoner", totalUCPop);
+            j.KV("lowerNobility", totalLNPop);
+            j.KV("upperNobility", totalUNPop);
+            j.KV("lowerClergy", totalLClPop);
+            j.KV("upperClergy", totalUClPop);
+            j.ObjClose();
+            j.Key("satisfactionBreakdown"); j.ObjOpen();
+            j.KV("survivalMean", breakdownCount > 0 ? survivalSatSum / breakdownCount : 0f);
+            j.KV("religionMean", breakdownCount > 0 ? religionSatSum / breakdownCount : 0f);
+            j.KV("economicMean", breakdownCount > 0 ? economicSatSum / breakdownCount : 0f);
+            j.KV("stabilityPlaceholder", 1.0f);
+            j.KV("governancePlaceholder", 0.7f);
+            j.ObjClose();
+            j.ObjClose();
+
             // Phase 3: facility throughput
             j.Key("facilities_throughput"); j.ArrOpen();
             for (int f = 0; f < FacilitiesV4.Count; f++)
@@ -1734,6 +1794,12 @@ namespace EconSim.Editor
                 j.KV("taxRevenue", ce.TaxRevenue);
                 j.KV("titheRevenue", ce.TitheRevenue);
                 j.KV("tariffRevenue", ce.TariffRevenue);
+                j.KV("births", ce.Births);
+                j.KV("deaths", ce.Deaths);
+                j.KV("netMigration", ce.NetMigration);
+                j.KV("survivalSat", ce.SurvivalSatisfaction);
+                j.KV("religionSat", ce.ReligionSatisfaction);
+                j.KV("economicSat", ce.EconomicSatisfaction);
 
                 j.Key("production"); j.ObjOpen();
                 for (int g = 0; g < GoodsV4.Count; g++)

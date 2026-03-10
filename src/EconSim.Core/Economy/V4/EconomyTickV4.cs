@@ -32,7 +32,7 @@ namespace EconSim.Core.Economy.V4
         const float LowerNobleLuxuryPerGood = 0.01f;
 
         // ── Upper commoner per-capita daily needs ──
-        const float UpperCommonerStaplePerGood = 0.25f;  // ×4 = 1.0 kg food
+        const float UpperCommonerStaplePerGood = 0.20f;  // ×4 = 0.8 kg food (artisans eat less than serfs)
         const float UpperCommonerBasicPerGood = 0.02f;
         const float UpperCommonerComfortPerGood = 0.005f;
         const float UpperCommonerLuxuryPerGood = 0.002f;
@@ -54,8 +54,9 @@ namespace EconSim.Core.Economy.V4
         // ── Monetary parameters ──
         const float GoldCoinPerKg = 50f;         // each kg of gold minted → 50 coins
         const float GoldJewelryFraction = 0.25f;  // fraction of gold production reserved for jewelers
+        const float SilverCoinPerKg = 10f;        // each kg of silver minted → 10 coins
         const float StipendPerCapita = 0.5f;      // Cr/lower noble/day
-        const float NobleWagePerCapita = 0.10f;   // Cr/upper commoner/day, paid by upper noble
+        const float NobleWagePerCapita = 0.25f;   // Cr/upper commoner/day, paid by upper noble
         const float ClergyWagePerCapita = 0.3f;   // Cr/lower clergy/day
         const float CoinWearRate = 0.001f;        // fraction of M lost per day
         const float BaseVelocity = 4.0f;          // base velocity of money
@@ -77,6 +78,25 @@ namespace EconSim.Core.Economy.V4
         // ── Worship goods ──
         static readonly int[] WorshipGoods = { (int)GoodTypeV4.Candles, (int)GoodTypeV4.Wine };
         static readonly int[] LowerClergyWorshipGoods = { (int)GoodTypeV4.Candles };
+
+        // ── Phase 5: Satisfaction weights ──
+        const float WeightSurvival = 0.40f;
+        const float WeightReligion = 0.25f;
+        const float WeightStability = 0.20f;
+        const float WeightEconomic = 0.10f;
+        const float WeightGovernance = 0.05f;
+        const float StabilityPlaceholder = 1.0f;
+        const float GovernancePlaceholder = 0.7f;
+
+        // ── Phase 5: Population dynamics ──
+        const float BaseBirthRate = 0.04f / 360f;
+        const float BaseDeathRate = 0.03f / 360f;
+        const float SatisfactionBirthMod = 0.5f;
+        const float SatisfactionDeathMod = 1.0f;
+        const float MigrationRate = 0.001f / 360f;
+        const float MigrationThreshold = 0.05f;
+        const float UpperMobility = 1.0f;
+        const float LowerMobility = 0.05f;
 
         private EconomyStateV4 _econ;
 
@@ -110,6 +130,7 @@ namespace EconSim.Core.Economy.V4
             ResolveMarkets(state, mapData);
             UpdateMoney(state, mapData);
             UpdateSatisfaction(state, mapData);
+            UpdatePopulation(state, mapData);
         }
 
         // ════════════════════════════════════════════════════════════
@@ -216,6 +237,8 @@ namespace EconSim.Core.Economy.V4
                         }
                         continue;
                     }
+                    if (g == (int)GoodTypeV4.Silver)
+                        continue; // Silver: 100% minted in UpdateMoney, not sold on market
                     if (ce.Surplus[g] > 0.001f)
                     {
                         orders.Add(new Order
@@ -391,15 +414,15 @@ namespace EconSim.Core.Economy.V4
 
                     if (householdBudget > 0.01f)
                     {
-                        // Tier allocation: 40% staples, 25% basics, 30% comforts, 5% luxuries
-                        PostTierOrders(orders, i, OrderSource.UpperCommoner,
+                        // Tier allocation: 40% staples, 10% basics, 35% comforts, 15% luxuries
+                        PostStapleOrdersEqual(orders, i, OrderSource.UpperCommoner,
                             householdBudget * 0.40f, ucPop, GoodsV4.StapleGoods, UpperCommonerStaplePerGood, priceLevel);
                         PostTierOrders(orders, i, OrderSource.UpperCommoner,
-                            householdBudget * 0.25f, ucPop, GoodsV4.BasicGoods, UpperCommonerBasicPerGood, priceLevel);
+                            householdBudget * 0.10f, ucPop, GoodsV4.BasicGoods, UpperCommonerBasicPerGood, priceLevel);
                         PostTierOrders(orders, i, OrderSource.UpperCommoner,
-                            householdBudget * 0.30f, ucPop, GoodsV4.ComfortGoods, UpperCommonerComfortPerGood, priceLevel);
+                            householdBudget * 0.35f, ucPop, GoodsV4.ComfortGoods, UpperCommonerComfortPerGood, priceLevel);
                         PostTierOrders(orders, i, OrderSource.UpperCommoner,
-                            householdBudget * 0.05f, ucPop, GoodsV4.LuxuryGoods, UpperCommonerLuxuryPerGood, priceLevel);
+                            householdBudget * 0.15f, ucPop, GoodsV4.LuxuryGoods, UpperCommonerLuxuryPerGood, priceLevel);
                     }
                 }
 
@@ -463,7 +486,7 @@ namespace EconSim.Core.Economy.V4
 
                     for (int g = 0; g < gc; g++)
                     {
-                        if (g == (int)GoodTypeV4.Gold) continue;
+                        if (g == (int)GoodTypeV4.Gold || g == (int)GoodTypeV4.Silver) continue;
 
                         // Try A→B (A exports to B)
                         TryPostTrade(mA, mB, g, marketA, marketB, distance);
@@ -536,7 +559,8 @@ namespace EconSim.Core.Economy.V4
             if (totalNeedValue <= 0f) return;
 
             // bidScale: budget / (need value at price level). >1 means can outbid equilibrium.
-            float bidScale = budget / (totalNeedValue * priceLevel);
+            // Cap at 3x to prevent nobles with huge treasuries from bidding 600x base.
+            float bidScale = Math.Min(budget / (totalNeedValue * priceLevel), 3.0f);
 
             for (int i = 0; i < tierGoods.Length; i++)
             {
@@ -553,6 +577,47 @@ namespace EconSim.Core.Economy.V4
                     Source = source,
                     Quantity = qty,
                     MaxBid = GoodsV4.Value[g] * priceLevel * bidScale,
+                });
+            }
+        }
+
+        /// <summary>
+        /// Post staple buy orders with budget split equally per good (not by value).
+        /// Poor buyers should spend equally on each food type, bidding high on cheap goods
+        /// rather than wasting budget on expensive ones they can't win.
+        /// </summary>
+        static void PostStapleOrdersEqual(List<Order> orders, int countyId, OrderSource source,
+            float budget, float pop, int[] tierGoods, float perCapitaPerGood, float priceLevel)
+        {
+            if (budget <= 0f || pop <= 0f || tierGoods.Length == 0) return;
+
+            int validCount = 0;
+            for (int i = 0; i < tierGoods.Length; i++)
+                if (GoodsV4.Value[tierGoods[i]] > 0f) validCount++;
+            if (validCount == 0) return;
+
+            float perGoodBudget = budget / validCount;
+
+            for (int i = 0; i < tierGoods.Length; i++)
+            {
+                int g = tierGoods[i];
+                if (GoodsV4.Value[g] <= 0f) continue;
+                float qty = pop * perCapitaPerGood;
+                if (qty <= 0f) continue;
+
+                float needValue = qty * GoodsV4.Value[g] * priceLevel;
+                float maxBid = needValue > 0f
+                    ? GoodsV4.Value[g] * priceLevel * (perGoodBudget / needValue)
+                    : 0f;
+
+                orders.Add(new Order
+                {
+                    CountyId = countyId,
+                    GoodId = g,
+                    Side = OrderSide.Buy,
+                    Source = source,
+                    Quantity = qty,
+                    MaxBid = maxBid,
                 });
             }
         }
@@ -853,12 +918,19 @@ namespace EconSim.Core.Economy.V4
                 var ce = _econ.Counties[i];
                 if (ce == null) continue;
 
-                // 1. Gold minting → upper noble treasury (after jewelry fraction reserved)
+                // 1. Gold + silver minting → upper noble treasury
                 float goldProd = ce.Production[(int)GoodTypeV4.Gold];
                 if (goldProd > 0f)
                 {
                     float mintableGold = goldProd * (1f - GoldJewelryFraction);
                     float minted = mintableGold * GoldCoinPerKg;
+                    ce.UpperNobleTreasury += minted;
+                    ce.UpperNobleIncome += minted;
+                }
+                float silverProd = ce.Production[(int)GoodTypeV4.Silver];
+                if (silverProd > 0f)
+                {
+                    float minted = silverProd * SilverCoinPerKg;
                     ce.UpperNobleTreasury += minted;
                     ce.UpperNobleIncome += minted;
                 }
@@ -874,17 +946,7 @@ namespace EconSim.Core.Economy.V4
                     ce.LowerNobleTreasury += stipend;
                 }
 
-                // 3. Noble wages: upper noble → upper commoner
-                float commWage = Math.Min(
-                    ce.UpperCommonerPop * NobleWagePerCapita,
-                    Math.Max(0f, ce.UpperNobleTreasury));
-                if (commWage > 0f)
-                {
-                    ce.UpperNobleTreasury -= commWage;
-                    ce.UpperNobleSpend += commWage;
-                    ce.UpperCommonerCoin += commWage;
-                    ce.UpperCommonerIncome += commWage;
-                }
+                // 3. Noble wages: handled at market level below
 
                 // 4. Clergy wages: upper clergy → lower clergy
                 float wages = Math.Min(
@@ -908,6 +970,44 @@ namespace EconSim.Core.Economy.V4
                 if (ce.UpperCommonerCoin < 0f) ce.UpperCommonerCoin = 0f;
                 if (ce.LowerClergyCoin < 0f) ce.LowerClergyCoin = 0f;
             }
+
+            // 3. Noble wages: pooled at market level.
+            // Total wage bill and total noble treasury within each market,
+            // then pay proportionally (wealthy lords subsidize poor ones within a realm).
+            for (int m = 1; m <= _econ.MarketCount; m++)
+            {
+                var ids = _econ.Markets[m].CountyIds;
+                float totalWageBill = 0f;
+                float totalTreasury = 0f;
+
+                for (int c = 0; c < ids.Count; c++)
+                {
+                    var ce = _econ.Counties[ids[c]];
+                    totalWageBill += ce.UpperCommonerPop * NobleWagePerCapita;
+                    totalTreasury += Math.Max(0f, ce.UpperNobleTreasury);
+                }
+
+                if (totalWageBill <= 0f || totalTreasury <= 0f) continue;
+
+                // Pay up to available treasury, distributed proportionally to each county's UC pop
+                float payable = Math.Min(totalWageBill, totalTreasury);
+                float payRate = payable / totalWageBill; // fraction of full wage actually paid
+
+                // Deduct from treasuries proportionally to each county's share of total treasury
+                float treasuryScale = payable / totalTreasury;
+
+                for (int c = 0; c < ids.Count; c++)
+                {
+                    var ce = _econ.Counties[ids[c]];
+                    float wage = ce.UpperCommonerPop * NobleWagePerCapita * payRate;
+                    float deduction = Math.Max(0f, ce.UpperNobleTreasury) * treasuryScale;
+
+                    ce.UpperNobleTreasury -= deduction;
+                    ce.UpperNobleSpend += deduction;
+                    ce.UpperCommonerCoin += wage;
+                    ce.UpperCommonerIncome += wage;
+                }
+            }
         }
 
         // ════════════════════════════════════════════════════════════
@@ -916,18 +1016,20 @@ namespace EconSim.Core.Economy.V4
 
         void UpdateSatisfaction(SimulationState state, MapData mapData)
         {
-            // Build per-county fulfillment from filled orders
+            // Build per-county fulfillment split by order source and good tier.
+            // Source indices: 0=UpperNobility(+SerfFeeding), 1=LowerNobility,
+            //   2=UpperCommoner, 3=UpperClergy, 4=LowerClergy
+            const int SrcCount = 5;
             int countyLen = _econ.Counties.Length;
-            var upperNobleDesired = new float[countyLen];
-            var upperNobleFilled = new float[countyLen];
-            var lowerNobleDesired = new float[countyLen];
-            var lowerNobleFilled = new float[countyLen];
-            var upperCommonerDesired = new float[countyLen];
-            var upperCommonerFilled = new float[countyLen];
-            var upperClergyDesired = new float[countyLen];
-            var upperClergyFilled = new float[countyLen];
-            var lowerClergyDesired = new float[countyLen];
-            var lowerClergyFilled = new float[countyLen];
+
+            var stapleDesired = new float[countyLen * SrcCount];
+            var stapleFilled  = new float[countyLen * SrcCount];
+            var econDesired   = new float[countyLen * SrcCount];
+            var econFilled    = new float[countyLen * SrcCount];
+
+            // Shared religion: worship goods (candles + wine) from clergy orders
+            var worshipDesired = new float[countyLen];
+            var worshipFilled  = new float[countyLen];
 
             for (int m = 1; m <= _econ.MarketCount; m++)
             {
@@ -940,72 +1042,234 @@ namespace EconSim.Core.Economy.V4
                     float desiredVal = o.Quantity * GoodsV4.Value[o.GoodId];
                     float filledVal = o.FilledQuantity * GoodsV4.Value[o.GoodId];
 
+                    int srcIdx;
                     switch (o.Source)
                     {
                         case OrderSource.UpperNobility:
                         case OrderSource.SerfFeeding:
-                            upperNobleDesired[o.CountyId] += desiredVal;
-                            upperNobleFilled[o.CountyId] += filledVal;
-                            break;
+                            srcIdx = 0; break;
                         case OrderSource.LowerNobility:
-                            lowerNobleDesired[o.CountyId] += desiredVal;
-                            lowerNobleFilled[o.CountyId] += filledVal;
-                            break;
+                            srcIdx = 1; break;
                         case OrderSource.UpperCommoner:
-                            upperCommonerDesired[o.CountyId] += desiredVal;
-                            upperCommonerFilled[o.CountyId] += filledVal;
-                            break;
+                            srcIdx = 2; break;
                         case OrderSource.UpperClergy:
-                            upperClergyDesired[o.CountyId] += desiredVal;
-                            upperClergyFilled[o.CountyId] += filledVal;
-                            break;
+                            srcIdx = 3; break;
                         case OrderSource.LowerClergy:
-                            lowerClergyDesired[o.CountyId] += desiredVal;
-                            lowerClergyFilled[o.CountyId] += filledVal;
-                            break;
+                            srcIdx = 4; break;
+                        default:
+                            continue; // FacilityInput, PeasantSurplus, Trade
+                    }
+
+                    int idx = o.CountyId * SrcCount + srcIdx;
+                    var tier = GoodsV4.Tier[o.GoodId];
+
+                    if (tier == NeedTierV4.Staple)
+                    {
+                        // Quantity-weighted for survival: a kg of food is a kg of food
+                        stapleDesired[idx] += o.Quantity;
+                        stapleFilled[idx] += o.FilledQuantity;
+                    }
+                    else
+                    {
+                        // Economic component: comfort+luxury for UC/clergy, luxury only for nobles
+                        bool isEcon;
+                        if (srcIdx <= 1) // nobles
+                            isEcon = tier == NeedTierV4.Luxury;
+                        else // UC, clergy
+                            isEcon = tier >= NeedTierV4.Comfort;
+
+                        if (isEcon)
+                        {
+                            econDesired[idx] += desiredVal;
+                            econFilled[idx] += filledVal;
+                        }
+                    }
+
+                    // Worship tracking (clergy orders for candles/wine → shared religion)
+                    if ((srcIdx == 3 || srcIdx == 4) &&
+                        (o.GoodId == (int)GoodTypeV4.Candles || o.GoodId == (int)GoodTypeV4.Wine))
+                    {
+                        worshipDesired[o.CountyId] += desiredVal;
+                        worshipFilled[o.CountyId] += filledVal;
                     }
                 }
             }
+
+            float stabilityEtc = WeightStability * StabilityPlaceholder
+                               + WeightGovernance * GovernancePlaceholder;
 
             for (int i = 0; i < countyLen; i++)
             {
                 var ce = _econ.Counties[i];
                 if (ce == null) continue;
 
-                // Lower commoner survival: (local staple prod + lord-provided food) / staple need
-                float pop = ce.LowerCommonerPop;
-                if (pop > 0f)
+                int b = i * SrcCount;
+
+                // Shared religion component
+                float religion = worshipDesired[i] > 0f
+                    ? Math.Min(worshipFilled[i] / worshipDesired[i], 1f)
+                    : 0.5f;
+                ce.ReligionSatisfaction = religion;
+
+                // ── Lower commoner (no market orders) ──
+                float lcSurvival = 0f;
+                if (ce.LowerCommonerPop > 0f)
                 {
                     float totalStapleProd = 0f;
                     for (int s = 0; s < GoodsV4.StapleGoods.Length; s++)
                         totalStapleProd += ce.Production[GoodsV4.StapleGoods[s]];
-
-                    float totalStapleNeed = pop * StapleNeedPerCapita;
-                    ce.LowerCommonerSatisfaction = totalStapleNeed > 0f
-                        ? Math.Min((totalStapleProd + ce.SerfFoodProvided) / totalStapleNeed, 1.0f)
+                    float totalStapleNeed = ce.LowerCommonerPop * StapleNeedPerCapita;
+                    lcSurvival = totalStapleNeed > 0f
+                        ? Math.Min((totalStapleProd + ce.SerfFoodProvided) / totalStapleNeed, 1f)
                         : 0f;
                 }
+                ce.SurvivalSatisfaction = lcSurvival;
+                ce.LowerCommonerSatisfaction = WeightSurvival * lcSurvival
+                    + WeightReligion * religion + WeightEconomic * 0.5f + stabilityEtc;
 
-                // Noble satisfaction: fulfillment ratio of buy orders
-                ce.UpperNobilitySatisfaction = upperNobleDesired[i] > 0f
-                    ? Math.Min(upperNobleFilled[i] / upperNobleDesired[i], 1f)
-                    : 0.5f;
-                ce.LowerNobilitySatisfaction = lowerNobleDesired[i] > 0f
-                    ? Math.Min(lowerNobleFilled[i] / lowerNobleDesired[i], 1f)
-                    : 0.5f;
+                // ── Upper nobility ──
+                float unSurv = SafeRatio(stapleFilled[b + 0], stapleDesired[b + 0]);
+                float unEcon = SafeRatio(econFilled[b + 0], econDesired[b + 0]);
+                ce.UpperNobilitySatisfaction = WeightSurvival * unSurv
+                    + WeightReligion * religion + WeightEconomic * unEcon + stabilityEtc;
 
-                // Upper commoner satisfaction: buy order fulfillment
-                ce.UpperCommonerSatisfaction = upperCommonerDesired[i] > 0f
-                    ? Math.Min(upperCommonerFilled[i] / upperCommonerDesired[i], 1f)
-                    : 0.5f;
+                // ── Lower nobility ──
+                float lnSurv = SafeRatio(stapleFilled[b + 1], stapleDesired[b + 1]);
+                float lnEcon = SafeRatio(econFilled[b + 1], econDesired[b + 1]);
+                ce.LowerNobilitySatisfaction = WeightSurvival * lnSurv
+                    + WeightReligion * religion + WeightEconomic * lnEcon + stabilityEtc;
 
-                // Clergy satisfaction: buy order fulfillment
-                ce.UpperClergySatisfaction = upperClergyDesired[i] > 0f
-                    ? Math.Min(upperClergyFilled[i] / upperClergyDesired[i], 1f)
-                    : 0.5f;
-                ce.LowerClergySatisfaction = lowerClergyDesired[i] > 0f
-                    ? Math.Min(lowerClergyFilled[i] / lowerClergyDesired[i], 1f)
-                    : 0.5f;
+                // ── Upper commoner ──
+                float ucSurv = SafeRatio(stapleFilled[b + 2], stapleDesired[b + 2]);
+                float ucEcon = SafeRatio(econFilled[b + 2], econDesired[b + 2]);
+                ce.EconomicSatisfaction = ucEcon;
+                ce.UpperCommonerSatisfaction = WeightSurvival * ucSurv
+                    + WeightReligion * religion + WeightEconomic * ucEcon + stabilityEtc;
+
+                // ── Upper clergy ──
+                float uclSurv = SafeRatio(stapleFilled[b + 3], stapleDesired[b + 3]);
+                float uclEcon = SafeRatio(econFilled[b + 3], econDesired[b + 3]);
+                ce.UpperClergySatisfaction = WeightSurvival * uclSurv
+                    + WeightReligion * religion + WeightEconomic * uclEcon + stabilityEtc;
+
+                // ── Lower clergy ──
+                float lclSurv = SafeRatio(stapleFilled[b + 4], stapleDesired[b + 4]);
+                float lclEcon = SafeRatio(econFilled[b + 4], econDesired[b + 4]);
+                ce.LowerClergySatisfaction = WeightSurvival * lclSurv
+                    + WeightReligion * religion + WeightEconomic * lclEcon + stabilityEtc;
+            }
+        }
+
+        static float SafeRatio(float filled, float desired)
+        {
+            return desired > 0f ? Math.Min(filled / desired, 1f) : 0.5f;
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  PHASE 5b: POPULATION DYNAMICS
+        // ════════════════════════════════════════════════════════════
+
+        void UpdatePopulation(SimulationState state, MapData mapData)
+        {
+            // ── Birth/Death per county per class ──
+            for (int i = 0; i < _econ.Counties.Length; i++)
+            {
+                var ce = _econ.Counties[i];
+                if (ce == null) continue;
+
+                ce.Births = 0f;
+                ce.Deaths = 0f;
+                ce.NetMigration = 0f;
+
+                ApplyBirthDeath(ref ce.LowerCommonerPop, ce.LowerCommonerSatisfaction, ref ce.Births, ref ce.Deaths);
+                ApplyBirthDeath(ref ce.UpperCommonerPop, ce.UpperCommonerSatisfaction, ref ce.Births, ref ce.Deaths);
+                ApplyBirthDeath(ref ce.LowerNobilityPop, ce.LowerNobilitySatisfaction, ref ce.Births, ref ce.Deaths);
+                ApplyBirthDeath(ref ce.UpperNobilityPop, ce.UpperNobilitySatisfaction, ref ce.Births, ref ce.Deaths);
+                ApplyBirthDeath(ref ce.LowerClergyPop, ce.LowerClergySatisfaction, ref ce.Births, ref ce.Deaths);
+                ApplyBirthDeath(ref ce.UpperClergyPop, ce.UpperClergySatisfaction, ref ce.Births, ref ce.Deaths);
+            }
+
+            // ── Migration within markets ──
+            for (int m = 1; m <= _econ.MarketCount; m++)
+            {
+                var market = _econ.Markets[m];
+                if (market.CountyIds.Count < 2) continue;
+
+                MigrateWithinMarket(market, isUpper: true, UpperMobility);
+                MigrateWithinMarket(market, isUpper: false, LowerMobility);
+            }
+        }
+
+        static void ApplyBirthDeath(ref float pop, float satisfaction, ref float totalBirths, ref float totalDeaths)
+        {
+            if (pop <= 0f) return;
+            float births = pop * BaseBirthRate * (1f + SatisfactionBirthMod * satisfaction);
+            float deaths = pop * BaseDeathRate * (1f + SatisfactionDeathMod * (1f - satisfaction));
+            pop += births - deaths;
+            if (pop < 0f) pop = 0f;
+            totalBirths += births;
+            totalDeaths += deaths;
+        }
+
+        void MigrateWithinMarket(MarketStateV4 market, bool isUpper, float mobility)
+        {
+            var ids = market.CountyIds;
+            int n = ids.Count;
+
+            // Population-weighted mean satisfaction
+            float satWt = 0f, popTotal = 0f;
+            for (int c = 0; c < n; c++)
+            {
+                var ce = _econ.Counties[ids[c]];
+                float pop = isUpper ? ce.UpperCommonerPop : ce.LowerCommonerPop;
+                float sat = isUpper ? ce.UpperCommonerSatisfaction : ce.LowerCommonerSatisfaction;
+                satWt += sat * pop;
+                popTotal += pop;
+            }
+            if (popTotal <= 0f) return;
+            float meanSat = satWt / popTotal;
+
+            float totalLeaving = 0f, totalArriving = 0f;
+            var desire = new float[n];
+
+            for (int c = 0; c < n; c++)
+            {
+                var ce = _econ.Counties[ids[c]];
+                float pop = isUpper ? ce.UpperCommonerPop : ce.LowerCommonerPop;
+                float sat = isUpper ? ce.UpperCommonerSatisfaction : ce.LowerCommonerSatisfaction;
+                if (pop <= 0f) continue;
+
+                float gap = sat - meanSat;
+                if (gap < -MigrationThreshold)
+                {
+                    float rate = MigrationRate * mobility * (-gap - MigrationThreshold) * pop;
+                    desire[c] = -rate;
+                    totalLeaving += rate;
+                }
+                else if (gap > MigrationThreshold)
+                {
+                    float rate = MigrationRate * mobility * (gap - MigrationThreshold) * pop;
+                    desire[c] = rate;
+                    totalArriving += rate;
+                }
+            }
+
+            if (totalLeaving <= 0f) return;
+            float scale = totalArriving > 0f ? totalLeaving / totalArriving : 0f;
+
+            for (int c = 0; c < n; c++)
+            {
+                if (desire[c] == 0f) continue;
+                var ce = _econ.Counties[ids[c]];
+
+                float delta = desire[c] < 0f ? desire[c] : desire[c] * scale;
+
+                if (isUpper)
+                    ce.UpperCommonerPop = Math.Max(0f, ce.UpperCommonerPop + delta);
+                else
+                    ce.LowerCommonerPop = Math.Max(0f, ce.LowerCommonerPop + delta);
+
+                ce.NetMigration += delta;
             }
         }
     }

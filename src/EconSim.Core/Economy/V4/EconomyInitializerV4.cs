@@ -45,6 +45,12 @@ namespace EconSim.Core.Economy.V4
                 econ.Counties[county.Id] = ce;
             }
 
+            // Track initial total population for growth rate analysis
+            float initPop = 0f;
+            foreach (var ce2 in econ.Counties)
+                if (ce2 != null) initPop += ce2.TotalPopulation;
+            econ.InitialTotalPopulation = initPop;
+
             // Initialize markets — reuses v3's one-per-realm approach
             InitializeMarkets(mapData, econ, maxCountyId, state);
 

@@ -19,5 +19,8 @@ namespace EconSim.Core.Economy.V4
 
         /// <summary>Transport cost between market hubs. [marketId][marketId]. Computed once at init.</summary>
         public float[][] HubToHubCost;
+
+        /// <summary>Total population at initialization (for growth rate tracking).</summary>
+        public float InitialTotalPopulation;
     }
 }
