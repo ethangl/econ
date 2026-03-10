@@ -36,8 +36,11 @@ namespace EconSim.Core.Economy.V4
                 // Compute biome productivity for v4 goods
                 ComputeProductivity(county, mapData, ce.Productivity);
 
-                // All coin pools start at zero — gold minting is the only source
-                // (no bootstrapped treasury like v3)
+                // Seed upper commoner coin for initial household spending.
+                // Facility inputs are unconstrained by coin (artisan credit),
+                // but household buy orders need some starting balance.
+                // Gold minting → noble spending → facility sales sustains the cycle.
+                ce.UpperCommonerCoin = ce.UpperCommonerPop * 0.1f;
 
                 econ.Counties[county.Id] = ce;
             }

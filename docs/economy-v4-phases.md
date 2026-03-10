@@ -95,25 +95,34 @@ Run 12 months. Analyzer checks:
 
 ### Work
 
-- Facility production: buy inputs (buy orders) → produce outputs (sell orders, 1-tick lag)
-- Facility sell orders based on last tick's input fill rate
-- Upper commoner buy orders from coin balance (staples → basics → comforts → luxuries)
+- Facility production with dual-fill throttling: `effective_fill = max(min(input_fill, max(sell_fill, 0.1)), 0.1)` — prevents overproduction and cold-start deadlock
+- Facility sell orders based on last tick's input fill AND output sell fill (not just input fill)
+- Facility input buy orders scaled to throttled production (not full capacity)
+- Artisan credit: facility input buy orders unconstrained by coin balance (bid at fair value). Solves chicken-and-egg bootstrap: 0 coin → no inputs → no production → no income → 0 coin
+- Upper commoner household buy orders from coin balance (40% staples, 25% basics, 30% comforts, 5% luxuries)
+- Household budget accounts for tax+tithe overhead: `coin / (1 + tax_rate + tithe_rate)`
 - Upper commoner coin pool: earned from facility sales, spent on goods + taxed
-- Upper commoner budget allocation by tier (percentages from design doc)
-- Clergy economy now active: upper commoner transactions generate tithe → clergy treasury → wages → lower clergy spending
-- Facility input buy orders at full capacity (capped by coin budget)
-- Value-add validation: output value > input cost for all 5 facilities
+- Tax (10%) and tithe (10%) on both UpperCommoner and FacilityInput buy orders. Lower clergy exempt.
+- Clergy economy now active: upper commoner transactions generate tithe → clergy treasury → wages (0.3 Cr/lower clergy/day) → lower clergy spending
+- Upper commoner coin seeded at 0.1 Cr/capita at init (household spending bootstrap)
+
+### Design Changes from Original Plan
+
+- **Artisan credit replaces coin-constrained inputs.** Original plan: "Facility input buy orders at full capacity (capped by coin budget)." This deadlocked because tick ordering meant coin from sales hadn't arrived when input orders were generated. Credit system lets production run while coin catches up.
+- **Demand-side throttling added.** Original plan only tracked input fill. Without sell-side tracking, all 764 counties produced at full capacity, flooding markets. FacilityOutputGoodFill now throttles production to match demand.
+- **Input orders scaled to production.** Original plan: inputs at full capacity. This wasted coin on inputs that couldn't be consumed. Now inputs scale with throttled output.
 
 ### Validation
 
 Run 12 months. Analyzer checks:
 
-- Per-facility: input fill rate, output volume, profitability
+- Per-facility: input fill rate, output volume, sell fill rate
+- Bakery/Brewery/Weaver/Carpenter at 98-100% input fill, Smithy at ~62% (iron-limited)
 - Upper commoner income vs spending vs savings
-- M supply trajectory (growing? stable? draining?)
+- M supply growing (from gold minting)
 - Elite treasury flows: tax in, spending out, net balance
+- Clearing prices converging toward equilibrium (tools ~1.05×, furniture ~0.92×)
 - Counties with active facilities have higher upper commoner satisfaction
-- Counties where facilities are idle (can't source inputs) still function via subsistence + elite spending
 - Budget allocation percentages produce reasonable spending patterns
 
 ---

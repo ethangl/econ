@@ -27,6 +27,8 @@ namespace EconSim.Core.Economy.V4
         LowerClergy,
         /// <summary>Upper commoner buy/sell order — funded from / revenue to upper commoner coin (M).</summary>
         UpperCommoner,
+        /// <summary>Facility input buy order — funded from upper commoner coin (M). Taxed/tithed like UpperCommoner.</summary>
+        FacilityInput,
         /// <summary>Cross-market trade order.</summary>
         Trade,
     }

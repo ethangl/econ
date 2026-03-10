@@ -86,11 +86,43 @@ namespace EconSim.Core.Economy.V4
         /// <summary>Total coin spent by upper noble this tick (buys + stipend).</summary>
         public float UpperNobleSpend;
 
-        /// <summary>Total coin received by upper noble this tick (surplus sales + minting).</summary>
+        /// <summary>Total coin received by upper noble this tick (surplus sales + minting + tax).</summary>
         public float UpperNobleIncome;
 
         /// <summary>Total coin spent by lower noble this tick.</summary>
         public float LowerNobleSpend;
+
+        // ── Phase 3: facility + commoner + clergy state ──
+
+        /// <summary>Per-good fill rate for facility input buy orders from last tick. Used to compute next tick's output.</summary>
+        public float[] FacilityInputGoodFill;
+
+        /// <summary>Per-good sell fill rate for facility output from last tick. Throttles production to match demand.</summary>
+        public float[] FacilityOutputGoodFill;
+
+        /// <summary>Total coin earned by upper commoners this tick (facility sales).</summary>
+        public float UpperCommonerIncome;
+
+        /// <summary>Total coin spent by upper commoners this tick (goods + facility inputs).</summary>
+        public float UpperCommonerSpend;
+
+        /// <summary>Tax revenue collected from upper commoner purchases this tick.</summary>
+        public float TaxRevenue;
+
+        /// <summary>Tithe revenue collected from upper commoner purchases this tick.</summary>
+        public float TitheRevenue;
+
+        /// <summary>Total coin spent by upper clergy this tick.</summary>
+        public float UpperClergySpend;
+
+        /// <summary>Total coin received by upper clergy this tick (tithe).</summary>
+        public float UpperClergyIncome;
+
+        /// <summary>Total coin spent by lower clergy this tick.</summary>
+        public float LowerClergySpend;
+
+        /// <summary>Total coin received by lower clergy this tick (wages).</summary>
+        public float LowerClergyIncome;
 
         public CountyEconomyV4()
         {
@@ -99,6 +131,8 @@ namespace EconSim.Core.Economy.V4
             Production = new float[n];
             Consumption = new float[n];
             Surplus = new float[n];
+            FacilityInputGoodFill = new float[n];
+            FacilityOutputGoodFill = new float[n];
         }
     }
 }

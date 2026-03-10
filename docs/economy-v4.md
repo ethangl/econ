@@ -147,12 +147,14 @@ Two production modes, one per productive class:
 
 ### Facility Production (upper commoners)
 
-- **Sell orders based on last tick's input availability.** A facility looks at what it successfully bought last tick, and posts sell orders for the corresponding output this tick. A new facility (or one that couldn't source inputs) posts zero sell orders.
-- **Buy orders based on desired throughput.** Facilities always post buy orders for inputs at full capacity. Whether they're filled depends on market resolution and the facility's coin budget.
-- Volume = upper commoner population × facility throughput per capita (capped by last tick's input fill rate)
+- **Sell orders based on last tick's fill rates.** A facility looks at what it successfully bought last tick AND how much of its output the market absorbed last tick, and posts sell orders throttled by both. This prevents overproduction flooding the market.
+- **Demand-side throttling:** `effective_fill = max(min(input_fill, max(sell_fill, 0.1)), 0.1)`. The 0.1 floor on sell fill allows facilities to ramp up into new demand. The outer 0.1 floor ensures cold-start (both fills start at 0) doesn't deadlock — facilities always try at least 10% capacity.
+- **Input orders scaled to production.** Facilities post input buy orders proportional to their throttled output, not at full capacity. This prevents wasteful input purchasing when output demand is low.
+- **Artisan credit:** Facility input buy orders are posted regardless of upper commoner coin balance. MaxBid is set at fair value (`value_g × price_level`). This avoids the chicken-and-egg problem where 0 coin → no inputs → no production → no income → 0 coin. Household buy orders remain constrained by coin.
+- Volume = upper commoner population / facility count × facility throughput per capita × effective fill rate
 - One-tick production lag for processed goods. Raw extraction is instant.
 
-Production generates sell orders (from last tick's inputs) and facility input buy orders (for next tick). That's it.
+Production generates sell orders (throttled by last tick's fills) and facility input buy orders (scaled to production). That's it.
 
 ### Facilities (5)
 
@@ -252,7 +254,7 @@ price_level = max((M × V) / Q, 1.0)
 ```
 
 - **M** = upper commoner coin + lower clergy coin in circulation across this market's counties (elite treasuries excluded)
-- **V** = velocity of money. Scales with population density: `V = base_V × log(pop_density)`. Cities have higher velocity (more transactions per coin per tick) than rural counties.
+- **V** = velocity of money. Currently a flat constant (`base_V = 4.0`). Future: scale with population density (`V = base_V × log(pop_density)`) so cities have higher velocity than rural counties.
 - **Q** = total real output = Σ(sell_g × value_g) across all goods g
 - **Floor of 1.0** ensures prices are meaningful even when M ≈ 0. In low-money economies, goods trade at their real value. As coin enters circulation, inflation kicks in naturally.
 
@@ -333,16 +335,19 @@ Feeding serfs comes first. A lord who lets serfs starve to buy silk will lose hi
 3. Candles   — worship
 ```
 
-**Upper commoners:** budget = their coin balance (from last tick's facility sales + savings). Allocated across needs:
+**Upper commoners:** Two separate budgets from their coin balance:
+
+1. **Facility inputs** — posted via artisan credit (unconstrained by coin, bid at fair value). Input volume scales with production throttling, not full capacity.
+2. **Household spending** — budget = `coin / (1 + tax_rate + tithe_rate)` (accounts for tax+tithe overhead). Allocated across tiers:
 
 ```
-1. Staples  — up to X% of budget
-2. Basics   — up to Y% of remaining
-3. Comforts — up to Z% of remaining
-4. Luxuries — up to W% of remaining (small — aspirational spending)
+1. Staples  — 40% of household budget
+2. Basics   — 25% of household budget
+3. Comforts — 30% of household budget
+4. Luxuries — 5% of household budget (small — aspirational spending)
 ```
 
-Within a tier, bid per unit = budget allocated to that tier / total units needed.
+Within a tier, bid per unit = budget allocated to that tier / (total need value at price level). A bidScale > 1.0 means the buyer can outbid equilibrium price.
 
 **Trade buy orders** are funded by the importing market's coin. The merchant bids at `last_price_g_B - transport_cost` — what the good is worth at the destination minus costs. Foreign merchants can outbid locals when the price gap is large. Lords who don't like it impose tariffs.
 
@@ -427,9 +432,9 @@ The realm controlling a market's territory can impose a tariff (percentage skim 
 ### Money Creation
 
 - Gold mines produce gold based on biome yields and lower commoner population
-- A fraction of gold production is minted into coin per tick
-- Minting rate may be capped by a mint facility or just a fixed fraction
-- New coin enters the lord's treasury of the realm that controls the mine
+- All gold production is minted into coin at a fixed rate (50 Cr per kg of gold)
+- New coin enters the lord's treasury (upper noble) of the county that mines it
+- **Bootstrap:** Upper commoner coin is seeded at 0.1 Cr per capita at initialization. This provides enough starting coin for initial household spending while artisan credit handles facility inputs.
 
 ### Money Destruction / Drain
 
@@ -465,7 +470,7 @@ Upper commoners pay two skims on every buy-side transaction:
 1. **Tax** → upper noble treasury. Rate set by the lord (tax_rate).
 2. **Tithe** → clergy treasury. Rate is fixed (tithe_rate, historically ~10%).
 
-Both use the same mechanism: skim = rate × clearing_price × quantity on filled buy orders. Upper commoners pay both on every purchase. Lower clergy are exempt from tax and tithe (clerical privilege).
+Both use the same mechanism: skim = rate × clearing_price × quantity on filled buy orders. Upper commoners pay both on every purchase, including facility input purchases. Lower clergy are exempt from tax and tithe (clerical privilege).
 
 Additionally:
 
@@ -623,25 +628,28 @@ What percentage of coin budget each buyer type allocates to each need tier.
 
 | Tier                    | Upper Commoners | Upper Nobility | Lower Nobility | Upper Clergy | Lower Clergy |
 | ----------------------- | --------------- | -------------- | -------------- | ------------ | ------------ |
-| Serf feeding            | —               | first priority | —              | —            | —            |
-| Stipends/Wages          | —               | after serfs    | —              | first priority | —          |
+| Serf feeding            | —               | first (up to 40% treasury) | — | —            | —            |
+| Stipends/Wages          | —               | reserved after serfs | —     | first priority | —          |
 | Staples                 | 40%             | 10%            | 20%            | 15%          | 50%          |
 | Basics                  | 25%             | 10%            | 15%            | 10%          | 25%          |
 | Comforts                | 30%             | 30%            | 40%            | 35%          | —            |
 | Luxuries                | 5%              | 50%            | 25%            | —            | —            |
 | Worship (Candles, Wine) | —               | —              | —              | 40%          | 25%          |
 
+Upper commoner percentages apply to household budget only. Facility inputs are separate (artisan credit, unconstrained by coin).
+
 ### Monetary Parameters
 
-| Parameter        | Meaning                                                                  |
-| ---------------- | ------------------------------------------------------------------------ |
-| `base_V`         | Base velocity of money (tuning knob for price level)                     |
-| `gold_mint_rate` | Fraction of gold production converted to coin per tick                   |
-| `coin_wear_rate` | Fraction of M (circulating coin) lost per tick                           |
-| `tax_rate`       | Percentage lord skims from upper commoner buy-side transactions          |
-| `tithe_rate`     | Percentage clergy skims from upper commoner buy-side transactions (~10%) |
-| `stipend_rate`   | Fixed coin amount upper nobility pays to lower nobility per tick         |
-| `clergy_wage`    | Fixed coin amount upper clergy pays to lower clergy per tick             |
+| Parameter          | Value  | Meaning                                                                  |
+| ------------------ | ------ | ------------------------------------------------------------------------ |
+| `base_V`           | 4.0    | Base velocity of money (flat, no density scaling yet)                    |
+| `gold_coin_per_kg` | 50     | Coin minted per kg of gold produced (all gold minted, no fraction)      |
+| `coin_wear_rate`   | 0.001  | Fraction of M (circulating coin) lost per day                            |
+| `tax_rate`         | 0.10   | Percentage lord skims from upper commoner + facility input buys          |
+| `tithe_rate`       | 0.10   | Percentage clergy skims from upper commoner + facility input buys        |
+| `stipend_per_capita`| 0.5   | Cr per lower noble per day (capped by upper noble treasury)              |
+| `clergy_wage`      | 0.3    | Cr per lower clergy per day (capped by upper clergy treasury)            |
+| `bootstrap_coin`   | 0.1    | Cr per upper commoner at initialization (household spending seed)        |
 
 ### Trade Parameters
 
@@ -668,7 +676,9 @@ What percentage of coin budget each buyer type allocates to each need tier.
 | --------------------------- | ------------ | ----------------------------------------------------------- |
 | `input_ratio`               | Yes          | Units of input consumed per unit of output                  |
 | `throughput_per_capita`     | Yes          | Output per upper commoner per tick                          |
-| `max_facility_pop_fraction` | Yes          | Max fraction of county's upper pop that can work a facility |
+| `effective_fill_floor`      | No           | 0.1 — minimum production rate (prevents cold-start deadlock) |
+
+Population is split evenly across all 5 facilities. Each facility's effective fill = `max(min(input_fill, max(sell_fill, 0.1)), 0.1)`. Two fill rates are tracked per county per good: `FacilityInputGoodFill` (how much of input buy orders were filled) and `FacilityOutputGoodFill` (how much of output sell orders were absorbed).
 
 ### Key Balance Relationships
 

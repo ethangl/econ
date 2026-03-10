@@ -11,7 +11,7 @@ Real-time economic simulator with EU4-style map visualization.
 The user runs economy simulations via the EconDebugBridge in Unity, which writes results to `unity/econ_debug_output.json`. To analyze a dump:
 
 1. **Wait for the user** to tell you a dump is ready. Do NOT trigger dumps yourself.
-2. Run the analyzer: `./scripts/analyze_econ.py ./unity/unity/econ_debug_output.json`
+2. Run the analyzer from the project root directory: `./scripts/analyze_econ.py ./unity/econ_debug_output.json`
 3. The script reads the dump and prints a full summary (economy, fiscal, convergence, roads, etc.).
 
 ### Unity Instructions

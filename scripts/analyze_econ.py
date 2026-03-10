@@ -1175,6 +1175,41 @@ def print_economy_v4(data: dict):
         print(f"  Lower noble spend:      {cf.get('totalLowerNobleSpend', 0):>12,.2f}")
         print(f"  Serf food provided:     {cf.get('totalSerfFoodProvided', 0):>12,.1f} kg")
 
+    # Upper commoner economy
+    uce = v4.get("upperCommonerEconomy", {})
+    if uce:
+        print(f"\n  ── Upper Commoner Economy ──")
+        print(f"  Total coin (M contrib):  {uce.get('totalCoin', 0):>12,.2f}")
+        print(f"  Income (facility sales): {uce.get('totalIncome', 0):>12,.2f}")
+        print(f"  Spend (goods):           {uce.get('totalSpend', 0):>12,.2f}")
+        print(f"  Tax paid:                {uce.get('taxRevenue', 0):>12,.2f}")
+        print(f"  Tithe paid:              {uce.get('titheRevenue', 0):>12,.2f}")
+        print(f"  Satisfaction mean:       {uce.get('satisfactionMean', 0):>12.3f}")
+
+    # Clergy economy
+    cle = v4.get("clergyEconomy", {})
+    if cle:
+        print(f"\n  ── Clergy Economy ──")
+        print(f"  Upper clergy treasury:   {cle.get('upperClergyTreasury', 0):>12,.2f}")
+        print(f"  Upper clergy income:     {cle.get('upperClergyIncome', 0):>12,.2f}")
+        print(f"  Upper clergy spend:      {cle.get('upperClergySpend', 0):>12,.2f}")
+        print(f"  Lower clergy coin:       {cle.get('lowerClergyCoin', 0):>12,.2f}")
+        print(f"  Lower clergy income:     {cle.get('lowerClergyIncome', 0):>12,.2f}")
+        print(f"  Lower clergy spend:      {cle.get('lowerClergySpend', 0):>12,.2f}")
+        print(f"  Upper clergy sat mean:   {cle.get('upperClergySatMean', 0):>12.3f}")
+        print(f"  Lower clergy sat mean:   {cle.get('lowerClergySatMean', 0):>12.3f}")
+
+    # Facility throughput
+    facs = v4.get("facilities_throughput", [])
+    if facs:
+        print(f"\n  ── Facility Throughput ──")
+        print(f"  {'Facility':>12s}  {'Output':>12s}  {'Daily(kg)':>10s}  {'MeanFill':>8s}  {'Active':>6s}")
+        for f in facs:
+            print(f"  {f['name']:>12s}  {f['output']:>12s}  "
+                  f"{f.get('totalDailyOutput', 0):>10,.1f}  "
+                  f"{f.get('meanFillRate', 0):>8.3f}  "
+                  f"{f.get('activeCounties', 0):>6d}")
+
     # County details (worst/best)
     details = v4.get("countyDetails", [])
     if details:

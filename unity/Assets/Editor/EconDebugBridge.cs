@@ -1498,6 +1498,26 @@ namespace EconSim.Editor
             float upperNobleSatSum = 0f;
             float lowerNobleSatSum = 0f;
             int nobleSatCount = 0;
+            // Phase 3 aggregates
+            float totalUpperCommonerCoin = 0f;
+            float totalUpperCommonerIncome = 0f;
+            float totalUpperCommonerSpend = 0f;
+            float totalTaxRevenue = 0f;
+            float totalTitheRevenue = 0f;
+            float totalUpperClergySpend = 0f;
+            float totalUpperClergyIncome = 0f;
+            float totalLowerClergySpend = 0f;
+            float totalLowerClergyIncome = 0f;
+            float totalLowerClergyCoin = 0f;
+            float upperCommonerSatSum = 0f;
+            float upperClergySatSum = 0f;
+            float lowerClergySatSum = 0f;
+            int upperCommonerSatCount = 0;
+            int clergySatCount = 0;
+            // Facility output tracking
+            float[] facilityTotalOutput = new float[FacilitiesV4.Count];
+            float[] facilityFillSum = new float[FacilitiesV4.Count];
+            int[] facilityActiveCount = new int[FacilitiesV4.Count];
 
             foreach (var ce in econ.Counties)
             {
@@ -1537,6 +1557,46 @@ namespace EconSim.Editor
                     upperNobleSatSum += ce.UpperNobilitySatisfaction;
                     lowerNobleSatSum += ce.LowerNobilitySatisfaction;
                     nobleSatCount++;
+                }
+
+                // Phase 3 tracking
+                totalUpperCommonerCoin += ce.UpperCommonerCoin;
+                totalUpperCommonerIncome += ce.UpperCommonerIncome;
+                totalUpperCommonerSpend += ce.UpperCommonerSpend;
+                totalTaxRevenue += ce.TaxRevenue;
+                totalTitheRevenue += ce.TitheRevenue;
+                totalUpperClergySpend += ce.UpperClergySpend;
+                totalUpperClergyIncome += ce.UpperClergyIncome;
+                totalLowerClergySpend += ce.LowerClergySpend;
+                totalLowerClergyIncome += ce.LowerClergyIncome;
+                totalLowerClergyCoin += ce.LowerClergyCoin;
+                if (ce.UpperCommonerPop > 0f)
+                {
+                    upperCommonerSatSum += ce.UpperCommonerSatisfaction;
+                    upperCommonerSatCount++;
+
+                    // Per-facility output and fill rate
+                    float popPerFac = ce.UpperCommonerPop / FacilitiesV4.Count;
+                    for (int f = 0; f < FacilitiesV4.Count; f++)
+                    {
+                        var fac = FacilitiesV4.Defs[f];
+                        float fillRate = 1.0f;
+                        for (int inp = 0; inp < fac.Inputs.Length; inp++)
+                        {
+                            int inputGoodId = (int)fac.Inputs[inp].Good;
+                            fillRate = System.Math.Min(fillRate, ce.FacilityInputGoodFill[inputGoodId]);
+                        }
+                        float output = popPerFac * fac.ThroughputPerCapita * fillRate;
+                        facilityTotalOutput[f] += output;
+                        facilityFillSum[f] += fillRate;
+                        if (fillRate > 0.001f) facilityActiveCount[f]++;
+                    }
+                }
+                if (ce.UpperClergyPop > 0f)
+                {
+                    upperClergySatSum += ce.UpperClergySatisfaction;
+                    lowerClergySatSum += ce.LowerClergySatisfaction;
+                    clergySatCount++;
                 }
             }
             j.KV("countyCount", countyCount);
@@ -1587,6 +1647,45 @@ namespace EconSim.Editor
             j.KV("counties", nobleSatCount);
             j.ObjClose();
 
+            // Phase 3: upper commoner economy
+            j.Key("upperCommonerEconomy"); j.ObjOpen();
+            j.KV("totalCoin", totalUpperCommonerCoin);
+            j.KV("totalIncome", totalUpperCommonerIncome);
+            j.KV("totalSpend", totalUpperCommonerSpend);
+            j.KV("taxRevenue", totalTaxRevenue);
+            j.KV("titheRevenue", totalTitheRevenue);
+            j.KV("satisfactionMean", upperCommonerSatCount > 0 ? upperCommonerSatSum / upperCommonerSatCount : 0f);
+            j.KV("counties", upperCommonerSatCount);
+            j.ObjClose();
+
+            // Phase 3: clergy economy
+            j.Key("clergyEconomy"); j.ObjOpen();
+            j.KV("upperClergyTreasury", totalUpperClergyTreasury);
+            j.KV("upperClergyIncome", totalUpperClergyIncome);
+            j.KV("upperClergySpend", totalUpperClergySpend);
+            j.KV("lowerClergyCoin", totalLowerClergyCoin);
+            j.KV("lowerClergyIncome", totalLowerClergyIncome);
+            j.KV("lowerClergySpend", totalLowerClergySpend);
+            j.KV("upperClergySatMean", clergySatCount > 0 ? upperClergySatSum / clergySatCount : 0f);
+            j.KV("lowerClergySatMean", clergySatCount > 0 ? lowerClergySatSum / clergySatCount : 0f);
+            j.KV("counties", clergySatCount);
+            j.ObjClose();
+
+            // Phase 3: facility throughput
+            j.Key("facilities_throughput"); j.ArrOpen();
+            for (int f = 0; f < FacilitiesV4.Count; f++)
+            {
+                var fac = FacilitiesV4.Defs[f];
+                j.ObjOpen();
+                j.KV("name", fac.Name);
+                j.KV("output", GoodsV4.Names[(int)fac.Output]);
+                j.KV("totalDailyOutput", facilityTotalOutput[f]);
+                j.KV("meanFillRate", countyCount > 0 ? facilityFillSum[f] / countyCount : 0f);
+                j.KV("activeCounties", facilityActiveCount[f]);
+                j.ObjClose();
+            }
+            j.ArrClose();
+
             // Per-county top deficit/surplus (sample: worst 10 deficit + best 10 surplus)
             j.Key("countyDetails"); j.ArrOpen();
             // Collect county IDs sorted by satisfaction
@@ -1619,6 +1718,14 @@ namespace EconSim.Editor
                 j.KV("serfFoodProvided", ce.SerfFoodProvided);
                 j.KV("upperNobleSatisfaction", ce.UpperNobilitySatisfaction);
                 j.KV("lowerNobleSatisfaction", ce.LowerNobilitySatisfaction);
+                j.KV("upperCommonerCoin", ce.UpperCommonerCoin);
+                j.KV("upperCommonerIncome", ce.UpperCommonerIncome);
+                j.KV("upperCommonerSpend", ce.UpperCommonerSpend);
+                j.KV("upperCommonerSatisfaction", ce.UpperCommonerSatisfaction);
+                j.KV("upperClergyTreasury", ce.UpperClergyTreasury);
+                j.KV("lowerClergyCoin", ce.LowerClergyCoin);
+                j.KV("taxRevenue", ce.TaxRevenue);
+                j.KV("titheRevenue", ce.TitheRevenue);
 
                 j.Key("production"); j.ObjOpen();
                 for (int g = 0; g < GoodsV4.Count; g++)
