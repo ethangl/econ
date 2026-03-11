@@ -154,14 +154,27 @@ float3 ApplyReliefShading(float3 baseColor, float2 uv, bool isWater)
     if (isWater || _ReliefShadeStrength <= 0.001)
         return baseColor;
 
-    float3 encodedNormal = tex2D(_ReliefNormalTex, uv).rgb;
-    float3 reliefNormal = normalize(encodedNormal * 2.0 - 1.0);
-    reliefNormal = normalize(lerp(float3(0.0, 1.0, 0.0), reliefNormal, saturate(_ReliefNormalStrength)));
+    // Mapgen4-style slope lighting: sample heightmap at 4 neighbors,
+    // compute slope normal, dot with directional light.
+    float2 d = _HeightmapTex_TexelSize.xy;
+    float zN = tex2D(_HeightmapTex, uv + float2(0, d.y)).r;
+    float zS = tex2D(_HeightmapTex, uv - float2(0, d.y)).r;
+    float zE = tex2D(_HeightmapTex, uv + float2(d.x, 0)).r;
+    float zW = tex2D(_HeightmapTex, uv - float2(d.x, 0)).r;
 
-    float3 lightDir = normalize(_ReliefLightDir.xyz);
-    float ndotl = saturate(dot(reliefNormal, lightDir));
-    float shade = lerp(_ReliefAmbient, 1.0, ndotl);
-    float shadeMix = lerp(1.0, shade, _ReliefShadeStrength);
+    // Slope vector: XY = height gradients, Z = flatness term scaled by texel size.
+    // Larger _SlopeOverhead pushes Z up, making flat areas flatter in the normal.
+    float3 slopeNormal = normalize(float3(zE - zW, zN - zS, _SlopeOverhead * (d.x + d.y)));
+
+    // Light direction from angle (rotates in XY plane like mapgen4).
+    float rad = _SlopeLightAngle * 3.14159265 / 180.0;
+    // Z component of light blends between _SlopeExaggeration (steep terrain)
+    // and _SlopeFlatLight (flat terrain) based on how vertical the surface is.
+    float3 lightDir = normalize(float3(cos(rad), sin(rad),
+        lerp(_SlopeExaggeration, _SlopeFlatLight, slopeNormal.z)));
+
+    float light = _ReliefAmbient + max(0.0, dot(lightDir, slopeNormal));
+    float shadeMix = lerp(1.0, light, _ReliefShadeStrength);
     return baseColor * shadeMix;
 }
 #endif

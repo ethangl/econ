@@ -4,11 +4,13 @@ Shader "EconSim/MapOverlayBiome"
     {
         // Heightmap for terrain (Phase 6)
         _HeightmapTex ("Heightmap", 2D) = "gray" {}
-        _ReliefNormalTex ("Relief Normal", 2D) = "bump" {}
-        _ReliefNormalStrength ("Relief Normal Strength", Range(0, 1)) = 0.90
-        _ReliefShadeStrength ("Relief Shade Strength", Range(0, 1)) = 0.50
-        _ReliefAmbient ("Relief Ambient", Range(0, 1)) = 0.55
-        _ReliefLightDir ("Relief Light Direction", Vector) = (0.4, 0.85, 0.3, 0)
+        _ReliefNormalTex ("Relief Normal (unused)", 2D) = "bump" {}
+        _ReliefShadeStrength ("Slope Shade Strength", Range(0, 1)) = 0.85
+        _ReliefAmbient ("Slope Ambient", Range(0, 1)) = 0.25
+        _SlopeLightAngle ("Slope Light Angle (degrees)", Float) = 80
+        _SlopeExaggeration ("Slope Exaggeration", Range(0, 5)) = 2.0
+        _SlopeFlatLight ("Slope Flat Light", Range(0, 5)) = 2.5
+        _SlopeOverhead ("Slope Overhead", Range(0, 60)) = 30
         _HeightScale ("Height Scale", Float) = 0.2
         _SeaLevel ("Sea Level (Normalized)", Float) = 0.5
         _UseHeightDisplacement ("Use Height Displacement", Int) = 0
@@ -141,10 +143,12 @@ Shader "EconSim/MapOverlayBiome"
             SAMPLER(sampler_BiomePaletteTex);
 
             CBUFFER_START(UnityPerMaterial)
-                float _ReliefNormalStrength;
                 float _ReliefShadeStrength;
                 float _ReliefAmbient;
-                float4 _ReliefLightDir;
+                float _SlopeLightAngle;
+                float _SlopeExaggeration;
+                float _SlopeFlatLight;
+                float _SlopeOverhead;
                 float _HeightScale;
                 float _SeaLevel;
                 int _UseHeightDisplacement;

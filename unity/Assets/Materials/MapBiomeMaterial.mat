@@ -19,7 +19,7 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties: _ProvinceBorderColor _ProvinceBorderWidth _SoilColor1
+  m_LockedProperties: _ProvinceBorderColor _ProvinceBorderWidth _SlopeOverhead _SoilColor1
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -153,7 +153,7 @@ Material:
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 1.7505921e-27
+    - _HoverIntensity: 0.000013222536
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
@@ -195,11 +195,15 @@ Material:
     - _ShowMarketBorders: 0
     - _ShowProvinceBorders: 0
     - _ShowRealmBorders: 0
+    - _SlopeExaggeration: 2
+    - _SlopeFlatLight: 2.5
+    - _SlopeLightAngle: 80
+    - _SlopeOverhead: 30
     - _SmoothnessTextureChannel: 0
-    - _SoilBlendRadius: 3
+    - _SoilBlendRadius: 5
     - _SoilBlendSharpness: 3
     - _SoilBlurRadius: 3
-    - _SoilHeightFloor: 0.085
+    - _SoilHeightFloor: 0.15
     - _SoilTerrainOverlayOpacity: 0
     - _SoilTintStrength: 0.181
     - _SpecularHighlights: 1
