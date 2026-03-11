@@ -57,9 +57,15 @@ Shader "EconSim/MapOverlayFlat"
         _MapMode ("Map Mode", Int) = 0
         _DebugView ("Debug View", Int) = 0
 
-        // Gradient fill style (edge-to-center fade for political/market modes)
-        _GradientRadius ("Gradient Radius (pixels)", Range(5, 100)) = 40
-        _GradientEdgeDarkening ("Gradient Edge Darkening", Range(0, 1)) = 0.5
+        // Compositing: base color → heightmap (multiply) → map mode (multiply)
+        _BaseColor ("Base Color", Color) = (0.941, 0.890, 0.788, 1)
+        _HeightmapOpacity ("Heightmap Opacity", Range(0, 1)) = 0.3
+        _HeightmapContrast ("Heightmap Contrast", Range(1, 5)) = 2.5
+        _FillOpacity ("Fill Opacity", Range(0, 1)) = 0.5
+
+        // Edge band style (flat border along realm/archdiocese edges)
+        _EdgeWidth ("Edge Width (pixels)", Range(0, 30)) = 6
+        _EdgeDarkening ("Edge Darkening", Range(0, 1)) = 0.15
 
         // Realm border (world-space, in texels of data texture)
         _RealmBorderDistTex ("Realm Border Distance", 2D) = "white" {}
@@ -180,8 +186,12 @@ Shader "EconSim/MapOverlayFlat"
 
                 int _MapMode;
                 int _DebugView;
-                float _GradientRadius;
-                float _GradientEdgeDarkening;
+                float4 _BaseColor;
+                float _HeightmapOpacity;
+                float _HeightmapContrast;
+                float _FillOpacity;
+                float _EdgeWidth;
+                float _EdgeDarkening;
                 float _RealmBorderWidth;
                 float _RealmBorderDarkening;
                 float _ProvinceBorderWidth;
@@ -279,63 +289,61 @@ Shader "EconSim/MapOverlayFlat"
 
                 float height = tex2D(_HeightmapTex, IN.dataUV).r;
 
-                // ---- Layer 1: Terrain ----
+                // ---- Compositing ----
 
-                float3 terrain = _MapMode == 0
-                    ? ComputeHeightGradient(isCellWater, height, riverMask)
-                    : float3(0.0, 0.0, 0.0);
-
-                // ---- Layer 2: Map mode ----
-
+                // Decode map mode auxiliary data (marketId from resolve alpha).
                 float4 mapMode;
                 if (_UseModeColorResolve > 0)
                 {
                     float4 resolvedMode = tex2D(_ModeColorResolve, uv);
                     float3 resolvedBase = resolvedMode.rgb;
-                    marketId = resolvedMode.a;
-                    mapMode = ComputeMapModeFromResolvedBase(uv, isCellWater, isRiver, height, resolvedBase);
+                    float resolvedAlpha = resolvedMode.a;
+                    if (_MapMode == 4 || _MapMode == 8 || _MapMode == 9)
+                        marketId = resolvedAlpha;
+                    else if (_MapMode >= 10 && _MapMode <= 12)
+                        marketId = fmod(resolvedAlpha * 255.0, 64.0) / 255.0;
+                    else
+                        marketId = 0.0;
+                    mapMode = ComputeMapModeFromResolvedBase(uv, isCellWater, isRiver, height, resolvedBase, resolvedAlpha);
                 }
                 else
                 {
                     marketId = 0.0;
                     mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId);
                 }
-                float3 afterMapMode;
-                if (!isWater && mapMode.a > 0.001)
-                {
-                    // Flat land modes are pure mode color (no terrain layer).
-                    afterMapMode = mapMode.rgb;
-                }
-                else
-                {
-                    // Preserve terrain substrate for water/rivers and debug fallback modes.
-                    afterMapMode = terrain;
-                }
 
-                // ---- Layer 3: Water ----
+                float3 relitColor;
 
                 if (_MapMode == 0)
                 {
-                    // Height mode: no water overlay (already has its own water colors)
-                    // Keep the height-mode water gradient untouched.
-                    // (ComputeWater is only for normal overlay compositing.)
-                    // NOP
+                    // Height mode: colored terrain gradient (standalone).
+                    relitColor = ComputeHeightGradient(isCellWater, height, riverMask);
                 }
                 else
                 {
-                    // Flat style water tinting (no volumetric/refraction/shimmer).
-                    if (isCellWater)
+                    // 3-layer compositing: base → heightmap (multiply) → fill (multiply).
+                    // Contrast-boost: remap height from [0,1] through pow to increase range.
+                    float h = saturate(pow(height, _HeightmapContrast));
+
+                    float3 color = _BaseColor.rgb;
+                    color *= lerp(1.0, h, _HeightmapOpacity);
+
+                    // Map mode fill (multiply with opacity).
+                    if (mapMode.a > 0.001)
                     {
-                        afterMapMode = _WaterShallowColor.rgb;
+                        float3 fill = mapMode.rgb;
+                        color *= lerp(float3(1,1,1), fill, _FillOpacity);
                     }
-                    else if (riverMask > 0.01)
+
+                    // River tint.
+                    if (riverMask > 0.01)
                     {
                         float riverAlpha = _WaterShallowAlpha * riverMask;
-                        afterMapMode = lerp(afterMapMode, _WaterShallowColor.rgb, riverAlpha);
+                        color = lerp(color, _WaterShallowColor.rgb, riverAlpha);
                     }
+
+                    relitColor = color;
                 }
-                float3 afterWater = afterMapMode;
-                float3 relitColor = afterWater;
 
                 // ---- Layer 4: Selection / hover (operates on composited color) ----
 
@@ -389,43 +397,52 @@ Shader "EconSim/MapOverlayFlat"
             {
                 if (_MapMode >= 1 && _MapMode <= 3)
                 {
+                    // Read per-pixel display level from resolve texture alpha
+                    float displayLevel = 1.0;
+                    if (_UseModeColorResolve > 0)
+                        displayLevel = tex2D(_ModeColorResolve, IN.dataUV).a * 255.0;
+
                     float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
-                    float provinceBorderDist = tex2D(_ProvinceBorderDistTex, IN.dataUV).r * 255.0;
-                    if (_MapMode == 1)
+                    bool inBorder = realmBorderDist < _RealmBorderWidth;
+
+                    if (!inBorder && displayLevel >= 1.5)
                     {
-                        if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth) discard;
+                        float provinceBorderDist = tex2D(_ProvinceBorderDistTex, IN.dataUV).r * 255.0;
+                        inBorder = provinceBorderDist < _ProvinceBorderWidth;
                     }
-                    else
+                    if (!inBorder && displayLevel >= 2.5)
                     {
                         float countyBorderDist = tex2D(_CountyBorderDistTex, IN.dataUV).r * 255.0;
-                        if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth && countyBorderDist >= _CountyBorderWidth) discard;
+                        inBorder = countyBorderDist < _CountyBorderWidth;
                     }
+                    if (!inBorder) discard;
                 }
                 else if (_MapMode == 4)
                 {
                     float marketBorderDist = tex2D(_MarketBorderDistTex, IN.dataUV).r * 255.0;
                     if (marketBorderDist >= _MarketBorderWidth) discard;
                 }
-                else if (_MapMode == 10)
+                else if (_MapMode >= 10 && _MapMode <= 12)
                 {
-                    // Archdiocese mode: show archdiocese borders only
+                    // Read per-pixel display level from resolve texture alpha (top 2 bits)
+                    float displayLevel = 1.0;
+                    if (_UseModeColorResolve > 0)
+                        displayLevel = floor(tex2D(_ModeColorResolve, IN.dataUV).a * 255.0 / 64.0);
+
                     float archBorderDist = tex2D(_ArchdioceseBorderDistTex, IN.dataUV).r * 255.0;
-                    if (archBorderDist >= _RealmBorderWidth) discard;
-                }
-                else if (_MapMode == 11)
-                {
-                    // Diocese mode: show archdiocese and diocese borders
-                    float archBorderDist = tex2D(_ArchdioceseBorderDistTex, IN.dataUV).r * 255.0;
-                    float dioceseBorderDist = tex2D(_DioceseBorderDistTex, IN.dataUV).r * 255.0;
-                    if (archBorderDist >= _RealmBorderWidth && dioceseBorderDist >= _ProvinceBorderWidth) discard;
-                }
-                else if (_MapMode == 12)
-                {
-                    // Parish mode: show archdiocese, diocese, and parish borders
-                    float archBorderDist = tex2D(_ArchdioceseBorderDistTex, IN.dataUV).r * 255.0;
-                    float dioceseBorderDist = tex2D(_DioceseBorderDistTex, IN.dataUV).r * 255.0;
-                    float parishBorderDist = tex2D(_ParishBorderDistTex, IN.dataUV).r * 255.0;
-                    if (archBorderDist >= _RealmBorderWidth && dioceseBorderDist >= _ProvinceBorderWidth && parishBorderDist >= _CountyBorderWidth) discard;
+                    bool inBorder = archBorderDist < _RealmBorderWidth;
+
+                    if (!inBorder && displayLevel >= 1.5)
+                    {
+                        float dioceseBorderDist = tex2D(_DioceseBorderDistTex, IN.dataUV).r * 255.0;
+                        inBorder = dioceseBorderDist < _ProvinceBorderWidth;
+                    }
+                    if (!inBorder && displayLevel >= 2.5)
+                    {
+                        float parishBorderDist = tex2D(_ParishBorderDistTex, IN.dataUV).r * 255.0;
+                        inBorder = parishBorderDist < _CountyBorderWidth;
+                    }
+                    if (!inBorder) discard;
                 }
                 else
                 {
