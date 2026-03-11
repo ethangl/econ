@@ -57,9 +57,9 @@ Shader "EconSim/MapOverlayFlat"
         _MapMode ("Map Mode", Int) = 0
         _DebugView ("Debug View", Int) = 0
 
-        // Gradient fill style (edge-to-center fade for political/market modes)
-        _GradientRadius ("Gradient Radius (pixels)", Range(5, 100)) = 40
-        _GradientEdgeDarkening ("Gradient Edge Darkening", Range(0, 1)) = 0.5
+        // Edge band style (flat border along realm/archdiocese edges)
+        _EdgeWidth ("Edge Width (pixels)", Range(0, 30)) = 6
+        _EdgeDarkening ("Edge Darkening", Range(0, 1)) = 0.15
 
         // Realm border (world-space, in texels of data texture)
         _RealmBorderDistTex ("Realm Border Distance", 2D) = "white" {}
@@ -180,8 +180,8 @@ Shader "EconSim/MapOverlayFlat"
 
                 int _MapMode;
                 int _DebugView;
-                float _GradientRadius;
-                float _GradientEdgeDarkening;
+                float _EdgeWidth;
+                float _EdgeDarkening;
                 float _RealmBorderWidth;
                 float _RealmBorderDarkening;
                 float _ProvinceBorderWidth;

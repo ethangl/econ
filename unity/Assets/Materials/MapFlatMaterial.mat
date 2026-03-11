@@ -198,8 +198,8 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _GradientEdgeDarkening: 0.08
-    - _GradientRadius: 100
+    - _EdgeDarkening: 0.15
+    - _EdgeWidth: 6
     - _HalftoneScale: 0.15
     - _HeightScale: 0
     - _HoverDimming: 0.9992545

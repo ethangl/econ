@@ -88,13 +88,13 @@ Political modes (1/2/3) and market mode (4) use a gradient fill style:
 - Gradient from dark multiplied edge to full color in center
 - Borders rendered via mesh-based `BorderRenderer` (separate from shader gradient)
 
-Shader uniforms for gradient control:
+Shader uniforms for edge band control:
 
-- `_GradientRadius` (default 40) - how far from edges the gradient extends (pixels)
-- `_GradientEdgeDarkening` (default 0.5, range 0-1) - multiply blend strength at edges
+- `_EdgeWidth` (default 6) - width of the flat darkened edge band along boundaries (pixels)
+- `_EdgeDarkening` (default 0.15, range 0-1) - darkening strength of the edge band
 - `_PoliticalCenterOpacity` (default 0.5, range 0-1) - center blend weight for political fill
 
-Shader renders terrain with gradient fill; borders are separate mesh layer on top.
+Edge bands render along all realm/archdiocese boundaries including coasts, lakes, and rivers.
 
 ## Selection Highlight
 

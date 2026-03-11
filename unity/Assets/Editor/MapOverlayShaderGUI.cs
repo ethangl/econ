@@ -76,8 +76,8 @@ namespace EconSim.Editor
             ("_ProvinceBorderDarkening", "Province Border Darkening"),
             ("_CountyBorderWidth", "County Border Width"),
             ("_CountyBorderDarkening", "County Border Darkening"),
-            ("_GradientRadius", "Gradient Radius (pixels)"),
-            ("_GradientEdgeDarkening", "Gradient Edge Darkening"),
+            ("_EdgeWidth", "Edge Width (pixels)"),
+            ("_EdgeDarkening", "Edge Darkening"),
             ("_OverlayOpacity", "Overlay Opacity"),
         };
 

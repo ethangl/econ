@@ -117,9 +117,9 @@ Likely causes:
 
 Checks:
 
-1. Set `_GradientEdgeDarkening = 0` and `_PoliticalCenterOpacity = 1` to baseline.
+1. Set `_EdgeDarkening = 0` and `_PoliticalCenterOpacity = 1` to baseline.
 2. Disable borders temporarily.
-3. Reintroduce gradient, then borders, one parameter group at a time.
+3. Reintroduce edge band, then borders, one parameter group at a time.
 
 ---
 

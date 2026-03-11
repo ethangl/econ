@@ -4,11 +4,16 @@
 float3 ApplyPoliticalModeStyle(float2 uv, float3 politicalColor, float displayLevel)
 {
     float realmDist = tex2D(_RealmBorderDistTex, uv).r * 255.0;
-    float edgeProximity = saturate(realmDist / _GradientRadius);
+    float3 modeColor = politicalColor;
 
-    float edgeDarkening = saturate(_GradientEdgeDarkening);
-    float3 edgeColor = politicalColor * (1.0 - edgeDarkening);
-    float3 modeColor = lerp(edgeColor, politicalColor, edgeProximity);
+    // Flat edge band along realm boundaries (including coasts).
+    float edgeAA = fwidth(realmDist);
+    float edgeFactor = 1.0 - smoothstep(_EdgeWidth - edgeAA, _EdgeWidth + edgeAA, realmDist);
+    if (edgeFactor > 0.001)
+    {
+        float3 edgeColor = politicalColor * (1.0 - saturate(_EdgeDarkening));
+        modeColor = lerp(modeColor, edgeColor, edgeFactor);
+    }
 
     // County border band overlay (thinnest, lightest — drawn first).
     // Only where display level indicates county drill-down (level >= 3).
@@ -53,11 +58,16 @@ float3 ApplyPoliticalModeStyle(float2 uv, float3 politicalColor, float displayLe
 float3 ApplyMarketModeStyle(float2 uv, float3 marketColor)
 {
     float marketDist = tex2D(_MarketBorderDistTex, uv).r * 255.0;
-    float edgeProximity = saturate(marketDist / _GradientRadius);
+    float3 modeColor = marketColor;
 
-    float edgeDarkening = saturate(_GradientEdgeDarkening);
-    float3 edgeColor = marketColor * (1.0 - edgeDarkening);
-    float3 modeColor = lerp(edgeColor, marketColor, edgeProximity);
+    // Flat edge band along market boundaries (including coasts).
+    float edgeAA = fwidth(marketDist);
+    float edgeFactor = 1.0 - smoothstep(_EdgeWidth - edgeAA, _EdgeWidth + edgeAA, marketDist);
+    if (edgeFactor > 0.001)
+    {
+        float3 edgeColor = marketColor * (1.0 - saturate(_EdgeDarkening));
+        modeColor = lerp(modeColor, edgeColor, edgeFactor);
+    }
 
     // Path overlay: black routes blended over market color.
     // Mask is direct coverage (0=no path, 1=path), bilinear-filtered for AA.
@@ -82,13 +92,17 @@ float3 ApplyMarketModeStyle(float2 uv, float3 marketColor)
 
 float3 ApplyReligionModeStyle(float2 uv, float3 territoryColor, float displayLevel)
 {
-    // Gradient fill using archdiocese borders (analogous to realm gradient in political mode)
     float archDist = tex2D(_ArchdioceseBorderDistTex, uv).r * 255.0;
-    float edgeProximity = saturate(archDist / _GradientRadius);
+    float3 modeColor = territoryColor;
 
-    float edgeDarkening = saturate(_GradientEdgeDarkening);
-    float3 edgeColor = territoryColor * (1.0 - edgeDarkening);
-    float3 modeColor = lerp(edgeColor, territoryColor, edgeProximity);
+    // Flat edge band along archdiocese boundaries (including coasts).
+    float edgeAA = fwidth(archDist);
+    float edgeFactor = 1.0 - smoothstep(_EdgeWidth - edgeAA, _EdgeWidth + edgeAA, archDist);
+    if (edgeFactor > 0.001)
+    {
+        float3 edgeColor = territoryColor * (1.0 - saturate(_EdgeDarkening));
+        modeColor = lerp(modeColor, edgeColor, edgeFactor);
+    }
 
     // Parish border band overlay (thinnest — only where display level >= 3)
     if (displayLevel >= 2.5)

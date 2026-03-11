@@ -71,8 +71,8 @@ public class MapOverlayManager
         private static readonly int PathGapLengthId = Shader.PropertyToID("_PathGapLength");
         private static readonly int PathWidthId = Shader.PropertyToID("_PathWidth");
         private static readonly int PathOpacityId = Shader.PropertyToID("_PathOpacity");
-        private static readonly int GradientRadiusId = Shader.PropertyToID("_GradientRadius");
-        private static readonly int GradientEdgeDarkeningId = Shader.PropertyToID("_GradientEdgeDarkening");
+        private static readonly int EdgeWidthId = Shader.PropertyToID("_EdgeWidth");
+        private static readonly int EdgeDarkeningId = Shader.PropertyToID("_EdgeDarkening");
         private static readonly int RealmBorderWidthId = Shader.PropertyToID("_RealmBorderWidth");
         private static readonly int RealmBorderDarkeningId = Shader.PropertyToID("_RealmBorderDarkening");
         private static readonly int ProvinceBorderWidthId = Shader.PropertyToID("_ProvinceBorderWidth");
@@ -2345,11 +2345,19 @@ public class MapOverlayManager
                             int nx = x + dx;
                             int ny = y + dy;
                             if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight)
+                            {
+                                // Grid edge counts as realm boundary (coastline at map edge).
+                                realmBoundary = true;
                                 continue;
+                            }
 
                             int nIdx = ny * gridWidth + nx;
                             if (!isLand[nIdx])
+                            {
+                                // Water/river neighbor — realm edge (coast, lake, river).
+                                realmBoundary = true;
                                 continue;
+                            }
 
                             int nRealm = realmGrid[nIdx];
                             if (!realmBoundary && nRealm != realm)
@@ -4150,9 +4158,17 @@ public class MapOverlayManager
                             if (dx == 0 && dy == 0) continue;
                             int nx = x + dx;
                             int ny = y + dy;
-                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
+                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight)
+                            {
+                                isBoundary = true;
+                                continue;
+                            }
                             int nIdx = ny * gridWidth + nx;
-                            if (!isLand[nIdx]) continue;
+                            if (!isLand[nIdx])
+                            {
+                                isBoundary = true;
+                                continue;
+                            }
                             if (marketGrid[nIdx] != myMarket)
                                 isBoundary = true;
                         }
@@ -4241,9 +4257,18 @@ public class MapOverlayManager
                             if (dx == 0 && dy == 0) continue;
                             int nx = x + dx;
                             int ny = y + dy;
-                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
+                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight)
+                            {
+                                archBoundary = true;
+                                continue;
+                            }
                             int nIdx = ny * gridWidth + nx;
-                            if (!isLand[nIdx]) continue;
+                            if (!isLand[nIdx])
+                            {
+                                // Water/river neighbor — archdiocese edge (coast, lake, river).
+                                archBoundary = true;
+                                continue;
+                            }
 
                             if (!archBoundary && archGrid[nIdx] != myArch)
                                 archBoundary = true;
