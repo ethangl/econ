@@ -75,10 +75,13 @@ namespace EconSim.Renderer
         private bool hasActiveSelection;
         private float currentHoverIntensity = 0f;
         private bool hasActiveHover;
-        private const float RealmZoomedInMax = 0.05f;
-        private const float ProvinceZoomedInMax = 0.75f;
-        private const float PoliticalZoomHysteresis = 0.02f;
         private const float DefaultModeHeightScale = 0f;
+
+        // Drill-down (expand/collapse) state for CK3-style per-entity zoom
+        private readonly HashSet<int> expandedRealmIds = new HashSet<int>();
+        private readonly HashSet<int> expandedProvinceIds = new HashSet<int>();
+        private readonly HashSet<int> expandedArchdioceseIds = new HashSet<int>();
+        private readonly HashSet<int> expandedDioceseIds = new HashSet<int>();
         [Header("Height")]
         [SerializeField] [Range(0f, 2f)] private float biomesModeHeightScale = 0.3f;
         private const float HeightScaleTransitionSpeed = 2f;
@@ -142,17 +145,17 @@ namespace EconSim.Renderer
 
         public enum MapMode
         {
-            Political = 0,      // Colored by realm (zoomed-in 0-25%)
-            Province = 1,       // Colored by province (zoomed-in 25-75%)
-            County = 2,         // Colored by county/cell (zoomed-in 75-100%)
-            Market = 3,         // Market zones (key: 3)
-            Biomes = 4,         // Biomes (vertex-blended) (key: 2)
+            Political = 0,        // Political map with drill-down (realm/province/county)
+            Province = 1,         // Internal: province-level resolve (used by drill-down)
+            County = 2,           // Internal: county-level resolve (used by drill-down)
+            Market = 3,           // Market zones (key: 3)
+            Biomes = 4,           // Biomes (vertex-blended) (key: 2)
             ChannelInspector = 5, // Debug channel visualization (key: 0)
-            TransportCost = 6, // Local per-cell transport difficulty heatmap (key: 5)
-            MarketAccess = 7,  // Transport cost heatmap from market hub (key: 6)
-            Religion = 8,      // Colored by archdiocese (zoomed out) (key: 4)
-            ReligionDiocese = 9,  // Colored by diocese (mid zoom)
-            ReligionParish = 10,  // Colored by parish (zoomed in)
+            TransportCost = 6,    // Local per-cell transport difficulty heatmap (key: 5)
+            MarketAccess = 7,     // Transport cost heatmap from market hub (key: 6)
+            Religion = 8,         // Religious map with drill-down (archdiocese/diocese/parish)
+            ReligionDiocese = 9,  // Internal: diocese-level resolve (used by drill-down)
+            ReligionParish = 10,  // Internal: parish-level resolve (used by drill-down)
         }
 
         public MapMode CurrentMode => currentMode;
@@ -262,8 +265,8 @@ namespace EconSim.Renderer
                 }
                 else
                 {
-                    MapMode politicalBandMode = ResolveZoomDrivenPoliticalMode();
-                    SetMapMode(politicalBandMode);
+                    ClearPoliticalDrillState();
+                    SetMapMode(MapMode.Political);
                 }
             }
             else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2))
@@ -282,8 +285,8 @@ namespace EconSim.Renderer
                 }
                 else
                 {
-                    MapMode religionBandMode = ResolveZoomDrivenReligionMode();
-                    SetMapMode(religionBandMode);
+                    ClearReligionDrillState();
+                    SetMapMode(MapMode.Religion);
                 }
             }
             else if (Input.GetKeyDown(KeyCode.Alpha5) || Input.GetKeyDown(KeyCode.Keypad5))
@@ -298,9 +301,6 @@ namespace EconSim.Renderer
             {
                 SetMapMode(MapMode.ChannelInspector);
             }
-
-            ApplyZoomDrivenPoliticalMode();
-            ApplyZoomDrivenReligionMode();
 
             if (Input.GetKeyDown(cycleDebugChannelKey))
             {
@@ -338,6 +338,15 @@ namespace EconSim.Renderer
                 }
             }
 
+            // Right-click: expand/collapse drill-down (suppress during pan)
+            if (Input.GetMouseButtonUp(1) && !IsPointerOverUI()
+                && (mapCameraController == null || !mapCameraController.IsPanningMode))
+            {
+                bool isCtrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)
+                    || Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand);
+                HandleDrillClick(isCtrl);
+            }
+
             // Animate selection dimming
             UpdateHeightScaleAnimation();
             UpdateDimmingAnimation();
@@ -370,17 +379,36 @@ namespace EconSim.Renderer
             return false;
         }
 
-        private static ModeSelectionTarget ResolveModeSelectionTarget(MapMode mode)
+        private ModeSelectionTarget ResolveModeSelectionTarget(MapMode mode, Cell cell = null)
         {
+            // For political/religion modes with drill-down, determine target from cell's drill depth
+            if (IsPoliticalFamilyMode(mode) && cell != null)
+            {
+                if (expandedRealmIds.Contains(cell.RealmId))
+                {
+                    if (expandedProvinceIds.Contains(cell.ProvinceId))
+                        return ModeSelectionTarget.County;
+                    return ModeSelectionTarget.Province;
+                }
+                return ModeSelectionTarget.Realm;
+            }
+            if (IsReligionFamilyMode(mode) && cell != null)
+            {
+                int archId = overlayManager?.GetCellArchdioceseId(cell.Id) ?? 0;
+                int dioId = overlayManager?.GetCellDioceseId(cell.Id) ?? 0;
+                if (archId > 0 && expandedArchdioceseIds.Contains(archId))
+                {
+                    if (dioId > 0 && expandedDioceseIds.Contains(dioId))
+                        return ModeSelectionTarget.Parish;
+                    return ModeSelectionTarget.Diocese;
+                }
+                return ModeSelectionTarget.Archdiocese;
+            }
+
             return mode switch
             {
-                MapMode.Political => ModeSelectionTarget.Realm,
-                MapMode.Province => ModeSelectionTarget.Province,
                 MapMode.Market => ModeSelectionTarget.Market,
                 MapMode.MarketAccess => ModeSelectionTarget.Market,
-                MapMode.Religion => ModeSelectionTarget.Archdiocese,
-                MapMode.ReligionDiocese => ModeSelectionTarget.Diocese,
-                MapMode.ReligionParish => ModeSelectionTarget.Parish,
                 _ => ModeSelectionTarget.County
             };
         }
@@ -555,114 +583,191 @@ namespace EconSim.Renderer
             overlayManager.SetOverlay(selectedOverlay);
         }
 
-        private MapMode ResolveZoomDrivenPoliticalMode()
+        // ---- Expand/Collapse (CK3-style drill-down) ----
+
+        private void HandleDrillClick(bool isCollapse)
         {
-            if (mapCameraController == null)
-                return MapMode.Political;
+            if (mapData == null || overlayManager == null) return;
 
-            float zoomedIn01 = mapCameraController.GetZoomedIn01();
-            if (zoomedIn01 < RealmZoomedInMax)
-                return MapMode.Political;
-            if (zoomedIn01 < ProvinceZoomedInMax)
-                return MapMode.Province;
-            return MapMode.County;
-        }
+            var cam = selectionCamera != null ? selectionCamera : UnityEngine.Camera.main;
+            if (cam == null) return;
 
-        private static MapMode ResolveZoomDrivenPoliticalModeWithHysteresis(MapMode currentPoliticalMode, float zoomedIn01)
-        {
-            float realmLower = RealmZoomedInMax - PoliticalZoomHysteresis;
-            float realmUpper = RealmZoomedInMax + PoliticalZoomHysteresis;
-            float provinceLower = ProvinceZoomedInMax - PoliticalZoomHysteresis;
-            float provinceUpper = ProvinceZoomedInMax + PoliticalZoomHysteresis;
+            Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+            Plane groundPlane = new Plane(Vector3.up, Vector3.zero);
+            if (!groundPlane.Raycast(ray, out float distance)) return;
 
-            switch (currentPoliticalMode)
+            Vector3 hitPoint = ray.GetPoint(distance);
+            int cellId = FindCellAtPosition(hitPoint);
+            if (cellId < 0) return;
+            if (!mapData.CellById.TryGetValue(cellId, out var cell) || !cell.IsLand) return;
+
+            if (IsPoliticalFamilyMode(currentMode))
             {
-                case MapMode.Political:
-                    return zoomedIn01 >= realmUpper ? MapMode.Province : MapMode.Political;
-                case MapMode.Province:
-                    if (zoomedIn01 < realmLower)
-                        return MapMode.Political;
-                    if (zoomedIn01 >= provinceUpper)
-                        return MapMode.County;
-                    return MapMode.Province;
-                case MapMode.County:
-                    return zoomedIn01 < provinceLower ? MapMode.Province : MapMode.County;
-                default:
-                    if (zoomedIn01 < RealmZoomedInMax)
-                        return MapMode.Political;
-                    if (zoomedIn01 < ProvinceZoomedInMax)
-                        return MapMode.Province;
-                    return MapMode.County;
+                if (isCollapse)
+                    CollapsePolitical(cell);
+                else
+                    ExpandPolitical(cell);
+            }
+            else if (IsReligionFamilyMode(currentMode))
+            {
+                if (isCollapse)
+                    CollapseReligion(cell);
+                else
+                    ExpandReligion(cell);
             }
         }
 
-        private void ApplyZoomDrivenPoliticalMode()
+        private void ExpandPolitical(Cell cell)
         {
-            if (!IsPoliticalFamilyMode(currentMode))
-                return;
-
-            if (mapCameraController == null)
-                return;
-
-            float zoomedIn01 = mapCameraController.GetZoomedIn01();
-            MapMode zoomDrivenMode = ResolveZoomDrivenPoliticalModeWithHysteresis(currentMode, zoomedIn01);
-            if (zoomDrivenMode != currentMode)
-                SetMapMode(zoomDrivenMode);
-        }
-
-        private MapMode ResolveZoomDrivenReligionMode()
-        {
-            if (mapCameraController == null)
-                return MapMode.Religion;
-
-            float zoomedIn01 = mapCameraController.GetZoomedIn01();
-            if (zoomedIn01 < RealmZoomedInMax)
-                return MapMode.Religion;
-            if (zoomedIn01 < ProvinceZoomedInMax)
-                return MapMode.ReligionDiocese;
-            return MapMode.ReligionParish;
-        }
-
-        private static MapMode ResolveZoomDrivenReligionModeWithHysteresis(MapMode currentReligionMode, float zoomedIn01)
-        {
-            float archLower = RealmZoomedInMax - PoliticalZoomHysteresis;
-            float archUpper = RealmZoomedInMax + PoliticalZoomHysteresis;
-            float dioceseLower = ProvinceZoomedInMax - PoliticalZoomHysteresis;
-            float dioceseUpper = ProvinceZoomedInMax + PoliticalZoomHysteresis;
-
-            switch (currentReligionMode)
+            if (!expandedRealmIds.Contains(cell.RealmId))
             {
-                case MapMode.Religion:
-                    return zoomedIn01 >= archUpper ? MapMode.ReligionDiocese : MapMode.Religion;
-                case MapMode.ReligionDiocese:
-                    if (zoomedIn01 < archLower)
-                        return MapMode.Religion;
-                    if (zoomedIn01 >= dioceseUpper)
-                        return MapMode.ReligionParish;
-                    return MapMode.ReligionDiocese;
-                case MapMode.ReligionParish:
-                    return zoomedIn01 < dioceseLower ? MapMode.ReligionDiocese : MapMode.ReligionParish;
-                default:
-                    if (zoomedIn01 < RealmZoomedInMax)
-                        return MapMode.Religion;
-                    if (zoomedIn01 < ProvinceZoomedInMax)
-                        return MapMode.ReligionDiocese;
-                    return MapMode.ReligionParish;
+                expandedRealmIds.Add(cell.RealmId);
+            }
+            else if (!expandedProvinceIds.Contains(cell.ProvinceId))
+            {
+                expandedProvinceIds.Add(cell.ProvinceId);
+            }
+            else
+            {
+                return; // already fully expanded
+            }
+            ApplyDrillStateChange();
+        }
+
+        private void CollapsePolitical(Cell cell)
+        {
+            if (expandedProvinceIds.Contains(cell.ProvinceId))
+            {
+                expandedProvinceIds.Remove(cell.ProvinceId);
+            }
+            else if (expandedRealmIds.Contains(cell.RealmId))
+            {
+                expandedRealmIds.Remove(cell.RealmId);
+                // Also collapse any provinces within this realm
+                if (mapData.ProvinceById != null)
+                {
+                    var toRemove = new List<int>();
+                    foreach (int provId in expandedProvinceIds)
+                    {
+                        if (mapData.ProvinceById.TryGetValue(provId, out var prov) && prov.RealmId == cell.RealmId)
+                            toRemove.Add(provId);
+                    }
+                    foreach (int provId in toRemove)
+                        expandedProvinceIds.Remove(provId);
+                }
+            }
+            else
+            {
+                return; // nothing to collapse
+            }
+            ApplyDrillStateChange();
+        }
+
+        private void ExpandReligion(Cell cell)
+        {
+            int archId = overlayManager.GetCellArchdioceseId(cell.Id);
+            int dioId = overlayManager.GetCellDioceseId(cell.Id);
+
+            if (archId > 0 && !expandedArchdioceseIds.Contains(archId))
+            {
+                expandedArchdioceseIds.Add(archId);
+            }
+            else if (dioId > 0 && !expandedDioceseIds.Contains(dioId))
+            {
+                expandedDioceseIds.Add(dioId);
+            }
+            else
+            {
+                return;
+            }
+            ApplyDrillStateChange();
+        }
+
+        private void CollapseReligion(Cell cell)
+        {
+            int archId = overlayManager.GetCellArchdioceseId(cell.Id);
+            int dioId = overlayManager.GetCellDioceseId(cell.Id);
+
+            if (dioId > 0 && expandedDioceseIds.Contains(dioId))
+            {
+                expandedDioceseIds.Remove(dioId);
+            }
+            else if (archId > 0 && expandedArchdioceseIds.Contains(archId))
+            {
+                expandedArchdioceseIds.Remove(archId);
+                // Also collapse any dioceses within this archdiocese
+                var toRemove = new List<int>();
+                foreach (int did in expandedDioceseIds)
+                {
+                    int parentArch = overlayManager.GetDioceseArchdioceseId(did);
+                    if (parentArch == archId)
+                        toRemove.Add(did);
+                }
+                foreach (int did in toRemove)
+                    expandedDioceseIds.Remove(did);
+            }
+            else
+            {
+                return;
+            }
+            ApplyDrillStateChange();
+        }
+
+        private void ApplyDrillStateChange()
+        {
+            if (overlayManager == null) return;
+
+            overlayManager.SetDrillState(expandedRealmIds, expandedProvinceIds,
+                expandedArchdioceseIds, expandedDioceseIds);
+
+            // Determine the effective shader map mode based on deepest expansion
+            if (IsPoliticalFamilyMode(currentMode))
+            {
+                MapMode effectiveMode;
+                if (expandedProvinceIds.Count > 0)
+                    effectiveMode = MapMode.County;
+                else if (expandedRealmIds.Count > 0)
+                    effectiveMode = MapMode.Province;
+                else
+                    effectiveMode = MapMode.Political;
+
+                // Force regeneration: invalidate cache and bypass SetMapMode's mode-change check
+                overlayManager.InvalidatePoliticalOverlay();
+                currentMode = effectiveMode;
+                overlayManager.SetMapMode(effectiveMode);
+            }
+            else if (IsReligionFamilyMode(currentMode))
+            {
+                MapMode effectiveMode;
+                if (expandedDioceseIds.Count > 0)
+                    effectiveMode = MapMode.ReligionParish;
+                else if (expandedArchdioceseIds.Count > 0)
+                    effectiveMode = MapMode.ReligionDiocese;
+                else
+                    effectiveMode = MapMode.Religion;
+
+                overlayManager.InvalidateReligionOverlay();
+                currentMode = effectiveMode;
+                overlayManager.SetMapMode(effectiveMode);
             }
         }
 
-        private void ApplyZoomDrivenReligionMode()
+        private void ClearPoliticalDrillState()
         {
-            if (!IsReligionFamilyMode(currentMode))
-                return;
+            expandedRealmIds.Clear();
+            expandedProvinceIds.Clear();
+        }
 
-            if (mapCameraController == null)
-                return;
+        private void ClearReligionDrillState()
+        {
+            expandedArchdioceseIds.Clear();
+            expandedDioceseIds.Clear();
+        }
 
-            float zoomedIn01 = mapCameraController.GetZoomedIn01();
-            MapMode zoomDrivenMode = ResolveZoomDrivenReligionModeWithHysteresis(currentMode, zoomedIn01);
-            if (zoomDrivenMode != currentMode)
-                SetMapMode(zoomDrivenMode);
+        private void ClearAllDrillState()
+        {
+            ClearPoliticalDrillState();
+            ClearReligionDrillState();
         }
 
         private void SetSelectionActive(bool active)
@@ -730,7 +835,7 @@ namespace EconSim.Renderer
                 return;
             }
 
-            ModeSelectionTarget target = ResolveModeSelectionTarget(currentMode);
+            ModeSelectionTarget target = ResolveModeSelectionTarget(currentMode, cell);
 
             // Set hover based on current mode selection target.
             hasActiveHover = true;
@@ -1028,7 +1133,7 @@ namespace EconSim.Renderer
                 return;
             }
 
-            ModeSelectionTarget target = ResolveModeSelectionTarget(currentMode);
+            ModeSelectionTarget target = ResolveModeSelectionTarget(currentMode, cell);
             SelectionScope scope = ToSelectionScope(target);
 
             float focusDuration = 0f;
@@ -1290,12 +1395,21 @@ namespace EconSim.Renderer
             if (currentMode != mode)
             {
                 MapMode previousMode = currentMode;
+
+                // Clear drill state when leaving a family
+                if (!IsPoliticalFamilyMode(mode) && IsPoliticalFamilyMode(previousMode))
+                    ClearPoliticalDrillState();
+                if (!IsReligionFamilyMode(mode) && IsReligionFamilyMode(previousMode))
+                    ClearReligionDrillState();
+
                 currentMode = mode;
                 UpdateColors();
 
                 if (useShaderOverlays && overlayManager != null)
                 {
                     EnsureRenderStyleForMode(mode);
+                    overlayManager.SetDrillState(expandedRealmIds, expandedProvinceIds,
+                        expandedArchdioceseIds, expandedDioceseIds);
                     overlayManager.SetMapMode(mode);
                     SetHeightScaleTargetForMode(mode);
                     overlayManager.SetChannelDebugView(channelDebugView);

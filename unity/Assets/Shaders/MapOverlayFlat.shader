@@ -292,8 +292,15 @@ Shader "EconSim/MapOverlayFlat"
                 {
                     float4 resolvedMode = tex2D(_ModeColorResolve, uv);
                     float3 resolvedBase = resolvedMode.rgb;
-                    marketId = resolvedMode.a;
-                    mapMode = ComputeMapModeFromResolvedBase(uv, isCellWater, isRiver, height, resolvedBase);
+                    float resolvedAlpha = resolvedMode.a;
+                    // For market/transport/religion modes, alpha encodes entity ID for selection
+                    if (_MapMode == 4 || _MapMode == 8 || _MapMode == 9)
+                        marketId = resolvedAlpha;
+                    else if (_MapMode >= 10 && _MapMode <= 12)
+                        marketId = fmod(resolvedAlpha * 255.0, 64.0) / 255.0;  // bottom 6 bits = territory ID
+                    else
+                        marketId = 0.0;
+                    mapMode = ComputeMapModeFromResolvedBase(uv, isCellWater, isRiver, height, resolvedBase, resolvedAlpha);
                 }
                 else
                 {
@@ -389,43 +396,52 @@ Shader "EconSim/MapOverlayFlat"
             {
                 if (_MapMode >= 1 && _MapMode <= 3)
                 {
+                    // Read per-pixel display level from resolve texture alpha
+                    float displayLevel = 1.0;
+                    if (_UseModeColorResolve > 0)
+                        displayLevel = tex2D(_ModeColorResolve, IN.dataUV).a * 255.0;
+
                     float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
-                    float provinceBorderDist = tex2D(_ProvinceBorderDistTex, IN.dataUV).r * 255.0;
-                    if (_MapMode == 1)
+                    bool inBorder = realmBorderDist < _RealmBorderWidth;
+
+                    if (!inBorder && displayLevel >= 1.5)
                     {
-                        if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth) discard;
+                        float provinceBorderDist = tex2D(_ProvinceBorderDistTex, IN.dataUV).r * 255.0;
+                        inBorder = provinceBorderDist < _ProvinceBorderWidth;
                     }
-                    else
+                    if (!inBorder && displayLevel >= 2.5)
                     {
                         float countyBorderDist = tex2D(_CountyBorderDistTex, IN.dataUV).r * 255.0;
-                        if (realmBorderDist >= _RealmBorderWidth && provinceBorderDist >= _ProvinceBorderWidth && countyBorderDist >= _CountyBorderWidth) discard;
+                        inBorder = countyBorderDist < _CountyBorderWidth;
                     }
+                    if (!inBorder) discard;
                 }
                 else if (_MapMode == 4)
                 {
                     float marketBorderDist = tex2D(_MarketBorderDistTex, IN.dataUV).r * 255.0;
                     if (marketBorderDist >= _MarketBorderWidth) discard;
                 }
-                else if (_MapMode == 10)
+                else if (_MapMode >= 10 && _MapMode <= 12)
                 {
-                    // Archdiocese mode: show archdiocese borders only
+                    // Read per-pixel display level from resolve texture alpha (top 2 bits)
+                    float displayLevel = 1.0;
+                    if (_UseModeColorResolve > 0)
+                        displayLevel = floor(tex2D(_ModeColorResolve, IN.dataUV).a * 255.0 / 64.0);
+
                     float archBorderDist = tex2D(_ArchdioceseBorderDistTex, IN.dataUV).r * 255.0;
-                    if (archBorderDist >= _RealmBorderWidth) discard;
-                }
-                else if (_MapMode == 11)
-                {
-                    // Diocese mode: show archdiocese and diocese borders
-                    float archBorderDist = tex2D(_ArchdioceseBorderDistTex, IN.dataUV).r * 255.0;
-                    float dioceseBorderDist = tex2D(_DioceseBorderDistTex, IN.dataUV).r * 255.0;
-                    if (archBorderDist >= _RealmBorderWidth && dioceseBorderDist >= _ProvinceBorderWidth) discard;
-                }
-                else if (_MapMode == 12)
-                {
-                    // Parish mode: show archdiocese, diocese, and parish borders
-                    float archBorderDist = tex2D(_ArchdioceseBorderDistTex, IN.dataUV).r * 255.0;
-                    float dioceseBorderDist = tex2D(_DioceseBorderDistTex, IN.dataUV).r * 255.0;
-                    float parishBorderDist = tex2D(_ParishBorderDistTex, IN.dataUV).r * 255.0;
-                    if (archBorderDist >= _RealmBorderWidth && dioceseBorderDist >= _ProvinceBorderWidth && parishBorderDist >= _CountyBorderWidth) discard;
+                    bool inBorder = archBorderDist < _RealmBorderWidth;
+
+                    if (!inBorder && displayLevel >= 1.5)
+                    {
+                        float dioceseBorderDist = tex2D(_DioceseBorderDistTex, IN.dataUV).r * 255.0;
+                        inBorder = dioceseBorderDist < _ProvinceBorderWidth;
+                    }
+                    if (!inBorder && displayLevel >= 2.5)
+                    {
+                        float parishBorderDist = tex2D(_ParishBorderDistTex, IN.dataUV).r * 255.0;
+                        inBorder = parishBorderDist < _CountyBorderWidth;
+                    }
+                    if (!inBorder) discard;
                 }
                 else
                 {

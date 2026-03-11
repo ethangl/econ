@@ -1,7 +1,7 @@
 #ifndef MAP_OVERLAY_RESOLVE_MODES_INCLUDED
 #define MAP_OVERLAY_RESOLVE_MODES_INCLUDED
 
-float3 ApplyPoliticalModeStyle(float2 uv, float3 politicalColor)
+float3 ApplyPoliticalModeStyle(float2 uv, float3 politicalColor, float displayLevel)
 {
     float realmDist = tex2D(_RealmBorderDistTex, uv).r * 255.0;
     float edgeProximity = saturate(realmDist / _GradientRadius);
@@ -11,8 +11,8 @@ float3 ApplyPoliticalModeStyle(float2 uv, float3 politicalColor)
     float3 modeColor = lerp(edgeColor, politicalColor, edgeProximity);
 
     // County border band overlay (thinnest, lightest — drawn first).
-    // Hide county borders in realm mode (MapMode=1).
-    if (_MapMode >= 2)
+    // Only where display level indicates county drill-down (level >= 3).
+    if (displayLevel >= 2.5)
     {
         float countyBorderDist = tex2D(_CountyBorderDistTex, uv).r * 255.0;
         float countyBorderAA = fwidth(countyBorderDist);
@@ -24,17 +24,20 @@ float3 ApplyPoliticalModeStyle(float2 uv, float3 politicalColor)
         }
     }
 
-    // Province border band overlay (thinner, lighter — drawn on top of county borders).
-    float provinceBorderDist = tex2D(_ProvinceBorderDistTex, uv).r * 255.0;
-    float provinceBorderAA = fwidth(provinceBorderDist);
-    float provinceBorderFactor = 1.0 - smoothstep(_ProvinceBorderWidth - provinceBorderAA, _ProvinceBorderWidth + provinceBorderAA, provinceBorderDist);
-    if (provinceBorderFactor > 0.001)
+    // Province border band overlay — only where display level >= 2.
+    if (displayLevel >= 1.5)
     {
-        float3 provinceBorderColor = politicalColor * (1.0 - _ProvinceBorderDarkening);
-        modeColor = lerp(modeColor, provinceBorderColor, provinceBorderFactor);
+        float provinceBorderDist = tex2D(_ProvinceBorderDistTex, uv).r * 255.0;
+        float provinceBorderAA = fwidth(provinceBorderDist);
+        float provinceBorderFactor = 1.0 - smoothstep(_ProvinceBorderWidth - provinceBorderAA, _ProvinceBorderWidth + provinceBorderAA, provinceBorderDist);
+        if (provinceBorderFactor > 0.001)
+        {
+            float3 provinceBorderColor = politicalColor * (1.0 - _ProvinceBorderDarkening);
+            modeColor = lerp(modeColor, provinceBorderColor, provinceBorderFactor);
+        }
     }
 
-    // Realm border band overlay (distance texture + smoothstep AA, on top of province borders).
+    // Realm border band overlay (always shown).
     float realmBorderDist = tex2D(_RealmBorderDistTex, uv).r * 255.0;
     float borderAA = fwidth(realmBorderDist);
     float borderFactor = 1.0 - smoothstep(_RealmBorderWidth - borderAA, _RealmBorderWidth + borderAA, realmBorderDist);
@@ -77,7 +80,7 @@ float3 ApplyMarketModeStyle(float2 uv, float3 marketColor)
     return modeColor;
 }
 
-float3 ApplyReligionModeStyle(float2 uv, float3 territoryColor)
+float3 ApplyReligionModeStyle(float2 uv, float3 territoryColor, float displayLevel)
 {
     // Gradient fill using archdiocese borders (analogous to realm gradient in political mode)
     float archDist = tex2D(_ArchdioceseBorderDistTex, uv).r * 255.0;
@@ -87,8 +90,8 @@ float3 ApplyReligionModeStyle(float2 uv, float3 territoryColor)
     float3 edgeColor = territoryColor * (1.0 - edgeDarkening);
     float3 modeColor = lerp(edgeColor, territoryColor, edgeProximity);
 
-    // Parish border band overlay (thinnest — drawn first, only in parish mode)
-    if (_MapMode >= 12)
+    // Parish border band overlay (thinnest — only where display level >= 3)
+    if (displayLevel >= 2.5)
     {
         float parishBorderDist = tex2D(_ParishBorderDistTex, uv).r * 255.0;
         float parishBorderAA = fwidth(parishBorderDist);
@@ -100,8 +103,8 @@ float3 ApplyReligionModeStyle(float2 uv, float3 territoryColor)
         }
     }
 
-    // Diocese border band overlay (shown in diocese and parish modes)
-    if (_MapMode >= 11)
+    // Diocese border band overlay — only where display level >= 2
+    if (displayLevel >= 1.5)
     {
         float dioceseBorderDist = tex2D(_DioceseBorderDistTex, uv).r * 255.0;
         float dioceseBorderAA = fwidth(dioceseBorderDist);
@@ -135,9 +138,9 @@ float4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, f
 
     if (_MapMode >= 1 && _MapMode <= 3)
     {
-        // Political modes (1=realm, 2=province, 3=county)
+        // Political modes — non-resolved path always shows realm level (displayLevel=1)
         float3 politicalColor = LookupPaletteColor(_RealmPaletteTex, sampler_RealmPaletteTex, realmId);
-        modeColor = ApplyPoliticalModeStyle(uv, politicalColor);
+        modeColor = ApplyPoliticalModeStyle(uv, politicalColor, 1.0);
     }
     else if (_MapMode == 4)
     {
@@ -153,7 +156,7 @@ float4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, f
     return float4(modeColor, 1.0);
 }
 
-float4 ComputeMapModeFromResolvedBase(float2 uv, bool isCellWater, bool isRiver, float height, float3 resolvedBaseColor)
+float4 ComputeMapModeFromResolvedBase(float2 uv, bool isCellWater, bool isRiver, float height, float3 resolvedBaseColor, float resolvedAlpha)
 {
     // No map mode overlay on water, rivers, height mode (0), or biomes mode (6).
     if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 6)
@@ -163,7 +166,9 @@ float4 ComputeMapModeFromResolvedBase(float2 uv, bool isCellWater, bool isRiver,
 
     if (_MapMode >= 1 && _MapMode <= 3)
     {
-        modeColor = ApplyPoliticalModeStyle(uv, resolvedBaseColor);
+        // Display level encoded in alpha: 1/255=realm, 2/255=province, 3/255=county
+        float displayLevel = resolvedAlpha * 255.0;
+        modeColor = ApplyPoliticalModeStyle(uv, resolvedBaseColor, displayLevel);
     }
     else if (_MapMode == 4)
     {
@@ -176,8 +181,10 @@ float4 ComputeMapModeFromResolvedBase(float2 uv, bool isCellWater, bool isRiver,
     }
     else if (_MapMode >= 10 && _MapMode <= 12)
     {
-        // Religion modes (archdiocese/diocese/parish): territory colors with religious border gradients.
-        modeColor = ApplyReligionModeStyle(uv, resolvedBaseColor);
+        // Religion: display level in top 2 bits of alpha
+        float packedAlpha = resolvedAlpha * 255.0;
+        float displayLevel = floor(packedAlpha / 64.0);
+        modeColor = ApplyReligionModeStyle(uv, resolvedBaseColor, displayLevel);
     }
     else
     {
