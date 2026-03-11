@@ -23,6 +23,10 @@ Material:
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
+    - _ArchdioceseBorderDistTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _BiomePaletteTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -60,6 +64,10 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _DetailNormalMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DioceseBorderDistTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -108,6 +116,10 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _ParallaxMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ParishBorderDistTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -177,8 +189,8 @@ Material:
     - _CoastGradientIntensity: 0
     - _CoastGradientRadius: 15
     - _CoastlineBorderWidth: 2
-    - _CountyBorderDarkening: 0.15
-    - _CountyBorderWidth: 0.05
+    - _CountyBorderDarkening: 0.1
+    - _CountyBorderWidth: 0.1
     - _Cutoff: 0.5
     - _DebugView: 0
     - _DetailNormalMapScale: 1
@@ -186,26 +198,26 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _GradientEdgeDarkening: 0.176
-    - _GradientRadius: 5
+    - _GradientEdgeDarkening: 0.08
+    - _GradientRadius: 100
     - _HalftoneScale: 0.15
     - _HeightScale: 0
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.0000017759685
+    - _HoverIntensity: 0
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
-    - _MapMode: 3
+    - _MapMode: 1
     - _MarketBorderDarkening: 0.688
     - _MarketBorderWidth: 0.25
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
     - _OverlayEnabled: 0
-    - _OverlayOpacity: 0.8
+    - _OverlayOpacity: 0
     - _Parallax: 0.02
     - _PathDashLength: 0.1
     - _PathGapLength: 1.5
@@ -215,12 +227,14 @@ Material:
     - _PoliticalEdgeDarkening: 0.777
     - _PoliticalEdgeOpacity: 0.8
     - _PoliticalGradientRadius: 64
-    - _ProvinceBorderDarkening: 0.25
+    - _ProvinceBorderDarkening: 0.1
     - _ProvinceBorderWidth: 0.1
-    - _RealmBorderDarkening: 0.5
-    - _RealmBorderWidth: 0.3
+    - _RealmBorderDarkening: 0.4
+    - _RealmBorderWidth: 0.25
     - _RiverDarken: 1
     - _RiverDepth: 0.5
+    - _RiverMinWidth: 0
+    - _RiverWidth: 0.5
     - _RoadWidth: 0.045
     - _SeaLevel: 0.5
     - _SelectedCellId: -1
@@ -229,8 +243,8 @@ Material:
     - _SelectedProvinceId: -1
     - _SelectedRealmId: -1
     - _SelectionBorderWidth: 3
-    - _SelectionDesaturation: 0.000008834613
-    - _SelectionDimming: 0.9999918
+    - _SelectionDesaturation: 0
+    - _SelectionDimming: 1
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
     - _ShowCountyBorders: 0

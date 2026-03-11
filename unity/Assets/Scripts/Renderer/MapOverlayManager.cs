@@ -168,6 +168,19 @@ public class MapOverlayManager
         private HashSet<int> drillExpandedProvinceIds = new HashSet<int>();
         private HashSet<int> drillExpandedArchdioceseIds = new HashSet<int>();
         private HashSet<int> drillExpandedDioceseIds = new HashSet<int>();
+
+        // Precomputed per-cell colors for drill-down (avoids rebuilding graph-colored maps each drill change)
+        private Color[] cachedRealmColorByCell;      // cellId → realm color
+        private Color[] cachedProvinceColorByCell;   // cellId → graph-colored province color
+        private Color[] cachedCountyColorByCell;     // cellId → graph-colored county color
+        private Color[] cachedArchdioceseColorByCell; // cellId → archdiocese color
+        private Color[] cachedDioceseColorByCell;    // cellId → diocese color
+        private Color[] cachedParishColorByCell;     // cellId → parish color
+
+        // Cached river mask per grid pixel (avoids GetPixels() allocation on every resolve)
+        private bool[] cachedRiverMaskGrid;
+        // Reusable pixel buffer for mode color resolve (avoids allocation per rebuild)
+        private Color[] resolvePixelBuffer;
         private Texture2D archdioceseBorderDistTexture;
         private Texture2D dioceseBorderDistTexture;
         private Texture2D parishBorderDistTexture;
@@ -2692,14 +2705,25 @@ public class MapOverlayManager
 
             modeColorResolveTexture = GetOrCreateModeColorResolveTexture(currentMapMode);
             int size = gridWidth * gridHeight;
-            var resolved = new Color[size];
+            if (resolvePixelBuffer == null || resolvePixelBuffer.Length != size)
+                resolvePixelBuffer = new Color[size];
+            else
+                System.Array.Clear(resolvePixelBuffer, 0, size);
+            var resolved = resolvePixelBuffer;
 
-            Color[] rivers = riverMaskTexture.GetPixels();
+            // For political/religion drill-down, use cached river mask (avoids GetPixels allocation).
+            // Other modes still use the full Color[] for IsRiverPixel.
+            EnsureRiverMaskGrid();
+            Color[] rivers = null; // lazy-allocated below only if needed
             Color[] realmPalette = realmPaletteTexture.GetPixels();
 
             bool isMarketMode = currentMapMode == MapView.MapMode.Market;
             bool isMarketAccessMode = currentMapMode == MapView.MapMode.MarketAccess;
             bool isLocalTransportMode = currentMapMode == MapView.MapMode.TransportCost;
+
+            // Non-drill modes need Color[] rivers for IsRiverPixel; allocate only when needed
+            if (isMarketMode || isMarketAccessMode || isLocalTransportMode)
+                rivers = riverMaskTexture.GetPixels();
 
             if (isMarketMode)
             {
@@ -2873,64 +2897,48 @@ public class MapOverlayManager
                      currentMapMode == MapView.MapMode.ReligionDiocese ||
                      currentMapMode == MapView.MapMode.ReligionParish)
             {
-                // Build territory color maps for all levels that may be needed
-                bool anyArchExpanded = drillExpandedArchdioceseIds.Count > 0;
-                bool anyDioExpanded = drillExpandedDioceseIds.Count > 0;
-
-                Dictionary<int, Color> archdioceseColorById = null;
-                Dictionary<int, Color> dioceseColorById = null;
-                Dictionary<int, Color> parishColorById = null;
-
-                if (religionState != null && faithPaletteColors != null)
-                {
-                    archdioceseColorById = BuildArchdioceseColors();
-                    if (anyArchExpanded)
-                        dioceseColorById = BuildDioceseColors(archdioceseColorById);
-                    if (anyDioExpanded)
-                        parishColorById = BuildParishColors(dioceseColorById, archdioceseColorById);
-                }
+                // Religion modes with drill-down: use precomputed per-cell colors
+                EnsureReligionCellColors();
+                bool hasDrill = drillExpandedArchdioceseIds.Count > 0;
 
                 for (int i = 0; i < size; i++)
                 {
                     int cellId = spatialGrid[i];
-                    if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
-                        continue;
-
-                    if (!cell.IsLand || IsRiverPixel(rivers[i]))
-                        continue;
+                    if (cellId < 0) continue;
+                    if (cellId >= cellIsLandById.Length || !cellIsLandById[cellId]) continue;
+                    if (cachedRiverMaskGrid != null && i < cachedRiverMaskGrid.Length && cachedRiverMaskGrid[i]) continue;
 
                     int archId = (cellArchdioceseIdById != null && cellId < cellArchdioceseIdById.Length) ? cellArchdioceseIdById[cellId] : 0;
                     int dioId = (cellDioceseIdById != null && cellId < cellDioceseIdById.Length) ? cellDioceseIdById[cellId] : 0;
                     int parId = (cellParishIdById != null && cellId < cellParishIdById.Length) ? cellParishIdById[cellId] : 0;
 
-                    // Determine display level based on drill state
-                    // 1=archdiocese, 2=diocese, 3=parish
                     int displayLevel = 1;
-                    Color territoryColor;
                     int territoryId = archId;
+                    Color territoryColor;
 
-                    if (archId > 0 && archdioceseColorById != null && archdioceseColorById.TryGetValue(archId, out Color ac))
-                        territoryColor = ac;
-                    else
-                        territoryColor = GetCellFaithColor(cellId);
-
-                    if (archId > 0 && drillExpandedArchdioceseIds.Contains(archId))
+                    if (cachedArchdioceseColorByCell != null && cellId < cachedArchdioceseColorByCell.Length)
                     {
-                        displayLevel = 2;
-                        territoryId = dioId;
-                        if (dioId > 0 && dioceseColorById != null && dioceseColorById.TryGetValue(dioId, out Color dc))
-                            territoryColor = dc;
+                        territoryColor = cachedArchdioceseColorByCell[cellId];
 
-                        if (dioId > 0 && drillExpandedDioceseIds.Contains(dioId))
+                        if (hasDrill && archId > 0 && drillExpandedArchdioceseIds.Contains(archId))
                         {
-                            displayLevel = 3;
-                            territoryId = parId;
-                            if (parId > 0 && parishColorById != null && parishColorById.TryGetValue(parId, out Color pc))
-                                territoryColor = pc;
+                            displayLevel = 2;
+                            territoryId = dioId;
+                            territoryColor = cachedDioceseColorByCell[cellId];
+
+                            if (dioId > 0 && drillExpandedDioceseIds.Contains(dioId))
+                            {
+                                displayLevel = 3;
+                                territoryId = parId;
+                                territoryColor = cachedParishColorByCell[cellId];
+                            }
                         }
                     }
+                    else
+                    {
+                        territoryColor = GetCellFaithColor(cellId);
+                    }
 
-                    // Pack: top 2 bits = display level, bottom 6 bits = territory ID
                     int packedAlpha = ((displayLevel & 0x3) << 6) | (territoryId & 0x3F);
                     territoryColor.a = packedAlpha / 255f;
                     resolved[i] = territoryColor;
@@ -2938,58 +2946,50 @@ public class MapOverlayManager
             }
             else
             {
-                // Political modes with drill-down: build color lookups for all levels that may be needed
-                bool anyRealmExpanded = drillExpandedRealmIds.Count > 0;
-                bool anyProvinceExpanded = drillExpandedProvinceIds.Count > 0;
-
-                Dictionary<int, Color> provinceColorById = null;
-                Dictionary<int, Color> countyColorById = null;
-                if (anyRealmExpanded)
-                {
-                    provinceColorById = BuildProvinceColorOverrides(realmPalette);
-                    if (anyProvinceExpanded)
-                        countyColorById = BuildCountyColorOverrides(provinceColorById, realmPalette);
-                }
+                // Political modes with drill-down: use precomputed per-cell colors
+                EnsurePoliticalCellColors();
+                bool hasDrill = drillExpandedRealmIds.Count > 0;
 
                 for (int i = 0; i < size; i++)
                 {
                     int cellId = spatialGrid[i];
-                    if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
-                        continue;
+                    if (cellId < 0) continue;
+                    if (cellId >= cellIsLandById.Length || !cellIsLandById[cellId]) continue;
+                    if (cachedRiverMaskGrid != null && i < cachedRiverMaskGrid.Length && cachedRiverMaskGrid[i]) continue;
 
-                    bool isCellWater = !cell.IsLand;
-                    bool isRiver = IsRiverPixel(rivers[i]);
-                    if (isCellWater || isRiver)
-                        continue;
-
-                    // Determine display level based on drill state
-                    // 1=realm, 2=province, 3=county
                     int displayLevel = 1;
-                    Color politicalColor = LookupPaletteColor(realmPalette, cell.RealmId);
+                    Color politicalColor;
 
-                    if (drillExpandedRealmIds.Contains(cell.RealmId))
+                    if (hasDrill && cachedRealmColorByCell != null && cellId < cachedRealmColorByCell.Length)
                     {
-                        displayLevel = 2;
-                        if (provinceColorById != null && provinceColorById.TryGetValue(cell.ProvinceId, out Color provinceColor))
-                            politicalColor = provinceColor;
-                        else
-                            politicalColor = DeriveProvinceColorFromRealm(politicalColor, cell.ProvinceId);
+                        int realmId = (cellRealmIdById != null && cellId < cellRealmIdById.Length) ? cellRealmIdById[cellId] : 0;
+                        int provinceId = (cellProvinceIdById != null && cellId < cellProvinceIdById.Length) ? cellProvinceIdById[cellId] : 0;
 
-                        if (drillExpandedProvinceIds.Contains(cell.ProvinceId))
+                        if (drillExpandedRealmIds.Contains(realmId))
                         {
-                            displayLevel = 3;
-                            if (countyColorById != null && countyColorById.TryGetValue(cell.CountyId, out Color countyColor))
+                            displayLevel = 2;
+                            politicalColor = cachedProvinceColorByCell[cellId];
+
+                            if (drillExpandedProvinceIds.Contains(provinceId))
                             {
-                                politicalColor = countyColor;
-                            }
-                            else
-                            {
-                                politicalColor = DeriveCountyColorFromProvince(politicalColor, cell.CountyId);
+                                displayLevel = 3;
+                                politicalColor = cachedCountyColorByCell[cellId];
                             }
                         }
+                        else
+                        {
+                            politicalColor = cachedRealmColorByCell[cellId];
+                        }
+                    }
+                    else if (cachedRealmColorByCell != null && cellId < cachedRealmColorByCell.Length)
+                    {
+                        politicalColor = cachedRealmColorByCell[cellId];
+                    }
+                    else
+                    {
+                        politicalColor = LookupPaletteColor(realmPalette, cellRealmIdById != null && cellId < cellRealmIdById.Length ? cellRealmIdById[cellId] : 0);
                     }
 
-                    // Pack display level in alpha (1/255, 2/255, or 3/255)
                     politicalColor.a = displayLevel / 255f;
                     resolved[i] = politicalColor;
                 }
@@ -3083,6 +3083,101 @@ public class MapOverlayManager
             Color derived = Color.HSVToRGB(h, s, v);
             derived.a = provinceColor.a;
             return derived;
+        }
+
+        /// <summary>
+        /// Precompute per-pixel river mask from river distance texture.
+        /// Called once; avoids GetPixels() allocation on every resolve.
+        /// </summary>
+        private void EnsureRiverMaskGrid()
+        {
+            if (cachedRiverMaskGrid != null) return;
+            if (riverMaskTexture == null) return;
+
+            Color[] rivers = riverMaskTexture.GetPixels();
+            cachedRiverMaskGrid = new bool[rivers.Length];
+            for (int i = 0; i < rivers.Length; i++)
+                cachedRiverMaskGrid[i] = IsRiverPixel(rivers[i]);
+        }
+
+        /// <summary>
+        /// Precompute per-cell colors for all three political levels (realm/province/county).
+        /// Called once; results cached for fast drill-down switching.
+        /// </summary>
+        private void EnsurePoliticalCellColors()
+        {
+            if (cachedRealmColorByCell != null) return; // already computed
+
+            Color[] realmPalette = realmPaletteTexture?.GetPixels();
+            if (realmPalette == null || mapData?.CellById == null) return;
+
+            int maxCellId = 0;
+            foreach (var cell in mapData.Cells)
+                if (cell.Id > maxCellId) maxCellId = cell.Id;
+
+            cachedRealmColorByCell = new Color[maxCellId + 1];
+            cachedProvinceColorByCell = new Color[maxCellId + 1];
+            cachedCountyColorByCell = new Color[maxCellId + 1];
+
+            var provinceColorById = BuildProvinceColorOverrides(realmPalette);
+            var countyColorById = BuildCountyColorOverrides(provinceColorById, realmPalette);
+
+            foreach (var cell in mapData.Cells)
+            {
+                if (!cell.IsLand) continue;
+                int id = cell.Id;
+
+                Color realmColor = LookupPaletteColor(realmPalette, cell.RealmId);
+                cachedRealmColorByCell[id] = realmColor;
+
+                if (provinceColorById.TryGetValue(cell.ProvinceId, out Color pc))
+                    cachedProvinceColorByCell[id] = pc;
+                else
+                    cachedProvinceColorByCell[id] = DeriveProvinceColorFromRealm(realmColor, cell.ProvinceId);
+
+                if (countyColorById.TryGetValue(cell.CountyId, out Color cc))
+                    cachedCountyColorByCell[id] = cc;
+                else
+                    cachedCountyColorByCell[id] = DeriveCountyColorFromProvince(cachedProvinceColorByCell[id], cell.CountyId);
+            }
+        }
+
+        /// <summary>
+        /// Precompute per-cell colors for all three religion levels (archdiocese/diocese/parish).
+        /// Called once; results cached for fast drill-down switching.
+        /// </summary>
+        private void EnsureReligionCellColors()
+        {
+            if (cachedArchdioceseColorByCell != null) return;
+            if (religionState == null || faithPaletteColors == null || mapData?.CellById == null) return;
+
+            int maxCellId = 0;
+            foreach (var cell in mapData.Cells)
+                if (cell.Id > maxCellId) maxCellId = cell.Id;
+
+            cachedArchdioceseColorByCell = new Color[maxCellId + 1];
+            cachedDioceseColorByCell = new Color[maxCellId + 1];
+            cachedParishColorByCell = new Color[maxCellId + 1];
+
+            var archdioceseColorById = BuildArchdioceseColors();
+            var dioceseColorById = BuildDioceseColors(archdioceseColorById);
+            var parishColorById = BuildParishColors(dioceseColorById, archdioceseColorById);
+
+            foreach (var cell in mapData.Cells)
+            {
+                if (!cell.IsLand) continue;
+                int id = cell.Id;
+
+                int archId = (cellArchdioceseIdById != null && id < cellArchdioceseIdById.Length) ? cellArchdioceseIdById[id] : 0;
+                int dioId = (cellDioceseIdById != null && id < cellDioceseIdById.Length) ? cellDioceseIdById[id] : 0;
+                int parId = (cellParishIdById != null && id < cellParishIdById.Length) ? cellParishIdById[id] : 0;
+
+                Color fallback = GetCellFaithColor(id);
+
+                cachedArchdioceseColorByCell[id] = (archId > 0 && archdioceseColorById.TryGetValue(archId, out Color ac)) ? ac : fallback;
+                cachedDioceseColorByCell[id] = (dioId > 0 && dioceseColorById.TryGetValue(dioId, out Color dc)) ? dc : fallback;
+                cachedParishColorByCell[id] = (parId > 0 && parishColorById.TryGetValue(parId, out Color pc)) ? pc : fallback;
+            }
         }
 
         private Dictionary<int, Color> BuildProvinceColorOverrides(Color[] realmPalette)
@@ -3974,11 +4069,33 @@ public class MapOverlayManager
             InvalidateModeColorResolveCache(MapView.MapMode.County);
         }
 
+        /// <summary>
+        /// Force recomputation of cached per-cell political colors (e.g. after political map changes).
+        /// </summary>
+        public void InvalidatePoliticalCellColors()
+        {
+            cachedRealmColorByCell = null;
+            cachedProvinceColorByCell = null;
+            cachedCountyColorByCell = null;
+            InvalidatePoliticalOverlay();
+        }
+
         public void InvalidateReligionOverlay()
         {
             InvalidateModeColorResolveCache(MapView.MapMode.Religion);
             InvalidateModeColorResolveCache(MapView.MapMode.ReligionDiocese);
             InvalidateModeColorResolveCache(MapView.MapMode.ReligionParish);
+        }
+
+        /// <summary>
+        /// Force recomputation of cached per-cell religion colors (e.g. after adherence spread).
+        /// </summary>
+        public void InvalidateReligionCellColors()
+        {
+            cachedArchdioceseColorByCell = null;
+            cachedDioceseColorByCell = null;
+            cachedParishColorByCell = null;
+            InvalidateReligionOverlay();
         }
 
         private void GenerateMarketBorderDistTexture()
@@ -4291,6 +4408,14 @@ public class MapOverlayManager
                 EnsureRoadMaskTexture();
                 BindGeneratedTexturesToMaterial();
             }
+
+            // Clear all cached cell colors and mode color resolve caches
+            cachedRealmColorByCell = null;
+            cachedProvinceColorByCell = null;
+            cachedCountyColorByCell = null;
+            cachedArchdioceseColorByCell = null;
+            cachedDioceseColorByCell = null;
+            cachedParishColorByCell = null;
 
             InvalidateModeColorResolveCache(MapView.MapMode.Political);
             InvalidateModeColorResolveCache(MapView.MapMode.Province);
@@ -4796,6 +4921,9 @@ public class MapOverlayManager
             {
                 politicalIdsTexture.SetPixels(politicalIdsPixels);
                 politicalIdsTexture.Apply();
+                cachedRealmColorByCell = null;
+                cachedProvinceColorByCell = null;
+                cachedCountyColorByCell = null;
                 InvalidateModeColorResolveCache(MapView.MapMode.Political);
                 InvalidateModeColorResolveCache(MapView.MapMode.Province);
                 InvalidateModeColorResolveCache(MapView.MapMode.County);
@@ -4865,6 +4993,14 @@ public class MapOverlayManager
             parishBorderDistTexture = null;
             modeColorResolveTexture = null;
             riverMaskPixels = null;
+            cachedRiverMaskGrid = null;
+            resolvePixelBuffer = null;
+            cachedRealmColorByCell = null;
+            cachedProvinceColorByCell = null;
+            cachedCountyColorByCell = null;
+            cachedArchdioceseColorByCell = null;
+            cachedDioceseColorByCell = null;
+            cachedParishColorByCell = null;
         }
 
         private static void AddTextureForDestroy(HashSet<Texture2D> set, Texture2D texture)

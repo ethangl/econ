@@ -250,7 +250,7 @@ namespace EconSim.Renderer
                 && religionStateRef != null && religionStateRef.OverlayDirty)
             {
                 religionStateRef.OverlayDirty = false;
-                overlayManager.InvalidateReligionOverlay();
+                overlayManager.InvalidateReligionCellColors();
             }
 
             // Suppress hotkeys while startup screen is open.
