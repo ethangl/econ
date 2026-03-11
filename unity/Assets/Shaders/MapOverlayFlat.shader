@@ -57,6 +57,12 @@ Shader "EconSim/MapOverlayFlat"
         _MapMode ("Map Mode", Int) = 0
         _DebugView ("Debug View", Int) = 0
 
+        // Compositing: base color → heightmap (multiply) → map mode (multiply)
+        _BaseColor ("Base Color", Color) = (0.941, 0.890, 0.788, 1)
+        _HeightmapOpacity ("Heightmap Opacity", Range(0, 1)) = 0.3
+        _HeightmapContrast ("Heightmap Contrast", Range(1, 5)) = 2.5
+        _FillOpacity ("Fill Opacity", Range(0, 1)) = 0.5
+
         // Edge band style (flat border along realm/archdiocese edges)
         _EdgeWidth ("Edge Width (pixels)", Range(0, 30)) = 6
         _EdgeDarkening ("Edge Darkening", Range(0, 1)) = 0.15
@@ -180,6 +186,10 @@ Shader "EconSim/MapOverlayFlat"
 
                 int _MapMode;
                 int _DebugView;
+                float4 _BaseColor;
+                float _HeightmapOpacity;
+                float _HeightmapContrast;
+                float _FillOpacity;
                 float _EdgeWidth;
                 float _EdgeDarkening;
                 float _RealmBorderWidth;
@@ -279,25 +289,19 @@ Shader "EconSim/MapOverlayFlat"
 
                 float height = tex2D(_HeightmapTex, IN.dataUV).r;
 
-                // ---- Layer 1: Terrain ----
+                // ---- Compositing ----
 
-                float3 terrain = _MapMode == 0
-                    ? ComputeHeightGradient(isCellWater, height, riverMask)
-                    : float3(0.0, 0.0, 0.0);
-
-                // ---- Layer 2: Map mode ----
-
+                // Decode map mode auxiliary data (marketId from resolve alpha).
                 float4 mapMode;
                 if (_UseModeColorResolve > 0)
                 {
                     float4 resolvedMode = tex2D(_ModeColorResolve, uv);
                     float3 resolvedBase = resolvedMode.rgb;
                     float resolvedAlpha = resolvedMode.a;
-                    // For market/transport/religion modes, alpha encodes entity ID for selection
                     if (_MapMode == 4 || _MapMode == 8 || _MapMode == 9)
                         marketId = resolvedAlpha;
                     else if (_MapMode >= 10 && _MapMode <= 12)
-                        marketId = fmod(resolvedAlpha * 255.0, 64.0) / 255.0;  // bottom 6 bits = territory ID
+                        marketId = fmod(resolvedAlpha * 255.0, 64.0) / 255.0;
                     else
                         marketId = 0.0;
                     mapMode = ComputeMapModeFromResolvedBase(uv, isCellWater, isRiver, height, resolvedBase, resolvedAlpha);
@@ -307,42 +311,39 @@ Shader "EconSim/MapOverlayFlat"
                     marketId = 0.0;
                     mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId);
                 }
-                float3 afterMapMode;
-                if (!isWater && mapMode.a > 0.001)
-                {
-                    // Flat land modes are pure mode color (no terrain layer).
-                    afterMapMode = mapMode.rgb;
-                }
-                else
-                {
-                    // Preserve terrain substrate for water/rivers and debug fallback modes.
-                    afterMapMode = terrain;
-                }
 
-                // ---- Layer 3: Water ----
+                float3 relitColor;
 
                 if (_MapMode == 0)
                 {
-                    // Height mode: no water overlay (already has its own water colors)
-                    // Keep the height-mode water gradient untouched.
-                    // (ComputeWater is only for normal overlay compositing.)
-                    // NOP
+                    // Height mode: colored terrain gradient (standalone).
+                    relitColor = ComputeHeightGradient(isCellWater, height, riverMask);
                 }
                 else
                 {
-                    // Flat style water tinting (no volumetric/refraction/shimmer).
-                    if (isCellWater)
+                    // 3-layer compositing: base → heightmap (multiply) → fill (multiply).
+                    // Contrast-boost: remap height from [0,1] through pow to increase range.
+                    float h = saturate(pow(height, _HeightmapContrast));
+
+                    float3 color = _BaseColor.rgb;
+                    color *= lerp(1.0, h, _HeightmapOpacity);
+
+                    // Map mode fill (multiply with opacity).
+                    if (mapMode.a > 0.001)
                     {
-                        afterMapMode = _WaterShallowColor.rgb;
+                        float3 fill = mapMode.rgb;
+                        color *= lerp(float3(1,1,1), fill, _FillOpacity);
                     }
-                    else if (riverMask > 0.01)
+
+                    // River tint.
+                    if (riverMask > 0.01)
                     {
                         float riverAlpha = _WaterShallowAlpha * riverMask;
-                        afterMapMode = lerp(afterMapMode, _WaterShallowColor.rgb, riverAlpha);
+                        color = lerp(color, _WaterShallowColor.rgb, riverAlpha);
                     }
+
+                    relitColor = color;
                 }
-                float3 afterWater = afterMapMode;
-                float3 relitColor = afterWater;
 
                 // ---- Layer 4: Selection / hover (operates on composited color) ----
 
