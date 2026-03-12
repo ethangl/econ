@@ -123,6 +123,7 @@ public class MapOverlayManager
         /// Accessor for the political IDs texture (realm/province/county channels).
         /// </summary>
         public Texture2D PoliticalIdsTexture => politicalIdsTexture;
+        public Texture2D HeightmapTexture => heightmapTexture;
         private Texture2D heightmapTexture;     // RFloat: smoothed height values
         private Texture2D reliefNormalTexture;  // RGBA32: normal map derived from visual height
         private Texture2D riverMaskTexture;     // RG16: R=distance from river, G=normalized flux
@@ -2485,6 +2486,105 @@ public class MapOverlayManager
             roadDistTexture.wrapMode = TextureWrapMode.Clamp;
             // R8 textures initialize to 0 (black = no roads), just apply.
             roadDistTexture.Apply();
+        }
+
+        /// <summary>
+        /// Bake the mesh's vertex-interpolated elevation into a high-resolution RenderTexture.
+        /// This replaces the cell-resolution heightmap for slope lighting, giving smooth gradients
+        /// across cell boundaries via GPU interpolation.
+        /// </summary>
+        public void BakeElevationFromMesh(MeshFilter sourceMeshFilter, Transform meshTransform)
+        {
+            if (sourceMeshFilter == null || sourceMeshFilter.sharedMesh == null)
+            {
+                Debug.LogWarning("MapOverlayManager: Cannot bake elevation - no mesh");
+                return;
+            }
+
+            const int bakeSize = 2048;
+            Shader bakeShader = Shader.Find("EconSim/ElevationBake");
+            if (bakeShader == null)
+            {
+                Debug.LogError("MapOverlayManager: ElevationBake shader not found");
+                return;
+            }
+
+            var bakeMaterial = new Material(bakeShader) { hideFlags = HideFlags.DontSave };
+
+            // Create a temporary RenderTexture for the bake
+            var bakeRT = new RenderTexture(bakeSize, bakeSize, 24, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear)
+            {
+                name = "ElevationBakeRT",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                useMipMap = false,
+                autoGenerateMips = false
+            };
+            bakeRT.Create();
+
+            // Set up a temporary orthographic camera looking straight down at the mesh.
+            // The mesh is in world space: X = [0, worldWidth], Z = [0, worldHeight], Y = up.
+            Bounds meshBounds = sourceMeshFilter.sharedMesh.bounds;
+            Vector3 worldCenter = meshTransform.TransformPoint(meshBounds.center);
+            Vector3 worldSize = meshBounds.size;
+
+            // The mesh lies on the XZ plane. Camera looks down -Y.
+            var cameraGO = new GameObject("ElevationBakeCamera");
+            cameraGO.hideFlags = HideFlags.HideAndDontSave;
+            var bakeCam = cameraGO.AddComponent<UnityEngine.Camera>();
+            bakeCam.enabled = false;
+            bakeCam.orthographic = true;
+            // Ortho size = half the Z extent (height in world space)
+            bakeCam.orthographicSize = worldSize.z * 0.5f;
+            bakeCam.aspect = worldSize.x / worldSize.z;
+            bakeCam.transform.position = new Vector3(worldCenter.x, worldCenter.y + 100f, worldCenter.z);
+            bakeCam.transform.rotation = UnityEngine.Quaternion.Euler(90f, 0f, 0f);
+            bakeCam.nearClipPlane = 0.1f;
+            bakeCam.farClipPlane = 500f;
+            bakeCam.clearFlags = CameraClearFlags.SolidColor;
+            bakeCam.backgroundColor = Color.black;
+            bakeCam.targetTexture = bakeRT;
+            bakeCam.cullingMask = 0; // We'll render manually
+
+            // Render the mesh with the bake material using CommandBuffer
+            bakeCam.Render(); // Clear
+            var cmd = new UnityEngine.Rendering.CommandBuffer { name = "ElevationBake" };
+            cmd.SetRenderTarget(bakeRT);
+            cmd.ClearRenderTarget(true, true, Color.black);
+            cmd.SetViewProjectionMatrices(bakeCam.worldToCameraMatrix, bakeCam.projectionMatrix);
+            cmd.DrawMesh(sourceMeshFilter.sharedMesh, meshTransform.localToWorldMatrix, bakeMaterial, 0, 0);
+            UnityEngine.Graphics.ExecuteCommandBuffer(cmd);
+            cmd.Dispose();
+
+            // Read back into a Texture2D to replace the cell-resolution heightmap
+            RenderTexture previousActive = RenderTexture.active;
+            RenderTexture.active = bakeRT;
+            var bakedTexture = new Texture2D(bakeSize, bakeSize, TextureFormat.RFloat, false)
+            {
+                name = "BakedElevationTexture",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            bakedTexture.ReadPixels(new Rect(0, 0, bakeSize, bakeSize), 0, 0);
+            bakedTexture.Apply();
+            RenderTexture.active = previousActive;
+
+            // Clean up
+            UnityEngine.Object.DestroyImmediate(cameraGO);
+            UnityEngine.Object.DestroyImmediate(bakeMaterial);
+            bakeRT.Release();
+            UnityEngine.Object.DestroyImmediate(bakeRT);
+
+            // Replace the heightmap texture
+            if (heightmapTexture != null)
+                UnityEngine.Object.DestroyImmediate(heightmapTexture);
+            heightmapTexture = bakedTexture;
+
+            // Re-bind to material
+            if (styleMaterial != null)
+                styleMaterial.SetTexture(HeightmapTexId, heightmapTexture);
+
+            Debug.Log($"MapOverlayManager: Baked elevation {bakeSize}x{bakeSize} from mesh (was {gridWidth}x{gridHeight})");
         }
 
         private void BindGeneratedTexturesToMaterial()
