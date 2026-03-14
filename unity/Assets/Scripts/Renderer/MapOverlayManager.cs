@@ -100,9 +100,7 @@ public class MapOverlayManager
         private static readonly int HoveredMarketIdId = Shader.PropertyToID("_HoveredMarketId");
 
         // Water layer property IDs
-        private static readonly int WaterShallowColorId = Shader.PropertyToID("_WaterShallowColor");
         private static readonly int WaterDeepColorId = Shader.PropertyToID("_WaterDeepColor");
-        private static readonly int WaterShallowAlphaId = Shader.PropertyToID("_WaterShallowAlpha");
         private static readonly int ShimmerScaleId = Shader.PropertyToID("_ShimmerScale");
         private static readonly int ShimmerSpeedId = Shader.PropertyToID("_ShimmerSpeed");
         private static readonly int ShimmerIntensityId = Shader.PropertyToID("_ShimmerIntensity");
@@ -2898,19 +2896,11 @@ public class MapOverlayManager
                 System.Array.Clear(resolvePixelBuffer, 0, size);
             var resolved = resolvePixelBuffer;
 
-            // For political/religion drill-down, use cached river mask (avoids GetPixels allocation).
-            // Other modes still use the full Color[] for IsRiverPixel.
-            EnsureRiverMaskGrid();
-            Color[] rivers = null; // lazy-allocated below only if needed
             Color[] realmPalette = realmPaletteTexture.GetPixels();
 
             bool isMarketMode = currentMapMode == MapView.MapMode.Market;
             bool isMarketAccessMode = currentMapMode == MapView.MapMode.MarketAccess;
             bool isLocalTransportMode = currentMapMode == MapView.MapMode.TransportCost;
-
-            // Non-drill modes need Color[] rivers for IsRiverPixel; allocate only when needed
-            if (isMarketMode || isMarketAccessMode || isLocalTransportMode)
-                rivers = riverMaskTexture.GetPixels();
 
             if (isMarketMode)
             {
@@ -2922,7 +2912,7 @@ public class MapOverlayManager
                     if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
                         continue;
 
-                    if (!cell.IsLand || IsRiverPixel(rivers[i]))
+                    if (!cell.IsLand)
                         continue;
 
                     int marketId = (cellMarketIdById != null && cellId < cellMarketIdById.Length)
@@ -2966,7 +2956,6 @@ public class MapOverlayManager
                             int cellId = spatialGrid[i];
                             if (cellId < 0) continue;
                             if (cellId >= cellIsLandById.Length || !cellIsLandById[cellId]) continue;
-                            if (IsRiverPixel(rivers[i])) continue;
 
                             int cellMarketId = (cellMarketIdById != null && cellId < cellMarketIdById.Length)
                                 ? cellMarketIdById[cellId] : 0;
@@ -2996,7 +2985,6 @@ public class MapOverlayManager
                     int cellId = spatialGrid[i];
                     if (cellId < 0) continue;
                     if (cellId >= cellIsLandById.Length || !cellIsLandById[cellId]) continue;
-                    if (IsRiverPixel(rivers[i])) continue;
 
                     float cost = costValues[i];
                     if (float.IsNaN(cost) || float.IsInfinity(cost))
@@ -3033,7 +3021,7 @@ public class MapOverlayManager
                     if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
                         continue;
 
-                    if (!cell.IsLand || IsRiverPixel(rivers[i]))
+                    if (!cell.IsLand)
                         continue;
 
                     float value = ComputeTransportCost(cell);
@@ -3062,7 +3050,7 @@ public class MapOverlayManager
                     if (cellId < 0 || !mapData.CellById.TryGetValue(cellId, out var cell))
                         continue;
 
-                    if (!cell.IsLand || IsRiverPixel(rivers[i]))
+                    if (!cell.IsLand)
                         continue;
 
                     float value = values[i];
@@ -3093,7 +3081,6 @@ public class MapOverlayManager
                     int cellId = spatialGrid[i];
                     if (cellId < 0) continue;
                     if (cellId >= cellIsLandById.Length || !cellIsLandById[cellId]) continue;
-                    if (cachedRiverMaskGrid != null && i < cachedRiverMaskGrid.Length && cachedRiverMaskGrid[i]) continue;
 
                     int archId = (cellArchdioceseIdById != null && cellId < cellArchdioceseIdById.Length) ? cellArchdioceseIdById[cellId] : 0;
                     int dioId = (cellDioceseIdById != null && cellId < cellDioceseIdById.Length) ? cellDioceseIdById[cellId] : 0;
@@ -3142,7 +3129,6 @@ public class MapOverlayManager
                     int cellId = spatialGrid[i];
                     if (cellId < 0) continue;
                     if (cellId >= cellIsLandById.Length || !cellIsLandById[cellId]) continue;
-                    if (cachedRiverMaskGrid != null && i < cachedRiverMaskGrid.Length && cachedRiverMaskGrid[i]) continue;
 
                     int displayLevel = 1;
                     Color politicalColor;
@@ -3712,15 +3698,11 @@ public class MapOverlayManager
             }
 
             bool hasRange = countyLogDensityById.Count > 0 && maxLogDensity > minLogDensity + 1e-5f;
-            Color[] riverPixels = riverMaskTexture != null ? riverMaskTexture.GetPixels() : null;
 
             for (int i = 0; i < size; i++)
             {
                 int cellId = spatialGrid[i];
                 if (cellId < 0 || cellId >= cellIsLandById.Length || !cellIsLandById[cellId])
-                    continue;
-
-                if (riverPixels != null && i < riverPixels.Length && IsRiverPixel(riverPixels[i]))
                     continue;
 
                 int countyId = (cellId >= 0 && cellId < cellCountyIdById.Length) ? cellCountyIdById[cellId] : 0;

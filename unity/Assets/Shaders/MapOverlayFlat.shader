@@ -99,9 +99,6 @@ Shader "EconSim/MapOverlayFlat"
         _PathGapLength ("Path Gap Length", Range(0.1, 20)) = 2.4
         _PathWidth ("Path Width", Range(0.2, 4)) = 0.8
 
-        // Water layer properties
-        _WaterShallowColor ("Shallow Water Color", Color) = (0.25, 0.55, 0.65, 1)
-        _WaterShallowAlpha ("River Alpha", Range(0, 1)) = 0.5
     }
     SubShader
     {
@@ -202,9 +199,6 @@ Shader "EconSim/MapOverlayFlat"
                 float _MarketBorderDarkening;
                 float _PathOpacity;
 
-                // Water layer uniforms
-                half4 _WaterShallowColor;
-                float _WaterShallowAlpha;
                 float _RiverWidth;
                 float _RiverMinWidth;
 
@@ -333,13 +327,6 @@ Shader "EconSim/MapOverlayFlat"
                     {
                         float3 fill = mapMode.rgb;
                         color *= lerp(float3(1,1,1), fill, _FillOpacity);
-                    }
-
-                    // River tint.
-                    if (riverMask > 0.01)
-                    {
-                        float riverAlpha = _WaterShallowAlpha * riverMask;
-                        color = lerp(color, _WaterShallowColor.rgb, riverAlpha);
                     }
 
                     relitColor = color;

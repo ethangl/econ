@@ -126,12 +126,6 @@ namespace EconSim.Editor
             ("_VegetationColor6", "Broadleaf"),
         };
 
-        private static readonly (string name, string label)[] WaterRenderingFlatProps = new[]
-        {
-            ("_WaterShallowColor", "Shallow Water Color"),
-            ("_WaterShallowAlpha", "River Alpha"),
-        };
-
         private static readonly (string name, string label)[] WaterRenderingBiomeProps = new[]
         {
             ("_WaterShallowColor", "Shallow Water Color"),
@@ -211,8 +205,6 @@ namespace EconSim.Editor
         private bool IsGrouped(string propName)
         {
             foreach (var (name, _) in RealmRenderingProps)
-                if (name == propName) return true;
-            foreach (var (name, _) in WaterRenderingFlatProps)
                 if (name == propName) return true;
             foreach (var (name, _) in WaterRenderingBiomeProps)
                 if (name == propName) return true;
@@ -359,14 +351,15 @@ namespace EconSim.Editor
                 EditorGUILayout.EndFoldoutHeaderGroup();
             }
 
-            // Water Rendering group
+            // Water Rendering group (biome only — flat has no water layer properties)
+            if (!isFlat)
+            {
             EditorGUILayout.Space();
             waterRenderingFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(waterRenderingFoldout, "Water Rendering");
             if (waterRenderingFoldout)
             {
                 EditorGUI.indentLevel++;
-                var waterProps = isFlat ? WaterRenderingFlatProps : WaterRenderingBiomeProps;
-                foreach (var (name, label) in waterProps)
+                foreach (var (name, label) in WaterRenderingBiomeProps)
                 {
                     var prop = FindProperty(name, properties, false);
                     if (prop != null)
@@ -375,6 +368,7 @@ namespace EconSim.Editor
                 EditorGUI.indentLevel--;
             }
             EditorGUILayout.EndFoldoutHeaderGroup();
+            }
 
             if (showBiomeGroups)
             {
