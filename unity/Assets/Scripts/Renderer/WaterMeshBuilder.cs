@@ -48,13 +48,7 @@ namespace EconSim.Renderer
             var colors = new List<Color>(16384);
             var triangles = new List<int>(32768);
 
-            // --- Water bodies (oceans + lakes) ---
-            float seaLevel01 = Elevation.NormalizeAbsolute01(
-                Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
-            BuildWaterBodies(mapData, cellScale, seaLevel01, expand,
-                vertices, uvs, colors, triangles);
-
-            // --- Rivers ---
+            // --- Rivers (submitted first so stencil gives them priority over water bodies) ---
 
             // Compute log-flux range for river width interpolation
             float logTrace = 0f;
@@ -94,6 +88,12 @@ namespace EconSim.Renderer
                     riverMinHalfWidth, riverMaxHalfWidth,
                     vertices, uvs, colors, triangles);
             }
+
+            // --- Water bodies (oceans + lakes, after rivers for stencil priority) ---
+            float seaLevel01 = Elevation.NormalizeAbsolute01(
+                Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
+            BuildWaterBodies(mapData, cellScale, seaLevel01, expand,
+                vertices, uvs, colors, triangles);
 
             if (vertices.Count == 0)
                 return null;

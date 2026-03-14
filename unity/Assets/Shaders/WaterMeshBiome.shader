@@ -84,6 +84,15 @@ Shader "EconSim/WaterMeshBiome"
             ZTest LEqual
             Cull Off
 
+            // Prevent double-blending at cell boundaries:
+            // first fragment to hit a pixel writes stencil, subsequent fragments are skipped.
+            Stencil
+            {
+                Ref 1
+                Comp NotEqual
+                Pass Replace
+            }
+
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag

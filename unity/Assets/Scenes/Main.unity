@@ -493,7 +493,7 @@ MonoBehaviour:
   waterLakeColor: {r: 0, g: 0.9666667, b: 1, a: 1}
   waterOceanColor: {r: 0.1, g: 0.25, b: 0.45, a: 0.65}
   waterEdgeSoftness: 0.08
-  biomesModeHeightScale: 0.75
+  biomesModeHeightScale: 0.5
 --- !u!23 &2039203592
 MeshRenderer:
   m_ObjectHideFlags: 0

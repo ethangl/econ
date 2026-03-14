@@ -61,6 +61,13 @@ Shader "EconSim/WaterMesh"
             ZWrite Off
             Cull Off
 
+            Stencil
+            {
+                Ref 1
+                Comp NotEqual
+                Pass Replace
+            }
+
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
