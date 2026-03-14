@@ -235,7 +235,7 @@ Shader "EconSim/MapOverlayFlat"
             }
 
             #include "MapOverlay.Common.cginc"
-            #define MAP_OVERLAY_DISABLE_WATER_VOLUME 1
+            #define MAP_OVERLAY_DISABLE_RELIEF_SHADING 1
             #include "MapOverlay.Composite.cginc"
             #include "MapOverlay.ResolveModes.cginc"
 

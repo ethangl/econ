@@ -87,61 +87,7 @@ float3 ComputeHeightGradient(bool isCellWater, float height, float riverMask)
     return result;
 }
 
-#ifndef MAP_OVERLAY_DISABLE_WATER_VOLUME
-float3 ComputeWater(bool isCellWater, float height, float riverMask, float2 uv, float2 worldUV, float3 underlyingColor)
-{
-    // No water layer if not ocean/lake cell
-    if (!isCellWater)
-        return underlyingColor;
-
-    // Ocean/lake volume attenuation:
-    // Transmittance decays with depth (Beer-Lambert style), so deeper water hides seabed.
-    float depth01 = saturate((_SeaLevel - height) / max(_SeaLevel, 0.001));
-    float curvedDepth = pow(depth01, max(_WaterDepthExponent, 0.001));
-    float opticalDepth = curvedDepth * max(_WaterOpticalDepth, 0.001);
-    float3 absorption = max(_WaterAbsorption.rgb, float3(0.001, 0.001, 0.001));
-    float3 transmittance = exp(-absorption * opticalDepth);
-
-    float3 waterTint = lerp(_WaterShallowColor.rgb, _WaterDeepColor.rgb, depth01);
-
-    // Animated shimmer rides on in-scattering tint (more visible in shallower water).
-    float time = _Time.y * _ShimmerSpeed;
-    float2 uv1 = worldUV + float2(time, time * 0.7);
-    float2 uv2 = worldUV * 1.3 + float2(-time * 0.8, time * 0.5);
-    float shimmer = (fbm2(uv1) + fbm2(uv2)) * 0.5;
-    float shimmerStrength = _ShimmerIntensity * lerp(1.0, 0.45, depth01);
-    float brightness = 1.0 + (shimmer - 0.5) * 2.0 * shimmerStrength;
-    waterTint *= brightness;
-
-    // Animated seabed refraction (screen-space approximation using UV offset).
-    // Uses independent scale/speed controls so motion is decoupled from shimmer.
-    float refractionStrength = _WaterRefractionStrength * lerp(1.0, 0.35, depth01);
-    float refractionScaleRatio = _WaterRefractionScale / max(_ShimmerScale, 0.0001);
-    float2 refractionBaseUV = worldUV * refractionScaleRatio;
-    float refractionTime = _Time.y * _WaterRefractionSpeed;
-    float2 refractNoiseUV1 = refractionBaseUV + float2(refractionTime * 0.9, -refractionTime * 0.6);
-    float2 refractNoiseUV2 = refractionBaseUV * 1.7 + float2(-refractionTime * 0.7, refractionTime * 1.1);
-    float2 refractionNoise = float2(
-        fbm2(refractNoiseUV1 + float2(11.3, 3.7)),
-        fbm2(refractNoiseUV2 + float2(5.9, 17.1))
-    ) * 2.0 - 1.0;
-    float2 refractUV = saturate(uv + refractionNoise * refractionStrength);
-
-    float3 refractedUnderlying = underlyingColor;
-    float4 refractedGeo = SampleGeographyBase(refractUV);
-    bool refractedIsWater = refractedGeo.a >= 0.5;
-    if (refractedIsWater)
-    {
-        float refractedHeight = tex2D(_HeightmapTex, refractUV).r;
-        refractedUnderlying = ComputeTerrain(refractUV, true, refractedGeo.r, refractedHeight);
-    }
-
-    float3 attenuatedUnderlying = refractedUnderlying * transmittance;
-    float3 inScattering = waterTint * (1.0 - transmittance);
-    float3 volumetricColor = attenuatedUnderlying + inScattering;
-    return volumetricColor;
-}
-
+#ifndef MAP_OVERLAY_DISABLE_RELIEF_SHADING
 float3 ApplyReliefShading(float3 baseColor, float2 uv, bool isWater)
 {
     if (isWater || _ReliefShadeStrength <= 0.001)

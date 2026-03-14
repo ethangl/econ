@@ -97,12 +97,6 @@ public class MapOverlayManager
         private static readonly int HoveredMarketIdId = Shader.PropertyToID("_HoveredMarketId");
         private static readonly int BorderTexelScaleId = Shader.PropertyToID("_BorderTexelScale");
 
-        // Water layer property IDs
-        private static readonly int WaterDeepColorId = Shader.PropertyToID("_WaterDeepColor");
-        private static readonly int ShimmerScaleId = Shader.PropertyToID("_ShimmerScale");
-        private static readonly int ShimmerSpeedId = Shader.PropertyToID("_ShimmerSpeed");
-        private static readonly int ShimmerIntensityId = Shader.PropertyToID("_ShimmerIntensity");
-
         private MapData mapData;
         private Material styleMaterial;
 

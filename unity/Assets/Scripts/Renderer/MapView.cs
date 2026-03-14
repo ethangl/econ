@@ -1525,10 +1525,7 @@ namespace EconSim.Renderer
         private void SyncWaterColors()
         {
             if (waterMeshRenderer == null) return;
-            waterMeshRenderer.RiverColor = waterRiverColor;
-            waterMeshRenderer.LakeColor = waterLakeColor;
-            waterMeshRenderer.OceanColor = waterOceanColor;
-            waterMeshRenderer.EdgeSoftness = waterEdgeSoftness;
+            waterMeshRenderer.SetColors(waterRiverColor, waterLakeColor, waterOceanColor, waterEdgeSoftness);
         }
 
         private void BuildParchmentLayer()

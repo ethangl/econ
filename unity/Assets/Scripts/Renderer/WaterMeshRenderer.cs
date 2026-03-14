@@ -7,6 +7,7 @@ namespace EconSim.Renderer
     /// Manages the water mesh (rivers + water bodies) lifecycle.
     /// Supports two render modes: flat (stencil knockout) and biome (volumetric water).
     /// Created as a child GameObject of MapView, similar to RealmCapitalMarkers.
+    /// Color/opacity settings live on MapView (persistent) and are pushed via SetColors().
     /// </summary>
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public class WaterMeshRenderer : MonoBehaviour
@@ -14,12 +15,6 @@ namespace EconSim.Renderer
         public float RiverMinHalfWidth = WaterMeshBuilder.DefaultRiverMinHalfWidth;
         public float RiverMaxHalfWidth = WaterMeshBuilder.DefaultRiverMaxHalfWidth;
         public float Expand = 0.003f;
-
-        [Header("Water Colors")]
-        public Color RiverColor = new Color(0.18f, 0.42f, 0.68f, 0.75f);
-        public Color LakeColor = new Color(0.15f, 0.35f, 0.55f, 0.60f);
-        public Color OceanColor = new Color(0.10f, 0.25f, 0.45f, 0.65f);
-        public float EdgeSoftness = 0.08f;
 
         private static readonly int HeightScaleId = Shader.PropertyToID("_HeightScale");
         private static readonly int SeaLevelId = Shader.PropertyToID("_SeaLevel");
@@ -44,10 +39,6 @@ namespace EconSim.Renderer
         private float prevRiverMin;
         private float prevRiverMax;
         private float prevExpand;
-        private Color prevRiverColor;
-        private Color prevLakeColor;
-        private Color prevOceanColor;
-        private float prevEdgeSoftness;
 
         public void Initialize(MapData mapData, float cellScale)
         {
@@ -57,10 +48,6 @@ namespace EconSim.Renderer
             prevRiverMin = RiverMinHalfWidth;
             prevRiverMax = RiverMaxHalfWidth;
             prevExpand = Expand;
-            prevRiverColor = RiverColor;
-            prevLakeColor = LakeColor;
-            prevOceanColor = OceanColor;
-            prevEdgeSoftness = EdgeSoftness;
 
             RebuildMesh();
         }
@@ -72,6 +59,16 @@ namespace EconSim.Renderer
         {
             isBiomeMode = biome;
             ApplyActiveMaterial();
+        }
+
+        /// <summary>
+        /// Push water color/opacity settings to both materials.
+        /// Called by MapView which owns the serialized values.
+        /// </summary>
+        public void SetColors(Color riverColor, Color lakeColor, Color oceanColor, float edgeSoftness)
+        {
+            SetColorsOnMaterial(flatMaterial, riverColor, lakeColor, oceanColor, edgeSoftness);
+            SetColorsOnMaterial(biomeMaterial, riverColor, lakeColor, oceanColor, edgeSoftness);
         }
 
         /// <summary>
@@ -147,7 +144,6 @@ namespace EconSim.Renderer
             mf.sharedMesh = waterMesh;
 
             EnsureMaterials();
-            SyncColorProperties();
             ApplyActiveMaterial();
         }
 
@@ -176,33 +172,15 @@ namespace EconSim.Renderer
                 prevExpand = Expand;
                 RebuildMesh();
             }
-
-            if (RiverColor != prevRiverColor ||
-                LakeColor != prevLakeColor ||
-                OceanColor != prevOceanColor ||
-                EdgeSoftness != prevEdgeSoftness)
-            {
-                prevRiverColor = RiverColor;
-                prevLakeColor = LakeColor;
-                prevOceanColor = OceanColor;
-                prevEdgeSoftness = EdgeSoftness;
-                SyncColorProperties();
-            }
         }
 
-        private void SyncColorProperties()
-        {
-            SyncColorsToMaterial(flatMaterial);
-            SyncColorsToMaterial(biomeMaterial);
-        }
-
-        private void SyncColorsToMaterial(Material mat)
+        private static void SetColorsOnMaterial(Material mat, Color river, Color lake, Color ocean, float edgeSoftness)
         {
             if (mat == null) return;
-            mat.SetColor(RiverColorId, RiverColor);
-            mat.SetColor(LakeColorId, LakeColor);
-            mat.SetColor(OceanColorId, OceanColor);
-            mat.SetFloat(EdgeSoftnessId, EdgeSoftness);
+            mat.SetColor(RiverColorId, river);
+            mat.SetColor(LakeColorId, lake);
+            mat.SetColor(OceanColorId, ocean);
+            mat.SetFloat(EdgeSoftnessId, edgeSoftness);
         }
 
         private void EnsureMaterials()
