@@ -114,6 +114,13 @@ namespace EconSim.Renderer
         // Religion state reference for dirty-flag overlay refresh
         private EconSim.Core.Religious.ReligionState religionStateRef;
 
+        // Background parchment layer
+        private GameObject parchmentObject;
+        private Material parchmentMaterial;
+
+        // Water mesh (rivers + coasts)
+        private WaterMeshRenderer waterMeshRenderer;
+
         // Cell mesh data
         private List<Vector3> vertices = new List<Vector3>();
         private List<int> triangles = new List<int>();
@@ -234,6 +241,8 @@ namespace EconSim.Renderer
             // Unsubscribe from shader selection
             OnCellClicked -= HandleShaderSelection;
 
+            DestroyParchmentLayer();
+            DestroyWaterMesh();
             DestroyRealmCapitalMarkers();
             DestroyMarketHubMarkers();
             DestroyRealmCapitalMarkerMaterial();
@@ -474,11 +483,19 @@ namespace EconSim.Renderer
             if (meshRenderer != null)
                 meshRenderer.sharedMaterial = styleMaterial;
 
+            bool isFlat = style == RenderStyle.Flat;
+            if (parchmentObject != null) parchmentObject.SetActive(isFlat);
+            if (waterMeshRenderer != null) waterMeshRenderer.SetBiomeMode(!isFlat);
+
             overlayManager?.RebindMaterial(styleMaterial);
             overlayManager?.SetHeightDisplacementEnabled(useGridMesh);
             overlayManager?.SetHeightScale(currentAnimatedHeightScale);
             if (mapData != null)
                 overlayManager?.SetSeaLevel(Elevation.ResolveSeaLevel(mapData.Info));
+
+            // Sync biome textures to water mesh after terrain material is fully configured
+            if (!isFlat && waterMeshRenderer != null && styleMaterial != null)
+                waterMeshRenderer.SyncBiomeTextures(styleMaterial);
         }
 
         private float ResolveHeightScaleForMode(MapMode mode)
@@ -516,6 +533,13 @@ namespace EconSim.Renderer
                 HeightScaleTransitionSpeed * Time.deltaTime);
 
             overlayManager.SetHeightScale(currentAnimatedHeightScale);
+
+            if (waterMeshRenderer != null && mapData != null)
+            {
+                float seaLevel01 = Elevation.NormalizeAbsolute01(
+                    Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
+                waterMeshRenderer.SetHeightScale(currentAnimatedHeightScale, seaLevel01);
+            }
         }
 
         private static MapMode ResolveOverlayScope(MapMode mode)
@@ -1026,6 +1050,28 @@ namespace EconSim.Renderer
                 Profiler.End();
             }
 
+            BuildParchmentLayer();
+
+            Profiler.Begin("BuildWaterMesh");
+            BuildWaterMesh();
+            if (waterMeshRenderer != null && mapData != null)
+            {
+                float seaLevel01 = Elevation.NormalizeAbsolute01(
+                    Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
+                waterMeshRenderer.SetHeightScale(currentAnimatedHeightScale, seaLevel01);
+
+                // Set initial render mode and sync biome textures from terrain material
+                bool isBiome = currentRenderStyle == RenderStyle.Biome;
+                waterMeshRenderer.SetBiomeMode(isBiome);
+                if (isBiome)
+                {
+                    Material mat = ResolveRenderStyleMaterial(currentRenderStyle);
+                    if (mat != null)
+                        waterMeshRenderer.SyncBiomeTextures(mat);
+                }
+            }
+            Profiler.End();
+
             BuildRealmCapitalMarkers();
             UpdateModeMarkerVisibility();
 
@@ -1438,6 +1484,86 @@ namespace EconSim.Renderer
 
                 UpdateModeMarkerVisibility();
             }
+        }
+
+        private void BuildWaterMesh()
+        {
+            DestroyWaterMesh();
+
+            if (mapData == null)
+                return;
+
+            var go = new GameObject("WaterMesh");
+            go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>();
+            go.AddComponent<MeshRenderer>();
+            waterMeshRenderer = go.AddComponent<WaterMeshRenderer>();
+
+            waterMeshRenderer.Initialize(mapData, cellScale);
+        }
+
+        private void DestroyWaterMesh()
+        {
+            if (waterMeshRenderer == null)
+                return;
+
+            if (Application.isPlaying)
+                Destroy(waterMeshRenderer.gameObject);
+            else
+                DestroyImmediate(waterMeshRenderer.gameObject);
+
+            waterMeshRenderer = null;
+        }
+
+        private void BuildParchmentLayer()
+        {
+            DestroyParchmentLayer();
+
+            if (mapData == null)
+                return;
+
+            float w = mapData.Info.Width * cellScale;
+            float h = mapData.Info.Height * cellScale;
+
+            var mesh = new Mesh { name = "Parchment" };
+            mesh.vertices = new[]
+            {
+                new Vector3(0, -0.001f, 0),
+                new Vector3(w, -0.001f, 0),
+                new Vector3(w, -0.001f, h),
+                new Vector3(0, -0.001f, h)
+            };
+            mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+
+            parchmentMaterial = Resources.Load<Material>("ParchmentMaterial");
+            if (parchmentMaterial == null)
+            {
+                Debug.LogWarning("MapView: Could not load Resources/ParchmentMaterial.");
+                return;
+            }
+
+            parchmentObject = new GameObject("Parchment");
+            parchmentObject.transform.SetParent(transform, false);
+            var mf = parchmentObject.AddComponent<MeshFilter>();
+            mf.sharedMesh = mesh;
+            var mr = parchmentObject.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = parchmentMaterial;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+        }
+
+        private void DestroyParchmentLayer()
+        {
+            if (parchmentObject != null)
+            {
+                if (Application.isPlaying)
+                    Destroy(parchmentObject);
+                else
+                    DestroyImmediate(parchmentObject);
+                parchmentObject = null;
+            }
+
+            parchmentMaterial = null;
         }
 
         private void BuildRealmCapitalMarkers()

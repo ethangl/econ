@@ -10,7 +10,6 @@ namespace EconSim.Tests
         private static readonly string[] GoldenTextureProperties =
         {
             "_HeightmapTex",
-            "_RiverMaskTex",
             "_RealmBorderDistTex",
             "_ProvinceBorderDistTex",
             "_CountyBorderDistTex",
@@ -24,7 +23,6 @@ namespace EconSim.Tests
             "_ModeColorResolve",
             "_HeightmapTex",
             "_ReliefNormalTex",
-            "_RiverMaskTex",
             "_RealmBorderDistTex",
             "_ProvinceBorderDistTex",
             "_CountyBorderDistTex",
