@@ -520,6 +520,13 @@ namespace EconSim.Renderer
                 HeightScaleTransitionSpeed * Time.deltaTime);
 
             overlayManager.SetHeightScale(currentAnimatedHeightScale);
+
+            if (waterMeshRenderer != null && mapData != null)
+            {
+                float seaLevel01 = Elevation.NormalizeAbsolute01(
+                    Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
+                waterMeshRenderer.SetHeightScale(currentAnimatedHeightScale, seaLevel01);
+            }
         }
 
         private static MapMode ResolveOverlayScope(MapMode mode)
@@ -1032,6 +1039,12 @@ namespace EconSim.Renderer
 
             Profiler.Begin("BuildWaterMesh");
             BuildWaterMesh();
+            if (waterMeshRenderer != null && mapData != null)
+            {
+                float seaLevel01 = Elevation.NormalizeAbsolute01(
+                    Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
+                waterMeshRenderer.SetHeightScale(currentAnimatedHeightScale, seaLevel01);
+            }
             Profiler.End();
 
             BuildRealmCapitalMarkers();
@@ -1466,7 +1479,7 @@ namespace EconSim.Renderer
                 ? overlayManager.GetNoisyEdgeStyle()
                 : MapOverlayManager.NoisyEdgeStyle.Default;
 
-            waterMeshRenderer.Initialize(mapData, cellScale, gridHeightScale, noisyStyle, rootSeed);
+            waterMeshRenderer.Initialize(mapData, cellScale, noisyStyle, rootSeed);
         }
 
         private void DestroyWaterMesh()

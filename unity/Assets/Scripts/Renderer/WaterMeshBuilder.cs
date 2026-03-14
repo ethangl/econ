@@ -5,15 +5,15 @@ using EconSim.Core.Data;
 namespace EconSim.Renderer
 {
     /// <summary>
-    /// Builds quad-strip meshes for rivers and coasts from Voronoi edge geometry.
-    /// Adjacent edges sharing a Voronoi vertex are chained into continuous polylines
-    /// before extrusion, producing smooth connected river/coast meshes.
+    /// Builds meshes for water rendering:
+    /// - Rivers: quad-strip meshes from chained Voronoi edges with noisy displacement
+    /// - Water bodies: fan-triangulated Voronoi cell polygons for oceans and lakes
+    /// Oceans stay at sea level; lakes respond to heightmap displacement.
     /// </summary>
     public static class WaterMeshBuilder
     {
         public const float DefaultRiverMinHalfWidth = 0.003f;
         public const float DefaultRiverMaxHalfWidth = 0.025f;
-        public const float DefaultCoastHalfWidth = 0.008f;
         private const float RiverAmplitudeScale = 0.4f;
         private const int SmoothSamples = 3;
         private const float MeshYOffset = 0.002f;
@@ -25,8 +25,7 @@ namespace EconSim.Renderer
         {
             public int V0, V1;           // Voronoi vertex indices
             public int CellA, CellB;     // Cell pair
-            public float Flux;           // River flux (0 for coast)
-            public bool IsCoast;
+            public float Flux;           // River flux
         }
 
         /// <summary>
@@ -35,26 +34,30 @@ namespace EconSim.Renderer
         private struct Chain
         {
             public List<int> VertexIndices;         // Ordered Voronoi vertex indices
-            public List<(int CellA, int CellB)> EdgeCellPairs; // Cell pair per segment (Count = VertexIndices.Count - 1)
+            public List<(int CellA, int CellB)> EdgeCellPairs; // Cell pair per segment
             public List<float> EdgeFluxes;          // Flux per segment
-            public bool IsCoast;
         }
 
         public static Mesh Build(
             MapData mapData,
             float cellScale,
-            float gridHeightScale,
             MapOverlayManager.NoisyEdgeStyle noisyEdgeStyle,
             uint rootSeed,
             float riverMinHalfWidth = DefaultRiverMinHalfWidth,
-            float riverMaxHalfWidth = DefaultRiverMaxHalfWidth,
-            float coastHalfWidth = DefaultCoastHalfWidth)
+            float riverMaxHalfWidth = DefaultRiverMaxHalfWidth)
         {
-            var vertices = new List<Vector3>(8192);
-            var uvs = new List<Vector2>(8192);
-            var colors = new List<Color>(8192);
-            var triangles = new List<int>(16384);
+            var vertices = new List<Vector3>(16384);
+            var uvs = new List<Vector2>(16384);
+            var colors = new List<Color>(16384);
+            var triangles = new List<int>(32768);
 
+            // --- Water bodies (oceans + lakes) ---
+            float seaLevel01 = Elevation.NormalizeAbsolute01(
+                Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
+            BuildWaterBodies(mapData, cellScale, seaLevel01,
+                vertices, uvs, colors, triangles);
+
+            // --- Rivers ---
             float baseAmplitude = NoisyEdgeUtils.GetBaseAmplitude(1f, noisyEdgeStyle) * cellScale;
 
             // Compute log-flux range for river width interpolation
@@ -72,10 +75,7 @@ namespace EconSim.Renderer
                 logRange = Mathf.Max(0.01f, logMax - logTrace);
             }
 
-            // Collect all edge segments
             var riverSegments = new List<EdgeSegment>();
-            var coastSegments = new List<EdgeSegment>();
-
             if (mapData.EdgeRiverFlux != null && mapData.EdgeRiverVertices != null)
             {
                 foreach (var kv in mapData.EdgeRiverFlux)
@@ -86,41 +86,17 @@ namespace EconSim.Renderer
                     {
                         V0 = vp.Item1, V1 = vp.Item2,
                         CellA = kv.Key.Item1, CellB = kv.Key.Item2,
-                        Flux = kv.Value, IsCoast = false
+                        Flux = kv.Value
                     });
                 }
             }
 
-            if (mapData.EdgeCoastVertices != null)
-            {
-                foreach (var kv in mapData.EdgeCoastVertices)
-                {
-                    coastSegments.Add(new EdgeSegment
-                    {
-                        V0 = kv.Value.Item1, V1 = kv.Value.Item2,
-                        CellA = kv.Key.Item1, CellB = kv.Key.Item2,
-                        Flux = 0f, IsCoast = true
-                    });
-                }
-            }
-
-            // Chain and extrude rivers
-            var riverChains = BuildChains(riverSegments, false);
+            var riverChains = BuildChains(riverSegments);
             foreach (var chain in riverChains)
             {
-                ExtrudeChain(chain, mapData, cellScale, gridHeightScale, noisyEdgeStyle,
+                ExtrudeChain(chain, mapData, cellScale, noisyEdgeStyle,
                     baseAmplitude, rootSeed, logTrace, logRange,
-                    riverMinHalfWidth, riverMaxHalfWidth, coastHalfWidth,
-                    vertices, uvs, colors, triangles);
-            }
-
-            // Chain and extrude coasts
-            var coastChains = BuildChains(coastSegments, true);
-            foreach (var chain in coastChains)
-            {
-                ExtrudeChain(chain, mapData, cellScale, gridHeightScale, noisyEdgeStyle,
-                    baseAmplitude, rootSeed + 7919u, logTrace, logRange,
-                    riverMinHalfWidth, riverMaxHalfWidth, coastHalfWidth,
+                    riverMinHalfWidth, riverMaxHalfWidth,
                     vertices, uvs, colors, triangles);
             }
 
@@ -139,11 +115,96 @@ namespace EconSim.Renderer
             return mesh;
         }
 
-        /// <summary>
-        /// Chain edge segments into continuous polylines by walking shared Voronoi vertices.
-        /// Vertices with degree != 2 are chain endpoints (degree 1 = tip, degree 3+ = junction).
-        /// </summary>
-        private static List<Chain> BuildChains(List<EdgeSegment> segments, bool isCoast)
+        // ───────────────────────────────────────────────
+        //  Water bodies (oceans + lakes)
+        // ───────────────────────────────────────────────
+
+        private static void BuildWaterBodies(
+            MapData mapData,
+            float cellScale,
+            float seaLevel01,
+            List<Vector3> vertices,
+            List<Vector2> uvs,
+            List<Color> colors,
+            List<int> triangles)
+        {
+            if (mapData.Cells == null || mapData.Vertices == null)
+                return;
+
+            foreach (var cell in mapData.Cells)
+            {
+                if (cell.IsLand)
+                    continue;
+                if (cell.VertexIndices == null || cell.VertexIndices.Count < 3)
+                    continue;
+
+                // Determine ocean vs lake
+                bool isLake = false;
+                if (mapData.FeatureById != null &&
+                    mapData.FeatureById.TryGetValue(cell.FeatureId, out var feature))
+                {
+                    isLake = feature.IsLake;
+                }
+
+                // Ocean: sea level (flat). Lake: actual cell height (responds to displacement).
+                float height01 = isLake
+                    ? Elevation.NormalizeAbsolute01(
+                        Elevation.GetAbsoluteHeight(cell, mapData.Info), mapData.Info)
+                    : seaLevel01;
+
+                // Vertex color: R=1.0 ocean, R=0.5 lake
+                Color bodyColor = isLake
+                    ? new Color(0.5f, 0f, 0f, 1f)
+                    : new Color(1f, 0f, 0f, 1f);
+
+                // Collect polygon vertices
+                var polyVerts = new List<Vector2>(cell.VertexIndices.Count);
+                foreach (int vIdx in cell.VertexIndices)
+                {
+                    if (vIdx >= 0 && vIdx < mapData.Vertices.Count)
+                    {
+                        var v = mapData.Vertices[vIdx];
+                        polyVerts.Add(new Vector2(v.X * cellScale, v.Y * cellScale));
+                    }
+                }
+
+                if (polyVerts.Count < 3)
+                    continue;
+
+                // Fan triangulation from cell center
+                Vector2 center = new Vector2(
+                    cell.Center.X * cellScale,
+                    cell.Center.Y * cellScale);
+
+                int centerIdx = vertices.Count;
+                vertices.Add(new Vector3(center.x, 0f, center.y));
+                uvs.Add(new Vector2(height01, 0.5f));
+                colors.Add(bodyColor);
+
+                int firstPolyIdx = vertices.Count;
+                for (int i = 0; i < polyVerts.Count; i++)
+                {
+                    vertices.Add(new Vector3(polyVerts[i].x, 0f, polyVerts[i].y));
+                    uvs.Add(new Vector2(height01, 0.5f));
+                    colors.Add(bodyColor);
+                }
+
+                // CCW winding for Z-positive top-down camera
+                for (int i = 0; i < polyVerts.Count; i++)
+                {
+                    int next = (i + 1) % polyVerts.Count;
+                    triangles.Add(centerIdx);
+                    triangles.Add(firstPolyIdx + next);
+                    triangles.Add(firstPolyIdx + i);
+                }
+            }
+        }
+
+        // ───────────────────────────────────────────────
+        //  River edge chaining + extrusion
+        // ───────────────────────────────────────────────
+
+        private static List<Chain> BuildChains(List<EdgeSegment> segments)
         {
             if (segments.Count == 0)
                 return new List<Chain>();
@@ -171,8 +232,7 @@ namespace EconSim.Renderer
             var used = new bool[segments.Count];
             var chains = new List<Chain>();
 
-            // Start chains from non-degree-2 vertices (endpoints and junctions),
-            // then sweep remaining loops.
+            // Start chains from non-degree-2 vertices (endpoints and junctions)
             var startVertices = new List<int>();
             foreach (var kv in vertexEdges)
             {
@@ -180,7 +240,6 @@ namespace EconSim.Renderer
                     startVertices.Add(kv.Key);
             }
 
-            // Walk chains from each start vertex
             foreach (int startVert in startVertices)
             {
                 foreach (int segIdx in vertexEdges[startVert])
@@ -188,19 +247,19 @@ namespace EconSim.Renderer
                     if (used[segIdx])
                         continue;
 
-                    var chain = WalkChain(segments, vertexEdges, used, segIdx, startVert, isCoast);
+                    var chain = WalkChain(segments, vertexEdges, used, segIdx, startVert);
                     if (chain.VertexIndices.Count >= 2)
                         chains.Add(chain);
                 }
             }
 
-            // Pick up any remaining closed loops (all degree-2 vertices)
+            // Pick up remaining closed loops (all degree-2 vertices)
             for (int i = 0; i < segments.Count; i++)
             {
                 if (used[i])
                     continue;
 
-                var chain = WalkChain(segments, vertexEdges, used, i, segments[i].V0, isCoast);
+                var chain = WalkChain(segments, vertexEdges, used, i, segments[i].V0);
                 if (chain.VertexIndices.Count >= 2)
                     chains.Add(chain);
             }
@@ -213,8 +272,7 @@ namespace EconSim.Renderer
             Dictionary<int, List<int>> vertexEdges,
             bool[] used,
             int startSegIdx,
-            int startVertex,
-            bool isCoast)
+            int startVertex)
         {
             var vertIndices = new List<int> { startVertex };
             var cellPairs = new List<(int, int)>();
@@ -247,9 +305,9 @@ namespace EconSim.Renderer
                 }
 
                 if (nextSeg < 0)
-                    break; // end of chain (endpoint, junction, or loop closed)
+                    break;
 
-                // Stop at junctions (degree 3+) — don't continue through them
+                // Stop at junctions (degree 3+)
                 if (adj.Count > 2)
                     break;
 
@@ -261,8 +319,7 @@ namespace EconSim.Renderer
             {
                 VertexIndices = vertIndices,
                 EdgeCellPairs = cellPairs,
-                EdgeFluxes = fluxes,
-                IsCoast = isCoast
+                EdgeFluxes = fluxes
             };
         }
 
@@ -270,7 +327,6 @@ namespace EconSim.Renderer
             Chain chain,
             MapData mapData,
             float cellScale,
-            float gridHeightScale,
             MapOverlayManager.NoisyEdgeStyle noisyEdgeStyle,
             float baseAmplitude,
             uint rootSeed,
@@ -278,7 +334,6 @@ namespace EconSim.Renderer
             float logRange,
             float riverMinHalfWidth,
             float riverMaxHalfWidth,
-            float coastHalfWidth,
             List<Vector3> outVerts,
             List<Vector2> outUVs,
             List<Color> outColors,
@@ -288,9 +343,6 @@ namespace EconSim.Renderer
             if (vertCount < 2)
                 return;
 
-            // Build the full noisy polyline from the chain's Voronoi vertices.
-            // Each edge segment gets its own noisy sub-polyline (seeded by its cell pair),
-            // and they're stitched together at shared vertices.
             var fullPolyline = new List<Vector2>(vertCount * 8);
             var polylineHalfWidths = new List<float>(vertCount * 8);
             var polylineHeights = new List<float>(vertCount * 8);
@@ -305,7 +357,6 @@ namespace EconSim.Renderer
                 Vector2 w0 = new Vector2(p0.X * cellScale, p0.Y * cellScale);
                 Vector2 w1 = new Vector2(p1.X * cellScale, p1.Y * cellScale);
 
-                // Noisy polyline for this segment
                 var (cellA, cellB) = chain.EdgeCellPairs[seg];
                 uint edgeSeed = NoisyEdgeUtils.BuildUnorderedPairSeed(rootSeed, cellA, cellB);
                 var controlPts = new List<Vector2> { w0, w1 };
@@ -316,22 +367,17 @@ namespace EconSim.Renderer
                 if (subPoly == null || subPoly.Count < 2)
                     continue;
 
-                // Per-segment properties
                 float flux = chain.EdgeFluxes[seg];
-                float fluxT = chain.IsCoast ? 0f : Mathf.Clamp01((Mathf.Log(flux + 1f) - logTrace) / logRange);
-                float halfWidth = chain.IsCoast ? coastHalfWidth : Mathf.Lerp(riverMinHalfWidth, riverMaxHalfWidth, fluxT);
-                float y = chain.IsCoast
-                    ? ComputeCoastHeight(mapData, cellA, cellB, gridHeightScale)
-                    : ComputeEdgeHeight(mapData, cellA, cellB, gridHeightScale);
+                float fluxT = Mathf.Clamp01((Mathf.Log(flux + 1f) - logTrace) / logRange);
+                float halfWidth = Mathf.Lerp(riverMinHalfWidth, riverMaxHalfWidth, fluxT);
+                float height01 = ComputeEdgeHeight01(mapData, cellA, cellB);
 
-                // Append sub-polyline, skipping first point if not the first segment
-                // (the shared vertex was already added as the last point of the previous segment)
                 int startIdx = (seg > 0 && fullPolyline.Count > 0) ? 1 : 0;
                 for (int i = startIdx; i < subPoly.Count; i++)
                 {
                     fullPolyline.Add(subPoly[i]);
                     polylineHalfWidths.Add(halfWidth);
-                    polylineHeights.Add(y);
+                    polylineHeights.Add(height01);
                     polylineFluxT.Add(fluxT);
                 }
             }
@@ -339,10 +385,9 @@ namespace EconSim.Renderer
             if (fullPolyline.Count < 2)
                 return;
 
-            // Extrude the combined polyline with per-vertex width
             ExtrudeVariableWidthStrip(
                 fullPolyline, polylineHalfWidths, polylineHeights, polylineFluxT,
-                chain.IsCoast, outVerts, outUVs, outColors, outTris);
+                outVerts, outUVs, outColors, outTris);
         }
 
         private static void ExtrudeVariableWidthStrip(
@@ -350,7 +395,6 @@ namespace EconSim.Renderer
             List<float> halfWidths,
             List<float> heights,
             List<float> fluxTs,
-            bool isCoast,
             List<Vector3> vertices,
             List<Vector2> uvs,
             List<Color> colors,
@@ -363,10 +407,9 @@ namespace EconSim.Renderer
             {
                 Vector2 p = polyline[i];
                 float hw = halfWidths[i];
-                float y = heights[i];
+                float height01 = heights[i];
                 float fluxT = fluxTs[i];
 
-                // Compute tangent direction
                 Vector2 dir;
                 if (i == 0)
                     dir = (polyline[1] - polyline[0]).normalized;
@@ -379,24 +422,23 @@ namespace EconSim.Renderer
                     dir = Vector2.right;
 
                 Vector2 normal = new Vector2(-dir.y, dir.x);
-
                 Vector2 left = p - normal * hw;
                 Vector2 right = p + normal * hw;
 
-                vertices.Add(new Vector3(left.x, y + MeshYOffset, left.y));
-                vertices.Add(new Vector3(right.x, y + MeshYOffset, right.y));
+                // Y=0; shader displaces using height01 in UV.x
+                vertices.Add(new Vector3(left.x, 0f, left.y));
+                vertices.Add(new Vector3(right.x, 0f, right.y));
 
-                uvs.Add(new Vector2(0f, 0f)); // left edge
-                uvs.Add(new Vector2(0f, 1f)); // right edge
+                // UV.x = height01, UV.y = 0/1 for edge AA
+                uvs.Add(new Vector2(height01, 0f));
+                uvs.Add(new Vector2(height01, 1f));
 
-                Color c = isCoast
-                    ? new Color(1f, 0f, 0f, 1f)
-                    : new Color(0f, fluxT, 0f, 1f);
+                // River: R=0, G=fluxT
+                Color c = new Color(0f, fluxT, 0f, 1f);
                 colors.Add(c);
                 colors.Add(c);
             }
 
-            // Triangles
             for (int i = 0; i < count - 1; i++)
             {
                 int bl = startVert + i * 2;
@@ -414,32 +456,21 @@ namespace EconSim.Renderer
             }
         }
 
-        private static float ComputeEdgeHeight(MapData mapData, int cellA, int cellB, float gridHeightScale)
+        // ───────────────────────────────────────────────
+        //  Height helpers
+        // ───────────────────────────────────────────────
+
+        private static float ComputeEdgeHeight01(MapData mapData, int cellA, int cellB)
         {
-            float hA = GetCellY(mapData, cellA, gridHeightScale);
-            float hB = GetCellY(mapData, cellB, gridHeightScale);
-            return (hA + hB) * 0.5f;
+            return (GetCellHeight01(mapData, cellA) + GetCellHeight01(mapData, cellB)) * 0.5f;
         }
 
-        private static float ComputeCoastHeight(MapData mapData, int cellA, int cellB, float gridHeightScale)
-        {
-            if (mapData.CellById == null)
-                return 0f;
-            bool aLand = mapData.CellById.TryGetValue(cellA, out var cA) && cA.IsLand;
-            bool bLand = mapData.CellById.TryGetValue(cellB, out var cB) && cB.IsLand;
-            if (aLand && !bLand)
-                return GetCellY(mapData, cellA, gridHeightScale);
-            if (bLand && !aLand)
-                return GetCellY(mapData, cellB, gridHeightScale);
-            return (GetCellY(mapData, cellA, gridHeightScale) + GetCellY(mapData, cellB, gridHeightScale)) * 0.5f;
-        }
-
-        private static float GetCellY(MapData mapData, int cellId, float gridHeightScale)
+        private static float GetCellHeight01(MapData mapData, int cellId)
         {
             if (mapData.CellById == null || !mapData.CellById.TryGetValue(cellId, out var cell))
                 return 0f;
-            float normalizedSignedHeight = Elevation.GetNormalizedSignedHeight(cell, mapData.Info);
-            return normalizedSignedHeight * gridHeightScale;
+            float absoluteHeight = Elevation.GetAbsoluteHeight(cell, mapData.Info);
+            return Elevation.NormalizeAbsolute01(absoluteHeight, mapData.Info);
         }
     }
 }

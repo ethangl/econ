@@ -3,8 +3,11 @@ Shader "EconSim/WaterMesh"
     Properties
     {
         _RiverColor ("River Color", Color) = (0.18, 0.42, 0.68, 0.75)
-        _CoastColor ("Coast Color", Color) = (0.55, 0.50, 0.40, 0.60)
-        _EdgeSoftness ("Edge Softness", Range(0.01, 0.25)) = 0.08
+        _LakeColor ("Lake Color", Color) = (0.15, 0.35, 0.55, 0.80)
+        _OceanColor ("Ocean Color", Color) = (0.10, 0.25, 0.45, 0.85)
+        _EdgeSoftness ("River Edge Softness", Range(0.01, 0.25)) = 0.08
+        _HeightScale ("Height Scale", Float) = 0.0
+        _SeaLevel ("Sea Level", Float) = 0.2
     }
 
     SubShader
@@ -41,13 +44,25 @@ Shader "EconSim/WaterMesh"
             };
 
             float4 _RiverColor;
-            float4 _CoastColor;
+            float4 _LakeColor;
+            float4 _OceanColor;
             float _EdgeSoftness;
+            float _HeightScale;
+            float _SeaLevel;
+
+            static const float MESH_Y_OFFSET = 0.002;
 
             v2f vert(appdata v)
             {
                 v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
+
+                float4 vertex = v.vertex;
+
+                // UV.x = raw 0-1 height. Same displacement as terrain shader.
+                float height01 = v.uv.x;
+                vertex.y = (height01 - _SeaLevel) * _HeightScale + MESH_Y_OFFSET;
+
+                o.pos = UnityObjectToClipPos(vertex);
                 o.uv = v.uv;
                 o.color = v.color;
                 UNITY_TRANSFER_FOG(o, o.pos);
@@ -56,19 +71,32 @@ Shader "EconSim/WaterMesh"
 
             fixed4 frag(v2f i) : SV_Target
             {
-                // Select river vs coast by vertex color R channel
-                float isCoast = i.color.r;
-                float4 baseColor = lerp(_RiverColor, _CoastColor, isCoast);
+                // Vertex color R encodes type: 0 = river, 0.5 = lake, 1.0 = ocean
+                float typeR = i.color.r;
 
-                // Soft-edge AA: UV.y goes 0 at left edge, 1 at right edge.
-                // Distance from center = abs(uv.y - 0.5) * 2, range [0, 1]
-                float distFromCenter = abs(i.uv.y - 0.5) * 2.0;
+                float4 baseColor;
+                float alpha;
 
-                // smoothstep fade at edges
-                float edgeAlpha = 1.0 - smoothstep(1.0 - _EdgeSoftness * 2.0, 1.0, distFromCenter);
-
-                // Vertex alpha for endpoint fading
-                float alpha = baseColor.a * edgeAlpha * i.color.a;
+                if (typeR < 0.25)
+                {
+                    // River: edge AA from UV.y (0 at left edge, 1 at right edge)
+                    baseColor = _RiverColor;
+                    float distFromCenter = abs(i.uv.y - 0.5) * 2.0;
+                    float edgeAlpha = 1.0 - smoothstep(1.0 - _EdgeSoftness * 2.0, 1.0, distFromCenter);
+                    alpha = baseColor.a * edgeAlpha * i.color.a;
+                }
+                else if (typeR < 0.75)
+                {
+                    // Lake: solid fill
+                    baseColor = _LakeColor;
+                    alpha = baseColor.a;
+                }
+                else
+                {
+                    // Ocean: solid fill
+                    baseColor = _OceanColor;
+                    alpha = baseColor.a;
+                }
 
                 fixed4 col = fixed4(baseColor.rgb, alpha);
                 UNITY_APPLY_FOG(i.fogCoord, col);

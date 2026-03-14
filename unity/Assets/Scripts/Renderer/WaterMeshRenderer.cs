@@ -4,7 +4,7 @@ using EconSim.Core.Data;
 namespace EconSim.Renderer
 {
     /// <summary>
-    /// Manages the water mesh (rivers + coasts) lifecycle.
+    /// Manages the water mesh (rivers + water bodies) lifecycle.
     /// Created as a child GameObject of MapView, similar to RealmCapitalMarkers.
     /// </summary>
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
@@ -12,7 +12,9 @@ namespace EconSim.Renderer
     {
         public float RiverMinHalfWidth = WaterMeshBuilder.DefaultRiverMinHalfWidth;
         public float RiverMaxHalfWidth = WaterMeshBuilder.DefaultRiverMaxHalfWidth;
-        public float CoastHalfWidth = WaterMeshBuilder.DefaultCoastHalfWidth;
+
+        private static readonly int HeightScaleId = Shader.PropertyToID("_HeightScale");
+        private static readonly int SeaLevelId = Shader.PropertyToID("_SeaLevel");
 
         private Mesh waterMesh;
         private Material waterMaterial;
@@ -20,33 +22,40 @@ namespace EconSim.Renderer
         // Stored build parameters for rebuild
         private MapData cachedMapData;
         private float cachedCellScale;
-        private float cachedGridHeightScale;
         private MapOverlayManager.NoisyEdgeStyle cachedNoisyEdgeStyle;
         private uint cachedRootSeed;
 
         // Track previous values for change detection
         private float prevRiverMin;
         private float prevRiverMax;
-        private float prevCoastWidth;
 
         public void Initialize(
             MapData mapData,
             float cellScale,
-            float gridHeightScale,
             MapOverlayManager.NoisyEdgeStyle noisyEdgeStyle,
             uint rootSeed)
         {
             cachedMapData = mapData;
             cachedCellScale = cellScale;
-            cachedGridHeightScale = gridHeightScale;
             cachedNoisyEdgeStyle = noisyEdgeStyle;
             cachedRootSeed = rootSeed;
 
             prevRiverMin = RiverMinHalfWidth;
             prevRiverMax = RiverMaxHalfWidth;
-            prevCoastWidth = CoastHalfWidth;
 
             RebuildMesh();
+        }
+
+        /// <summary>
+        /// Set height displacement parameters to match the terrain shader.
+        /// Called each frame by MapView during height scale animation.
+        /// </summary>
+        public void SetHeightScale(float heightScale, float seaLevel01)
+        {
+            if (waterMaterial == null)
+                return;
+            waterMaterial.SetFloat(HeightScaleId, heightScale);
+            waterMaterial.SetFloat(SeaLevelId, seaLevel01);
         }
 
         private void RebuildMesh()
@@ -61,13 +70,13 @@ namespace EconSim.Renderer
             }
 
             waterMesh = WaterMeshBuilder.Build(
-                cachedMapData, cachedCellScale, cachedGridHeightScale,
+                cachedMapData, cachedCellScale,
                 cachedNoisyEdgeStyle, cachedRootSeed,
-                RiverMinHalfWidth, RiverMaxHalfWidth, CoastHalfWidth);
+                RiverMinHalfWidth, RiverMaxHalfWidth);
 
             if (waterMesh == null)
             {
-                Debug.Log("WaterMeshRenderer: No water edges to render.");
+                Debug.Log("WaterMeshRenderer: No water geometry to render.");
                 gameObject.SetActive(false);
                 return;
             }
@@ -92,12 +101,10 @@ namespace EconSim.Renderer
 
             // ReSharper disable once CompareOfFloatsByEqualityOperator
             if (RiverMinHalfWidth != prevRiverMin ||
-                RiverMaxHalfWidth != prevRiverMax ||
-                CoastHalfWidth != prevCoastWidth)
+                RiverMaxHalfWidth != prevRiverMax)
             {
                 prevRiverMin = RiverMinHalfWidth;
                 prevRiverMax = RiverMaxHalfWidth;
-                prevCoastWidth = CoastHalfWidth;
                 RebuildMesh();
             }
         }
