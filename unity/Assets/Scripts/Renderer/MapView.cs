@@ -58,6 +58,7 @@ namespace EconSim.Renderer
         // Non-serialized during development - see CLAUDE.md
         private bool useGridMesh = true;
         private int gridDivisor = 1;  // 1 = full source resolution, 2 = half, etc.
+        private int gridSubdivision = 1; // Multiplier beyond source resolution for smoother elevation interpolation
         private float gridHeightScale = 0.2f;
 
         [Header("Selection")]
@@ -1756,11 +1757,12 @@ namespace EconSim.Renderer
         /// </summary>
         private void GenerateGridMesh()
         {
-            // Use source resolution divided by divisor for clean texel alignment
-            int gridWidth = mapData.Info.Width / gridDivisor;
-            int gridHeight = mapData.Info.Height / gridDivisor;
+            // Grid resolution: source / divisor * subdivision.
+            // Subdivision > 1 gives denser vertices for smoother elevation interpolation.
+            int gridWidth = (mapData.Info.Width / gridDivisor) * gridSubdivision;
+            int gridHeight = (mapData.Info.Height / gridDivisor) * gridSubdivision;
 
-            Debug.Log($"Generating grid mesh {gridWidth}x{gridHeight} (divisor {gridDivisor})...");
+            Debug.Log($"Generating grid mesh {gridWidth}x{gridHeight} (divisor {gridDivisor}, subdivision {gridSubdivision})...");
 
             float worldWidth = mapData.Info.Width * cellScale;
             float worldHeight = mapData.Info.Height * cellScale;
@@ -1868,8 +1870,8 @@ namespace EconSim.Renderer
             var hmTex = overlayManager.HeightmapTexture;
             if (hmTex == null || mesh == null) return;
 
-            int gridWidth = mapData.Info.Width / gridDivisor;
-            int gridHeight = mapData.Info.Height / gridDivisor;
+            int gridWidth = (mapData.Info.Width / gridDivisor) * gridSubdivision;
+            int gridHeight = (mapData.Info.Height / gridDivisor) * gridSubdivision;
             int vertCountX = gridWidth + 1;
             int vertCountY = gridHeight + 1;
             int totalVerts = vertCountX * vertCountY;

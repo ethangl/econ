@@ -2501,7 +2501,7 @@ public class MapOverlayManager
                 return;
             }
 
-            const int bakeSize = 2048;
+            const int bakeSize = 4096;
             Shader bakeShader = Shader.Find("EconSim/ElevationBake");
             if (bakeShader == null)
             {
