@@ -6,7 +6,8 @@ float3 ApplyPoliticalBorders(float2 uv, float3 color, float displayLevel)
     // Edge band (multiply).
     float realmDist = tex2D(_RealmBorderDistTex, uv).r * 255.0;
     float edgeAA = fwidth(realmDist);
-    float edgeFactor = 1.0 - smoothstep(_EdgeWidth - edgeAA, _EdgeWidth + edgeAA, realmDist);
+    float scaledEdgeWidth = _EdgeWidth * _BorderTexelScale;
+    float edgeFactor = 1.0 - smoothstep(scaledEdgeWidth - edgeAA, scaledEdgeWidth + edgeAA, realmDist);
     color *= 1.0 - edgeFactor * saturate(_EdgeDarkening);
 
     // County border (multiply) — only at display level >= 3.
@@ -14,7 +15,8 @@ float3 ApplyPoliticalBorders(float2 uv, float3 color, float displayLevel)
     {
         float countyBorderDist = tex2D(_CountyBorderDistTex, uv).r * 255.0;
         float countyBorderAA = fwidth(countyBorderDist);
-        float countyBorderFactor = 1.0 - smoothstep(_CountyBorderWidth - countyBorderAA, _CountyBorderWidth + countyBorderAA, countyBorderDist);
+        float scaledCountyWidth = _CountyBorderWidth * _BorderTexelScale;
+        float countyBorderFactor = 1.0 - smoothstep(scaledCountyWidth - countyBorderAA, scaledCountyWidth + countyBorderAA, countyBorderDist);
         color *= 1.0 - countyBorderFactor * _CountyBorderDarkening;
     }
 
@@ -23,13 +25,15 @@ float3 ApplyPoliticalBorders(float2 uv, float3 color, float displayLevel)
     {
         float provinceBorderDist = tex2D(_ProvinceBorderDistTex, uv).r * 255.0;
         float provinceBorderAA = fwidth(provinceBorderDist);
-        float provinceBorderFactor = 1.0 - smoothstep(_ProvinceBorderWidth - provinceBorderAA, _ProvinceBorderWidth + provinceBorderAA, provinceBorderDist);
+        float scaledProvinceWidth = _ProvinceBorderWidth * _BorderTexelScale;
+        float provinceBorderFactor = 1.0 - smoothstep(scaledProvinceWidth - provinceBorderAA, scaledProvinceWidth + provinceBorderAA, provinceBorderDist);
         color *= 1.0 - provinceBorderFactor * _ProvinceBorderDarkening;
     }
 
     // Realm border (multiply, always shown).
     float borderAA = fwidth(realmDist);
-    float borderFactor = 1.0 - smoothstep(_RealmBorderWidth - borderAA, _RealmBorderWidth + borderAA, realmDist);
+    float scaledRealmWidth = _RealmBorderWidth * _BorderTexelScale;
+    float borderFactor = 1.0 - smoothstep(scaledRealmWidth - borderAA, scaledRealmWidth + borderAA, realmDist);
     color *= 1.0 - borderFactor * _RealmBorderDarkening;
 
     return color;
@@ -40,7 +44,8 @@ float3 ApplyMarketBorders(float2 uv, float3 color)
     // Edge band (multiply).
     float marketDist = tex2D(_MarketBorderDistTex, uv).r * 255.0;
     float edgeAA = fwidth(marketDist);
-    float edgeFactor = 1.0 - smoothstep(_EdgeWidth - edgeAA, _EdgeWidth + edgeAA, marketDist);
+    float scaledEdgeWidth = _EdgeWidth * _BorderTexelScale;
+    float edgeFactor = 1.0 - smoothstep(scaledEdgeWidth - edgeAA, scaledEdgeWidth + edgeAA, marketDist);
     color *= 1.0 - edgeFactor * saturate(_EdgeDarkening);
 
     // Path overlay: black routes blended over market color.
@@ -53,7 +58,8 @@ float3 ApplyMarketBorders(float2 uv, float3 color)
     // Market zone border (multiply).
     float marketBorderDist = tex2D(_MarketBorderDistTex, uv).r * 255.0;
     float marketBorderAA = fwidth(marketBorderDist);
-    float marketBorderFactor = 1.0 - smoothstep(_MarketBorderWidth - marketBorderAA, _MarketBorderWidth + marketBorderAA, marketBorderDist);
+    float scaledMarketWidth = _MarketBorderWidth * _BorderTexelScale;
+    float marketBorderFactor = 1.0 - smoothstep(scaledMarketWidth - marketBorderAA, scaledMarketWidth + marketBorderAA, marketBorderDist);
     color *= 1.0 - marketBorderFactor * _MarketBorderDarkening;
 
     return color;
@@ -64,7 +70,8 @@ float3 ApplyReligionBorders(float2 uv, float3 color, float displayLevel)
     // Edge band (multiply).
     float archDist = tex2D(_ArchdioceseBorderDistTex, uv).r * 255.0;
     float edgeAA = fwidth(archDist);
-    float edgeFactor = 1.0 - smoothstep(_EdgeWidth - edgeAA, _EdgeWidth + edgeAA, archDist);
+    float scaledEdgeWidth = _EdgeWidth * _BorderTexelScale;
+    float edgeFactor = 1.0 - smoothstep(scaledEdgeWidth - edgeAA, scaledEdgeWidth + edgeAA, archDist);
     color *= 1.0 - edgeFactor * saturate(_EdgeDarkening);
 
     // Parish border (multiply) — only at display level >= 3.
@@ -72,7 +79,8 @@ float3 ApplyReligionBorders(float2 uv, float3 color, float displayLevel)
     {
         float parishBorderDist = tex2D(_ParishBorderDistTex, uv).r * 255.0;
         float parishBorderAA = fwidth(parishBorderDist);
-        float parishBorderFactor = 1.0 - smoothstep(_CountyBorderWidth - parishBorderAA, _CountyBorderWidth + parishBorderAA, parishBorderDist);
+        float scaledParishWidth = _CountyBorderWidth * _BorderTexelScale;
+        float parishBorderFactor = 1.0 - smoothstep(scaledParishWidth - parishBorderAA, scaledParishWidth + parishBorderAA, parishBorderDist);
         color *= 1.0 - parishBorderFactor * _CountyBorderDarkening;
     }
 
@@ -81,13 +89,15 @@ float3 ApplyReligionBorders(float2 uv, float3 color, float displayLevel)
     {
         float dioceseBorderDist = tex2D(_DioceseBorderDistTex, uv).r * 255.0;
         float dioceseBorderAA = fwidth(dioceseBorderDist);
-        float dioceseBorderFactor = 1.0 - smoothstep(_ProvinceBorderWidth - dioceseBorderAA, _ProvinceBorderWidth + dioceseBorderAA, dioceseBorderDist);
+        float scaledDioceseWidth = _ProvinceBorderWidth * _BorderTexelScale;
+        float dioceseBorderFactor = 1.0 - smoothstep(scaledDioceseWidth - dioceseBorderAA, scaledDioceseWidth + dioceseBorderAA, dioceseBorderDist);
         color *= 1.0 - dioceseBorderFactor * _ProvinceBorderDarkening;
     }
 
     // Archdiocese border (multiply, always shown).
     float archBorderAA = fwidth(archDist);
-    float archBorderFactor = 1.0 - smoothstep(_RealmBorderWidth - archBorderAA, _RealmBorderWidth + archBorderAA, archDist);
+    float scaledArchWidth = _RealmBorderWidth * _BorderTexelScale;
+    float archBorderFactor = 1.0 - smoothstep(scaledArchWidth - archBorderAA, scaledArchWidth + archBorderAA, archDist);
     color *= 1.0 - archBorderFactor * _RealmBorderDarkening;
 
     return color;

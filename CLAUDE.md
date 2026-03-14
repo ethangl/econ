@@ -77,8 +77,7 @@ No standalone csproj — this is a Unity project with assembly definitions.
 
 - `GameManager` - Entry point, generates map, owns simulation
 - `MapView` - Generates grid mesh (default) or Voronoi mesh, map modes (1=political cycle, 2=terrain with elevation tinting, 3=market), click-to-select
-- `BorderRenderer` - Province/county borders as straight polyline meshes (realm borders via shader)
-- `MapOverlayManager` - Generates data textures, palettes, and biome-elevation matrix for shader overlays
+- `MapOverlayManager` - Generates data textures, palettes, and biome-elevation matrix for shader overlays (borders rendered via shader edge detection)
 - `RiverRenderer` - River line strips (blue, tapered)
 - `RoadRenderer` - Emergent road segments (brown)
 - `SelectionHighlight` - Legacy outline (disabled when shader overlays enabled)
@@ -98,9 +97,9 @@ Maps are generated procedurally via the MapGen pipeline. Use the "Generate New" 
 
 ## Shader-Based Overlay System
 
-The map uses a GPU-driven overlay system for borders and map modes. See [docs/shader-overlay-system.md](docs/shader-overlay-system.md) for full details (data texture formats, palette textures, border rendering, gradient fill, selection highlight).
+The map uses a GPU-driven overlay system for borders and map modes. See [docs/shader-overlay-system.md](docs/shader-overlay-system.md) for full details (data textures, distance-field borders, noisy edges, border resolution scale, selection/hover, map modes).
 
-**Key files:** `Assets/Shaders/MapOverlayFlat.shader`, `MapOverlayBiome.shader`, `Assets/Scripts/Renderer/MapOverlayManager.cs`, `EconSim.Core/Rendering/PoliticalPalette.cs`
+**Key files:** `Assets/Shaders/MapOverlayFlat.shader`, `MapOverlayBiome.shader`, `MapOverlay.ResolveModes.cginc`, `MapOverlay.Composite.cginc`, `Assets/Scripts/Renderer/MapOverlayManager.cs`, `EconSim.Core/Rendering/PoliticalPalette.cs`
 
 ## Coordinate Systems
 

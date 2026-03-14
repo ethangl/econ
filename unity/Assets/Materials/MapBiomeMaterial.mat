@@ -20,6 +20,7 @@ Material:
   stringTagMap: {}
   disabledShaderPasses: []
   m_LockedProperties: _ProvinceBorderColor _ProvinceBorderWidth _SlopeOverhead _SoilColor1
+    _WaterAbsorption
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -139,6 +140,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _WaterSdfTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _BumpScale: 1
@@ -158,8 +163,8 @@ Material:
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.983001
-    - _HoveredCountyId: 0.005493248
+    - _HoverIntensity: 1
+    - _HoveredCountyId: 0.0056916154
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
@@ -189,8 +194,8 @@ Material:
     - _SelectedProvinceId: -1
     - _SelectedRealmId: -1
     - _SelectionBorderWidth: 3
-    - _SelectionDesaturation: 0.00000010355595
-    - _SelectionDimming: 0.9999999
+    - _SelectionDesaturation: 0
+    - _SelectionDimming: 1
     - _SelectionFillAlpha: 0.15
     - _SelectionPopAmount: 0.2
     - _ShimmerIntensity: 0.2
@@ -224,11 +229,12 @@ Material:
     - _WaterDepthExponent: 0.4
     - _WaterDepthRange: 1
     - _WaterGradientRadius: 11
-    - _WaterOpticalDepth: 6
+    - _WaterOpticalDepth: 8
     - _WaterRefractionScale: 0.1
     - _WaterRefractionSpeed: 0.1
     - _WaterRefractionStrength: 0.02
-    - _WaterShallowAlpha: 0.7
+    - _WaterSdfMaxDist: 80
+    - _WaterShallowAlpha: 0.841
     - _ZWrite: 1
     m_Colors:
     - _CoastlineBorderColor: {r: 0.02, g: 0.049999982, b: 0.14999998, a: 1}
@@ -258,6 +264,6 @@ Material:
     - _VegetationColor6: {r: 0.17999998, g: 0.36999997, b: 0.13999996, a: 1}
     - _WaterAbsorption: {r: 2.2, g: 0.9, b: 0.34999996, a: 1}
     - _WaterDeepColor: {r: 0, g: 0, b: 0, a: 1}
-    - _WaterShallowColor: {r: 0, g: 0.17633338, b: 0.23, a: 1}
+    - _WaterShallowColor: {r: 0.1225, g: 0.20416665, b: 0.245, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

@@ -98,6 +98,7 @@ public class MapOverlayManager
         private static readonly int MarketBorderDistTexId = Shader.PropertyToID("_MarketBorderDistTex");
         private static readonly int SelectedMarketIdId = Shader.PropertyToID("_SelectedMarketId");
         private static readonly int HoveredMarketIdId = Shader.PropertyToID("_HoveredMarketId");
+        private static readonly int BorderTexelScaleId = Shader.PropertyToID("_BorderTexelScale");
 
         // Water layer property IDs
         private static readonly int WaterDeepColorId = Shader.PropertyToID("_WaterDeepColor");
@@ -112,6 +113,12 @@ public class MapOverlayManager
         private int resolutionMultiplier;
         private int baseWidth;
         private int baseHeight;
+
+        // Border resolution scale (border textures at higher resolution than main grid)
+        private float borderResolutionScale;
+        private int borderWidth;
+        private int borderHeight;
+        private int[] cachedBorderGrid;  // Lazily built, invalidated when spatialGrid changes
 
         // Data textures
         private Texture2D politicalIdsTexture;  // RGBAFloat: RealmId, ProvinceId, CountyId, reserved
@@ -279,7 +286,7 @@ public class MapOverlayManager
         private const float DefaultNoisyEdgeAmplitudeCap = 8.0f;
         private const float DefaultNoisyEdgeBandPaddingPx = 1.5f;
 
-        private const int OverlayTextureCacheVersion = 10;
+        private const int OverlayTextureCacheVersion = 11;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
         private const string CacheSpatialGridFile = "spatial_grid.bin";
         private const string CachePoliticalIdsFile = "political_ids.bin";
@@ -306,6 +313,9 @@ public class MapOverlayManager
             public float LatitudeSouth;
             public float LatitudeNorth;
             public int RoadStateHash;
+            public float BorderResolutionScale;
+            public int BorderWidth;
+            public int BorderHeight;
             public float NoisyEdgeSampleSpacingPx;
             public int NoisyEdgeMaxSamples;
             public float NoisyEdgeRoughness;
@@ -457,11 +467,13 @@ public class MapOverlayManager
             int resolutionMultiplier = 2,
             string overlayTextureCacheDirectory = null,
             bool preferCachedOverlayTextures = false,
-            NoisyEdgeStyle? initialNoisyEdgeStyle = null)
+            NoisyEdgeStyle? initialNoisyEdgeStyle = null,
+            float borderResolutionScale = 1.0f)
         {
             this.mapData = mapData;
             this.styleMaterial = styleMaterial;
             this.resolutionMultiplier = Mathf.Clamp(resolutionMultiplier, 1, 8);
+            this.borderResolutionScale = Mathf.Clamp(borderResolutionScale, 1.0f, 3.0f);
             this.overlayTextureCacheDirectory = overlayTextureCacheDirectory;
             noisyEdgeStyle = ClampNoisyEdgeStyle(initialNoisyEdgeStyle ?? NoisyEdgeStyle.Default);
 
@@ -469,6 +481,8 @@ public class MapOverlayManager
             baseHeight = mapData.Info.Height;
             gridWidth = baseWidth * this.resolutionMultiplier;
             gridHeight = baseHeight * this.resolutionMultiplier;
+            borderWidth = (int)(gridWidth * this.borderResolutionScale);
+            borderHeight = (int)(gridHeight * this.borderResolutionScale);
             BuildCellLookupCache();
 
             bool loadedSpatialGrid = false;
@@ -509,7 +523,8 @@ public class MapOverlayManager
                 Profiler.End();
 
                 Profiler.Begin("GenerateAdministrativeBorderDistTextures");
-                GenerateAdministrativeBorderDistTextures();
+                int[] borderGrid = BuildBorderSpatialGrid();
+                GenerateAdministrativeBorderDistTextures(borderGrid);
                 Profiler.End();
             }
 
@@ -615,6 +630,7 @@ public class MapOverlayManager
                 int[] loadedSpatialGrid = new int[gridWidth * gridHeight];
                 Buffer.BlockCopy(bytes, 0, loadedSpatialGrid, 0, bytes.Length);
                 spatialGrid = loadedSpatialGrid;
+                cachedBorderGrid = null;  // Invalidate upsampled border grid
 
                 Debug.Log($"MapOverlayManager: Loaded cached spatial grid from {spatialGridPath}");
                 return true;
@@ -704,8 +720,8 @@ public class MapOverlayManager
 
                 Texture2D loadedRealmBorder = LoadTextureFromRaw(
                     Path.Combine(cacheDirectory, CacheRealmBorderFile),
-                    gridWidth,
-                    gridHeight,
+                    borderWidth,
+                    borderHeight,
                     TextureFormat.R8,
                     FilterMode.Bilinear,
                     TextureWrapMode.Clamp,
@@ -713,8 +729,8 @@ public class MapOverlayManager
 
                 Texture2D loadedProvinceBorder = LoadTextureFromRaw(
                     Path.Combine(cacheDirectory, CacheProvinceBorderFile),
-                    gridWidth,
-                    gridHeight,
+                    borderWidth,
+                    borderHeight,
                     TextureFormat.R8,
                     FilterMode.Bilinear,
                     TextureWrapMode.Clamp,
@@ -722,8 +738,8 @@ public class MapOverlayManager
 
                 Texture2D loadedCountyBorder = LoadTextureFromRaw(
                     Path.Combine(cacheDirectory, CacheCountyBorderFile),
-                    gridWidth,
-                    gridHeight,
+                    borderWidth,
+                    borderHeight,
                     TextureFormat.R8,
                     FilterMode.Bilinear,
                     TextureWrapMode.Clamp,
@@ -731,8 +747,8 @@ public class MapOverlayManager
 
                 Texture2D loadedRoadDist = LoadTextureFromRaw(
                     Path.Combine(cacheDirectory, CacheRoadDistFile),
-                    gridWidth,
-                    gridHeight,
+                    borderWidth,
+                    borderHeight,
                     TextureFormat.R8,
                     FilterMode.Bilinear,
                     TextureWrapMode.Clamp,
@@ -816,6 +832,9 @@ public class MapOverlayManager
                     LatitudeSouth = mapData?.Info?.World != null ? mapData.Info.World.LatitudeSouth : float.NaN,
                     LatitudeNorth = mapData?.Info?.World != null ? mapData.Info.World.LatitudeNorth : float.NaN,
                     RoadStateHash = cachedRoadStateHash,
+                    BorderResolutionScale = borderResolutionScale,
+                    BorderWidth = borderWidth,
+                    BorderHeight = borderHeight,
                     NoisyEdgeSampleSpacingPx = noisyEdgeStyle.SampleSpacingPx,
                     NoisyEdgeMaxSamples = noisyEdgeStyle.MaxSamples,
                     NoisyEdgeRoughness = noisyEdgeStyle.Roughness,
@@ -849,6 +868,13 @@ public class MapOverlayManager
                 metadata.BaseWidth != baseWidth ||
                 metadata.BaseHeight != baseHeight ||
                 metadata.ResolutionMultiplier != resolutionMultiplier)
+            {
+                return false;
+            }
+
+            if (!CacheFloatMatches(metadata.BorderResolutionScale, borderResolutionScale) ||
+                metadata.BorderWidth != borderWidth ||
+                metadata.BorderHeight != borderHeight)
             {
                 return false;
             }
@@ -969,6 +995,7 @@ public class MapOverlayManager
         private void BuildSpatialGrid()
         {
             BuildSpatialGridFromScratch();
+            cachedBorderGrid = null;  // Invalidate upsampled border grid
             Debug.Log($"MapOverlayManager: Built spatial grid {gridWidth}x{gridHeight} ({resolutionMultiplier}x resolution)");
         }
 
@@ -977,18 +1004,63 @@ public class MapOverlayManager
         /// </summary>
         private void BuildSpatialGridFromScratch()
         {
-            int size = gridWidth * gridHeight;
-            spatialGrid = new int[size];
+            spatialGrid = new int[gridWidth * gridHeight];
+            BuildSpatialGridInto(spatialGrid, gridWidth, gridHeight, resolutionMultiplier);
+        }
+
+        /// <summary>
+        /// Build a border spatial grid by upsampling the main spatialGrid to border resolution.
+        /// This ensures border detection aligns exactly with province/county color fills.
+        /// Returns the main spatialGrid if border scale is 1.0 (no extra work).
+        /// </summary>
+        private int[] BuildBorderSpatialGrid()
+        {
+            if (borderResolutionScale <= 1.001f)
+                return spatialGrid;
+
+            if (cachedBorderGrid != null)
+                return cachedBorderGrid;
+
+            Profiler.Begin("BuildBorderSpatialGrid");
+            cachedBorderGrid = new int[borderWidth * borderHeight];
+
+            // Nearest-neighbor upsample: map each border pixel back to the main grid.
+            // The chamfer distance transform will smooth the staircase edges into
+            // continuous distance gradients at the higher resolution.
+            float invScaleX = (float)gridWidth / borderWidth;
+            float invScaleY = (float)gridHeight / borderHeight;
+
+            Parallel.For(0, borderHeight, y =>
+            {
+                int srcY = Mathf.Min((int)(y * invScaleY), gridHeight - 1);
+                int srcRow = srcY * gridWidth;
+                int dstRow = y * borderWidth;
+                for (int x = 0; x < borderWidth; x++)
+                {
+                    int srcX = Mathf.Min((int)(x * invScaleX), gridWidth - 1);
+                    cachedBorderGrid[dstRow + x] = spatialGrid[srcRow + srcX];
+                }
+            });
+
+            Profiler.End();
+            Debug.Log($"MapOverlayManager: Upsampled border spatial grid {borderWidth}x{borderHeight} from {gridWidth}x{gridHeight}");
+            return cachedBorderGrid;
+        }
+
+        /// <summary>
+        /// Core Voronoi fill + noisy edge logic targeting an arbitrary grid.
+        /// </summary>
+        private void BuildSpatialGridInto(int[] target, int targetWidth, int targetHeight, float scale)
+        {
+            int size = targetWidth * targetHeight;
             var distanceSqGrid = new float[size];
 
             // Initialize grids
             Parallel.For(0, size, i =>
             {
-                spatialGrid[i] = -1;
+                target[i] = -1;
                 distanceSqGrid[i] = float.MaxValue;
             });
-
-            float scale = resolutionMultiplier;
 
             // PHASE 1: Base Voronoi fill using cell centers.
             var cellInfos = new List<SpatialCellInfo>(mapData.Cells.Count);
@@ -1014,9 +1086,9 @@ public class MapOverlayManager
                 }
 
                 int x0 = Mathf.Max(0, Mathf.FloorToInt(minX) - 1);
-                int x1 = Mathf.Min(gridWidth - 1, Mathf.CeilToInt(maxX) + 1);
+                int x1 = Mathf.Min(targetWidth - 1, Mathf.CeilToInt(maxX) + 1);
                 int y0 = Mathf.Max(0, Mathf.FloorToInt(minY) - 1);
-                int y1 = Mathf.Min(gridHeight - 1, Mathf.CeilToInt(maxY) + 1);
+                int y1 = Mathf.Min(targetHeight - 1, Mathf.CeilToInt(maxY) + 1);
 
                 float cx = cell.Center.X * scale;
                 float cy = cell.Center.Y * scale;
@@ -1026,7 +1098,7 @@ public class MapOverlayManager
 
             // Partition by row stripes so each worker owns exclusive output rows (no locks).
             const int stripeHeight = 32;
-            int stripeCount = (gridHeight + stripeHeight - 1) / stripeHeight;
+            int stripeCount = (targetHeight + stripeHeight - 1) / stripeHeight;
             var stripeCellIndices = new List<int>[stripeCount];
 
             for (int i = 0; i < cellInfos.Count; i++)
@@ -1048,7 +1120,7 @@ public class MapOverlayManager
                     return;
 
                 int stripeY0 = stripe * stripeHeight;
-                int stripeY1 = Mathf.Min(gridHeight - 1, stripeY0 + stripeHeight - 1);
+                int stripeY1 = Mathf.Min(targetHeight - 1, stripeY0 + stripeHeight - 1);
 
                 for (int i = 0; i < cellsInStripe.Count; i++)
                 {
@@ -1058,7 +1130,7 @@ public class MapOverlayManager
 
                     for (int y = y0; y <= y1; y++)
                     {
-                        int row = y * gridWidth;
+                        int row = y * targetWidth;
                         for (int x = info.X0; x <= info.X1; x++)
                         {
                             int gridIdx = row + x;
@@ -1069,7 +1141,7 @@ public class MapOverlayManager
                             if (distSq < distanceSqGrid[gridIdx])
                             {
                                 distanceSqGrid[gridIdx] = distSq;
-                                spatialGrid[gridIdx] = info.CellId;
+                                target[gridIdx] = info.CellId;
                             }
                         }
                     }
@@ -1077,10 +1149,10 @@ public class MapOverlayManager
             });
 
             // PHASE 2: Replace straight shared edges with deterministic noisy edges.
-            ApplyNoisyVoronoiEdges(scale);
+            ApplyNoisyVoronoiEdges(target, targetWidth, targetHeight, scale);
         }
 
-        private void ApplyNoisyVoronoiEdges(float scale)
+        private void ApplyNoisyVoronoiEdges(int[] target, int targetWidth, int targetHeight, float scale)
         {
             if (mapData?.Cells == null || mapData.Vertices == null || mapData.Vertices.Count == 0)
                 return;
@@ -1143,12 +1215,13 @@ public class MapOverlayManager
                 }
             }
 
-            int[] baseGrid = (int[])spatialGrid.Clone();
+            int[] baseGrid = (int[])target.Clone();
+            float effectiveResMultiplier = scale;
             for (int i = 0; i < sharedEdges.Count; i++)
-                RasterizeNoisyEdge(sharedEdges[i], baseGrid);
+                RasterizeNoisyEdge(sharedEdges[i], baseGrid, target, targetWidth, targetHeight, effectiveResMultiplier);
         }
 
-        private void RasterizeNoisyEdge(SharedVoronoiEdge edge, int[] baseGrid)
+        private void RasterizeNoisyEdge(SharedVoronoiEdge edge, int[] baseGrid, int[] target, int targetWidth, int targetHeight, float effectiveResMultiplier)
         {
             Vector2 delta = edge.V1 - edge.V0;
             float length = delta.magnitude;
@@ -1162,7 +1235,7 @@ public class MapOverlayManager
             Vector2 orientedNormal = signToA >= 0f ? lineNormal : -lineNormal;
 
             float centerDistance = Vector2.Distance(edge.CenterA, edge.CenterB);
-            float baseAmplitude = GetNoisyEdgeBaseAmplitudePixels();
+            float baseAmplitude = GetNoisyEdgeBaseAmplitudePixels(effectiveResMultiplier);
             float amplitude = Mathf.Min(baseAmplitude, length * 0.22f, centerDistance * 0.35f);
             if (amplitude < 0.75f)
                 return;
@@ -1175,13 +1248,13 @@ public class MapOverlayManager
 
             float band = amplitude + noisyEdgeStyle.BandPaddingPx;
             int minX = Mathf.Max(0, Mathf.FloorToInt(Mathf.Min(edge.V0.x, edge.V1.x) - band));
-            int maxX = Mathf.Min(gridWidth - 1, Mathf.CeilToInt(Mathf.Max(edge.V0.x, edge.V1.x) + band));
+            int maxX = Mathf.Min(targetWidth - 1, Mathf.CeilToInt(Mathf.Max(edge.V0.x, edge.V1.x) + band));
             int minY = Mathf.Max(0, Mathf.FloorToInt(Mathf.Min(edge.V0.y, edge.V1.y) - band));
-            int maxY = Mathf.Min(gridHeight - 1, Mathf.CeilToInt(Mathf.Max(edge.V0.y, edge.V1.y) + band));
+            int maxY = Mathf.Min(targetHeight - 1, Mathf.CeilToInt(Mathf.Max(edge.V0.y, edge.V1.y) + band));
 
             for (int y = minY; y <= maxY; y++)
             {
-                int row = y * gridWidth;
+                int row = y * targetWidth;
                 for (int x = minX; x <= maxX; x++)
                 {
                     int idx = row + x;
@@ -1202,14 +1275,19 @@ public class MapOverlayManager
                     float t = along / length;
                     float shift = SampleNoisyEdgeOffset(offsets, t);
                     float orientedDistance = Vector2.Dot(p - closest, orientedNormal);
-                    spatialGrid[idx] = orientedDistance >= shift ? edge.CellA : edge.CellB;
+                    target[idx] = orientedDistance >= shift ? edge.CellA : edge.CellB;
                 }
             }
         }
 
         private float GetNoisyEdgeBaseAmplitudePixels()
         {
-            return Mathf.Min(noisyEdgeStyle.AmplitudeCap, Mathf.Max(1.0f, resolutionMultiplier * noisyEdgeStyle.AmplitudePerResolution));
+            return GetNoisyEdgeBaseAmplitudePixels(resolutionMultiplier);
+        }
+
+        private float GetNoisyEdgeBaseAmplitudePixels(float effectiveResMultiplier)
+        {
+            return Mathf.Min(noisyEdgeStyle.AmplitudeCap, Mathf.Max(1.0f, effectiveResMultiplier * noisyEdgeStyle.AmplitudePerResolution));
         }
 
         private void BuildNoisyEdgeOffsets(float[] offsets, int start, int end, float amplitude, uint seed)
@@ -2057,7 +2135,7 @@ public class MapOverlayManager
             // Propagate flux values from seed pixels to neighbors via nearest-seed.
             // We run the chamfer and simultaneously track which seed each pixel is closest to.
             // Simpler approach: after chamfer, flood-fill flux from nearest seed.
-            RunChamferTransform(dist, isLand);
+            RunChamferTransform(dist, isLand, gridWidth, gridHeight);
             PropagateNearestFlux(dist, fluxNorm, isLand);
 
             // Interleave into RG8
@@ -2140,7 +2218,7 @@ public class MapOverlayManager
         /// <summary>
         /// Draw a thick anti-aliased line into the pixel buffer.
         /// </summary>
-        private void DrawThickLine(byte[] pixels, Vector2 start, Vector2 end, float width)
+        private static void DrawThickLine(byte[] pixels, Vector2 start, Vector2 end, float width, int gridW, int gridH)
         {
             // Calculate line direction and perpendicular
             Vector2 dir = (end - start).normalized;
@@ -2154,9 +2232,9 @@ public class MapOverlayManager
             float maxY = Mathf.Max(start.y, end.y) + halfWidth + 1;
 
             int x0 = Mathf.Max(0, Mathf.FloorToInt(minX));
-            int x1 = Mathf.Min(gridWidth - 1, Mathf.CeilToInt(maxX));
+            int x1 = Mathf.Min(gridW - 1, Mathf.CeilToInt(maxX));
             int y0 = Mathf.Max(0, Mathf.FloorToInt(minY));
-            int y1 = Mathf.Min(gridHeight - 1, Mathf.CeilToInt(maxY));
+            int y1 = Mathf.Min(gridH - 1, Mathf.CeilToInt(maxY));
 
             float lineLength = (end - start).magnitude;
             if (lineLength < 0.001f)
@@ -2182,7 +2260,7 @@ public class MapOverlayManager
 
                     if (coverage > 0)
                     {
-                        int idx = y * gridWidth + x;
+                        int idx = y * gridW + x;
                         // Max blend (river overwrites)
                         int newVal = Mathf.RoundToInt(coverage * 255);
                         if (newVal > pixels[idx])
@@ -2198,38 +2276,38 @@ public class MapOverlayManager
         /// Operates in-place on dist[], which should be pre-seeded with 0 at boundary pixels
         /// and 255 elsewhere. isLand[] masks which pixels participate.
         /// </summary>
-        private void RunChamferTransform(float[] dist, bool[] isLand)
+        private static void RunChamferTransform(float[] dist, bool[] isLand, int width, int height)
         {
             const float orthCost = 1f;
             const float diagCost = 1.414f;
 
             // Forward pass: top-to-bottom, left-to-right
-            for (int y = 1; y < gridHeight; y++)
+            for (int y = 1; y < height; y++)
             {
-                for (int x = 0; x < gridWidth; x++)
+                for (int x = 0; x < width; x++)
                 {
-                    int idx = y * gridWidth + x;
+                    int idx = y * width + x;
                     if (!isLand[idx]) continue;
 
                     if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[idx - 1] + orthCost);
-                    if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * gridWidth + x - 1] + diagCost);
-                    dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * gridWidth + x] + orthCost);
-                    if (x < gridWidth - 1) dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * gridWidth + x + 1] + diagCost);
+                    if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * width + x - 1] + diagCost);
+                    dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * width + x] + orthCost);
+                    if (x < width - 1) dist[idx] = Mathf.Min(dist[idx], dist[(y - 1) * width + x + 1] + diagCost);
                 }
             }
 
             // Backward pass: bottom-to-top, right-to-left
-            for (int y = gridHeight - 2; y >= 0; y--)
+            for (int y = height - 2; y >= 0; y--)
             {
-                for (int x = gridWidth - 1; x >= 0; x--)
+                for (int x = width - 1; x >= 0; x--)
                 {
-                    int idx = y * gridWidth + x;
+                    int idx = y * width + x;
                     if (!isLand[idx]) continue;
 
-                    if (x < gridWidth - 1) dist[idx] = Mathf.Min(dist[idx], dist[idx + 1] + orthCost);
-                    if (x < gridWidth - 1) dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * gridWidth + x + 1] + diagCost);
-                    dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * gridWidth + x] + orthCost);
-                    if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * gridWidth + x - 1] + diagCost);
+                    if (x < width - 1) dist[idx] = Mathf.Min(dist[idx], dist[idx + 1] + orthCost);
+                    if (x < width - 1) dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * width + x + 1] + diagCost);
+                    dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * width + x] + orthCost);
+                    if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * width + x - 1] + diagCost);
                 }
             }
         }
@@ -2345,22 +2423,22 @@ public class MapOverlayManager
         /// Generate realm/province/county border distance textures together so we can
         /// reuse a single land + boundary classification pass.
         /// </summary>
-        private void GenerateAdministrativeBorderDistTextures()
+        private void GenerateAdministrativeBorderDistTextures(int[] sourceGrid)
         {
             Profiler.Begin("GenerateAdministrativeBorderDistPixels");
-            AdministrativeBorderDistPixels pixels = GenerateAdministrativeBorderDistPixels();
+            AdministrativeBorderDistPixels pixels = GenerateAdministrativeBorderDistPixels(sourceGrid, borderWidth, borderHeight);
             Profiler.End();
 
-            realmBorderDistTexture = CreateBorderDistTexture("RealmBorderDistTexture", pixels.Realm, "realm_border_dist");
-            provinceBorderDistTexture = CreateBorderDistTexture("ProvinceBorderDistTexture", pixels.Province, "province_border_dist");
-            countyBorderDistTexture = CreateBorderDistTexture("CountyBorderDistTexture", pixels.County, "county_border_dist");
+            realmBorderDistTexture = CreateBorderDistTexture("RealmBorderDistTexture", pixels.Realm, "realm_border_dist", borderWidth, borderHeight);
+            provinceBorderDistTexture = CreateBorderDistTexture("ProvinceBorderDistTexture", pixels.Province, "province_border_dist", borderWidth, borderHeight);
+            countyBorderDistTexture = CreateBorderDistTexture("CountyBorderDistTexture", pixels.County, "county_border_dist", borderWidth, borderHeight);
 
-            Debug.Log($"MapOverlayManager: Generated administrative border distance textures {gridWidth}x{gridHeight}");
+            Debug.Log($"MapOverlayManager: Generated administrative border distance textures {borderWidth}x{borderHeight}");
         }
 
-        private AdministrativeBorderDistPixels GenerateAdministrativeBorderDistPixels()
+        private AdministrativeBorderDistPixels GenerateAdministrativeBorderDistPixels(int[] sourceGrid, int gridW, int gridH)
         {
-            int size = gridWidth * gridHeight;
+            int size = gridW * gridH;
 
             int[] realmGrid = new int[size];
             int[] provinceGrid = new int[size];
@@ -2369,7 +2447,7 @@ public class MapOverlayManager
 
             for (int i = 0; i < size; i++)
             {
-                int cellId = spatialGrid[i];
+                int cellId = sourceGrid[i];
                 if (cellId >= 0 && cellId < cellIsLandById.Length && cellIsLandById[cellId])
                 {
                     realmGrid[i] = cellRealmIdById[cellId];
@@ -2394,10 +2472,10 @@ public class MapOverlayManager
             Array.Fill(countyDist, 255f);
 
             // Single seed scan for all administrative boundary classes.
-            Parallel.For(0, gridHeight, y =>
+            Parallel.For(0, gridH, y =>
             {
-                int row = y * gridWidth;
-                for (int x = 0; x < gridWidth; x++)
+                int row = y * gridW;
+                for (int x = 0; x < gridW; x++)
                 {
                     int idx = row + x;
                     if (!isLand[idx])
@@ -2420,14 +2498,14 @@ public class MapOverlayManager
 
                             int nx = x + dx;
                             int ny = y + dy;
-                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight)
+                            if (nx < 0 || nx >= gridW || ny < 0 || ny >= gridH)
                             {
                                 // Grid edge counts as realm boundary (coastline at map edge).
                                 realmBoundary = true;
                                 continue;
                             }
 
-                            int nIdx = ny * gridWidth + nx;
+                            int nIdx = ny * gridW + nx;
                             if (!isLand[nIdx])
                             {
                                 // Water/river neighbor — realm edge (coast, lake, river).
@@ -2466,9 +2544,9 @@ public class MapOverlayManager
             });
 
             Profiler.Begin("RunAdministrativeBorderChamferTransforms");
-            Task realmTask = Task.Run(() => RunChamferTransform(realmDist, isLand));
-            Task provinceTask = Task.Run(() => RunChamferTransform(provinceDist, isLand));
-            Task countyTask = Task.Run(() => RunChamferTransform(countyDist, isLand));
+            Task realmTask = Task.Run(() => RunChamferTransform(realmDist, isLand, gridW, gridH));
+            Task provinceTask = Task.Run(() => RunChamferTransform(provinceDist, isLand, gridW, gridH));
+            Task countyTask = Task.Run(() => RunChamferTransform(countyDist, isLand, gridW, gridH));
             Task.WaitAll(realmTask, provinceTask, countyTask);
             Profiler.End();
 
@@ -2478,9 +2556,9 @@ public class MapOverlayManager
                 DistToBytes(countyDist));
         }
 
-        private Texture2D CreateBorderDistTexture(string textureName, byte[] pixels, string debugName)
+        private Texture2D CreateBorderDistTexture(string textureName, byte[] pixels, string debugName, int texW, int texH)
         {
-            var texture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+            var texture = new Texture2D(texW, texH, TextureFormat.R8, false);
             texture.name = textureName;
             texture.filterMode = FilterMode.Bilinear;
             texture.anisoLevel = 8;
@@ -2554,7 +2632,7 @@ public class MapOverlayManager
             if (roadDistTexture != null)
                 return;
 
-            roadDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+            roadDistTexture = new Texture2D(borderWidth, borderHeight, TextureFormat.R8, false);
             roadDistTexture.name = "RoadMaskTexture";
             roadDistTexture.filterMode = FilterMode.Bilinear;
             roadDistTexture.anisoLevel = 8;
@@ -2691,6 +2769,7 @@ public class MapOverlayManager
                 styleMaterial.SetTexture(DioceseBorderDistTexId, dioceseBorderDistTexture);
             if (parishBorderDistTexture != null)
                 styleMaterial.SetTexture(ParishBorderDistTexId, parishBorderDistTexture);
+            styleMaterial.SetFloat(BorderTexelScaleId, borderResolutionScale);
         }
 
         /// <summary>
@@ -3998,7 +4077,18 @@ public class MapOverlayManager
         {
             if (roadDistTexture == null || roadState == null || mapData == null) return;
 
-            var pixels = GenerateRoadMaskPixels();
+            var pixels = GenerateRoadMaskPixels(borderWidth, borderHeight, resolutionMultiplier * borderResolutionScale);
+
+            // Resize texture if needed (border resolution may have changed)
+            if (roadDistTexture.width != borderWidth || roadDistTexture.height != borderHeight)
+            {
+                DestroyTexture(roadDistTexture);
+                roadDistTexture = new Texture2D(borderWidth, borderHeight, TextureFormat.R8, false);
+                roadDistTexture.name = "RoadMaskTexture";
+                roadDistTexture.filterMode = FilterMode.Bilinear;
+                roadDistTexture.anisoLevel = 8;
+                roadDistTexture.wrapMode = TextureWrapMode.Clamp;
+            }
 
             roadDistTexture.LoadRawTextureData(pixels);
             roadDistTexture.Apply();
@@ -4079,8 +4169,9 @@ public class MapOverlayManager
             marketPaletteTexture.SetPixels(marketPalettePixels);
             marketPaletteTexture.Apply();
 
-            // Generate market border distance texture
-            GenerateMarketBorderDistTexture();
+            // Generate market border distance texture at border resolution
+            int[] borderGrid = BuildBorderSpatialGrid();
+            GenerateMarketBorderDistTexture(borderGrid, borderWidth, borderHeight);
 
             // Bind textures to material
             if (styleMaterial != null)
@@ -4177,8 +4268,9 @@ public class MapOverlayManager
                 }
             }
 
-            // Generate religious territory border distance textures
-            GenerateReligiousBorderDistTextures();
+            // Generate religious territory border distance textures at border resolution
+            int[] religBorderGrid = BuildBorderSpatialGrid();
+            GenerateReligiousBorderDistTextures(religBorderGrid, borderWidth, borderHeight);
 
             // Bind border textures to material
             if (styleMaterial != null)
@@ -4267,15 +4359,15 @@ public class MapOverlayManager
             InvalidateReligionOverlay();
         }
 
-        private void GenerateMarketBorderDistTexture()
+        private void GenerateMarketBorderDistTexture(int[] sourceGrid, int gridW, int gridH)
         {
             if (marketBorderDistTexture != null) DestroyTexture(marketBorderDistTexture);
-            marketBorderDistTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.R8, false);
+            marketBorderDistTexture = new Texture2D(gridW, gridH, TextureFormat.R8, false);
             marketBorderDistTexture.name = "MarketBorderDistTexture";
             marketBorderDistTexture.filterMode = FilterMode.Bilinear;
             marketBorderDistTexture.wrapMode = TextureWrapMode.Clamp;
 
-            int size = gridWidth * gridHeight;
+            int size = gridW * gridH;
 
             // Build market grid from spatial grid
             int[] marketGrid = new int[size];
@@ -4283,7 +4375,7 @@ public class MapOverlayManager
 
             for (int i = 0; i < size; i++)
             {
-                int cellId = spatialGrid[i];
+                int cellId = sourceGrid[i];
                 if (cellId >= 0 && cellId < cellIsLandById.Length && cellIsLandById[cellId])
                 {
                     isLand[i] = true;
@@ -4301,10 +4393,10 @@ public class MapOverlayManager
             float[] marketDist = new float[size];
             Array.Fill(marketDist, 255f);
 
-            System.Threading.Tasks.Parallel.For(0, gridHeight, y =>
+            System.Threading.Tasks.Parallel.For(0, gridH, y =>
             {
-                int row = y * gridWidth;
-                for (int x = 0; x < gridWidth; x++)
+                int row = y * gridW;
+                for (int x = 0; x < gridW; x++)
                 {
                     int idx = row + x;
                     if (!isLand[idx]) continue;
@@ -4319,12 +4411,12 @@ public class MapOverlayManager
                             if (dx == 0 && dy == 0) continue;
                             int nx = x + dx;
                             int ny = y + dy;
-                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight)
+                            if (nx < 0 || nx >= gridW || ny < 0 || ny >= gridH)
                             {
                                 isBoundary = true;
                                 continue;
                             }
-                            int nIdx = ny * gridWidth + nx;
+                            int nIdx = ny * gridW + nx;
                             if (!isLand[nIdx])
                             {
                                 isBoundary = true;
@@ -4341,7 +4433,7 @@ public class MapOverlayManager
             });
 
             // Chamfer transform
-            RunChamferTransform(marketDist, isLand);
+            RunChamferTransform(marketDist, isLand, gridW, gridH);
 
             // Convert to R8
             byte[] pixels = new byte[size];
@@ -4352,13 +4444,13 @@ public class MapOverlayManager
             marketBorderDistTexture.Apply();
         }
 
-        private void GenerateReligiousBorderDistTextures()
+        private void GenerateReligiousBorderDistTextures(int[] sourceGrid, int gridW, int gridH)
         {
             if (archdioceseBorderDistTexture != null) DestroyTexture(archdioceseBorderDistTexture);
             if (dioceseBorderDistTexture != null) DestroyTexture(dioceseBorderDistTexture);
             if (parishBorderDistTexture != null) DestroyTexture(parishBorderDistTexture);
 
-            int size = gridWidth * gridHeight;
+            int size = gridW * gridH;
 
             // Build per-pixel grids from spatial grid
             int[] archGrid = new int[size];
@@ -4368,7 +4460,7 @@ public class MapOverlayManager
 
             for (int i = 0; i < size; i++)
             {
-                int cellId = spatialGrid[i];
+                int cellId = sourceGrid[i];
                 if (cellId >= 0 && cellId < cellIsLandById.Length && cellIsLandById[cellId])
                 {
                     isLand[i] = true;
@@ -4396,10 +4488,10 @@ public class MapOverlayManager
             Array.Fill(dioDist, 255f);
             Array.Fill(parDist, 255f);
 
-            System.Threading.Tasks.Parallel.For(0, gridHeight, y =>
+            System.Threading.Tasks.Parallel.For(0, gridH, y =>
             {
-                int row = y * gridWidth;
-                for (int x = 0; x < gridWidth; x++)
+                int row = y * gridW;
+                for (int x = 0; x < gridW; x++)
                 {
                     int idx = row + x;
                     if (!isLand[idx]) continue;
@@ -4418,12 +4510,12 @@ public class MapOverlayManager
                             if (dx == 0 && dy == 0) continue;
                             int nx = x + dx;
                             int ny = y + dy;
-                            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight)
+                            if (nx < 0 || nx >= gridW || ny < 0 || ny >= gridH)
                             {
                                 archBoundary = true;
                                 continue;
                             }
-                            int nIdx = ny * gridWidth + nx;
+                            int nIdx = ny * gridW + nx;
                             if (!isLand[nIdx])
                             {
                                 // Water/river neighbor — archdiocese edge (coast, lake, river).
@@ -4446,16 +4538,16 @@ public class MapOverlayManager
                 }
             });
 
-            Task archTask = Task.Run(() => RunChamferTransform(archDist, isLand));
-            Task dioTask = Task.Run(() => RunChamferTransform(dioDist, isLand));
-            Task parTask = Task.Run(() => RunChamferTransform(parDist, isLand));
+            Task archTask = Task.Run(() => RunChamferTransform(archDist, isLand, gridW, gridH));
+            Task dioTask = Task.Run(() => RunChamferTransform(dioDist, isLand, gridW, gridH));
+            Task parTask = Task.Run(() => RunChamferTransform(parDist, isLand, gridW, gridH));
             Task.WaitAll(archTask, dioTask, parTask);
 
-            archdioceseBorderDistTexture = CreateBorderDistTexture("ArchdioceseBorderDistTexture", DistToBytes(archDist), "archdiocese_border_dist");
-            dioceseBorderDistTexture = CreateBorderDistTexture("DioceseBorderDistTexture", DistToBytes(dioDist), "diocese_border_dist");
-            parishBorderDistTexture = CreateBorderDistTexture("ParishBorderDistTexture", DistToBytes(parDist), "parish_border_dist");
+            archdioceseBorderDistTexture = CreateBorderDistTexture("ArchdioceseBorderDistTexture", DistToBytes(archDist), "archdiocese_border_dist", gridW, gridH);
+            dioceseBorderDistTexture = CreateBorderDistTexture("DioceseBorderDistTexture", DistToBytes(dioDist), "diocese_border_dist", gridW, gridH);
+            parishBorderDistTexture = CreateBorderDistTexture("ParishBorderDistTexture", DistToBytes(parDist), "parish_border_dist", gridW, gridH);
 
-            Debug.Log($"MapOverlayManager: Generated religious border distance textures {gridWidth}x{gridHeight}");
+            Debug.Log($"MapOverlayManager: Generated religious border distance textures {gridW}x{gridH}");
         }
 
         public IEnumerator RunDeferredStartupWork()
@@ -4571,17 +4663,18 @@ public class MapOverlayManager
             GenerateDataTextures();
             GenerateRiverMaskTexture();
             GenerateHeightmapTexture();
-            GenerateAdministrativeBorderDistTextures();
+            int[] rebuildBorderGrid = BuildBorderSpatialGrid();
+            GenerateAdministrativeBorderDistTextures(rebuildBorderGrid);
             GenerateVegetationTexture();
             if (roadState != null)
                 RegenerateRoadDistTexture();
             Profiler.End();
 
             if (economyState?.CountyToMarket != null && economyState.Markets != null)
-                GenerateMarketBorderDistTexture();
+                GenerateMarketBorderDistTexture(rebuildBorderGrid, borderWidth, borderHeight);
 
             if (cellParishIdById != null)
-                GenerateReligiousBorderDistTextures();
+                GenerateReligiousBorderDistTextures(rebuildBorderGrid, borderWidth, borderHeight);
 
             if (overlayTextureCacheByLayer.Count > 0)
             {
@@ -4636,20 +4729,20 @@ public class MapOverlayManager
                    styleMaterial.HasProperty(PathWidthId);
         }
 
-        private byte[] GenerateRoadMaskPixels()
+        private byte[] GenerateRoadMaskPixels(int gridW, int gridH, float effectiveMultiplier)
         {
-            var pixels = new byte[gridWidth * gridHeight];
-            float scale = resolutionMultiplier;
+            var pixels = new byte[gridW * gridH];
+            float scale = effectiveMultiplier;
 
             // Road width settings (in grid pixels)
             float configuredPathWidth = GetMaterialFloatOr(PathWidthId, 0.8f);
-            float pathWidth = configuredPathWidth * resolutionMultiplier;
+            float pathWidth = configuredPathWidth * effectiveMultiplier;
             float roadWidth = pathWidth * 1.8f;
 
             float configuredDashLength = GetMaterialFloatOr(PathDashLengthId, 1.8f);
             float configuredGapLength = GetMaterialFloatOr(PathGapLengthId, 2.4f);
-            float dashLength = configuredDashLength * resolutionMultiplier;
-            float gapLength = configuredGapLength * resolutionMultiplier;
+            float dashLength = configuredDashLength * effectiveMultiplier;
+            float gapLength = configuredGapLength * effectiveMultiplier;
             float patternLength = Mathf.Max(0.01f, dashLength + gapLength);
 
             var roads = roadState.GetAllRoads();
@@ -4679,13 +4772,13 @@ public class MapOverlayManager
                     new Vector2(bx, by)
                 };
                 List<Vector2> noisyPath = BuildNoisyRasterPath(controlPoints, roadSeed, amplitudeScale, smoothSamplesPerSegment: 0);
-                RasterizeDashedPath(pixels, noisyPath, width, dashLength, patternLength);
+                RasterizeDashedPath(pixels, noisyPath, width, dashLength, patternLength, gridW, gridH);
             }
 
             return pixels;
         }
 
-        private void RasterizeSolidPath(byte[] pixels, List<Vector2> path, Func<int, int, float> widthForSegment)
+        private void RasterizeSolidPath(byte[] pixels, List<Vector2> path, Func<int, int, float> widthForSegment, int gridW, int gridH)
         {
             if (pixels == null || path == null || path.Count < 2 || widthForSegment == null)
                 return;
@@ -4697,11 +4790,11 @@ public class MapOverlayManager
                 if (width <= 0f)
                     continue;
 
-                DrawThickLine(pixels, path[i], path[i + 1], width);
+                DrawThickLine(pixels, path[i], path[i + 1], width, gridW, gridH);
             }
         }
 
-        private void RasterizeDashedPath(byte[] pixels, List<Vector2> path, float width, float dashLength, float patternLength)
+        private void RasterizeDashedPath(byte[] pixels, List<Vector2> path, float width, float dashLength, float patternLength, int gridW, int gridH)
         {
             if (pixels == null || path == null || path.Count < 2 || width <= 0f)
                 return;
@@ -4722,18 +4815,22 @@ public class MapOverlayManager
                     width,
                     dashLength,
                     patternLength,
-                    ref dashProgress);
+                    ref dashProgress,
+                    gridW,
+                    gridH);
             }
         }
 
-        private void DrawDashedSegment(
+        private static void DrawDashedSegment(
             byte[] pixels,
             Vector2 start,
             Vector2 end,
             float width,
             float dashLength,
             float patternLength,
-            ref float dashProgress)
+            ref float dashProgress,
+            int gridW,
+            int gridH)
         {
             Vector2 delta = end - start;
             float segmentLength = delta.magnitude;
@@ -4756,7 +4853,7 @@ public class MapOverlayManager
                     {
                         Vector2 worldStart = start + dir * dashStart;
                         Vector2 worldEnd = start + dir * dashEnd;
-                        DrawThickLine(pixels, worldStart, worldEnd, width);
+                        DrawThickLine(pixels, worldStart, worldEnd, width, gridW, gridH);
                     }
                 }
 

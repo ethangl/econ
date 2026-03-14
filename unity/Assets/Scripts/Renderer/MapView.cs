@@ -44,6 +44,7 @@ namespace EconSim.Renderer
         [Header("Shader Overlays")]
         private bool useShaderOverlays = true;
         [SerializeField] [Range(1, 8)] private int overlayResolutionMultiplier = 6;  // Higher = smoother borders, more memory
+        [Range(1f, 3f)] private float borderResolutionScale = 1.5f;
         [Header("Noisy Zone Edges")]
         [SerializeField] [Range(0.5f, 12f)] private float noisyEdgeSampleSpacingPx = 2.5f;
         [SerializeField] [Range(8, 512)] private int noisyEdgeMaxSamples = 96;
@@ -1056,7 +1057,8 @@ namespace EconSim.Renderer
                 overlayResolutionMultiplier,
                 overlayTextureCacheDirectory,
                 preferCachedOverlayTextures,
-                BuildInspectorNoisyEdgeStyle());
+                BuildInspectorNoisyEdgeStyle(),
+                borderResolutionScale: borderResolutionScale);
 
             // Height displacement follows grid-mesh mode with map-mode-specific scale.
             overlayManager.SetHeightDisplacementEnabled(useGridMesh);
