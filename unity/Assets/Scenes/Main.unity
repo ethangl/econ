@@ -489,6 +489,10 @@ MonoBehaviour:
   selectionDimmingTarget: 1
   selectionDesaturationTarget: 1
   dimmingAnimationSpeed: 8
+  waterRiverColor: {r: 0, g: 0.3, b: 0.3, a: 0.6}
+  waterLakeColor: {r: 0, g: 0.9666667, b: 1, a: 1}
+  waterOceanColor: {r: 0.1, g: 0.25, b: 0.45, a: 0.65}
+  waterEdgeSoftness: 0.08
   biomesModeHeightScale: 0.75
 --- !u!23 &2039203592
 MeshRenderer:

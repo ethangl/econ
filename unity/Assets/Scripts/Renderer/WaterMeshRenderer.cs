@@ -15,11 +15,21 @@ namespace EconSim.Renderer
         public float RiverMaxHalfWidth = WaterMeshBuilder.DefaultRiverMaxHalfWidth;
         public float Expand = 0.003f;
 
+        [Header("Water Colors")]
+        public Color RiverColor = new Color(0.18f, 0.42f, 0.68f, 0.75f);
+        public Color LakeColor = new Color(0.15f, 0.35f, 0.55f, 0.60f);
+        public Color OceanColor = new Color(0.10f, 0.25f, 0.45f, 0.65f);
+        public float EdgeSoftness = 0.08f;
+
         private static readonly int HeightScaleId = Shader.PropertyToID("_HeightScale");
         private static readonly int SeaLevelId = Shader.PropertyToID("_SeaLevel");
         private static readonly int MapWorldSizeId = Shader.PropertyToID("_MapWorldSize");
         private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
         private static readonly int GeographyBaseTexId = Shader.PropertyToID("_GeographyBaseTex");
+        private static readonly int RiverColorId = Shader.PropertyToID("_RiverColor");
+        private static readonly int LakeColorId = Shader.PropertyToID("_LakeColor");
+        private static readonly int OceanColorId = Shader.PropertyToID("_OceanColor");
+        private static readonly int EdgeSoftnessId = Shader.PropertyToID("_EdgeSoftness");
 
         private Mesh waterMesh;
         private Material flatMaterial;
@@ -34,6 +44,10 @@ namespace EconSim.Renderer
         private float prevRiverMin;
         private float prevRiverMax;
         private float prevExpand;
+        private Color prevRiverColor;
+        private Color prevLakeColor;
+        private Color prevOceanColor;
+        private float prevEdgeSoftness;
 
         public void Initialize(MapData mapData, float cellScale)
         {
@@ -43,6 +57,10 @@ namespace EconSim.Renderer
             prevRiverMin = RiverMinHalfWidth;
             prevRiverMax = RiverMaxHalfWidth;
             prevExpand = Expand;
+            prevRiverColor = RiverColor;
+            prevLakeColor = LakeColor;
+            prevOceanColor = OceanColor;
+            prevEdgeSoftness = EdgeSoftness;
 
             RebuildMesh();
         }
@@ -129,6 +147,7 @@ namespace EconSim.Renderer
             mf.sharedMesh = waterMesh;
 
             EnsureMaterials();
+            SyncColorProperties();
             ApplyActiveMaterial();
         }
 
@@ -157,6 +176,33 @@ namespace EconSim.Renderer
                 prevExpand = Expand;
                 RebuildMesh();
             }
+
+            if (RiverColor != prevRiverColor ||
+                LakeColor != prevLakeColor ||
+                OceanColor != prevOceanColor ||
+                EdgeSoftness != prevEdgeSoftness)
+            {
+                prevRiverColor = RiverColor;
+                prevLakeColor = LakeColor;
+                prevOceanColor = OceanColor;
+                prevEdgeSoftness = EdgeSoftness;
+                SyncColorProperties();
+            }
+        }
+
+        private void SyncColorProperties()
+        {
+            SyncColorsToMaterial(flatMaterial);
+            SyncColorsToMaterial(biomeMaterial);
+        }
+
+        private void SyncColorsToMaterial(Material mat)
+        {
+            if (mat == null) return;
+            mat.SetColor(RiverColorId, RiverColor);
+            mat.SetColor(LakeColorId, LakeColor);
+            mat.SetColor(OceanColorId, OceanColor);
+            mat.SetFloat(EdgeSoftnessId, EdgeSoftness);
         }
 
         private void EnsureMaterials()

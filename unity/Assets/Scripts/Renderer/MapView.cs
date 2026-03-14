@@ -84,6 +84,12 @@ namespace EconSim.Renderer
         private readonly HashSet<int> expandedProvinceIds = new HashSet<int>();
         private readonly HashSet<int> expandedArchdioceseIds = new HashSet<int>();
         private readonly HashSet<int> expandedDioceseIds = new HashSet<int>();
+        [Header("Water Colors")]
+        [SerializeField] private Color waterRiverColor = new Color(0.18f, 0.42f, 0.68f, 0.75f);
+        [SerializeField] private Color waterLakeColor = new Color(0.15f, 0.35f, 0.55f, 0.60f);
+        [SerializeField] private Color waterOceanColor = new Color(0.10f, 0.25f, 0.45f, 0.65f);
+        [SerializeField] [Range(0.01f, 0.25f)] private float waterEdgeSoftness = 0.08f;
+
         [Header("Height")]
         [SerializeField] [Range(0f, 2f)] private float biomesModeHeightScale = 0.3f;
         private const float HeightScaleTransitionSpeed = 2f;
@@ -256,6 +262,7 @@ namespace EconSim.Renderer
         {
             overlayManager?.RefreshPathStyleFromMaterial();
             RefreshNoisyEdgeStyleFromInspector();
+            SyncWaterColors();
 
             // Refresh religion overlay when spread system marks adherence as meaningfully changed
             if (IsReligionFamilyMode(currentMode) && overlayManager != null
@@ -1498,7 +1505,7 @@ namespace EconSim.Renderer
             go.AddComponent<MeshFilter>();
             go.AddComponent<MeshRenderer>();
             waterMeshRenderer = go.AddComponent<WaterMeshRenderer>();
-
+            SyncWaterColors();
             waterMeshRenderer.Initialize(mapData, cellScale);
         }
 
@@ -1513,6 +1520,15 @@ namespace EconSim.Renderer
                 DestroyImmediate(waterMeshRenderer.gameObject);
 
             waterMeshRenderer = null;
+        }
+
+        private void SyncWaterColors()
+        {
+            if (waterMeshRenderer == null) return;
+            waterMeshRenderer.RiverColor = waterRiverColor;
+            waterMeshRenderer.LakeColor = waterLakeColor;
+            waterMeshRenderer.OceanColor = waterOceanColor;
+            waterMeshRenderer.EdgeSoftness = waterEdgeSoftness;
         }
 
         private void BuildParchmentLayer()
