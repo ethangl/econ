@@ -12,9 +12,49 @@ Shader "EconSim/WaterMesh"
 
     SubShader
     {
-        Tags { "Queue"="Transparent-50" "RenderType"="Transparent" "IgnoreProjector"="True" }
+        Tags { "Queue"="Geometry-1" "RenderType"="Transparent" "IgnoreProjector"="True" }
         LOD 100
 
+        // Pass 0: Early stencil write — marks water pixels so the terrain shader can discard them.
+        Pass
+        {
+            Tags { "LightMode"="SRPDefaultUnlit" }
+            ColorMask 0
+            ZWrite Off
+            Cull Off
+            Stencil
+            {
+                Ref 2
+                WriteMask 2
+                Comp Always
+                Pass Replace
+            }
+
+            CGPROGRAM
+            #pragma vertex vert_stencil
+            #pragma fragment frag_stencil
+
+            #include "UnityCG.cginc"
+
+            float _HeightScale;
+            float _SeaLevel;
+            static const float MESH_Y_OFFSET = 0.002;
+
+            float4 vert_stencil(float4 vertex : POSITION, float2 uv : TEXCOORD0) : SV_POSITION
+            {
+                float height01 = uv.x;
+                vertex.y = (height01 - _SeaLevel) * _HeightScale + MESH_Y_OFFSET;
+                return UnityObjectToClipPos(vertex);
+            }
+
+            fixed4 frag_stencil() : SV_Target
+            {
+                return 0;
+            }
+            ENDCG
+        }
+
+        // Pass 1: Color rendering
         Pass
         {
             Blend SrcAlpha OneMinusSrcAlpha

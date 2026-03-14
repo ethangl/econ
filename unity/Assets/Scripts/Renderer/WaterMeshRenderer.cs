@@ -22,23 +22,15 @@ namespace EconSim.Renderer
         // Stored build parameters for rebuild
         private MapData cachedMapData;
         private float cachedCellScale;
-        private MapOverlayManager.NoisyEdgeStyle cachedNoisyEdgeStyle;
-        private uint cachedRootSeed;
 
         // Track previous values for change detection
         private float prevRiverMin;
         private float prevRiverMax;
 
-        public void Initialize(
-            MapData mapData,
-            float cellScale,
-            MapOverlayManager.NoisyEdgeStyle noisyEdgeStyle,
-            uint rootSeed)
+        public void Initialize(MapData mapData, float cellScale)
         {
             cachedMapData = mapData;
             cachedCellScale = cellScale;
-            cachedNoisyEdgeStyle = noisyEdgeStyle;
-            cachedRootSeed = rootSeed;
 
             prevRiverMin = RiverMinHalfWidth;
             prevRiverMax = RiverMaxHalfWidth;
@@ -71,7 +63,6 @@ namespace EconSim.Renderer
 
             waterMesh = WaterMeshBuilder.Build(
                 cachedMapData, cachedCellScale,
-                cachedNoisyEdgeStyle, cachedRootSeed,
                 RiverMinHalfWidth, RiverMaxHalfWidth);
 
             if (waterMesh == null)

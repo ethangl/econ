@@ -207,5 +207,59 @@ namespace EconSim.Renderer
         {
             return Mathf.Min(style.AmplitudeCap, Mathf.Max(1.0f, effectiveResMultiplier * style.AmplitudePerResolution));
         }
+
+        /// <summary>
+        /// Generate a noisy polyline using the exact same offset logic as RasterizeNoisyEdge
+        /// in MapOverlayManager, so that mesh-based coastlines match texture-based borders.
+        /// Points are in the same coordinate space as the input (typically texture-pixel space).
+        /// </summary>
+        public static List<Vector2> BuildBorderMatchingPolyline(
+            Vector2 v0,
+            Vector2 v1,
+            Vector2 centerA,
+            Vector2 centerB,
+            uint edgeSeed,
+            MapOverlayManager.NoisyEdgeStyle style,
+            float baseAmplitude)
+        {
+            Vector2 delta = v1 - v0;
+            float length = delta.magnitude;
+            if (length < 1e-4f)
+                return new List<Vector2> { v0, v1 };
+
+            Vector2 dir = delta / length;
+            Vector2 lineNormal = new Vector2(-dir.y, dir.x);
+            Vector2 mid = (v0 + v1) * 0.5f;
+            float signToA = Vector2.Dot(centerA - mid, lineNormal);
+            Vector2 orientedNormal = signToA >= 0f ? lineNormal : -lineNormal;
+
+            float centerDistance = Vector2.Distance(centerA, centerB);
+            float amplitude = Mathf.Min(baseAmplitude, length * 0.22f, centerDistance * 0.35f);
+            if (amplitude < 0.75f)
+                return new List<Vector2> { v0, v1 };
+
+            int sampleCount = Mathf.Clamp(Mathf.CeilToInt(length / style.SampleSpacingPx), 4, style.MaxSamples);
+            var offsets = new float[sampleCount + 1];
+            offsets[0] = 0f;
+            offsets[sampleCount] = 0f;
+            BuildNoisyEdgeOffsets(offsets, 0, sampleCount, amplitude, edgeSeed, style.Roughness);
+
+            // Oversample the offset array at ~1 point per pixel to match the rasterizer's
+            // per-pixel boundary. The rasterizer samples SampleNoisyEdgeOffset at every pixel
+            // along the edge — we replicate that as a dense polyline.
+            int polyCount = Mathf.Max(sampleCount, Mathf.CeilToInt(length));
+            var points = new List<Vector2>(polyCount + 1);
+            points.Add(v0);
+            for (int s = 1; s < polyCount; s++)
+            {
+                float t = s / (float)polyCount;
+                Vector2 point = v0 + dir * (length * t);
+                float shift = SampleNoisyEdgeOffset(offsets, t);
+                points.Add(point + orientedNormal * shift);
+            }
+            points.Add(v1);
+
+            return points;
+        }
     }
 }

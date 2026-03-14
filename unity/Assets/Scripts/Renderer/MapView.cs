@@ -1474,12 +1474,7 @@ namespace EconSim.Renderer
             go.AddComponent<MeshRenderer>();
             waterMeshRenderer = go.AddComponent<WaterMeshRenderer>();
 
-            uint rootSeed = (uint)(mapData.Info?.MapGenSeed ?? 0);
-            var noisyStyle = overlayManager != null
-                ? overlayManager.GetNoisyEdgeStyle()
-                : MapOverlayManager.NoisyEdgeStyle.Default;
-
-            waterMeshRenderer.Initialize(mapData, cellScale, noisyStyle, rootSeed);
+            waterMeshRenderer.Initialize(mapData, cellScale);
         }
 
         private void DestroyWaterMesh()

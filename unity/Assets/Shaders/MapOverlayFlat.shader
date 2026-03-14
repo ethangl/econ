@@ -426,10 +426,16 @@ Shader "EconSim/MapOverlayFlat"
             }
         ENDHLSL
 
-        // Pass 0: Main rendering
+        // Pass 0: Main rendering — discard water pixels via stencil (written by WaterMesh shader)
         Pass
         {
             Tags { "LightMode"="UniversalForward" }
+            Stencil
+            {
+                Ref 2
+                ReadMask 2
+                Comp NotEqual
+            }
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -447,6 +453,7 @@ Shader "EconSim/MapOverlayFlat"
             Stencil
             {
                 Ref 1
+                WriteMask 1
                 Comp Always
                 Pass Replace
             }

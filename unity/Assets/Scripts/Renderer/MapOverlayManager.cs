@@ -1190,10 +1190,8 @@ public class MapOverlayManager
                 }
             }
 
-            int[] baseGrid = (int[])target.Clone();
-            float effectiveResMultiplier = scale;
-            for (int i = 0; i < sharedEdges.Count; i++)
-                RasterizeNoisyEdge(sharedEdges[i], baseGrid, target, targetWidth, targetHeight, effectiveResMultiplier);
+            // Noisy edge displacement disabled — borders follow straight Voronoi edges
+            // to stay aligned with the mesh-based water renderer.
         }
 
         private void RasterizeNoisyEdge(SharedVoronoiEdge edge, int[] baseGrid, int[] target, int targetWidth, int targetHeight, float effectiveResMultiplier)
