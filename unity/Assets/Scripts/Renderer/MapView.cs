@@ -114,6 +114,10 @@ namespace EconSim.Renderer
         // Religion state reference for dirty-flag overlay refresh
         private EconSim.Core.Religious.ReligionState religionStateRef;
 
+        // Background parchment layer
+        private GameObject parchmentObject;
+        private Material parchmentMaterial;
+
         // Water mesh (rivers + coasts)
         private WaterMeshRenderer waterMeshRenderer;
 
@@ -237,6 +241,7 @@ namespace EconSim.Renderer
             // Unsubscribe from shader selection
             OnCellClicked -= HandleShaderSelection;
 
+            DestroyParchmentLayer();
             DestroyWaterMesh();
             DestroyRealmCapitalMarkers();
             DestroyMarketHubMarkers();
@@ -477,6 +482,10 @@ namespace EconSim.Renderer
             currentRenderStyle = style;
             if (meshRenderer != null)
                 meshRenderer.sharedMaterial = styleMaterial;
+
+            bool isFlat = style == RenderStyle.Flat;
+            if (parchmentObject != null) parchmentObject.SetActive(isFlat);
+            if (waterMeshRenderer != null) waterMeshRenderer.gameObject.SetActive(isFlat);
 
             overlayManager?.RebindMaterial(styleMaterial);
             overlayManager?.SetHeightDisplacementEnabled(useGridMesh);
@@ -1037,6 +1046,8 @@ namespace EconSim.Renderer
                 Profiler.End();
             }
 
+            BuildParchmentLayer();
+
             Profiler.Begin("BuildWaterMesh");
             BuildWaterMesh();
             if (waterMeshRenderer != null && mapData != null)
@@ -1488,6 +1499,57 @@ namespace EconSim.Renderer
                 DestroyImmediate(waterMeshRenderer.gameObject);
 
             waterMeshRenderer = null;
+        }
+
+        private void BuildParchmentLayer()
+        {
+            DestroyParchmentLayer();
+
+            if (mapData == null)
+                return;
+
+            float w = mapData.Info.Width * cellScale;
+            float h = mapData.Info.Height * cellScale;
+
+            var mesh = new Mesh { name = "Parchment" };
+            mesh.vertices = new[]
+            {
+                new Vector3(0, -0.001f, 0),
+                new Vector3(w, -0.001f, 0),
+                new Vector3(w, -0.001f, h),
+                new Vector3(0, -0.001f, h)
+            };
+            mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+
+            parchmentMaterial = Resources.Load<Material>("ParchmentMaterial");
+            if (parchmentMaterial == null)
+            {
+                Debug.LogWarning("MapView: Could not load Resources/ParchmentMaterial.");
+                return;
+            }
+
+            parchmentObject = new GameObject("Parchment");
+            parchmentObject.transform.SetParent(transform, false);
+            var mf = parchmentObject.AddComponent<MeshFilter>();
+            mf.sharedMesh = mesh;
+            var mr = parchmentObject.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = parchmentMaterial;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+        }
+
+        private void DestroyParchmentLayer()
+        {
+            if (parchmentObject != null)
+            {
+                if (Application.isPlaying)
+                    Destroy(parchmentObject);
+                else
+                    DestroyImmediate(parchmentObject);
+                parchmentObject = null;
+            }
+
+            parchmentMaterial = null;
         }
 
         private void BuildRealmCapitalMarkers()

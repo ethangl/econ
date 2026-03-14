@@ -12,6 +12,7 @@ namespace EconSim.Renderer
     {
         public float RiverMinHalfWidth = WaterMeshBuilder.DefaultRiverMinHalfWidth;
         public float RiverMaxHalfWidth = WaterMeshBuilder.DefaultRiverMaxHalfWidth;
+        public float Expand = 0.003f;
 
         private static readonly int HeightScaleId = Shader.PropertyToID("_HeightScale");
         private static readonly int SeaLevelId = Shader.PropertyToID("_SeaLevel");
@@ -26,6 +27,7 @@ namespace EconSim.Renderer
         // Track previous values for change detection
         private float prevRiverMin;
         private float prevRiverMax;
+        private float prevExpand;
 
         public void Initialize(MapData mapData, float cellScale)
         {
@@ -34,6 +36,7 @@ namespace EconSim.Renderer
 
             prevRiverMin = RiverMinHalfWidth;
             prevRiverMax = RiverMaxHalfWidth;
+            prevExpand = Expand;
 
             RebuildMesh();
         }
@@ -62,7 +65,7 @@ namespace EconSim.Renderer
             }
 
             waterMesh = WaterMeshBuilder.Build(
-                cachedMapData, cachedCellScale,
+                cachedMapData, cachedCellScale, Expand,
                 RiverMinHalfWidth, RiverMaxHalfWidth);
 
             if (waterMesh == null)
@@ -92,10 +95,12 @@ namespace EconSim.Renderer
 
             // ReSharper disable once CompareOfFloatsByEqualityOperator
             if (RiverMinHalfWidth != prevRiverMin ||
-                RiverMaxHalfWidth != prevRiverMax)
+                RiverMaxHalfWidth != prevRiverMax ||
+                Expand != prevExpand)
             {
                 prevRiverMin = RiverMinHalfWidth;
                 prevRiverMax = RiverMaxHalfWidth;
+                prevExpand = Expand;
                 RebuildMesh();
             }
         }

@@ -39,6 +39,7 @@ namespace EconSim.Renderer
         public static Mesh Build(
             MapData mapData,
             float cellScale,
+            float expand = 0f,
             float riverMinHalfWidth = DefaultRiverMinHalfWidth,
             float riverMaxHalfWidth = DefaultRiverMaxHalfWidth)
         {
@@ -50,7 +51,7 @@ namespace EconSim.Renderer
             // --- Water bodies (oceans + lakes) ---
             float seaLevel01 = Elevation.NormalizeAbsolute01(
                 Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
-            BuildWaterBodies(mapData, cellScale, seaLevel01,
+            BuildWaterBodies(mapData, cellScale, seaLevel01, expand,
                 vertices, uvs, colors, triangles);
 
             // --- Rivers ---
@@ -89,7 +90,7 @@ namespace EconSim.Renderer
             var riverChains = BuildChains(riverSegments);
             foreach (var chain in riverChains)
             {
-                ExtrudeChain(chain, mapData, cellScale, logTrace, logRange,
+                ExtrudeChain(chain, mapData, cellScale, expand, logTrace, logRange,
                     riverMinHalfWidth, riverMaxHalfWidth,
                     vertices, uvs, colors, triangles);
             }
@@ -117,6 +118,7 @@ namespace EconSim.Renderer
             MapData mapData,
             float cellScale,
             float seaLevel01,
+            float expand,
             List<Vector3> vertices,
             List<Vector2> uvs,
             List<Color> colors,
@@ -172,6 +174,16 @@ namespace EconSim.Renderer
                 Vector2 center = new Vector2(
                     cell.Center.X * cellScale,
                     cell.Center.Y * cellScale);
+
+                // Expand perimeter outward from center to cover rasterization gaps
+                if (expand > 0f)
+                {
+                    for (int i = 0; i < perimeter.Count; i++)
+                    {
+                        Vector2 dir = (perimeter[i] - center).normalized;
+                        perimeter[i] += dir * expand;
+                    }
+                }
 
                 int centerIdx = vertices.Count;
                 vertices.Add(new Vector3(center.x, 0f, center.y));
@@ -325,6 +337,7 @@ namespace EconSim.Renderer
             Chain chain,
             MapData mapData,
             float cellScale,
+            float expand,
             float logTrace,
             float logRange,
             float riverMinHalfWidth,
@@ -353,7 +366,7 @@ namespace EconSim.Renderer
 
                 float flux = chain.EdgeFluxes[seg];
                 float fluxT = Mathf.Clamp01((Mathf.Log(flux + 1f) - logTrace) / logRange);
-                float halfWidth = Mathf.Lerp(riverMinHalfWidth, riverMaxHalfWidth, fluxT);
+                float halfWidth = Mathf.Lerp(riverMinHalfWidth, riverMaxHalfWidth, fluxT) + expand;
                 float height01 = ComputeEdgeHeight01(mapData, cellA, cellB);
 
                 if (seg == 0)
