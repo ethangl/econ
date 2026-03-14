@@ -485,13 +485,17 @@ namespace EconSim.Renderer
 
             bool isFlat = style == RenderStyle.Flat;
             if (parchmentObject != null) parchmentObject.SetActive(isFlat);
-            if (waterMeshRenderer != null) waterMeshRenderer.gameObject.SetActive(isFlat);
+            if (waterMeshRenderer != null) waterMeshRenderer.SetBiomeMode(!isFlat);
 
             overlayManager?.RebindMaterial(styleMaterial);
             overlayManager?.SetHeightDisplacementEnabled(useGridMesh);
             overlayManager?.SetHeightScale(currentAnimatedHeightScale);
             if (mapData != null)
                 overlayManager?.SetSeaLevel(Elevation.ResolveSeaLevel(mapData.Info));
+
+            // Sync biome textures to water mesh after terrain material is fully configured
+            if (!isFlat && waterMeshRenderer != null && styleMaterial != null)
+                waterMeshRenderer.SyncBiomeTextures(styleMaterial);
         }
 
         private float ResolveHeightScaleForMode(MapMode mode)
@@ -1055,6 +1059,16 @@ namespace EconSim.Renderer
                 float seaLevel01 = Elevation.NormalizeAbsolute01(
                     Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
                 waterMeshRenderer.SetHeightScale(currentAnimatedHeightScale, seaLevel01);
+
+                // Set initial render mode and sync biome textures from terrain material
+                bool isBiome = currentRenderStyle == RenderStyle.Biome;
+                waterMeshRenderer.SetBiomeMode(isBiome);
+                if (isBiome)
+                {
+                    Material mat = ResolveRenderStyleMaterial(currentRenderStyle);
+                    if (mat != null)
+                        waterMeshRenderer.SyncBiomeTextures(mat);
+                }
             }
             Profiler.End();
 
