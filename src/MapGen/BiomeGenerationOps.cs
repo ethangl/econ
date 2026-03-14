@@ -71,7 +71,6 @@ namespace MapGen.Core
                     continue;
 
                 bool touchesBorder = false;
-                bool allLakeCells = true;
                 int count = 0;
                 var queue = new Queue<int>();
                 queue.Enqueue(start);
@@ -85,8 +84,6 @@ namespace MapGen.Core
 
                     if (mesh.CellIsBoundary[c])
                         touchesBorder = true;
-                    if (!biome.IsLakeCell[c])
-                        allLakeCells = false;
 
                     int[] neighbors = mesh.CellNeighbors[c];
                     for (int ni = 0; ni < neighbors.Length; ni++)
@@ -100,9 +97,11 @@ namespace MapGen.Core
                     }
                 }
 
-                WaterFeatureType type = (!touchesBorder && allLakeCells)
-                    ? WaterFeatureType.Lake
-                    : WaterFeatureType.Ocean;
+                // Inland water bodies (not connected to map edge) are lakes.
+                // Border-touching water is ocean.
+                WaterFeatureType type = touchesBorder
+                    ? WaterFeatureType.Ocean
+                    : WaterFeatureType.Lake;
 
                 features.Add(new WaterFeature
                 {
