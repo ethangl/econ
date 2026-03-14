@@ -114,6 +114,9 @@ namespace EconSim.Renderer
         // Religion state reference for dirty-flag overlay refresh
         private EconSim.Core.Religious.ReligionState religionStateRef;
 
+        // Water mesh (rivers + coasts)
+        private WaterMeshRenderer waterMeshRenderer;
+
         // Cell mesh data
         private List<Vector3> vertices = new List<Vector3>();
         private List<int> triangles = new List<int>();
@@ -234,6 +237,7 @@ namespace EconSim.Renderer
             // Unsubscribe from shader selection
             OnCellClicked -= HandleShaderSelection;
 
+            DestroyWaterMesh();
             DestroyRealmCapitalMarkers();
             DestroyMarketHubMarkers();
             DestroyRealmCapitalMarkerMaterial();
@@ -1026,6 +1030,10 @@ namespace EconSim.Renderer
                 Profiler.End();
             }
 
+            Profiler.Begin("BuildWaterMesh");
+            BuildWaterMesh();
+            Profiler.End();
+
             BuildRealmCapitalMarkers();
             UpdateModeMarkerVisibility();
 
@@ -1438,6 +1446,40 @@ namespace EconSim.Renderer
 
                 UpdateModeMarkerVisibility();
             }
+        }
+
+        private void BuildWaterMesh()
+        {
+            DestroyWaterMesh();
+
+            if (mapData == null)
+                return;
+
+            var go = new GameObject("WaterMesh");
+            go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>();
+            go.AddComponent<MeshRenderer>();
+            waterMeshRenderer = go.AddComponent<WaterMeshRenderer>();
+
+            uint rootSeed = (uint)(mapData.Info?.MapGenSeed ?? 0);
+            var noisyStyle = overlayManager != null
+                ? overlayManager.GetNoisyEdgeStyle()
+                : MapOverlayManager.NoisyEdgeStyle.Default;
+
+            waterMeshRenderer.Initialize(mapData, cellScale, gridHeightScale, noisyStyle, rootSeed);
+        }
+
+        private void DestroyWaterMesh()
+        {
+            if (waterMeshRenderer == null)
+                return;
+
+            if (Application.isPlaying)
+                Destroy(waterMeshRenderer.gameObject);
+            else
+                DestroyImmediate(waterMeshRenderer.gameObject);
+
+            waterMeshRenderer = null;
         }
 
         private void BuildRealmCapitalMarkers()

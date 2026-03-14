@@ -59,9 +59,6 @@ public class MapOverlayManager
         private static readonly int ColormapTexId = Shader.PropertyToID("_ColormapTex");
         private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
         private static readonly int ReliefNormalTexId = Shader.PropertyToID("_ReliefNormalTex");
-        private static readonly int RiverMaskTexId = Shader.PropertyToID("_RiverMaskTex");
-        private static readonly int RiverWidthId = Shader.PropertyToID("_RiverWidth");
-        private static readonly int RiverMinWidthId = Shader.PropertyToID("_RiverMinWidth");
         private static readonly int RealmPaletteTexId = Shader.PropertyToID("_RealmPaletteTex");
         private static readonly int BiomePaletteTexId = Shader.PropertyToID("_BiomePaletteTex");
         private static readonly int RealmBorderDistTexId = Shader.PropertyToID("_RealmBorderDistTex");
@@ -132,7 +129,6 @@ public class MapOverlayManager
         public Texture2D HeightmapTexture => heightmapTexture;
         private Texture2D heightmapTexture;     // RFloat: smoothed height values
         private Texture2D reliefNormalTexture;  // RGBA32: normal map derived from visual height
-        private Texture2D riverMaskTexture;     // RG16: R=distance from river, G=normalized flux
         private Texture2D realmPaletteTexture;  // 256x1: realm colors
         private Texture2D biomePaletteTexture;  // 256x1: biome colors
         private Texture2D realmBorderDistTexture; // R8: distance to nearest realm boundary (texels)
@@ -140,7 +136,7 @@ public class MapOverlayManager
         private Texture2D countyBorderDistTexture;   // R8: distance to nearest county boundary (texels)
         private Texture2D roadDistTexture;             // R8: distance to nearest road centerline (texels, dynamic)
         private Texture2D modeColorResolveTexture;     // RGBA32: resolved per-mode color overlay
-        private byte[] riverMaskPixels;                // Cached to drive relief synthesis near rivers.
+        private byte[] riverMaskPixels;                // River distance data for relief erosion (not bound to shader).
         private string overlayTextureCacheDirectory;
         private int cachedRoadStateHash;
         private bool overlayCacheDirty;
@@ -187,7 +183,6 @@ public class MapOverlayManager
         private Color[] cachedParishColorByCell;     // cellId → parish color
 
         // Cached river mask per grid pixel (avoids GetPixels() allocation on every resolve)
-        private bool[] cachedRiverMaskGrid;
         // Reusable pixel buffer for mode color resolve (avoids allocation per rebuild)
         private Color[] resolvePixelBuffer;
         private Texture2D archdioceseBorderDistTexture;
@@ -199,17 +194,6 @@ public class MapOverlayManager
 
         // Visual relief synthesis parameters (visual-only; gameplay elevation remains authoritative).
         private const int ReliefBlurRadius = 4;
-        /// <summary>
-        /// Max river half-width in distance-field texels. The distance field is offset by this
-        /// value so that pixels inside rivers have dist &lt; MaxRiverHalfWidth.
-        /// Used by both shader (_RiverWidth) and C# mode-color resolve.
-        /// </summary>
-        /// <summary>
-        /// Max river half-width in distance-field texels (for the largest rivers).
-        /// </summary>
-        private const float MaxRiverHalfWidth = 0.5f;
-        /// <summary>Min half-width for the smallest visible tributaries (texels).</summary>
-        private const float MinRiverHalfWidth = 0.0f;
 
         private const float ReliefBlurCrossClassWeight = 0.25f;
         private const float ReliefChannelRadiusTexels = 2.6f;
@@ -514,10 +498,6 @@ public class MapOverlayManager
                 GenerateDataTextures();
                 Profiler.End();
 
-                Profiler.Begin("GenerateRiverMaskTexture");
-                GenerateRiverMaskTexture();
-                Profiler.End();
-
                 Profiler.Begin("GenerateHeightmapTexture");
                 GenerateHeightmapTexture();
                 Profiler.End();
@@ -692,14 +672,11 @@ public class MapOverlayManager
                     FilterMode.Point,
                     TextureWrapMode.Clamp);
 
-                Texture2D loadedRiverMask = LoadTextureFromRaw(
-                    Path.Combine(cacheDirectory, CacheRiverMaskFile),
-                    gridWidth,
-                    gridHeight,
-                    TextureFormat.RG16,
-                    FilterMode.Bilinear,
-                    TextureWrapMode.Clamp,
-                    out byte[] loadedRiverMaskPixels);
+                // Load river mask raw pixels for relief erosion (no texture needed)
+                byte[] loadedRiverMaskPixels = null;
+                string riverMaskPath = Path.Combine(cacheDirectory, CacheRiverMaskFile);
+                if (File.Exists(riverMaskPath))
+                    loadedRiverMaskPixels = File.ReadAllBytes(riverMaskPath);
 
                 Texture2D loadedHeightmap = LoadTextureFromRaw(
                     Path.Combine(cacheDirectory, CacheHeightmapFile),
@@ -756,7 +733,6 @@ public class MapOverlayManager
 
                 if (loadedPoliticalIds == null ||
                     loadedGeographyBase == null ||
-                    loadedRiverMask == null ||
                     loadedHeightmap == null ||
                     loadedReliefNormal == null ||
                     loadedRealmBorder == null ||
@@ -765,7 +741,6 @@ public class MapOverlayManager
                 {
                     DestroyTexture(loadedPoliticalIds);
                     DestroyTexture(loadedGeographyBase);
-                    DestroyTexture(loadedRiverMask);
                     DestroyTexture(loadedHeightmap);
                     DestroyTexture(loadedReliefNormal);
                     DestroyTexture(loadedRealmBorder);
@@ -776,7 +751,6 @@ public class MapOverlayManager
 
                 politicalIdsTexture = loadedPoliticalIds;
                 geographyBaseTexture = loadedGeographyBase;
-                riverMaskTexture = loadedRiverMask;
                 heightmapTexture = loadedHeightmap;
                 reliefNormalTexture = loadedReliefNormal;
                 realmBorderDistTexture = loadedRealmBorder;
@@ -810,7 +784,8 @@ public class MapOverlayManager
 
                 SaveTextureToRaw(Path.Combine(cacheDirectory, CachePoliticalIdsFile), politicalIdsTexture);
                 SaveTextureToRaw(Path.Combine(cacheDirectory, CacheGeographyBaseFile), geographyBaseTexture);
-                SaveTextureToRaw(Path.Combine(cacheDirectory, CacheRiverMaskFile), riverMaskTexture);
+                if (riverMaskPixels != null)
+                    File.WriteAllBytes(Path.Combine(cacheDirectory, CacheRiverMaskFile), riverMaskPixels);
                 SaveTextureToRaw(Path.Combine(cacheDirectory, CacheHeightmapFile), heightmapTexture);
                 SaveTextureToRaw(Path.Combine(cacheDirectory, CacheReliefNormalFile), reliefNormalTexture);
                 SaveTextureToRaw(Path.Combine(cacheDirectory, CacheRealmBorderFile), realmBorderDistTexture);
@@ -1292,49 +1267,17 @@ public class MapOverlayManager
 
         private void BuildNoisyEdgeOffsets(float[] offsets, int start, int end, float amplitude, uint seed)
         {
-            if (end - start <= 1)
-                return;
-
-            int mid = (start + end) >> 1;
-            float center = 0.5f * (offsets[start] + offsets[end]);
-            float jitter = HashSigned(seed, start, mid, end) * amplitude;
-            offsets[mid] = center + jitter;
-
-            float nextAmplitude = amplitude * noisyEdgeStyle.Roughness;
-            BuildNoisyEdgeOffsets(offsets, start, mid, nextAmplitude, seed);
-            BuildNoisyEdgeOffsets(offsets, mid, end, nextAmplitude, seed);
+            NoisyEdgeUtils.BuildNoisyEdgeOffsets(offsets, start, end, amplitude, seed, noisyEdgeStyle.Roughness);
         }
 
         private static float SampleNoisyEdgeOffset(float[] offsets, float t)
         {
-            if (offsets == null || offsets.Length == 0)
-                return 0f;
-
-            float clampedT = Mathf.Clamp01(t);
-            float pos = clampedT * (offsets.Length - 1);
-            int i0 = Mathf.FloorToInt(pos);
-            int i1 = Mathf.Min(offsets.Length - 1, i0 + 1);
-            float frac = pos - i0;
-            return Mathf.Lerp(offsets[i0], offsets[i1], frac);
+            return NoisyEdgeUtils.SampleNoisyEdgeOffset(offsets, t);
         }
 
         private List<Vector2> BuildNoisyPolyline(List<Vector2> controlPoints, uint seed, float amplitudeScale = 1f)
         {
-            if (controlPoints == null || controlPoints.Count < 2)
-                return controlPoints;
-
-            var result = new List<Vector2>(Mathf.Max(controlPoints.Count * 4, controlPoints.Count + 1))
-            {
-                controlPoints[0]
-            };
-
-            for (int i = 0; i < controlPoints.Count - 1; i++)
-            {
-                uint segmentSeed = BuildSegmentSeed(seed, i);
-                AppendNoisySegment(result, controlPoints[i], controlPoints[i + 1], segmentSeed, amplitudeScale);
-            }
-
-            return result;
+            return NoisyEdgeUtils.BuildNoisyPolyline(controlPoints, seed, noisyEdgeStyle, GetNoisyEdgeBaseAmplitudePixels(), amplitudeScale);
         }
 
         private List<Vector2> BuildNoisyRasterPath(
@@ -1343,53 +1286,12 @@ public class MapOverlayManager
             float amplitudeScale,
             int smoothSamplesPerSegment)
         {
-            List<Vector2> noisyPath = BuildNoisyPolyline(controlPoints, seed, amplitudeScale);
-            if (noisyPath == null || noisyPath.Count < 2)
-                return noisyPath;
-
-            if (smoothSamplesPerSegment <= 0)
-                return noisyPath;
-
-            return SmoothPath(noisyPath, smoothSamplesPerSegment);
+            return NoisyEdgeUtils.BuildNoisySmoothedPath(controlPoints, seed, noisyEdgeStyle, GetNoisyEdgeBaseAmplitudePixels(), amplitudeScale, smoothSamplesPerSegment);
         }
 
         private void AppendNoisySegment(List<Vector2> output, Vector2 a, Vector2 b, uint seed, float amplitudeScale)
         {
-            Vector2 delta = b - a;
-            float length = delta.magnitude;
-            if (length < 1e-4f)
-            {
-                output.Add(b);
-                return;
-            }
-
-            Vector2 dir = delta / length;
-            Vector2 normal = new Vector2(-dir.y, dir.x);
-            if (HashSigned(seed, 11, 17, 29) < 0f)
-                normal = -normal;
-
-            int sampleCount = Mathf.Clamp(Mathf.CeilToInt(length / noisyEdgeStyle.SampleSpacingPx), 2, noisyEdgeStyle.MaxSamples);
-            float maxAmplitude = GetNoisyEdgeBaseAmplitudePixels() * Mathf.Max(0f, amplitudeScale);
-            float amplitude = Mathf.Min(maxAmplitude, length * 0.2f);
-
-            if (amplitude < 0.35f)
-            {
-                output.Add(b);
-                return;
-            }
-
-            var offsets = new float[sampleCount + 1];
-            offsets[0] = 0f;
-            offsets[sampleCount] = 0f;
-            BuildNoisyEdgeOffsets(offsets, 0, sampleCount, amplitude, seed);
-
-            for (int s = 1; s <= sampleCount; s++)
-            {
-                float t = s / (float)sampleCount;
-                Vector2 point = a + dir * (length * t);
-                float offset = s == sampleCount ? 0f : SampleNoisyEdgeOffset(offsets, t);
-                output.Add(point + normal * offset);
-            }
+            NoisyEdgeUtils.AppendNoisySegment(output, a, b, seed, noisyEdgeStyle, GetNoisyEdgeBaseAmplitudePixels(), amplitudeScale);
         }
 
         private uint BuildMapSeed(int entityId)
@@ -1399,14 +1301,12 @@ public class MapOverlayManager
 
         private static uint BuildSegmentSeed(uint baseSeed, int segmentIndex)
         {
-            return MixHash(baseSeed, (uint)segmentIndex);
+            return NoisyEdgeUtils.BuildSegmentSeed(baseSeed, segmentIndex);
         }
 
         private static uint BuildUnorderedPairSeed(uint rootSeed, int a, int b)
         {
-            uint lo = (uint)Mathf.Min(a, b);
-            uint hi = (uint)Mathf.Max(a, b);
-            return MixHash(MixHash(rootSeed, lo), hi);
+            return NoisyEdgeUtils.BuildUnorderedPairSeed(rootSeed, a, b);
         }
 
         private static ulong MakeUndirectedEdgeKey(int a, int b)
@@ -1418,22 +1318,12 @@ public class MapOverlayManager
 
         private static uint MixHash(uint state, uint value)
         {
-            uint x = state ^ (value + 0x9e3779b9u + (state << 6) + (state >> 2));
-            x ^= x >> 16;
-            x *= 0x7feb352du;
-            x ^= x >> 15;
-            x *= 0x846ca68bu;
-            x ^= x >> 16;
-            return x;
+            return NoisyEdgeUtils.MixHash(state, value);
         }
 
         private static float HashSigned(uint seed, int a, int b, int c)
         {
-            uint h = MixHash(seed, (uint)a);
-            h = MixHash(h, (uint)b);
-            h = MixHash(h, (uint)c);
-            float unit = h / (float)uint.MaxValue;
-            return unit * 2f - 1f;
+            return NoisyEdgeUtils.HashSigned(seed, a, b, c);
         }
 
         /// <summary>
@@ -1637,6 +1527,7 @@ public class MapOverlayManager
             });
 
             float seaLevel01 = Elevation.NormalizeAbsolute01(Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
+            EnsureRiverMaskPixels();
             float[] riverDistance = BuildRiverDistanceField(isLand);
             float[] heightData = ApplyLandAwareGaussianBlur(baseHeightData, isLand);
             ApplyFluvialErosion(heightData, isLand, riverDistance, seaLevel01);
@@ -2022,31 +1913,20 @@ public class MapOverlayManager
         }
 
         /// <summary>
-        /// Generate river mask texture by rasterizing river paths.
-        /// Rivers are "knocked out" of the land in the shader, showing water underneath.
+        /// Compute river distance pixel data for relief erosion (no GPU texture).
         /// </summary>
-        private void GenerateRiverMaskTexture()
+        private void EnsureRiverMaskPixels()
         {
-            riverMaskTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RG16, false);
-            riverMaskTexture.name = "RiverMaskTexture";
-            riverMaskTexture.filterMode = FilterMode.Bilinear;
-            riverMaskTexture.wrapMode = TextureWrapMode.Clamp;
-
+            if (riverMaskPixels != null)
+                return;
             riverMaskPixels = GenerateRiverMaskPixels();
-            riverMaskTexture.LoadRawTextureData(riverMaskPixels);
-            riverMaskTexture.Apply();
-
-            TextureDebugger.SaveTexture(riverMaskTexture, "river_mask");
-            int edgeCount = mapData.EdgeRiverFlux != null ? mapData.EdgeRiverFlux.Count : 0;
-            Debug.Log($"MapOverlayManager: Generated river distance field {gridWidth}x{gridHeight} ({edgeCount} river edges)");
         }
 
         private byte[] GenerateRiverMaskPixels()
         {
-            // RG8 river texture:
+            // RG8 river distance data (for relief erosion only, not bound to shader):
             //   R = chamfer distance from nearest river centerline (0 = on river, 255 = far)
             //   G = normalized river width at nearest river pixel (0 = thinnest, 255 = widest)
-            // Shader uses both: isRiver = dist < width * MaxRiverHalfWidth
             var edgeFlux = mapData.EdgeRiverFlux;
             float visualThreshold = mapData.RiverTraceFluxThreshold;
             float majorThreshold = mapData.RiverFluxThreshold;
@@ -2173,46 +2053,12 @@ public class MapOverlayManager
         /// </summary>
         private List<Vector2> SmoothPath(List<Vector2> points, int samplesPerSegment)
         {
-            if (points.Count < 2)
-                return points;
-
-            var result = new List<Vector2>();
-
-            for (int i = 0; i < points.Count - 1; i++)
-            {
-                // Get 4 control points for Catmull-Rom (clamped at ends)
-                Vector2 p0 = points[Mathf.Max(0, i - 1)];
-                Vector2 p1 = points[i];
-                Vector2 p2 = points[i + 1];
-                Vector2 p3 = points[Mathf.Min(points.Count - 1, i + 2)];
-
-                for (int j = 0; j < samplesPerSegment; j++)
-                {
-                    float t = (float)j / samplesPerSegment;
-                    result.Add(CatmullRom(p0, p1, p2, p3, t));
-                }
-            }
-
-            // Add final point
-            result.Add(points[points.Count - 1]);
-
-            return result;
+            return NoisyEdgeUtils.SmoothPath(points, samplesPerSegment);
         }
 
-        /// <summary>
-        /// Catmull-Rom spline interpolation.
-        /// </summary>
         private Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
         {
-            float t2 = t * t;
-            float t3 = t2 * t;
-
-            return 0.5f * (
-                (2f * p1) +
-                (-p0 + p2) * t +
-                (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 +
-                (-p0 + 3f * p1 - 3f * p2 + p3) * t3
-            );
+            return NoisyEdgeUtils.CatmullRom(p0, p1, p2, p3, t);
         }
 
         /// <summary>
@@ -2310,18 +2156,6 @@ public class MapOverlayManager
                     if (x > 0) dist[idx] = Mathf.Min(dist[idx], dist[(y + 1) * width + x - 1] + diagCost);
                 }
             }
-        }
-
-        /// <summary>
-        /// Check if a pixel from the RG16 river mask texture represents a river.
-        /// R = distance from centerline (0-1 → 0-255 texels), G = normalized flux (0-1).
-        /// River if distance &lt; flux-scaled half-width.
-        /// </summary>
-        private static bool IsRiverPixel(Color riverPixel)
-        {
-            float dist = riverPixel.r * 255f;
-            float width = Mathf.Lerp(MinRiverHalfWidth, MaxRiverHalfWidth, riverPixel.g);
-            return dist < width;
         }
 
         /// <summary>
@@ -2752,9 +2586,6 @@ public class MapOverlayManager
             styleMaterial.SetTexture(ReliefNormalTexId, reliefNormalTexture);
             if (colormapTexture != null)
                 styleMaterial.SetTexture(ColormapTexId, colormapTexture);
-            styleMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
-            styleMaterial.SetFloat(RiverWidthId, MaxRiverHalfWidth);
-            styleMaterial.SetFloat(RiverMinWidthId, MinRiverHalfWidth);
             styleMaterial.SetTexture(RealmPaletteTexId, realmPaletteTexture);
             styleMaterial.SetTexture(BiomePaletteTexId, biomePaletteTexture);
             styleMaterial.SetTexture(RealmBorderDistTexId, realmBorderDistTexture);
@@ -3341,16 +3172,6 @@ public class MapOverlayManager
         /// Precompute per-pixel river mask from river distance texture.
         /// Called once; avoids GetPixels() allocation on every resolve.
         /// </summary>
-        private void EnsureRiverMaskGrid()
-        {
-            if (cachedRiverMaskGrid != null) return;
-            if (riverMaskTexture == null) return;
-
-            Color[] rivers = riverMaskTexture.GetPixels();
-            cachedRiverMaskGrid = new bool[rivers.Length];
-            for (int i = 0; i < rivers.Length; i++)
-                cachedRiverMaskGrid[i] = IsRiverPixel(rivers[i]);
-        }
 
         /// <summary>
         /// Precompute per-cell colors for all three political levels (realm/province/county).
@@ -4650,7 +4471,6 @@ public class MapOverlayManager
             DestroyTexture(politicalIdsTexture);
             DestroyTexture(geographyBaseTexture);
             DestroyTexture(vegetationTexture);
-            DestroyTexture(riverMaskTexture);
             DestroyTexture(heightmapTexture);
             DestroyTexture(reliefNormalTexture);
             DestroyTexture(colormapTexture);
@@ -4661,7 +4481,6 @@ public class MapOverlayManager
             DestroyTexture(dioceseBorderDistTexture);
             DestroyTexture(parishBorderDistTexture);
             GenerateDataTextures();
-            GenerateRiverMaskTexture();
             GenerateHeightmapTexture();
             int[] rebuildBorderGrid = BuildBorderSpatialGrid();
             GenerateAdministrativeBorderDistTextures(rebuildBorderGrid);
@@ -5232,7 +5051,6 @@ public class MapOverlayManager
             AddTextureForDestroy(texturesToDestroy, vegetationTexture);
             AddTextureForDestroy(texturesToDestroy, heightmapTexture);
             AddTextureForDestroy(texturesToDestroy, reliefNormalTexture);
-            AddTextureForDestroy(texturesToDestroy, riverMaskTexture);
             AddTextureForDestroy(texturesToDestroy, realmPaletteTexture);
             AddTextureForDestroy(texturesToDestroy, biomePaletteTexture);
             AddTextureForDestroy(texturesToDestroy, realmBorderDistTexture);
@@ -5264,7 +5082,6 @@ public class MapOverlayManager
             heightmapTexture = null;
             reliefNormalTexture = null;
             colormapTexture = null;
-            riverMaskTexture = null;
             realmPaletteTexture = null;
             biomePaletteTexture = null;
             realmBorderDistTexture = null;
@@ -5278,7 +5095,6 @@ public class MapOverlayManager
             parishBorderDistTexture = null;
             modeColorResolveTexture = null;
             riverMaskPixels = null;
-            cachedRiverMaskGrid = null;
             resolvePixelBuffer = null;
             cachedRealmColorByCell = null;
             cachedProvinceColorByCell = null;

@@ -56,6 +56,19 @@ namespace EconSim.Core.Data
         /// </summary>
         [NonSerialized] public float RiverTraceFluxThreshold;
 
+        /// <summary>
+        /// Voronoi vertex pairs for river edges. Key is normalized cell pair (smaller ID first).
+        /// Values are (V0, V1) indices into MapData.Vertices.
+        /// </summary>
+        [NonSerialized] public Dictionary<(int, int), (int, int)> EdgeRiverVertices;
+
+        /// <summary>
+        /// Voronoi vertex pairs for coast edges (one cell land, other water).
+        /// Key is normalized cell pair (smaller ID first).
+        /// Values are (V0, V1) indices into MapData.Vertices.
+        /// </summary>
+        [NonSerialized] public Dictionary<(int, int), (int, int)> EdgeCoastVertices;
+
         public void BuildLookups()
         {
             CellById = new Dictionary<int, Cell>();

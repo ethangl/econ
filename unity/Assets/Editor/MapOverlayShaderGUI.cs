@@ -157,7 +157,6 @@ namespace EconSim.Editor
             ("_VegetationTex", "Vegetation Data"),
             ("_HeightmapTex", "Heightmap"),
             ("_ReliefNormalTex", "Relief Normal"),
-            ("_RiverMaskTex", "River Mask"),
             ("_ModeColorResolve", "Mode Color Resolve"),
             ("_OverlayTex", "Overlay Layer"),
             ("_CellToMarketTex", "Cell To Market"),

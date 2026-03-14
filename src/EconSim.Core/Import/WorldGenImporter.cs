@@ -186,8 +186,9 @@ namespace EconSim.Core.Import
                 }
             };
 
-            // Build per-cell-edge river flux from MapGen's edge data
+            // Build per-cell-edge river flux and vertex pairs from MapGen's edge data
             var edgeRiverFlux = new Dictionary<(int, int), float>();
+            var edgeRiverVertices = new Dictionary<(int, int), (int, int)>();
             var riversideCells = new HashSet<int>();
             float majorThreshold = rivers.RiverThreshold;
             float traceThreshold = rivers.RiverTraceThreshold;
@@ -201,11 +202,29 @@ namespace EconSim.Core.Import
                     continue; // boundary edge
                 var key = c0 < c1 ? (c0, c1) : (c1, c0);
                 edgeRiverFlux[key] = flux;
+                var (v0, v1) = mesh.EdgeVertices[e];
+                edgeRiverVertices[key] = (v0, v1);
                 if (flux >= majorThreshold)
                 {
                     riversideCells.Add(c0);
                     riversideCells.Add(c1);
                 }
+            }
+
+            // Build coast edge vertex pairs: edges where one cell is land and the other is water
+            var edgeCoastVertices = new Dictionary<(int, int), (int, int)>();
+            for (int e = 0; e < mesh.EdgeCount; e++)
+            {
+                var (c0, c1) = mesh.EdgeCells[e];
+                if (c0 < 0 || c1 < 0)
+                    continue; // boundary edge
+                bool land0 = cells[c0].IsLand;
+                bool land1 = cells[c1].IsLand;
+                if (land0 == land1)
+                    continue; // both land or both water
+                var key = c0 < c1 ? (c0, c1) : (c1, c0);
+                var (v0, v1) = mesh.EdgeVertices[e];
+                edgeCoastVertices[key] = (v0, v1);
             }
 
             var mapData = new MapData
@@ -223,6 +242,8 @@ namespace EconSim.Core.Import
                 Cultures = cultures,
                 Religions = religions,
                 EdgeRiverFlux = edgeRiverFlux,
+                EdgeRiverVertices = edgeRiverVertices,
+                EdgeCoastVertices = edgeCoastVertices,
                 RiversideCells = riversideCells,
                 RiverFluxThreshold = majorThreshold,
                 RiverTraceFluxThreshold = traceThreshold

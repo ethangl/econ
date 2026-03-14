@@ -19,11 +19,6 @@ Shader "EconSim/MapOverlayBiome"
         _ColormapTex ("Terrain Colormap", 2D) = "gray" {}
         _ColormapBlend ("Colormap Blend", Range(0, 1)) = 0.35
 
-        // River distance field - distance from nearest river edge (0 = on river edge)
-        _RiverMaskTex ("River Distance", 2D) = "white" {}
-        _RiverWidth ("River Width", Range(0, 30)) = 20.0
-        _RiverMinWidth ("River Min Width", Range(0, 5)) = 1.0
-
         // Split core textures (M3-S1)
         // Sampler budget note:
         // Metal compiles this shader with a strict fragment sampler limit (16).
@@ -131,9 +126,6 @@ Shader "EconSim/MapOverlayBiome"
             SAMPLER(sampler_ReliefNormalTex);
             float4 _HeightmapTex_TexelSize;  // (1/width, 1/height, width, height)
 
-            TEXTURE2D(_RiverMaskTex);  // River mask (1 = river, 0 = not river)
-            SAMPLER(sampler_RiverMaskTex);
-
             TEXTURE2D(_PoliticalIdsTex);
             SAMPLER(sampler_PoliticalIdsTex);
             TEXTURE2D(_GeographyBaseTex);
@@ -204,8 +196,6 @@ Shader "EconSim/MapOverlayBiome"
                 float _ShimmerScale;
                 float _ShimmerSpeed;
                 float _ShimmerIntensity;
-                float _RiverWidth;
-                float _RiverMinWidth;
 
                 float _SelectedRealmId;
                 float _SelectedProvinceId;
@@ -429,16 +419,8 @@ Shader "EconSim/MapOverlayBiome"
                 float biomeId = geographyBase.r;
                 int soilId = DecodeSoilIdFromGeography(geographyBase);
                 bool isCellWater = geographyBase.a >= 0.5;
-
-                float2 riverSample = tex2D(_RiverMaskTex, IN.dataUV).rg;
-                float riverDist = riverSample.r * 255.0;
-                float riverWidth = lerp(_RiverMinWidth, _RiverWidth, riverSample.g);
-                float riverAA = fwidth(riverDist);
-                float riverMask = 1.0 - smoothstep(riverWidth - riverAA, riverWidth + riverAA, riverDist);
-                bool isRiver = riverDist < riverWidth;
-
-                // isWater combines both sources (used for selection/hover land checks)
-                bool isWater = isCellWater || isRiver;
+                bool isWater = isCellWater;
+                float riverMask = 0.0;
 
                 float height = tex2D(_HeightmapTex, IN.dataUV).r;
 
