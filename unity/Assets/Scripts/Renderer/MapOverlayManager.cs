@@ -118,6 +118,7 @@ public class MapOverlayManager
         private float borderResolutionScale;
         private int borderWidth;
         private int borderHeight;
+        private int[] cachedBorderGrid;  // Lazily built, invalidated when spatialGrid changes
 
         // Data textures
         private Texture2D politicalIdsTexture;  // RGBAFloat: RealmId, ProvinceId, CountyId, reserved
@@ -629,6 +630,7 @@ public class MapOverlayManager
                 int[] loadedSpatialGrid = new int[gridWidth * gridHeight];
                 Buffer.BlockCopy(bytes, 0, loadedSpatialGrid, 0, bytes.Length);
                 spatialGrid = loadedSpatialGrid;
+                cachedBorderGrid = null;  // Invalidate upsampled border grid
 
                 Debug.Log($"MapOverlayManager: Loaded cached spatial grid from {spatialGridPath}");
                 return true;
@@ -993,6 +995,7 @@ public class MapOverlayManager
         private void BuildSpatialGrid()
         {
             BuildSpatialGridFromScratch();
+            cachedBorderGrid = null;  // Invalidate upsampled border grid
             Debug.Log($"MapOverlayManager: Built spatial grid {gridWidth}x{gridHeight} ({resolutionMultiplier}x resolution)");
         }
 
@@ -1015,8 +1018,11 @@ public class MapOverlayManager
             if (borderResolutionScale <= 1.001f)
                 return spatialGrid;
 
+            if (cachedBorderGrid != null)
+                return cachedBorderGrid;
+
             Profiler.Begin("BuildBorderSpatialGrid");
-            int[] borderGrid = new int[borderWidth * borderHeight];
+            cachedBorderGrid = new int[borderWidth * borderHeight];
 
             // Nearest-neighbor upsample: map each border pixel back to the main grid.
             // The chamfer distance transform will smooth the staircase edges into
@@ -1032,13 +1038,13 @@ public class MapOverlayManager
                 for (int x = 0; x < borderWidth; x++)
                 {
                     int srcX = Mathf.Min((int)(x * invScaleX), gridWidth - 1);
-                    borderGrid[dstRow + x] = spatialGrid[srcRow + srcX];
+                    cachedBorderGrid[dstRow + x] = spatialGrid[srcRow + srcX];
                 }
             });
 
             Profiler.End();
             Debug.Log($"MapOverlayManager: Upsampled border spatial grid {borderWidth}x{borderHeight} from {gridWidth}x{gridHeight}");
-            return borderGrid;
+            return cachedBorderGrid;
         }
 
         /// <summary>
