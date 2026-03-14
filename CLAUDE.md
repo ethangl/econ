@@ -97,9 +97,9 @@ Maps are generated procedurally via the MapGen pipeline. Use the "Generate New" 
 
 ## Shader-Based Overlay System
 
-The map uses a GPU-driven overlay system for borders and map modes. See [docs/shader-overlay-system.md](docs/shader-overlay-system.md) for full details (data texture formats, palette textures, border rendering, gradient fill, selection highlight).
+The map uses a GPU-driven overlay system for borders and map modes. See [docs/shader-overlay-system.md](docs/shader-overlay-system.md) for full details (data textures, distance-field borders, noisy edges, border resolution scale, selection/hover, map modes).
 
-**Key files:** `Assets/Shaders/MapOverlayFlat.shader`, `MapOverlayBiome.shader`, `Assets/Scripts/Renderer/MapOverlayManager.cs`, `EconSim.Core/Rendering/PoliticalPalette.cs`
+**Key files:** `Assets/Shaders/MapOverlayFlat.shader`, `MapOverlayBiome.shader`, `MapOverlay.ResolveModes.cginc`, `MapOverlay.Composite.cginc`, `Assets/Scripts/Renderer/MapOverlayManager.cs`, `EconSim.Core/Rendering/PoliticalPalette.cs`
 
 ## Coordinate Systems
 
