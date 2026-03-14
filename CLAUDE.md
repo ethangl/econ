@@ -77,8 +77,7 @@ No standalone csproj — this is a Unity project with assembly definitions.
 
 - `GameManager` - Entry point, generates map, owns simulation
 - `MapView` - Generates grid mesh (default) or Voronoi mesh, map modes (1=political cycle, 2=terrain with elevation tinting, 3=market), click-to-select
-- `BorderRenderer` - Province/county borders as straight polyline meshes (realm borders via shader)
-- `MapOverlayManager` - Generates data textures, palettes, and biome-elevation matrix for shader overlays
+- `MapOverlayManager` - Generates data textures, palettes, and biome-elevation matrix for shader overlays (borders rendered via shader edge detection)
 - `RiverRenderer` - River line strips (blue, tapered)
 - `RoadRenderer` - Emergent road segments (brown)
 - `SelectionHighlight` - Legacy outline (disabled when shader overlays enabled)

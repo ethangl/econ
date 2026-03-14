@@ -99,6 +99,9 @@ Shader "EconSim/MapOverlayFlat"
         _PathGapLength ("Path Gap Length", Range(0.1, 20)) = 2.4
         _PathWidth ("Path Width", Range(0.2, 4)) = 0.8
 
+        // Border texture resolution scale (border textures may be higher-res than the main grid)
+        _BorderTexelScale ("Border Texel Scale", Float) = 1.0
+
     }
     SubShader
     {
@@ -214,6 +217,7 @@ Shader "EconSim/MapOverlayFlat"
                 float _HoveredCountyId;
                 float _HoveredMarketId;
                 float _HoverIntensity;
+                float _BorderTexelScale;
             CBUFFER_END
 
             // Bridge legacy sampling calls to SRP texture/sampler macros.
@@ -390,24 +394,24 @@ Shader "EconSim/MapOverlayFlat"
                         displayLevel = tex2D(_ModeColorResolve, IN.dataUV).a * 255.0;
 
                     float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
-                    bool inBorder = realmBorderDist < _RealmBorderWidth;
+                    bool inBorder = realmBorderDist < _RealmBorderWidth * _BorderTexelScale;
 
                     if (!inBorder && displayLevel >= 1.5)
                     {
                         float provinceBorderDist = tex2D(_ProvinceBorderDistTex, IN.dataUV).r * 255.0;
-                        inBorder = provinceBorderDist < _ProvinceBorderWidth;
+                        inBorder = provinceBorderDist < _ProvinceBorderWidth * _BorderTexelScale;
                     }
                     if (!inBorder && displayLevel >= 2.5)
                     {
                         float countyBorderDist = tex2D(_CountyBorderDistTex, IN.dataUV).r * 255.0;
-                        inBorder = countyBorderDist < _CountyBorderWidth;
+                        inBorder = countyBorderDist < _CountyBorderWidth * _BorderTexelScale;
                     }
                     if (!inBorder) discard;
                 }
                 else if (_MapMode == 4)
                 {
                     float marketBorderDist = tex2D(_MarketBorderDistTex, IN.dataUV).r * 255.0;
-                    if (marketBorderDist >= _MarketBorderWidth) discard;
+                    if (marketBorderDist >= _MarketBorderWidth * _BorderTexelScale) discard;
                 }
                 else if (_MapMode >= 10 && _MapMode <= 12)
                 {
@@ -417,17 +421,17 @@ Shader "EconSim/MapOverlayFlat"
                         displayLevel = floor(tex2D(_ModeColorResolve, IN.dataUV).a * 255.0 / 64.0);
 
                     float archBorderDist = tex2D(_ArchdioceseBorderDistTex, IN.dataUV).r * 255.0;
-                    bool inBorder = archBorderDist < _RealmBorderWidth;
+                    bool inBorder = archBorderDist < _RealmBorderWidth * _BorderTexelScale;
 
                     if (!inBorder && displayLevel >= 1.5)
                     {
                         float dioceseBorderDist = tex2D(_DioceseBorderDistTex, IN.dataUV).r * 255.0;
-                        inBorder = dioceseBorderDist < _ProvinceBorderWidth;
+                        inBorder = dioceseBorderDist < _ProvinceBorderWidth * _BorderTexelScale;
                     }
                     if (!inBorder && displayLevel >= 2.5)
                     {
                         float parishBorderDist = tex2D(_ParishBorderDistTex, IN.dataUV).r * 255.0;
-                        inBorder = parishBorderDist < _CountyBorderWidth;
+                        inBorder = parishBorderDist < _CountyBorderWidth * _BorderTexelScale;
                     }
                     if (!inBorder) discard;
                 }

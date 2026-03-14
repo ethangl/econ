@@ -19,7 +19,8 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties: _ProvinceBorderColor _ProvinceBorderWidth _SoilColor1
+  m_LockedProperties: _ParishBorderDistTex _ProvinceBorderColor _ProvinceBorderWidth
+    _SoilColor1 _WaterShallowAlpha
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -195,25 +196,25 @@ Material:
     - _DebugView: 0
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
-    - _EdgeDarkening: 0.15
-    - _EdgeWidth: 1.5
-    - _FillOpacity: 0.908
+    - _EdgeDarkening: 0.05
+    - _EdgeWidth: 2
+    - _FillOpacity: 1
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
     - _HalftoneScale: 0.15
     - _HeightScale: 0
-    - _HeightmapContrast: 1.77
-    - _HeightmapOpacity: 1
+    - _HeightmapContrast: 1
+    - _HeightmapOpacity: 0
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.95918477
+    - _HoverIntensity: 5.313224e-37
     - _HoveredCountyId: -1
-    - _HoveredMarketId: 0.007843138
+    - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
-    - _MapMode: 10
+    - _MapMode: 3
     - _MarketBorderDarkening: 0.688
     - _MarketBorderWidth: 0.25
     - _Metallic: 0
@@ -232,8 +233,8 @@ Material:
     - _PoliticalGradientRadius: 64
     - _ProvinceBorderDarkening: 0.1
     - _ProvinceBorderWidth: 0.1
-    - _RealmBorderDarkening: 0.4
-    - _RealmBorderWidth: 0.25
+    - _RealmBorderDarkening: 0.5
+    - _RealmBorderWidth: 0.27
     - _RiverDarken: 1
     - _RiverDepth: 0.5
     - _RiverMinWidth: 0
@@ -266,10 +267,10 @@ Material:
     - _WaterDeepAlpha: 1
     - _WaterDepthRange: 1
     - _WaterGradientRadius: 11
-    - _WaterShallowAlpha: 0
+    - _WaterShallowAlpha: 1
     - _ZWrite: 1
     m_Colors:
-    - _BaseColor: {r: 1, g: 0.9623333, b: 0.88699996, a: 1}
+    - _BaseColor: {r: 1, g: 0.9607843, b: 0.8862745, a: 1}
     - _CoastlineBorderColor: {r: 0.02, g: 0.049999982, b: 0.14999998, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _CountyBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
@@ -279,6 +280,6 @@ Material:
     - _ProvinceBorderColor: {r: 0, g: 0, b: 0, a: 0.87058824}
     - _RealmBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}
     - _SelectionBorderColor: {r: 1, g: 0.9, b: 0.1999999, a: 0}
-    - _WaterShallowColor: {r: 1, g: 0.9458333, b: 0.8375, a: 1}
+    - _WaterShallowColor: {r: 1, g: 0.6585366, b: 0, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
