@@ -49,6 +49,16 @@ namespace EconSim.Core.Import
             bool hasMovementCostData = biomes.MovementCost != null && biomes.MovementCost.Length == cellCount;
             bool hasRockData = biomes.Rock != null && biomes.Rock.Length == cellCount;
             bool hasTemperatureData = climate?.TemperatureC != null && climate.TemperatureC.Length == cellCount;
+            bool hasPrecipitationData = climate?.Precipitation != null && climate.Precipitation.Length == cellCount;
+            // Normalize precipitation to 0-1 range for shader use
+            float precipMax = 1f;
+            if (hasPrecipitationData)
+            {
+                float max = 0f;
+                for (int i = 0; i < climate.Precipitation.Length; i++)
+                    if (climate.Precipitation[i] > max) max = climate.Precipitation[i];
+                precipMax = max > 0f ? max : 1f;
+            }
             var cells = new List<Cell>(cellCount);
             for (int i = 0; i < cellCount; i++)
             {
@@ -75,6 +85,7 @@ namespace EconSim.Core.Import
                     VegetationDensity = hasVegetationDensityData ? Clamp01(biomes.VegetationDensity[i]) : 0f,
                     RockId = hasRockData ? (int)biomes.Rock[i] : 1,
                     Temperature = hasTemperatureData ? climate.TemperatureC[i] : 0f,
+                    Precipitation = hasPrecipitationData ? Clamp01(climate.Precipitation[i] / precipMax) : 0f,
                     MovementCost = hasMovementCostData ? biomes.MovementCost[i] : 0f,
                     IsLand = elevation.IsLand(i) && !biomes.IsLakeCell[i],
                     RealmId = political.RealmId[i],

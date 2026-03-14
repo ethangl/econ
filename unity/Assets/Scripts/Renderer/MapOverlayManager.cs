@@ -56,6 +56,7 @@ public class MapOverlayManager
         private static readonly int UseModeColorResolveId = Shader.PropertyToID("_UseModeColorResolve");
         private static readonly int OverlayOpacityId = Shader.PropertyToID("_OverlayOpacity");
         private static readonly int OverlayEnabledId = Shader.PropertyToID("_OverlayEnabled");
+        private static readonly int ColormapTexId = Shader.PropertyToID("_ColormapTex");
         private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
         private static readonly int ReliefNormalTexId = Shader.PropertyToID("_ReliefNormalTex");
         private static readonly int RiverMaskTexId = Shader.PropertyToID("_RiverMaskTex");
@@ -123,6 +124,7 @@ public class MapOverlayManager
         /// Accessor for the political IDs texture (realm/province/county channels).
         /// </summary>
         public Texture2D PoliticalIdsTexture => politicalIdsTexture;
+        public Texture2D HeightmapTexture => heightmapTexture;
         private Texture2D heightmapTexture;     // RFloat: smoothed height values
         private Texture2D reliefNormalTexture;  // RGBA32: normal map derived from visual height
         private Texture2D riverMaskTexture;     // RG16: R=distance from river, G=normalized flux
@@ -146,6 +148,8 @@ public class MapOverlayManager
         private int[] cellSoilIdById;
         private int[] cellVegetationTypeById;
         private float[] cellVegetationDensityById;
+        private float[] cellPrecipitationById;
+        private Texture2D colormapTexture;         // 64x64: elevation × moisture → terrain color
 
         // Market overlay data
         private EconSim.Core.Economy.EconomyState economyState;
@@ -519,6 +523,7 @@ public class MapOverlayManager
             GenerateVegetationTexture();
             Profiler.End();
 
+            GenerateColormapTexture();
 
             Profiler.Begin("ApplyTexturesToMaterial");
             ApplyTexturesToMaterial();
@@ -557,6 +562,7 @@ public class MapOverlayManager
             cellSoilIdById = new int[lookupSize];
             cellVegetationTypeById = new int[lookupSize];
             cellVegetationDensityById = new float[lookupSize];
+            cellPrecipitationById = new float[lookupSize];
 
             for (int i = 0; i < mapData.Cells.Count; i++)
             {
@@ -578,6 +584,9 @@ public class MapOverlayManager
                     ? 0f
                     : cell.VegetationDensity;
                 cellVegetationDensityById[cellId] = Mathf.Clamp01(vegetationDensity);
+                float precip = float.IsNaN(cell.Precipitation) || float.IsInfinity(cell.Precipitation)
+                    ? 0f : cell.Precipitation;
+                cellPrecipitationById[cellId] = Mathf.Clamp01(precip);
             }
         }
 
@@ -1417,7 +1426,7 @@ public class MapOverlayManager
 
         private void GenerateVegetationTexture()
         {
-            vegetationTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RGFloat, false);
+            vegetationTexture = new Texture2D(gridWidth, gridHeight, TextureFormat.RGBAFloat, false);
             vegetationTexture.name = "VegetationTexture";
             vegetationTexture.filterMode = FilterMode.Point;
             vegetationTexture.wrapMode = TextureWrapMode.Clamp;
@@ -1437,7 +1446,7 @@ public class MapOverlayManager
                         vegetationPixels[gridIdx] = new Color(
                             cellVegetationTypeById[cellId] / 65535f,
                             cellVegetationDensityById[cellId],
-                            0f,
+                            cellPrecipitationById[cellId],
                             0f);
                     }
                     else
@@ -1449,6 +1458,75 @@ public class MapOverlayManager
 
             vegetationTexture.SetPixels(vegetationPixels);
             vegetationTexture.Apply();
+        }
+
+        /// <summary>
+        /// Generate a 64×64 colormap texture for elevation × moisture → terrain color lookup.
+        /// Same procedural gradient as mapgen4: X = elevation (-1 to +1, sea level at center),
+        /// Y = moisture (0 to 1). Land blends from sandy/brown (dry) to green (wet), fading
+        /// to white at high elevation. Water deepens with depth.
+        /// </summary>
+        private void GenerateColormapTexture()
+        {
+            const int size = 64;
+            var pixels = new Color32[size * size];
+            int p = 0;
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    // e: -1 (deep ocean) to +1 (mountain peak), 0 = sea level
+                    float e = 2f * x / size - 1f;
+                    // m: 0 (dry) to 1 (wet)
+                    float m = (float)y / size;
+
+                    float r, g, b;
+
+                    if (x == size / 2 - 1)
+                    {
+                        r = 48; g = 120; b = 160;
+                    }
+                    else if (x == size / 2 - 2)
+                    {
+                        r = 48; g = 100; b = 150;
+                    }
+                    else if (x == size / 2 - 3)
+                    {
+                        r = 48; g = 80; b = 140;
+                    }
+                    else if (e < 0f)
+                    {
+                        r = 48 + 48 * e;
+                        g = 64 + 64 * e;
+                        b = 127 + 127 * e;
+                    }
+                    else
+                    {
+                        m *= 1f - e;
+                        r = 210 - 100 * m;
+                        g = 185 - 45 * m;
+                        b = 139 - 45 * m;
+                        r = 255 * e + r * (1f - e);
+                        g = 255 * e + g * (1f - e);
+                        b = 255 * e + b * (1f - e);
+                    }
+
+                    pixels[p++] = new Color32(
+                        (byte)Mathf.Clamp(r, 0, 255),
+                        (byte)Mathf.Clamp(g, 0, 255),
+                        (byte)Mathf.Clamp(b, 0, 255),
+                        255);
+                }
+            }
+
+            colormapTexture = new Texture2D(size, size, TextureFormat.RGBA32, false, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                name = "TerrainColormap"
+            };
+            colormapTexture.SetPixels32(pixels);
+            colormapTexture.Apply();
         }
 
         /// <summary>
@@ -2487,6 +2565,105 @@ public class MapOverlayManager
             roadDistTexture.Apply();
         }
 
+        /// <summary>
+        /// Bake the mesh's vertex-interpolated elevation into a high-resolution RenderTexture.
+        /// This replaces the cell-resolution heightmap for slope lighting, giving smooth gradients
+        /// across cell boundaries via GPU interpolation.
+        /// </summary>
+        public void BakeElevationFromMesh(MeshFilter sourceMeshFilter, Transform meshTransform)
+        {
+            if (sourceMeshFilter == null || sourceMeshFilter.sharedMesh == null)
+            {
+                Debug.LogWarning("MapOverlayManager: Cannot bake elevation - no mesh");
+                return;
+            }
+
+            const int bakeSize = 4096;
+            Shader bakeShader = Shader.Find("EconSim/ElevationBake");
+            if (bakeShader == null)
+            {
+                Debug.LogError("MapOverlayManager: ElevationBake shader not found");
+                return;
+            }
+
+            var bakeMaterial = new Material(bakeShader) { hideFlags = HideFlags.DontSave };
+
+            // Create a temporary RenderTexture for the bake
+            var bakeRT = new RenderTexture(bakeSize, bakeSize, 24, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear)
+            {
+                name = "ElevationBakeRT",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                useMipMap = false,
+                autoGenerateMips = false
+            };
+            bakeRT.Create();
+
+            // Set up a temporary orthographic camera looking straight down at the mesh.
+            // The mesh is in world space: X = [0, worldWidth], Z = [0, worldHeight], Y = up.
+            Bounds meshBounds = sourceMeshFilter.sharedMesh.bounds;
+            Vector3 worldCenter = meshTransform.TransformPoint(meshBounds.center);
+            Vector3 worldSize = meshBounds.size;
+
+            // The mesh lies on the XZ plane. Camera looks down -Y.
+            var cameraGO = new GameObject("ElevationBakeCamera");
+            cameraGO.hideFlags = HideFlags.HideAndDontSave;
+            var bakeCam = cameraGO.AddComponent<UnityEngine.Camera>();
+            bakeCam.enabled = false;
+            bakeCam.orthographic = true;
+            // Ortho size = half the Z extent (height in world space)
+            bakeCam.orthographicSize = worldSize.z * 0.5f;
+            bakeCam.aspect = worldSize.x / worldSize.z;
+            bakeCam.transform.position = new Vector3(worldCenter.x, worldCenter.y + 100f, worldCenter.z);
+            bakeCam.transform.rotation = UnityEngine.Quaternion.Euler(90f, 0f, 0f);
+            bakeCam.nearClipPlane = 0.1f;
+            bakeCam.farClipPlane = 500f;
+            bakeCam.clearFlags = CameraClearFlags.SolidColor;
+            bakeCam.backgroundColor = Color.black;
+            bakeCam.targetTexture = bakeRT;
+            bakeCam.cullingMask = 0; // We'll render manually
+
+            // Render the mesh with the bake material using CommandBuffer
+            bakeCam.Render(); // Clear
+            var cmd = new UnityEngine.Rendering.CommandBuffer { name = "ElevationBake" };
+            cmd.SetRenderTarget(bakeRT);
+            cmd.ClearRenderTarget(true, true, Color.black);
+            cmd.SetViewProjectionMatrices(bakeCam.worldToCameraMatrix, bakeCam.projectionMatrix);
+            cmd.DrawMesh(sourceMeshFilter.sharedMesh, meshTransform.localToWorldMatrix, bakeMaterial, 0, 0);
+            UnityEngine.Graphics.ExecuteCommandBuffer(cmd);
+            cmd.Dispose();
+
+            // Read back into a Texture2D to replace the cell-resolution heightmap
+            RenderTexture previousActive = RenderTexture.active;
+            RenderTexture.active = bakeRT;
+            var bakedTexture = new Texture2D(bakeSize, bakeSize, TextureFormat.RFloat, false)
+            {
+                name = "BakedElevationTexture",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            bakedTexture.ReadPixels(new Rect(0, 0, bakeSize, bakeSize), 0, 0);
+            bakedTexture.Apply();
+            RenderTexture.active = previousActive;
+
+            // Clean up
+            UnityEngine.Object.DestroyImmediate(cameraGO);
+            UnityEngine.Object.DestroyImmediate(bakeMaterial);
+            bakeRT.Release();
+            UnityEngine.Object.DestroyImmediate(bakeRT);
+
+            // Replace the heightmap texture
+            if (heightmapTexture != null)
+                UnityEngine.Object.DestroyImmediate(heightmapTexture);
+            heightmapTexture = bakedTexture;
+
+            // Re-bind to material
+            if (styleMaterial != null)
+                styleMaterial.SetTexture(HeightmapTexId, heightmapTexture);
+
+            Debug.Log($"MapOverlayManager: Baked elevation {bakeSize}x{bakeSize} from mesh (was {gridWidth}x{gridHeight})");
+        }
+
         private void BindGeneratedTexturesToMaterial()
         {
             if (styleMaterial == null)
@@ -2497,6 +2674,8 @@ public class MapOverlayManager
             styleMaterial.SetTexture(VegetationTexId, vegetationTexture);
             styleMaterial.SetTexture(HeightmapTexId, heightmapTexture);
             styleMaterial.SetTexture(ReliefNormalTexId, reliefNormalTexture);
+            if (colormapTexture != null)
+                styleMaterial.SetTexture(ColormapTexId, colormapTexture);
             styleMaterial.SetTexture(RiverMaskTexId, riverMaskTexture);
             styleMaterial.SetFloat(RiverWidthId, MaxRiverHalfWidth);
             styleMaterial.SetFloat(RiverMinWidthId, MinRiverHalfWidth);
@@ -4400,6 +4579,7 @@ public class MapOverlayManager
             DestroyTexture(riverMaskTexture);
             DestroyTexture(heightmapTexture);
             DestroyTexture(reliefNormalTexture);
+            DestroyTexture(colormapTexture);
             DestroyTexture(realmBorderDistTexture);
             DestroyTexture(provinceBorderDistTexture);
             DestroyTexture(countyBorderDistTexture);
@@ -5004,6 +5184,7 @@ public class MapOverlayManager
             vegetationTexture = null;
             heightmapTexture = null;
             reliefNormalTexture = null;
+            colormapTexture = null;
             riverMaskTexture = null;
             realmPaletteTexture = null;
             biomePaletteTexture = null;

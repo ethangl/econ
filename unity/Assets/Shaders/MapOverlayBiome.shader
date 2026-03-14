@@ -4,14 +4,20 @@ Shader "EconSim/MapOverlayBiome"
     {
         // Heightmap for terrain (Phase 6)
         _HeightmapTex ("Heightmap", 2D) = "gray" {}
-        _ReliefNormalTex ("Relief Normal", 2D) = "bump" {}
-        _ReliefNormalStrength ("Relief Normal Strength", Range(0, 1)) = 0.90
-        _ReliefShadeStrength ("Relief Shade Strength", Range(0, 1)) = 0.50
-        _ReliefAmbient ("Relief Ambient", Range(0, 1)) = 0.55
-        _ReliefLightDir ("Relief Light Direction", Vector) = (0.4, 0.85, 0.3, 0)
+        _ReliefNormalTex ("Relief Normal (unused)", 2D) = "bump" {}
+        _ReliefShadeStrength ("Slope Shade Strength", Range(0, 1)) = 0.85
+        _ReliefAmbient ("Slope Ambient", Range(0, 1)) = 0.25
+        _SlopeLightAngle ("Slope Light Angle (degrees)", Float) = 80
+        _SlopeExaggeration ("Slope Exaggeration", Range(0, 5)) = 2.0
+        _SlopeFlatLight ("Slope Flat Light", Range(0, 5)) = 2.5
+        _SlopeOverhead ("Slope Overhead", Range(0, 60)) = 30
         _HeightScale ("Height Scale", Float) = 0.2
         _SeaLevel ("Sea Level (Normalized)", Float) = 0.5
         _UseHeightDisplacement ("Use Height Displacement", Int) = 0
+
+        // Elevation×moisture colormap (mapgen4-style continuous terrain coloring)
+        _ColormapTex ("Terrain Colormap", 2D) = "gray" {}
+        _ColormapBlend ("Colormap Blend", Range(0, 1)) = 0.35
 
         // River distance field - distance from nearest river edge (0 = on river edge)
         _RiverMaskTex ("River Distance", 2D) = "white" {}
@@ -139,15 +145,21 @@ Shader "EconSim/MapOverlayBiome"
             SAMPLER(sampler_OverlayTex);
             TEXTURE2D(_BiomePaletteTex);
             SAMPLER(sampler_BiomePaletteTex);
+            TEXTURE2D(_ColormapTex);
+            // Share sampler with heightmap (both bilinear) to stay within Metal's 16 limit.
+            #define sampler_ColormapTex sampler_HeightmapTex
 
             CBUFFER_START(UnityPerMaterial)
-                float _ReliefNormalStrength;
                 float _ReliefShadeStrength;
                 float _ReliefAmbient;
-                float4 _ReliefLightDir;
+                float _SlopeLightAngle;
+                float _SlopeExaggeration;
+                float _SlopeFlatLight;
+                float _SlopeOverhead;
                 float _HeightScale;
                 float _SeaLevel;
                 int _UseHeightDisplacement;
+                float _ColormapBlend;
 
                 float _OverlayOpacity;
                 int _OverlayEnabled;
@@ -447,9 +459,19 @@ Shader "EconSim/MapOverlayBiome"
                         vegetationCoverage = 0.0;
                     float3 vegetationColor = VegetationColorFromId(vegetationType);
                     float stippleMask = ComputeVegetationStippleMask(uv, vegetationCoverage, vegetationType);
-                    float3 soilLayer = soilColor;
+                    // Blend soil with elevation×moisture colormap before vegetation.
+                    float3 baseColor = soilColor;
+                    if (_ColormapBlend > 0.001)
+                    {
+                        float colormapU = saturate(height);
+                        float moisture = tex2D(_VegetationTex, uv).b;
+                        float3 colormapColor = SAMPLE_TEXTURE2D(_ColormapTex, sampler_ColormapTex, float2(colormapU, moisture)).rgb;
+                        baseColor = lerp(soilColor, colormapColor, _ColormapBlend);
+                    }
+
+                    // Composite vegetation stipple on top (additive).
                     float3 stippleLayer = vegetationColor * (stippleMask * saturate(_VegetationStippleOpacity));
-                    float3 blendedColor = saturate(soilLayer + stippleLayer);
+                    float3 blendedColor = saturate(baseColor + stippleLayer);
                     float brightness = lerp(_SoilHeightFloor, 1.0, landHeight);
                     terrain = blendedColor * brightness;
                 }

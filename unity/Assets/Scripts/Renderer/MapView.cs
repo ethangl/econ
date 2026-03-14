@@ -58,6 +58,7 @@ namespace EconSim.Renderer
         // Non-serialized during development - see CLAUDE.md
         private bool useGridMesh = true;
         private int gridDivisor = 1;  // 1 = full source resolution, 2 = half, etc.
+        private int gridSubdivision = 1; // Multiplier beyond source resolution for smoother elevation interpolation
         private float gridHeightScale = 0.2f;
 
         [Header("Selection")]
@@ -117,6 +118,7 @@ namespace EconSim.Renderer
         private List<int> triangles = new List<int>();
         private List<Color32> colors = new List<Color32>();
         private List<Vector2> uv0 = new List<Vector2>();  // UVs for both heightmap and data texture (Y-up, unified)
+        private List<Vector2> uv1 = new List<Vector2>();  // UV1: x = normalized elevation (0-1) for bake pass
 
         // Vertex heights (computed by averaging neighboring cells)
         private float[] vertexHeights;
@@ -1011,6 +1013,18 @@ namespace EconSim.Renderer
             InitializeOverlays(overlayTextureCacheDirectory, preferCachedOverlayTextures);
             Profiler.End();
 
+            // Bake vertex-interpolated elevation into a high-res texture for slope lighting.
+            // Must happen after both mesh (with UV1 elevation) and overlays are ready.
+            // We update UV1 with the overlay manager's processed heights (which include
+            // Gaussian blur and fluvial erosion) rather than raw cell heights.
+            if (useGridMesh && useShaderOverlays && overlayManager != null && meshFilter != null)
+            {
+                Profiler.Begin("BakeElevation");
+                UpdateMeshElevationFromOverlay();
+                overlayManager.BakeElevationFromMesh(meshFilter, transform);
+                Profiler.End();
+            }
+
             BuildRealmCapitalMarkers();
             UpdateModeMarkerVisibility();
 
@@ -1743,11 +1757,12 @@ namespace EconSim.Renderer
         /// </summary>
         private void GenerateGridMesh()
         {
-            // Use source resolution divided by divisor for clean texel alignment
-            int gridWidth = mapData.Info.Width / gridDivisor;
-            int gridHeight = mapData.Info.Height / gridDivisor;
+            // Grid resolution: source / divisor * subdivision.
+            // Subdivision > 1 gives denser vertices for smoother elevation interpolation.
+            int gridWidth = (mapData.Info.Width / gridDivisor) * gridSubdivision;
+            int gridHeight = (mapData.Info.Height / gridDivisor) * gridSubdivision;
 
-            Debug.Log($"Generating grid mesh {gridWidth}x{gridHeight} (divisor {gridDivisor})...");
+            Debug.Log($"Generating grid mesh {gridWidth}x{gridHeight} (divisor {gridDivisor}, subdivision {gridSubdivision})...");
 
             float worldWidth = mapData.Info.Width * cellScale;
             float worldHeight = mapData.Info.Height * cellScale;
@@ -1759,9 +1774,17 @@ namespace EconSim.Renderer
             vertices.Clear();
             colors.Clear();
             uv0.Clear();
+            uv1.Clear();
             triangles.Clear();
 
             var oceanColor = new Color32(30, 50, 90, 255);
+
+            // Build spatial lookup for vertex elevation assignment
+            int bucketW, bucketH;
+            int[] cellBucketGrid = BuildCellBucketGrid(out bucketW, out bucketH);
+            float[] elevLookup = BuildCellElevationLookup();
+            int dataWidth = mapData.Info.Width;
+            int dataHeight = mapData.Info.Height;
 
             // Generate vertices and UVs
             for (int y = 0; y <= gridHeight; y++)
@@ -1780,6 +1803,12 @@ namespace EconSim.Renderer
 
                     // Single UV for both heightmap and data texture
                     uv0.Add(new Vector2(u, v));
+
+                    // UV1.x = normalized elevation (0-1) for elevation bake pass.
+                    float dataX = u * dataWidth;
+                    float dataY = v * dataHeight;
+                    float elevation = FindNearestCellElevation01(dataX, dataY, cellBucketGrid, bucketW, bucketH, elevLookup);
+                    uv1.Add(new Vector2(elevation, 0f));
                 }
             }
 
@@ -1819,6 +1848,7 @@ namespace EconSim.Renderer
             mesh.SetVertices(vertices);
             mesh.SetColors(colors);
             mesh.SetUVs(0, uv0);
+            mesh.SetUVs(1, uv1);
             mesh.SetTriangles(triangles, 0);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
@@ -1828,6 +1858,122 @@ namespace EconSim.Renderer
             ApplyRenderMaterialForMode(currentMode);
 
             CenterMap();
+        }
+
+        /// <summary>
+        /// Update UV1 on the grid mesh with heights sampled from the overlay manager's
+        /// processed heightmap (which includes Gaussian blur and fluvial erosion).
+        /// This ensures the bake uses the same smoothed heights as the shader.
+        /// </summary>
+        private void UpdateMeshElevationFromOverlay()
+        {
+            var hmTex = overlayManager.HeightmapTexture;
+            if (hmTex == null || mesh == null) return;
+
+            int gridWidth = (mapData.Info.Width / gridDivisor) * gridSubdivision;
+            int gridHeight = (mapData.Info.Height / gridDivisor) * gridSubdivision;
+            int vertCountX = gridWidth + 1;
+            int vertCountY = gridHeight + 1;
+            int totalVerts = vertCountX * vertCountY;
+
+            uv1.Clear();
+            for (int y = 0; y <= gridHeight; y++)
+            {
+                for (int x = 0; x <= gridWidth; x++)
+                {
+                    float u = (float)x / gridWidth;
+                    float v = (float)y / gridHeight;
+                    // Sample the processed heightmap at this UV position
+                    float elevation = hmTex.GetPixelBilinear(u, v).r;
+                    uv1.Add(new Vector2(elevation, 0f));
+                }
+            }
+
+            mesh.SetUVs(1, uv1);
+        }
+
+        /// <summary>
+        /// Precompute normalized elevation (0-1) for each cell, indexed by cell ID.
+        /// </summary>
+        private float[] BuildCellElevationLookup()
+        {
+            int maxId = 0;
+            foreach (var cell in mapData.Cells)
+                if (cell.Id > maxId) maxId = cell.Id;
+
+            var lookup = new float[maxId + 1];
+            foreach (var cell in mapData.Cells)
+            {
+                float abs = Elevation.GetAbsoluteHeight(cell, mapData.Info);
+                lookup[cell.Id] = Elevation.NormalizeAbsolute01(abs, mapData.Info);
+            }
+            return lookup;
+        }
+
+        /// <summary>
+        /// Find the nearest cell to a data-space position and return its normalized elevation (0-1).
+        /// Uses a simple grid bucket acceleration to avoid O(n²) brute force.
+        /// </summary>
+        private float FindNearestCellElevation01(float dataX, float dataY, int[] cellBucketGrid, int bucketW, int bucketH, float[] elevLookup)
+        {
+            // Map data position to bucket
+            int bx = Mathf.Clamp(Mathf.FloorToInt(dataX), 0, bucketW - 1);
+            int by = Mathf.Clamp(Mathf.FloorToInt(dataY), 0, bucketH - 1);
+            int cellId = cellBucketGrid[by * bucketW + bx];
+            if (cellId >= 0 && cellId < elevLookup.Length)
+                return elevLookup[cellId];
+            return 0f;
+        }
+
+        /// <summary>
+        /// Build a grid mapping each integer data position to its nearest cell ID.
+        /// </summary>
+        private int[] BuildCellBucketGrid(out int bucketW, out int bucketH)
+        {
+            bucketW = mapData.Info.Width;
+            bucketH = mapData.Info.Height;
+            var grid = new int[bucketW * bucketH];
+            for (int i = 0; i < grid.Length; i++)
+                grid[i] = -1;
+
+            // Assign each bucket to nearest cell center
+            foreach (var cell in mapData.Cells)
+            {
+                int cx = Mathf.RoundToInt(cell.Center.X);
+                int cy = Mathf.RoundToInt(cell.Center.Y);
+                if (cx >= 0 && cx < bucketW && cy >= 0 && cy < bucketH)
+                    grid[cy * bucketW + cx] = cell.Id;
+            }
+
+            // Flood fill empty buckets from nearest assigned cell (BFS)
+            var queue = new Queue<int>();
+            for (int i = 0; i < grid.Length; i++)
+                if (grid[i] >= 0) queue.Enqueue(i);
+
+            int[] dx = { -1, 1, 0, 0 };
+            int[] dy = { 0, 0, -1, 1 };
+            while (queue.Count > 0)
+            {
+                int idx = queue.Dequeue();
+                int gx = idx % bucketW;
+                int gy = idx / bucketW;
+                for (int d = 0; d < 4; d++)
+                {
+                    int nx = gx + dx[d];
+                    int ny = gy + dy[d];
+                    if (nx >= 0 && nx < bucketW && ny >= 0 && ny < bucketH)
+                    {
+                        int ni = ny * bucketW + nx;
+                        if (grid[ni] < 0)
+                        {
+                            grid[ni] = grid[idx];
+                            queue.Enqueue(ni);
+                        }
+                    }
+                }
+            }
+
+            return grid;
         }
 
         /// <summary>

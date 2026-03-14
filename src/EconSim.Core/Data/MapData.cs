@@ -261,6 +261,7 @@ namespace EconSim.Core.Data
         public float VegetationDensity; // 0..1
         public int RockId;             // MapGen.Core.RockType ordinal (0-3)
         public float Temperature;      // Air temperature in degrees Celsius
+        public float Precipitation;    // Relative precipitation (0-1 normalized)
         public float MovementCost;     // Per-cell transport difficulty (biome + slope)
         public bool IsLand;
         public int CoastDistance;       // + for land (dist to coast), - for water
