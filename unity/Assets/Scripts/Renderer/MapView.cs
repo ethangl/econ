@@ -89,6 +89,8 @@ namespace EconSim.Renderer
         [SerializeField] private Color waterLakeColor = new Color(0.15f, 0.35f, 0.55f, 0.60f);
         [SerializeField] private Color waterOceanColor = new Color(0.10f, 0.25f, 0.45f, 0.65f);
         [SerializeField] [Range(0.01f, 0.25f)] private float waterEdgeSoftness = 0.08f;
+        [SerializeField] [Range(0.5f, 20f)] private float waterDepthAbsorption = 6.0f;
+        [SerializeField] private Color waterShallowTint = new Color(0.30f, 0.60f, 0.55f, 1f);
 
         [Header("Height")]
         [SerializeField] [Range(0f, 2f)] private float biomesModeHeightScale = 0.3f;
@@ -1525,7 +1527,8 @@ namespace EconSim.Renderer
         private void SyncWaterColors()
         {
             if (waterMeshRenderer == null) return;
-            waterMeshRenderer.SetColors(waterRiverColor, waterLakeColor, waterOceanColor, waterEdgeSoftness);
+            waterMeshRenderer.SetColors(waterRiverColor, waterLakeColor, waterOceanColor,
+                waterEdgeSoftness, waterDepthAbsorption, waterShallowTint);
         }
 
         private void BuildParchmentLayer()

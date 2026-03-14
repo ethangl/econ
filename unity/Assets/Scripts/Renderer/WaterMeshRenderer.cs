@@ -25,6 +25,8 @@ namespace EconSim.Renderer
         private static readonly int LakeColorId = Shader.PropertyToID("_LakeColor");
         private static readonly int OceanColorId = Shader.PropertyToID("_OceanColor");
         private static readonly int EdgeSoftnessId = Shader.PropertyToID("_EdgeSoftness");
+        private static readonly int DepthAbsorptionId = Shader.PropertyToID("_DepthAbsorption");
+        private static readonly int ShallowTintId = Shader.PropertyToID("_ShallowTint");
 
         private Mesh waterMesh;
         private Material flatMaterial;
@@ -65,10 +67,13 @@ namespace EconSim.Renderer
         /// Push water color/opacity settings to both materials.
         /// Called by MapView which owns the serialized values.
         /// </summary>
-        public void SetColors(Color riverColor, Color lakeColor, Color oceanColor, float edgeSoftness)
+        public void SetColors(Color riverColor, Color lakeColor, Color oceanColor, float edgeSoftness,
+            float depthAbsorption, Color shallowTint)
         {
-            SetColorsOnMaterial(flatMaterial, riverColor, lakeColor, oceanColor, edgeSoftness);
-            SetColorsOnMaterial(biomeMaterial, riverColor, lakeColor, oceanColor, edgeSoftness);
+            SetColorsOnMaterial(flatMaterial, riverColor, lakeColor, oceanColor, edgeSoftness,
+                depthAbsorption, shallowTint);
+            SetColorsOnMaterial(biomeMaterial, riverColor, lakeColor, oceanColor, edgeSoftness,
+                depthAbsorption, shallowTint);
         }
 
         /// <summary>
@@ -174,13 +179,16 @@ namespace EconSim.Renderer
             }
         }
 
-        private static void SetColorsOnMaterial(Material mat, Color river, Color lake, Color ocean, float edgeSoftness)
+        private static void SetColorsOnMaterial(Material mat, Color river, Color lake, Color ocean,
+            float edgeSoftness, float depthAbsorption, Color shallowTint)
         {
             if (mat == null) return;
             mat.SetColor(RiverColorId, river);
             mat.SetColor(LakeColorId, lake);
             mat.SetColor(OceanColorId, ocean);
             mat.SetFloat(EdgeSoftnessId, edgeSoftness);
+            mat.SetFloat(DepthAbsorptionId, depthAbsorption);
+            mat.SetColor(ShallowTintId, shallowTint);
         }
 
         private void EnsureMaterials()
