@@ -59,37 +59,6 @@ float hash2d(float2 p)
     return frac((p3.x + p3.y) * p3.z);
 }
 
-// Value noise for water shimmer.
-float valueNoise(float2 p)
-{
-    float2 i = floor(p);
-    float2 f = frac(p);
-
-    // Cubic interpolation for smoother result.
-    float2 u = f * f * (3.0 - 2.0 * f);
-
-    float a = hash2d(i);
-    float b = hash2d(i + float2(1.0, 0.0));
-    float c = hash2d(i + float2(0.0, 1.0));
-    float d = hash2d(i + float2(1.0, 1.0));
-
-    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
-}
-
-// 2-octave FBM for water shimmer.
-float fbm2(float2 p)
-{
-    float value = 0.0;
-    float amplitude = 0.5;
-
-    value += valueNoise(p) * amplitude;
-    p *= 2.0;
-    amplitude *= 0.5;
-    value += valueNoise(p) * amplitude;
-
-    return value;
-}
-
 // Convert color to grayscale using perceptual luminance weights.
 float3 ToGrayscale(float3 color)
 {

@@ -48,13 +48,7 @@ namespace EconSim.Renderer
             var colors = new List<Color>(16384);
             var triangles = new List<int>(32768);
 
-            // --- Water bodies (oceans + lakes) ---
-            float seaLevel01 = Elevation.NormalizeAbsolute01(
-                Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
-            BuildWaterBodies(mapData, cellScale, seaLevel01, expand,
-                vertices, uvs, colors, triangles);
-
-            // --- Rivers ---
+            // --- Rivers (submitted first so stencil gives them priority over water bodies) ---
 
             // Compute log-flux range for river width interpolation
             float logTrace = 0f;
@@ -95,6 +89,12 @@ namespace EconSim.Renderer
                     vertices, uvs, colors, triangles);
             }
 
+            // --- Water bodies (oceans + lakes, after rivers for stencil priority) ---
+            float seaLevel01 = Elevation.NormalizeAbsolute01(
+                Elevation.ResolveSeaLevel(mapData.Info), mapData.Info);
+            BuildWaterBodies(mapData, cellScale, seaLevel01, expand,
+                vertices, uvs, colors, triangles);
+
             if (vertices.Count == 0)
                 return null;
 
@@ -127,6 +127,23 @@ namespace EconSim.Renderer
             if (mapData.Cells == null || mapData.Vertices == null)
                 return;
 
+            // Pre-compute uniform water level per lake feature (max cell elevation = spill point).
+            var lakeLevels = new Dictionary<int, float>();
+            if (mapData.FeatureById != null)
+            {
+                foreach (var cell in mapData.Cells)
+                {
+                    if (cell.IsLand) continue;
+                    if (!mapData.FeatureById.TryGetValue(cell.FeatureId, out var f)) continue;
+                    if (!f.IsLake) continue;
+
+                    float h = Elevation.NormalizeAbsolute01(
+                        Elevation.GetAbsoluteHeight(cell, mapData.Info), mapData.Info);
+                    if (!lakeLevels.TryGetValue(cell.FeatureId, out float cur) || h > cur)
+                        lakeLevels[cell.FeatureId] = h;
+                }
+            }
+
             foreach (var cell in mapData.Cells)
             {
                 if (cell.IsLand)
@@ -142,11 +159,12 @@ namespace EconSim.Renderer
                     isLake = feature.IsLake;
                 }
 
-                // Ocean: sea level (flat). Lake: actual cell height.
-                float height01 = isLake
-                    ? Elevation.NormalizeAbsolute01(
-                        Elevation.GetAbsoluteHeight(cell, mapData.Info), mapData.Info)
-                    : seaLevel01;
+                // Ocean: sea level (flat). Lake: uniform level per feature.
+                float height01;
+                if (isLake && lakeLevels.TryGetValue(cell.FeatureId, out float lakeLevel))
+                    height01 = lakeLevel;
+                else
+                    height01 = seaLevel01;
 
                 // Vertex color: R=1.0 ocean, R=0.5 lake
                 Color bodyColor = isLake

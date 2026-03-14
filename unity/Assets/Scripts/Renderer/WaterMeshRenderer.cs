@@ -7,6 +7,7 @@ namespace EconSim.Renderer
     /// Manages the water mesh (rivers + water bodies) lifecycle.
     /// Supports two render modes: flat (stencil knockout) and biome (volumetric water).
     /// Created as a child GameObject of MapView, similar to RealmCapitalMarkers.
+    /// Color/opacity settings live on MapView (persistent) and are pushed via SetColors().
     /// </summary>
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public class WaterMeshRenderer : MonoBehaviour
@@ -20,6 +21,12 @@ namespace EconSim.Renderer
         private static readonly int MapWorldSizeId = Shader.PropertyToID("_MapWorldSize");
         private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
         private static readonly int GeographyBaseTexId = Shader.PropertyToID("_GeographyBaseTex");
+        private static readonly int RiverColorId = Shader.PropertyToID("_RiverColor");
+        private static readonly int LakeColorId = Shader.PropertyToID("_LakeColor");
+        private static readonly int OceanColorId = Shader.PropertyToID("_OceanColor");
+        private static readonly int EdgeSoftnessId = Shader.PropertyToID("_EdgeSoftness");
+        private static readonly int DepthAbsorptionId = Shader.PropertyToID("_DepthAbsorption");
+        private static readonly int ShallowTintId = Shader.PropertyToID("_ShallowTint");
 
         private Mesh waterMesh;
         private Material flatMaterial;
@@ -54,6 +61,19 @@ namespace EconSim.Renderer
         {
             isBiomeMode = biome;
             ApplyActiveMaterial();
+        }
+
+        /// <summary>
+        /// Push water color/opacity settings to both materials.
+        /// Called by MapView which owns the serialized values.
+        /// </summary>
+        public void SetColors(Color riverColor, Color lakeColor, Color oceanColor, float edgeSoftness,
+            float depthAbsorption, Color shallowTint)
+        {
+            SetColorsOnMaterial(flatMaterial, riverColor, lakeColor, oceanColor, edgeSoftness,
+                depthAbsorption, shallowTint);
+            SetColorsOnMaterial(biomeMaterial, riverColor, lakeColor, oceanColor, edgeSoftness,
+                depthAbsorption, shallowTint);
         }
 
         /// <summary>
@@ -157,6 +177,18 @@ namespace EconSim.Renderer
                 prevExpand = Expand;
                 RebuildMesh();
             }
+        }
+
+        private static void SetColorsOnMaterial(Material mat, Color river, Color lake, Color ocean,
+            float edgeSoftness, float depthAbsorption, Color shallowTint)
+        {
+            if (mat == null) return;
+            mat.SetColor(RiverColorId, river);
+            mat.SetColor(LakeColorId, lake);
+            mat.SetColor(OceanColorId, ocean);
+            mat.SetFloat(EdgeSoftnessId, edgeSoftness);
+            mat.SetFloat(DepthAbsorptionId, depthAbsorption);
+            mat.SetColor(ShallowTintId, shallowTint);
         }
 
         private void EnsureMaterials()

@@ -80,19 +80,6 @@ Shader "EconSim/MapOverlayBiome"
         _MapMode ("Map Mode", Int) = 0
         _DebugView ("Debug View", Int) = 0
 
-        // Water layer properties
-        _WaterShallowColor ("Shallow Water Color", Color) = (0.25, 0.55, 0.65, 1)
-        _WaterDeepColor ("Deep Water Color", Color) = (0.06, 0.12, 0.25, 1)
-        _WaterAbsorption ("Water Absorption (RGB)", Color) = (2.2, 0.9, 0.35, 1)
-        _WaterOpticalDepth ("Water Optical Depth", Range(0.1, 8)) = 3.0
-        _WaterDepthExponent ("Water Depth Exponent", Range(0.2, 3)) = 1.35
-        _WaterRefractionStrength ("Seabed Refraction", Range(0, 0.02)) = 0.0035
-        _WaterRefractionScale ("Refraction Scale", Float) = 0.035
-        _WaterRefractionSpeed ("Refraction Speed", Float) = 0.02
-        _WaterShallowAlpha ("River Alpha", Range(0, 1)) = 0.5
-        _ShimmerScale ("Shimmer Scale", Float) = 0.02
-        _ShimmerSpeed ("Shimmer Speed", Float) = 0.03
-        _ShimmerIntensity ("Shimmer Intensity", Range(0, 0.2)) = 0.08
     }
     SubShader
     {
@@ -114,7 +101,6 @@ Shader "EconSim/MapOverlayBiome"
                 float4 pos : SV_POSITION;
                 float4 vertexColor : COLOR;
                 float2 dataUV : TEXCOORD0;    // Unified UV for all textures (Y-up coordinates)
-                float2 worldUV : TEXCOORD1;   // World-space UV for consistent shimmer scale
             };
 
             // Sampler budget note (Metal):
@@ -183,20 +169,6 @@ Shader "EconSim/MapOverlayBiome"
                 int _MapMode;
                 int _DebugView;
 
-                // Water layer uniforms
-                half4 _WaterShallowColor;
-                half4 _WaterDeepColor;
-                half4 _WaterAbsorption;
-                float _WaterOpticalDepth;
-                float _WaterDepthExponent;
-                float _WaterRefractionStrength;
-                float _WaterRefractionScale;
-                float _WaterRefractionSpeed;
-                float _WaterShallowAlpha;
-                float _ShimmerScale;
-                float _ShimmerSpeed;
-                float _ShimmerIntensity;
-
                 float _SelectedRealmId;
                 float _SelectedProvinceId;
                 float _SelectedCountyId;
@@ -232,10 +204,6 @@ Shader "EconSim/MapOverlayBiome"
                 o.vertexColor = v.color;
                 // Single UV for all textures (Y-up coordinates, unified)
                 o.dataUV = v.texcoord.xy;
-
-                // World UV for shimmer (consistent scale regardless of mesh UVs)
-                float3 worldPos = TransformObjectToWorld(vertex.xyz);
-                o.worldUV = worldPos.xz * _ShimmerScale;
 
                 return o;
             }
@@ -459,9 +427,9 @@ Shader "EconSim/MapOverlayBiome"
                 }
 
                 // ---- Layer 3: Water ----
+                // Volumetric water disabled — water mesh handles all water coloring.
 
-                float3 afterWater = ComputeWater(isCellWater, height, riverMask, uv, IN.worldUV, terrain);
-                float3 relitColor = ApplyReliefShading(afterWater, uv, isWater);
+                float3 relitColor = ApplyReliefShading(terrain, uv, isWater);
 
                 // ---- Layer 4: Selection / hover (operates on composited color) ----
 
