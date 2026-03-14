@@ -203,29 +203,25 @@ namespace EconSim.UI
                 {
                     if (econ.Counties[i] == null) continue;
                     if (i < econ.CountyToMarket.Length && econ.CountyToMarket[i] == _selectedMarketId)
-                        totalPop += (long)econ.Counties[i].Population;
+                        totalPop += (long)econ.Counties[i].TotalPopulation;
                 }
             }
             SetLabel(_popTotal, totalPop.ToString("N0"));
 
-            // Per-market prices
+            // Per-market clearing prices
             if (_goodsList != null)
             {
                 _goodsList.Clear();
 
-                float[] localPrices = null;
-                if (econ.PerMarketPrices != null && _selectedMarketId < econ.PerMarketPrices.Length)
-                    localPrices = econ.PerMarketPrices[_selectedMarketId];
-
-                if (localPrices != null)
+                if (market?.ClearingPrice != null)
                 {
-                    var goodDefs = EconSim.Core.Economy.Goods.Defs;
-                    var basePrices = EconSim.Core.Economy.Goods.BasePrice;
-                    for (int g = 0; g < goodDefs.Length; g++)
+                    for (int g = 0; g < Goods.Count; g++)
                     {
-                        if (!goodDefs[g].IsTradeable || basePrices[g] <= 0f) continue;
-                        float price = localPrices[g];
-                        float ratio = price / basePrices[g];
+                        float baseValue = Goods.Value[g];
+                        if (baseValue <= 0f) continue;
+                        float price = market.ClearingPrice[g];
+                        if (price <= 0f) continue;
+                        float ratio = price / baseValue;
                         string ratioStr = ratio >= 10f ? $"{ratio:F0}x" : $"{ratio:F2}x";
 
                         var row = new VisualElement();
@@ -234,12 +230,12 @@ namespace EconSim.UI
                         row.style.paddingLeft = 4;
                         row.style.paddingRight = 4;
 
-                        var nameLabel = new Label(goodDefs[g].Name);
+                        var nameLabel = new Label(Goods.Names[g]);
                         nameLabel.style.fontSize = 12;
                         nameLabel.style.width = 100;
                         row.Add(nameLabel);
 
-                        var priceLabel = new Label($"{price:F3}");
+                        var priceLabel = new Label($"{price:F2}");
                         priceLabel.style.fontSize = 12;
                         priceLabel.style.width = 60;
                         priceLabel.style.unityTextAlign = TextAnchor.MiddleRight;
@@ -249,7 +245,6 @@ namespace EconSim.UI
                         ratioLabel.style.fontSize = 12;
                         ratioLabel.style.width = 50;
                         ratioLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-                        // Color code: green if above base, red if below
                         if (ratio > 1.05f)
                             ratioLabel.style.color = new Color(0.3f, 0.8f, 0.3f);
                         else if (ratio < 0.95f)

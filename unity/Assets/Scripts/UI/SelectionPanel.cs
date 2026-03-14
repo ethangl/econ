@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using EconSim.Core.Actors;
 using EconSim.Core.Data;
+using EconSim.Core.Economy;
 using EconSim.Core.Religious;
 using EconSim.Core.Simulation;
 using EconSim.Renderer;
@@ -41,6 +42,7 @@ namespace EconSim.UI
         private VisualElement _selectionRail;
 
         private MapData _mapData;
+        private ISimulation _simulation;
         private ActorState _actorState;
         private ReligionState _religionState;
         private Coroutine _panelAnimationCoroutine;
@@ -81,10 +83,11 @@ namespace EconSim.UI
             if (gameManager != null)
             {
                 _mapData = gameManager.MapData;
-                if (gameManager.Simulation != null)
+                _simulation = gameManager.Simulation;
+                if (_simulation != null)
                 {
-                    _actorState = gameManager.Simulation.GetState()?.Actors;
-                    _religionState = gameManager.Simulation.GetState()?.Religion;
+                    _actorState = _simulation.GetState()?.Actors;
+                    _religionState = _simulation.GetState()?.Religion;
                 }
             }
 
@@ -500,10 +503,14 @@ namespace EconSim.UI
             SetLabel(_cultureValue, GetCultureName(county.RealmId));
             SetLabel(_religionValue, GetCountyMajorityFaithName(county.Id));
 
-            // Population from county data
-            SetLabel(_popTotal, ((int)county.TotalPopulation).ToString("N0"));
+            // Population — use live v4 economy data if available
+            float pop = county.TotalPopulation;
+            var econState = _simulation?.GetState()?.Economy;
+            if (econState?.Counties != null && county.Id < econState.Counties.Length && econState.Counties[county.Id] != null)
+                pop = econState.Counties[county.Id].TotalPopulation;
+            SetLabel(_popTotal, ((int)pop).ToString("N0"));
 
-            // Show adherence breakdown in religion mode, resources otherwise
+            // Show adherence breakdown in religion mode, economy otherwise
             SetSectionVisible(_resourcesSection, true);
             var resourcesHeader = _resourcesSection?.Q<Label>(className: "section-header");
 
@@ -518,8 +525,8 @@ namespace EconSim.UI
             else
             {
                 if (resourcesHeader != null)
-                    resourcesHeader.text = "Resources";
-                ClearList(_resourcesList);
+                    resourcesHeader.text = "Economy";
+                ShowCountyEconomy(county.Id);
             }
         }
 
@@ -891,6 +898,89 @@ namespace EconSim.UI
 
                 _resourcesList.Add(row);
             }
+        }
+
+        private void ShowCountyEconomy(int countyId)
+        {
+            if (_resourcesList == null) return;
+            _resourcesList.Clear();
+
+            var state = _simulation?.GetState();
+            var econ = state?.Economy;
+            if (econ?.Counties == null || countyId <= 0 || countyId >= econ.Counties.Length)
+            {
+                _resourcesList.Add(new Label("No data") { style = { color = new Color(0.5f, 0.5f, 0.5f), fontSize = 13 } });
+                return;
+            }
+
+            var ce = econ.Counties[countyId];
+            if (ce == null)
+            {
+                _resourcesList.Add(new Label("No data") { style = { color = new Color(0.5f, 0.5f, 0.5f), fontSize = 13 } });
+                return;
+            }
+
+            // Population by class
+            AddEconRow("Serfs (LC)", $"{ce.LowerCommonerPop:N0}");
+            AddEconRow("Artisans (UC)", $"{ce.UpperCommonerPop:N0}");
+            AddEconRow("Lower Nobility", $"{ce.LowerNobilityPop:N0}");
+            AddEconRow("Upper Nobility", $"{ce.UpperNobilityPop:N0}");
+            AddEconRow("Lower Clergy", $"{ce.LowerClergyPop:N0}");
+            AddEconRow("Upper Clergy", $"{ce.UpperClergyPop:N0}");
+
+            AddEconSeparator();
+
+            // Satisfaction
+            AddEconRow("LC Satisfaction", $"{ce.LowerCommonerSatisfaction:P0}");
+            AddEconRow("UC Satisfaction", $"{ce.UpperCommonerSatisfaction:P0}");
+            AddEconRow("Survival", $"{ce.SurvivalSatisfaction:P0}");
+            AddEconRow("Religion", $"{ce.ReligionSatisfaction:P0}");
+            AddEconRow("Economic", $"{ce.EconomicSatisfaction:P0}");
+
+            AddEconSeparator();
+
+            // Coin pools
+            AddEconRow("UC Coin", $"{ce.UpperCommonerCoin:F1} Cr");
+            AddEconRow("UN Treasury", $"{ce.UpperNobleTreasury:F1} Cr");
+            AddEconRow("LN Treasury", $"{ce.LowerNobleTreasury:F1} Cr");
+            AddEconRow("UC Treasury", $"{ce.UpperClergyTreasury:F1} Cr");
+
+            // Market assignment
+            if (econ.CountyToMarket != null && countyId < econ.CountyToMarket.Length)
+            {
+                int mId = econ.CountyToMarket[countyId];
+                if (mId > 0)
+                {
+                    AddEconSeparator();
+                    AddEconRow("Market", $"#{mId}");
+                    if (mId < econ.Markets.Length && econ.Markets[mId] != null)
+                        AddEconRow("Price Level", $"{econ.Markets[mId].PriceLevel:F2}");
+                }
+            }
+        }
+
+        private void AddEconRow(string label, string value)
+        {
+            var row = new VisualElement();
+            row.AddToClassList("resource-item");
+
+            var nameLabel = new Label(label);
+            nameLabel.style.fontSize = 13;
+            row.Add(nameLabel);
+
+            var valueLabel = new Label(value);
+            valueLabel.AddToClassList("item-value");
+            valueLabel.style.fontSize = 13;
+            row.Add(valueLabel);
+
+            _resourcesList.Add(row);
+        }
+
+        private void AddEconSeparator()
+        {
+            var sep = new VisualElement();
+            sep.style.height = 4;
+            _resourcesList.Add(sep);
         }
 
         private string GetCountyMajorityFaithName(int countyId)

@@ -514,13 +514,8 @@ namespace EconSim.Core
             // Initialize simulation
             Profiler.Begin("Simulation Init");
             var runner = new SimulationRunner(MapData);
-            runner.RegisterSystem(new ProductionSystem());
-            runner.RegisterSystem(new ConsumptionSystem());
-            runner.RegisterSystem(new FiscalSystem());
-            runner.RegisterSystem(new InterRealmTradeSystem());
+            runner.RegisterSystem(new EconomyTick());
 
-            runner.RegisterSystem(new PopulationSystem());
-            runner.RegisterSystem(new SpoilageSystem());
             _simulation = runner;
 
             // Bootstrap actors and peerage
@@ -536,9 +531,8 @@ namespace EconSim.Core
             ReligionBootstrap.Generate(simStateForActors.Religion, MapData, simStateForActors.Actors, MapData.Info.PopGenSeed);
             SimLog.Log("Actors", $"After clergy: {simStateForActors.Actors.ActorCount} actors, {simStateForActors.Actors.TitleCount} titles ({simStateForActors.Actors.ParishTitleCount} parish + {simStateForActors.Actors.DioceseTitleCount} diocese + {simStateForActors.Actors.ArchdioceseTitleCount} archdiocese)");
 
-            // Register religion spread and tithe collection after religion state is initialized
+            // Register religion spread after religion state is initialized
             runner.RegisterSystem(new ReligionSpreadSystem());
-            runner.RegisterSystem(new TitheSystem());
 
             Profiler.End();
             _simulation.IsPaused = true;  // Start paused

@@ -1,138 +1,163 @@
 namespace EconSim.Core.Economy
 {
     /// <summary>
-    /// Per-county runtime economic state. All per-good arrays indexed by (int)GoodType.
+    /// Per-county economic state for economy v4.
     /// </summary>
     public class CountyEconomy
     {
-        /// <summary>Goods on hand, per good type (kg).</summary>
-        public float[] Stock = new float[Goods.Count];
+        // ── Population by class ──
 
-        /// <summary>County population (cached at init).</summary>
-        public float Population;
+        /// <summary>Lower commoner (serf) population.</summary>
+        public float LowerCommonerPop;
 
-        /// <summary>Population per estate pool, indexed by (int)Estate. Derived from Population x shares.</summary>
-        public float[] EstatePop = new float[Estates.Count];
+        /// <summary>Upper commoner (artisan/merchant) population.</summary>
+        public float UpperCommonerPop;
 
-        /// <summary>Geographic latitude in degrees (cached at init for seasonal calculations).</summary>
-        public float Latitude;
+        /// <summary>Lower nobility population.</summary>
+        public float LowerNobilityPop;
 
-        /// <summary>Goods produced per person per day, per good type (set at init from biome).</summary>
-        public float[] Productivity = new float[Goods.Count];
+        /// <summary>Upper nobility population.</summary>
+        public float UpperNobilityPop;
 
-        /// <summary>Last tick's production output, per good type.</summary>
-        public float[] Production = new float[Goods.Count];
+        /// <summary>Lower clergy population.</summary>
+        public float LowerClergyPop;
 
-        /// <summary>Last tick's consumption, per good type.</summary>
-        public float[] Consumption = new float[Goods.Count];
+        /// <summary>Upper clergy population.</summary>
+        public float UpperClergyPop;
 
-        /// <summary>Shortfall when stock hits zero, per good type.</summary>
-        public float[] UnmetNeed = new float[Goods.Count];
+        public float TotalPopulation =>
+            LowerCommonerPop + UpperCommonerPop +
+            LowerNobilityPop + UpperNobilityPop +
+            LowerClergyPop + UpperClergyPop;
 
-        /// <summary>Relief received from provincial granary this tick, per good type.</summary>
-        public float[] Relief = new float[Goods.Count];
+        // ── Five coin pools ──
 
-        /// <summary>Exponential moving average of daily basic-needs fulfillment (0=starving, 1=fully supplied). ~30-day window.
-        /// Weighted average of staple pool + NeedCategory.Basic goods (salt, ale). Drives birth/death rates.</summary>
-        public float BasicSatisfaction = 1f;
+        /// <summary>Upper noble treasury (funded by surplus sales, tax, tariffs).</summary>
+        public float UpperNobleTreasury;
 
-        /// <summary>Blended satisfaction (needs + comfort). Drives migration pull. ~30-day EMA.</summary>
-        public float Satisfaction = 1f;
+        /// <summary>Lower noble treasury (funded by stipend from upper noble).</summary>
+        public float LowerNobleTreasury;
 
-        /// <summary>Births this month (reset monthly by PopulationSystem).</summary>
-        public float BirthsThisMonth;
+        /// <summary>Upper clergy treasury (funded by tithe on upper commoner buys).</summary>
+        public float UpperClergyTreasury;
 
-        /// <summary>Deaths this month (reset monthly by PopulationSystem).</summary>
-        public float DeathsThisMonth;
+        /// <summary>Lower clergy coin balance (funded by wages from upper clergy).</summary>
+        public float LowerClergyCoin;
 
-        /// <summary>Net migration this month (reset monthly by PopulationSystem). Positive = inflow.</summary>
-        public float NetMigrationThisMonth;
+        /// <summary>Upper commoner coin balance. Part of M (money in circulation).</summary>
+        public float UpperCommonerCoin;
 
-        /// <summary>Total workers assigned to facilities in this county. Updated each tick by EconomySystem.</summary>
-        public float FacilityWorkers;
+        /// <summary>M = upper commoner coin + lower clergy coin. Money in circulation for this county.</summary>
+        public float MoneySupply => UpperCommonerCoin + LowerClergyCoin;
 
-        /// <summary>Daily facility input demand per good (kg/day). Computed by EconomySystem, read by FiscalSystem for trade retain.</summary>
-        public float[] FacilityInputNeed = new float[Goods.Count];
+        // ── Biome productivity (computed once at init) ──
 
-        /// <summary>Crowns held by the county.</summary>
-        public float Treasury;
+        /// <summary>Average biome yield per good, indexed by GoodType. kg/person/day.</summary>
+        public float[] Productivity;
 
-        /// <summary>Monetary production tax paid to province this tick (reset daily).</summary>
-        public float MonetaryTaxPaid;
+        // ── Per-class satisfaction (weighted composite, computed each tick) ──
 
-        /// <summary>Goods requisitioned by duke for granary this tick, per good type (reset daily).</summary>
-        public float[] GranaryRequisitioned = new float[Goods.Count];
+        public float LowerCommonerSatisfaction;
+        public float UpperCommonerSatisfaction;
+        public float LowerNobilitySatisfaction;
+        public float UpperNobilitySatisfaction;
+        public float LowerClergySatisfaction;
+        public float UpperClergySatisfaction;
 
-        /// <summary>Crowns received from duke for granary requisition this tick (reset daily).</summary>
-        public float GranaryRequisitionCrownsReceived;
+        // ── Phase 5: satisfaction breakdown (diagnostic) ──
 
-        /// <summary>Intra-province trade: kg bought per good this tick (reset daily).</summary>
-        public float[] TradeBought = new float[Goods.Count];
+        /// <summary>LC survival component (local food / staple need).</summary>
+        public float SurvivalSatisfaction;
 
-        /// <summary>Intra-province trade: kg sold per good this tick (reset daily).</summary>
-        public float[] TradeSold = new float[Goods.Count];
+        /// <summary>Shared religion component (clergy worship goods fulfillment).</summary>
+        public float ReligionSatisfaction;
 
-        /// <summary>Intra-province trade: total crowns spent buying this tick (reset daily).</summary>
-        public float TradeCrownsSpent;
+        /// <summary>UC economic component (comfort+luxury buy order fulfillment).</summary>
+        public float EconomicSatisfaction;
 
-        /// <summary>Intra-province trade: total crowns earned selling this tick (reset daily).</summary>
-        public float TradeCrownsEarned;
+        // ── Phase 5: population change (reset each tick) ──
 
-        /// <summary>Cross-province trade: kg bought per good this tick (reset daily).</summary>
-        public float[] CrossProvTradeBought = new float[Goods.Count];
+        /// <summary>Total births this tick across all classes.</summary>
+        public float Births;
 
-        /// <summary>Cross-province trade: kg sold per good this tick (reset daily).</summary>
-        public float[] CrossProvTradeSold = new float[Goods.Count];
+        /// <summary>Total deaths this tick across all classes.</summary>
+        public float Deaths;
 
-        /// <summary>Cross-province trade: total crowns spent buying this tick (reset daily).</summary>
-        public float CrossProvTradeCrownsSpent;
+        /// <summary>Net migration this tick (positive = immigration).</summary>
+        public float NetMigration;
 
-        /// <summary>Cross-province trade: total crowns earned selling this tick (reset daily).</summary>
-        public float CrossProvTradeCrownsEarned;
+        // ── Phase 1: daily production / consumption / surplus ──
 
-        /// <summary>Cross-province trade: toll crowns paid to own province this tick (reset daily).</summary>
-        public float TradeTollsPaid;
+        /// <summary>Raw daily production per good (kg/day). LowerCommonerPop × Productivity[g].</summary>
+        public float[] Production;
 
-        /// <summary>Cross-market trade: kg bought per good this tick (reset daily).</summary>
-        public float[] CrossMarketTradeBought = new float[Goods.Count];
+        /// <summary>Subsistence consumption per good (kg/day).</summary>
+        public float[] Consumption;
 
-        /// <summary>Cross-market trade: kg sold per good this tick (reset daily).</summary>
-        public float[] CrossMarketTradeSold = new float[Goods.Count];
+        /// <summary>Production − consumption per good (kg/day). Available for sell orders.</summary>
+        public float[] Surplus;
 
-        /// <summary>Cross-market trade: total crowns spent buying this tick (reset daily).</summary>
-        public float CrossMarketTradeCrownsSpent;
+        /// <summary>True if local staple production &lt; staple need.</summary>
+        public bool FoodDeficit;
 
-        /// <summary>Cross-market trade: total crowns earned selling this tick (reset daily).</summary>
-        public float CrossMarketTradeCrownsEarned;
+        // ── Phase 2: per-tick tracking (reset each tick) ──
 
-        /// <summary>Cross-market trade: toll crowns paid to own province this tick (reset daily).</summary>
-        public float CrossMarketTollsPaid;
+        /// <summary>Food (kg) bought by lord and given to serfs this tick.</summary>
+        public float SerfFoodProvided;
 
-        /// <summary>Cross-market trade: tariff crowns paid to own realm this tick (reset daily).</summary>
-        public float CrossMarketTariffsPaid;
+        /// <summary>Total coin spent by upper noble this tick (buys + stipend).</summary>
+        public float UpperNobleSpend;
 
-        /// <summary>Market fees received this tick (reset daily). Only nonzero for market county.</summary>
-        public float MarketFeesReceived;
+        /// <summary>Total coin received by upper noble this tick (surplus sales + minting + tax).</summary>
+        public float UpperNobleIncome;
 
-        /// <summary>Transport costs paid this tick (destroyed). Reset daily.</summary>
-        public float TransportCostsPaid;
+        /// <summary>Total coin spent by lower noble this tick.</summary>
+        public float LowerNobleSpend;
 
-        /// <summary>Virtual market: kg bought per good this tick (reset daily).</summary>
-        public float[] VirtualMarketBought = new float[Goods.Count];
+        // ── Phase 3: facility + commoner + clergy state ──
 
-        /// <summary>Virtual market: kg sold per good this tick (reset daily).</summary>
-        public float[] VirtualMarketSold = new float[Goods.Count];
+        /// <summary>Per-good fill rate for facility input buy orders from last tick. Used to compute next tick's output.</summary>
+        public float[] FacilityInputGoodFill;
 
-        /// <summary>Virtual market: total crowns spent buying this tick (reset daily).</summary>
-        public float VirtualMarketCrownsSpent;
+        /// <summary>Per-good sell fill rate for facility output from last tick. Throttles production to match demand.</summary>
+        public float[] FacilityOutputGoodFill;
 
-        /// <summary>Virtual market: total crowns earned selling this tick (reset daily).</summary>
-        public float VirtualMarketCrownsEarned;
+        /// <summary>Total coin earned by upper commoners this tick (facility sales).</summary>
+        public float UpperCommonerIncome;
 
-        /// <summary>Virtual market: tariff crowns paid to own realm this tick (reset daily).</summary>
-        public float VirtualMarketTariffsPaid;
+        /// <summary>Total coin spent by upper commoners this tick (goods + facility inputs).</summary>
+        public float UpperCommonerSpend;
 
-        /// <summary>Religious tithe crowns paid this month (reset monthly by TitheSystem).</summary>
-        public float TithePaid;
+        /// <summary>Tax revenue collected from upper commoner purchases this tick.</summary>
+        public float TaxRevenue;
+
+        /// <summary>Tithe revenue collected from upper commoner purchases this tick.</summary>
+        public float TitheRevenue;
+
+        /// <summary>Tariff revenue from cross-market trade this tick.</summary>
+        public float TariffRevenue;
+
+        /// <summary>Total coin spent by upper clergy this tick.</summary>
+        public float UpperClergySpend;
+
+        /// <summary>Total coin received by upper clergy this tick (tithe).</summary>
+        public float UpperClergyIncome;
+
+        /// <summary>Total coin spent by lower clergy this tick.</summary>
+        public float LowerClergySpend;
+
+        /// <summary>Total coin received by lower clergy this tick (wages).</summary>
+        public float LowerClergyIncome;
+
+        public CountyEconomy()
+        {
+            int n = Goods.Count;
+            Productivity = new float[n];
+            Production = new float[n];
+            Consumption = new float[n];
+            Surplus = new float[n];
+            FacilityInputGoodFill = new float[n];
+            FacilityOutputGoodFill = new float[n];
+        }
     }
 }

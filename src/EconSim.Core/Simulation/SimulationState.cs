@@ -46,7 +46,7 @@ namespace EconSim.Core.Simulation
         public SimulationPerformanceStats Performance { get; set; } = new SimulationPerformanceStats();
 
         /// <summary>
-        /// Economy state (production, consumption, stock per county).
+        /// Economy state (buy/sell orders, quantity theory of money, population dynamics).
         /// </summary>
         public EconomyState Economy { get; set; }
 
