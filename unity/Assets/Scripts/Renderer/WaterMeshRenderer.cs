@@ -27,6 +27,10 @@ namespace EconSim.Renderer
         private static readonly int EdgeSoftnessId = Shader.PropertyToID("_EdgeSoftness");
         private static readonly int DepthAbsorptionId = Shader.PropertyToID("_DepthAbsorption");
         private static readonly int ShallowTintId = Shader.PropertyToID("_ShallowTint");
+        private static readonly int FresnelIntensityId = Shader.PropertyToID("_FresnelIntensity");
+        private static readonly int WaveScaleId = Shader.PropertyToID("_WaveScale");
+        private static readonly int WaveStrengthId = Shader.PropertyToID("_WaveStrength");
+        private static readonly int WaveSpeedId = Shader.PropertyToID("_WaveSpeed");
 
         private Mesh waterMesh;
         private Material flatMaterial;
@@ -67,13 +71,14 @@ namespace EconSim.Renderer
         /// Push water color/opacity settings to both materials.
         /// Called by MapView which owns the serialized values.
         /// </summary>
-        public void SetColors(Color riverColor, Color lakeColor, Color oceanColor, float edgeSoftness,
-            float depthAbsorption, Color shallowTint)
+        public void SetWaterProperties(Color riverColor, Color lakeColor, Color oceanColor,
+            float edgeSoftness, float depthAbsorption, Color shallowTint,
+            float fresnelIntensity, float waveScale, float waveStrength, float waveSpeed)
         {
-            SetColorsOnMaterial(flatMaterial, riverColor, lakeColor, oceanColor, edgeSoftness,
-                depthAbsorption, shallowTint);
-            SetColorsOnMaterial(biomeMaterial, riverColor, lakeColor, oceanColor, edgeSoftness,
-                depthAbsorption, shallowTint);
+            SetPropsOnMaterial(flatMaterial, riverColor, lakeColor, oceanColor, edgeSoftness,
+                depthAbsorption, shallowTint, fresnelIntensity, waveScale, waveStrength, waveSpeed);
+            SetPropsOnMaterial(biomeMaterial, riverColor, lakeColor, oceanColor, edgeSoftness,
+                depthAbsorption, shallowTint, fresnelIntensity, waveScale, waveStrength, waveSpeed);
         }
 
         /// <summary>
@@ -179,8 +184,9 @@ namespace EconSim.Renderer
             }
         }
 
-        private static void SetColorsOnMaterial(Material mat, Color river, Color lake, Color ocean,
-            float edgeSoftness, float depthAbsorption, Color shallowTint)
+        private static void SetPropsOnMaterial(Material mat, Color river, Color lake, Color ocean,
+            float edgeSoftness, float depthAbsorption, Color shallowTint,
+            float fresnelIntensity, float waveScale, float waveStrength, float waveSpeed)
         {
             if (mat == null) return;
             mat.SetColor(RiverColorId, river);
@@ -189,6 +195,10 @@ namespace EconSim.Renderer
             mat.SetFloat(EdgeSoftnessId, edgeSoftness);
             mat.SetFloat(DepthAbsorptionId, depthAbsorption);
             mat.SetColor(ShallowTintId, shallowTint);
+            mat.SetFloat(FresnelIntensityId, fresnelIntensity);
+            mat.SetFloat(WaveScaleId, waveScale);
+            mat.SetFloat(WaveStrengthId, waveStrength);
+            mat.SetFloat(WaveSpeedId, waveSpeed);
         }
 
         private void EnsureMaterials()

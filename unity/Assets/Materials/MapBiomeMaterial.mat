@@ -150,7 +150,7 @@ Material:
     - _CoastGradientIntensity: 0
     - _CoastGradientRadius: 15
     - _CoastlineBorderWidth: 2
-    - _ColormapBlend: 0.219
+    - _ColormapBlend: 0.3
     - _Cutoff: 0.5
     - _DebugView: 0
     - _DetailNormalMapScale: 1
@@ -159,12 +159,12 @@ Material:
     - _Glossiness: 0.5
     - _GlossyReflections: 1
     - _HalftoneScale: 0.15
-    - _HeightScale: 0.5
+    - _HeightScale: 0.3
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 1
-    - _HoveredCountyId: 0.0030365454
+    - _HoverIntensity: 0.99999976
+    - _HoveredCountyId: 0.010833906
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1
@@ -213,7 +213,7 @@ Material:
     - _SoilBlendRadius: 6
     - _SoilBlendSharpness: 0.5
     - _SoilBlurRadius: 3
-    - _SoilHeightFloor: 0.15
+    - _SoilHeightFloor: 0.163
     - _SoilTerrainOverlayOpacity: 0
     - _SoilTintStrength: 0.181
     - _SpecularHighlights: 1

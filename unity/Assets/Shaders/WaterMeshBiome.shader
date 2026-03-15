@@ -10,6 +10,10 @@ Shader "EconSim/WaterMeshBiome"
         _EdgeSoftness ("River Edge Softness", Range(0.01, 0.25)) = 0.08
         _DepthAbsorption ("Depth Absorption", Range(0.5, 20)) = 6.0
         _ShallowTint ("Shallow Tint", Color) = (0.30, 0.60, 0.55, 1)
+        _FresnelIntensity ("Fresnel Intensity", Range(0, 1)) = 0.4
+        _WaveScale ("Wave Scale", Range(1, 200)) = 40
+        _WaveStrength ("Wave Strength", Range(0, 1)) = 0.3
+        _WaveSpeed ("Wave Speed", Range(0, 2)) = 0.4
     }
 
     SubShader
@@ -19,6 +23,7 @@ Shader "EconSim/WaterMeshBiome"
 
         HLSLINCLUDE
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             struct appdata
             {
@@ -33,6 +38,7 @@ Shader "EconSim/WaterMeshBiome"
                 float2 uv : TEXCOORD0;
                 float4 vcolor : TEXCOORD1;
                 float2 dataUV : TEXCOORD2;
+                float3 worldPos : TEXCOORD3;
             };
 
             TEXTURE2D(_HeightmapTex);
@@ -48,9 +54,73 @@ Shader "EconSim/WaterMeshBiome"
                 float _DepthAbsorption;
                 half4 _ShallowTint;
                 float2 _MapWorldSize;
+                float _FresnelIntensity;
+                float _WaveScale;
+                float _WaveStrength;
+                float _WaveSpeed;
             CBUFFER_END
 
             static const float MESH_Y_OFFSET = 0.002;
+
+            // ---- Procedural noise for wave normals ----
+
+            float _hash2d(float2 p)
+            {
+                float3 p3 = frac(float3(p.xyx) * 0.1031);
+                p3 += dot(p3, p3.yzx + 33.33);
+                return frac((p3.x + p3.y) * p3.z);
+            }
+
+            float _valueNoise(float2 p)
+            {
+                float2 i = floor(p);
+                float2 f = frac(p);
+                float2 u = f * f * (3.0 - 2.0 * f);
+                float a = _hash2d(i);
+                float b = _hash2d(i + float2(1, 0));
+                float c = _hash2d(i + float2(0, 1));
+                float d = _hash2d(i + float2(1, 1));
+                return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+            }
+
+            // 3-octave FBM for richer wave detail.
+            float _fbm3(float2 p)
+            {
+                float v = 0.0;
+                float a = 0.5;
+                float2x2 rot = float2x2(0.8, 0.6, -0.6, 0.8);
+                for (int i = 0; i < 3; i++)
+                {
+                    v += _valueNoise(p) * a;
+                    p = mul(rot, p) * 2.0;
+                    a *= 0.5;
+                }
+                return v;
+            }
+
+            // Compute wave-perturbed normal via finite differences on FBM heightfield.
+            half3 WaveNormal(float2 worldXZ, float strength)
+            {
+                float t = _Time.y * _WaveSpeed;
+                float2 uv = worldXZ * _WaveScale;
+
+                // Two overlapping FBM layers moving in different directions.
+                float2 uv1 = uv + float2(t * 0.7, t * 0.3);
+                float2 uv2 = uv * 0.7 + float2(-t * 0.4, t * 0.6);
+                float eps = 0.5;
+
+                // Sample center and neighbors for gradient.
+                float hC = _fbm3(uv1) + _fbm3(uv2);
+                float hR = _fbm3(uv1 + float2(eps, 0)) + _fbm3(uv2 + float2(eps, 0));
+                float hU = _fbm3(uv1 + float2(0, eps)) + _fbm3(uv2 + float2(0, eps));
+
+                float dX = (hR - hC) * strength;
+                float dZ = (hU - hC) * strength;
+
+                return normalize(half3(-dX, 1.0, -dZ));
+            }
+
+            // ---- Vertex / Fragment ----
 
             v2f vert(appdata v)
             {
@@ -61,8 +131,8 @@ Shader "EconSim/WaterMeshBiome"
                 o.pos = TransformObjectToHClip(vertex.xyz);
                 o.uv = v.uv;
                 o.vcolor = v.color;
-                // Compute data UV from object-space XZ position and map dimensions.
                 o.dataUV = vertex.xz / max(_MapWorldSize, float2(1, 1));
+                o.worldPos = TransformObjectToWorld(vertex.xyz);
                 return o;
             }
 
@@ -70,12 +140,23 @@ Shader "EconSim/WaterMeshBiome"
             {
                 float typeR = IN.vcolor.r;
 
-                // River: flat color with edge softness, no depth effect.
+                // River: edge softness + waves/fresnel.
                 if (typeR < 0.25)
                 {
                     float distFromCenter = abs(IN.uv.y - 0.5) * 2.0;
                     float edgeAlpha = 1.0 - smoothstep(1.0 - _EdgeSoftness * 2.0, 1.0, distFromCenter);
-                    return half4(_RiverColor.rgb, _RiverColor.a * edgeAlpha * IN.vcolor.a);
+
+                    half3 N = WaveNormal(IN.worldPos.xz, _WaveStrength);
+                    half3 viewDir = normalize(_WorldSpaceCameraPos.xyz - IN.worldPos);
+                    half cosTheta = saturate(dot(N, viewDir));
+                    half fresnel = 0.02 + 0.98 * pow(1.0 - cosTheta, 5.0);
+
+                    Light mainLight = GetMainLight();
+                    half3 color = _RiverColor.rgb + mainLight.color * fresnel * _FresnelIntensity;
+                    half alpha = _RiverColor.a * edgeAlpha * IN.vcolor.a;
+                    alpha = saturate(alpha + fresnel * _FresnelIntensity * edgeAlpha);
+
+                    return half4(color, alpha);
                 }
 
                 // Lake / ocean: depth-based light absorption.
@@ -93,6 +174,18 @@ Shader "EconSim/WaterMeshBiome"
                 // Deep water: base color, full opacity.
                 half3 color = lerp(baseColor.rgb, _ShallowTint.rgb, transmittance);
                 half alpha = baseColor.a * (1.0 - transmittance * (1.0 - 0.15));
+
+                // Wave-perturbed normal for Fresnel (stronger in deep water).
+                half3 N = WaveNormal(IN.worldPos.xz, _WaveStrength * saturate(depth01 * 4.0));
+
+                // Fresnel reflection with perturbed normal.
+                half3 viewDir = normalize(_WorldSpaceCameraPos.xyz - IN.worldPos);
+                half cosTheta = saturate(dot(N, viewDir));
+                half fresnel = 0.02 + 0.98 * pow(1.0 - cosTheta, 5.0);
+
+                Light mainLight = GetMainLight();
+                color += mainLight.color * fresnel * _FresnelIntensity;
+                alpha = saturate(alpha + fresnel * _FresnelIntensity);
 
                 return half4(color, alpha);
             }
