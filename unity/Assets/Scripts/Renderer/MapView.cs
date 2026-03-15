@@ -86,11 +86,14 @@ namespace EconSim.Renderer
         private readonly HashSet<int> expandedDioceseIds = new HashSet<int>();
         [Header("Water Colors")]
         [SerializeField] private Color waterRiverColor = new Color(0.18f, 0.42f, 0.68f, 0.75f);
-        [SerializeField] private Color waterLakeColor = new Color(0.15f, 0.35f, 0.55f, 0.60f);
-        [SerializeField] private Color waterOceanColor = new Color(0.10f, 0.25f, 0.45f, 0.65f);
+        [SerializeField] private Color waterColor = new Color(0.10f, 0.25f, 0.45f, 0.65f);
         [SerializeField] [Range(0.01f, 0.25f)] private float waterEdgeSoftness = 0.08f;
         [SerializeField] [Range(0.5f, 20f)] private float waterDepthAbsorption = 6.0f;
         [SerializeField] private Color waterShallowTint = new Color(0.30f, 0.60f, 0.55f, 1f);
+        [SerializeField] [Range(0f, 1f)] private float waterFresnelIntensity = 0.4f;
+        [SerializeField] [Range(1f, 200f)] private float waterWaveScale = 40f;
+        [SerializeField] [Range(0f, 1f)] private float waterWaveStrength = 0.3f;
+        [SerializeField] [Range(0f, 2f)] private float waterWaveSpeed = 0.4f;
 
         [Header("Height")]
         [SerializeField] [Range(0f, 2f)] private float biomesModeHeightScale = 0.3f;
@@ -1527,8 +1530,9 @@ namespace EconSim.Renderer
         private void SyncWaterColors()
         {
             if (waterMeshRenderer == null) return;
-            waterMeshRenderer.SetColors(waterRiverColor, waterLakeColor, waterOceanColor,
-                waterEdgeSoftness, waterDepthAbsorption, waterShallowTint);
+            waterMeshRenderer.SetWaterProperties(waterRiverColor, waterColor,
+                waterEdgeSoftness, waterDepthAbsorption, waterShallowTint,
+                waterFresnelIntensity, waterWaveScale, waterWaveStrength, waterWaveSpeed);
         }
 
         private void BuildParchmentLayer()

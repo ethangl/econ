@@ -116,6 +116,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _PaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _ParallaxMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -197,24 +201,29 @@ Material:
     - _DebugView: 0
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
-    - _EdgeDarkening: 0.05
+    - _EdgeDarkening: 0.1
     - _EdgeWidth: 2
     - _FillOpacity: 1
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
     - _HalftoneScale: 0.15
+    - _HeightLevelsGamma: 1
+    - _HeightLevelsInBlack: 0
+    - _HeightLevelsInWhite: 0.5
+    - _HeightLevelsOutBlack: 0
+    - _HeightLevelsOutWhite: 1
     - _HeightScale: 0
     - _HeightmapContrast: 1
-    - _HeightmapOpacity: 0
+    - _HeightmapOpacity: 1
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.9995791
+    - _HoverIntensity: 0.00029831324
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
-    - _HoveredRealmId: 0.000045777066
+    - _HoveredRealmId: -1
     - _MapMode: 1
     - _MarketBorderDarkening: 0.688
     - _MarketBorderWidth: 0.25
@@ -222,7 +231,7 @@ Material:
     - _Mode: 0
     - _OcclusionStrength: 1
     - _OverlayEnabled: 0
-    - _OverlayOpacity: 0
+    - _OverlayOpacity: 1
     - _Parallax: 0.02
     - _PathDashLength: 0.1
     - _PathGapLength: 1.5
@@ -271,7 +280,7 @@ Material:
     - _WaterShallowAlpha: 1
     - _ZWrite: 1
     m_Colors:
-    - _BaseColor: {r: 1, g: 0.9607843, b: 0.8862745, a: 1}
+    - _BaseColor: {r: 0.929, g: 0.81498075, b: 0.684673, a: 1}
     - _CoastlineBorderColor: {r: 0.02, g: 0.049999982, b: 0.14999998, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _CountyBorderColor: {r: 0, g: 0, b: 0, a: 0.3764706}

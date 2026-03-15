@@ -103,31 +103,6 @@ float3 ApplyReligionBorders(float2 uv, float3 color, float displayLevel)
     return color;
 }
 
-float4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, float realmId, float provinceId, float countyId, float marketId)
-{
-    if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 6)
-        return float4(0, 0, 0, 0);
-
-    float3 color;
-
-    if (_MapMode >= 1 && _MapMode <= 3)
-    {
-        color = LookupPaletteColor(_RealmPaletteTex, sampler_RealmPaletteTex, realmId);
-        color = ApplyPoliticalBorders(uv, color, 1.0);
-    }
-    else if (_MapMode == 4)
-    {
-        color = LookupPaletteColor(_MarketPaletteTex, sampler_MarketPaletteTex, marketId);
-        color = ApplyMarketBorders(uv, color);
-    }
-    else
-    {
-        return float4(0, 0, 0, 0);
-    }
-
-    return float4(color, 1.0);
-}
-
 float4 ComputeMapModeFromResolvedBase(float2 uv, bool isCellWater, bool isRiver, float height, float3 resolvedBaseColor, float resolvedAlpha)
 {
     if (isCellWater || isRiver || _MapMode == 0 || _MapMode == 6)
