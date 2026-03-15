@@ -2541,7 +2541,9 @@ public class MapOverlayManager
                 return;
             }
 
-            const int bakeSize = 4096;
+            // Bake at 2x the overlay grid resolution, matching the map's aspect ratio.
+            int bakeWidth = gridWidth * 2;
+            int bakeHeight = gridHeight * 2;
             Shader bakeShader = Shader.Find("EconSim/ElevationBake");
             if (bakeShader == null)
             {
@@ -2552,7 +2554,7 @@ public class MapOverlayManager
             var bakeMaterial = new Material(bakeShader) { hideFlags = HideFlags.DontSave };
 
             // Create a temporary RenderTexture for the bake
-            var bakeRT = new RenderTexture(bakeSize, bakeSize, 24, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear)
+            var bakeRT = new RenderTexture(bakeWidth, bakeHeight, 24, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear)
             {
                 name = "ElevationBakeRT",
                 filterMode = FilterMode.Bilinear,
@@ -2599,13 +2601,13 @@ public class MapOverlayManager
             // Read back into a Texture2D to replace the cell-resolution heightmap
             RenderTexture previousActive = RenderTexture.active;
             RenderTexture.active = bakeRT;
-            var bakedTexture = new Texture2D(bakeSize, bakeSize, TextureFormat.RFloat, false)
+            var bakedTexture = new Texture2D(bakeWidth, bakeHeight, TextureFormat.RFloat, false)
             {
                 name = "BakedElevationTexture",
                 filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp
             };
-            bakedTexture.ReadPixels(new Rect(0, 0, bakeSize, bakeSize), 0, 0);
+            bakedTexture.ReadPixels(new Rect(0, 0, bakeWidth, bakeHeight), 0, 0);
             bakedTexture.Apply();
             RenderTexture.active = previousActive;
 
@@ -2624,7 +2626,7 @@ public class MapOverlayManager
             if (styleMaterial != null)
                 styleMaterial.SetTexture(HeightmapTexId, heightmapTexture);
 
-            Debug.Log($"MapOverlayManager: Baked elevation {bakeSize}x{bakeSize} from mesh (was {gridWidth}x{gridHeight})");
+            Debug.Log($"MapOverlayManager: Baked elevation {bakeWidth}x{bakeHeight} from mesh (grid {gridWidth}x{gridHeight})");
         }
 
         private void BindGeneratedTexturesToMaterial()
