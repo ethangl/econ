@@ -3,8 +3,7 @@ Shader "EconSim/WaterMesh"
     Properties
     {
         _RiverColor ("River Color", Color) = (0.18, 0.42, 0.68, 0.75)
-        _LakeColor ("Lake Color", Color) = (0.15, 0.35, 0.55, 0.80)
-        _OceanColor ("Ocean Color", Color) = (0.10, 0.25, 0.45, 0.85)
+        _WaterColor ("Water Color", Color) = (0.10, 0.25, 0.45, 0.85)
         _EdgeSoftness ("River Edge Softness", Range(0.01, 0.25)) = 0.08
         _HeightScale ("Height Scale", Float) = 0.0
         _SeaLevel ("Sea Level", Float) = 0.2
@@ -91,8 +90,7 @@ Shader "EconSim/WaterMesh"
             };
 
             float4 _RiverColor;
-            float4 _LakeColor;
-            float4 _OceanColor;
+            float4 _WaterColor;
             float _EdgeSoftness;
             float _HeightScale;
             float _SeaLevel;
@@ -132,16 +130,10 @@ Shader "EconSim/WaterMesh"
                     float edgeAlpha = 1.0 - smoothstep(1.0 - _EdgeSoftness * 2.0, 1.0, distFromCenter);
                     alpha = baseColor.a * edgeAlpha * i.color.a;
                 }
-                else if (typeR < 0.75)
-                {
-                    // Lake: solid fill
-                    baseColor = _LakeColor;
-                    alpha = baseColor.a;
-                }
                 else
                 {
-                    // Ocean: solid fill
-                    baseColor = _OceanColor;
+                    // Lake / ocean: solid fill
+                    baseColor = _WaterColor;
                     alpha = baseColor.a;
                 }
 

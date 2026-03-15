@@ -86,8 +86,7 @@ namespace EconSim.Renderer
         private readonly HashSet<int> expandedDioceseIds = new HashSet<int>();
         [Header("Water Colors")]
         [SerializeField] private Color waterRiverColor = new Color(0.18f, 0.42f, 0.68f, 0.75f);
-        [SerializeField] private Color waterLakeColor = new Color(0.15f, 0.35f, 0.55f, 0.60f);
-        [SerializeField] private Color waterOceanColor = new Color(0.10f, 0.25f, 0.45f, 0.65f);
+        [SerializeField] private Color waterColor = new Color(0.10f, 0.25f, 0.45f, 0.65f);
         [SerializeField] [Range(0.01f, 0.25f)] private float waterEdgeSoftness = 0.08f;
         [SerializeField] [Range(0.5f, 20f)] private float waterDepthAbsorption = 6.0f;
         [SerializeField] private Color waterShallowTint = new Color(0.30f, 0.60f, 0.55f, 1f);
@@ -1531,7 +1530,7 @@ namespace EconSim.Renderer
         private void SyncWaterColors()
         {
             if (waterMeshRenderer == null) return;
-            waterMeshRenderer.SetWaterProperties(waterRiverColor, waterLakeColor, waterOceanColor,
+            waterMeshRenderer.SetWaterProperties(waterRiverColor, waterColor,
                 waterEdgeSoftness, waterDepthAbsorption, waterShallowTint,
                 waterFresnelIntensity, waterWaveScale, waterWaveStrength, waterWaveSpeed);
         }

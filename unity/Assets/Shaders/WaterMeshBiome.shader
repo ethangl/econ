@@ -5,8 +5,7 @@ Shader "EconSim/WaterMeshBiome"
         _HeightScale ("Height Scale", Float) = 0.0
         _SeaLevel ("Sea Level", Float) = 0.2
         _RiverColor ("River Color", Color) = (0.18, 0.42, 0.68, 0.75)
-        _LakeColor ("Lake Color", Color) = (0.15, 0.35, 0.55, 0.60)
-        _OceanColor ("Ocean Color", Color) = (0.10, 0.25, 0.45, 0.65)
+        _WaterColor ("Water Color", Color) = (0.10, 0.25, 0.45, 0.65)
         _EdgeSoftness ("River Edge Softness", Range(0.01, 0.25)) = 0.08
         _DepthAbsorption ("Depth Absorption", Range(0.5, 20)) = 6.0
         _ShallowTint ("Shallow Tint", Color) = (0.30, 0.60, 0.55, 1)
@@ -48,8 +47,7 @@ Shader "EconSim/WaterMeshBiome"
                 float _HeightScale;
                 float _SeaLevel;
                 half4 _RiverColor;
-                half4 _LakeColor;
-                half4 _OceanColor;
+                half4 _WaterColor;
                 float _EdgeSoftness;
                 float _DepthAbsorption;
                 half4 _ShallowTint;
@@ -160,7 +158,7 @@ Shader "EconSim/WaterMeshBiome"
                 }
 
                 // Lake / ocean: depth-based light absorption.
-                half4 baseColor = (typeR < 0.75) ? _LakeColor : _OceanColor;
+                half4 baseColor = _WaterColor;
 
                 // Water surface level is in UV.x; sample terrain height underneath.
                 float waterLevel = IN.uv.x;

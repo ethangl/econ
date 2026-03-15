@@ -22,8 +22,7 @@ namespace EconSim.Renderer
         private static readonly int HeightmapTexId = Shader.PropertyToID("_HeightmapTex");
         private static readonly int GeographyBaseTexId = Shader.PropertyToID("_GeographyBaseTex");
         private static readonly int RiverColorId = Shader.PropertyToID("_RiverColor");
-        private static readonly int LakeColorId = Shader.PropertyToID("_LakeColor");
-        private static readonly int OceanColorId = Shader.PropertyToID("_OceanColor");
+        private static readonly int WaterColorId = Shader.PropertyToID("_WaterColor");
         private static readonly int EdgeSoftnessId = Shader.PropertyToID("_EdgeSoftness");
         private static readonly int DepthAbsorptionId = Shader.PropertyToID("_DepthAbsorption");
         private static readonly int ShallowTintId = Shader.PropertyToID("_ShallowTint");
@@ -71,13 +70,13 @@ namespace EconSim.Renderer
         /// Push water color/opacity settings to both materials.
         /// Called by MapView which owns the serialized values.
         /// </summary>
-        public void SetWaterProperties(Color riverColor, Color lakeColor, Color oceanColor,
+        public void SetWaterProperties(Color riverColor, Color waterColor,
             float edgeSoftness, float depthAbsorption, Color shallowTint,
             float fresnelIntensity, float waveScale, float waveStrength, float waveSpeed)
         {
-            SetPropsOnMaterial(flatMaterial, riverColor, lakeColor, oceanColor, edgeSoftness,
+            SetPropsOnMaterial(flatMaterial, riverColor, waterColor, edgeSoftness,
                 depthAbsorption, shallowTint, fresnelIntensity, waveScale, waveStrength, waveSpeed);
-            SetPropsOnMaterial(biomeMaterial, riverColor, lakeColor, oceanColor, edgeSoftness,
+            SetPropsOnMaterial(biomeMaterial, riverColor, waterColor, edgeSoftness,
                 depthAbsorption, shallowTint, fresnelIntensity, waveScale, waveStrength, waveSpeed);
         }
 
@@ -184,14 +183,13 @@ namespace EconSim.Renderer
             }
         }
 
-        private static void SetPropsOnMaterial(Material mat, Color river, Color lake, Color ocean,
+        private static void SetPropsOnMaterial(Material mat, Color river, Color water,
             float edgeSoftness, float depthAbsorption, Color shallowTint,
             float fresnelIntensity, float waveScale, float waveStrength, float waveSpeed)
         {
             if (mat == null) return;
             mat.SetColor(RiverColorId, river);
-            mat.SetColor(LakeColorId, lake);
-            mat.SetColor(OceanColorId, ocean);
+            mat.SetColor(WaterColorId, water);
             mat.SetFloat(EdgeSoftnessId, edgeSoftness);
             mat.SetFloat(DepthAbsorptionId, depthAbsorption);
             mat.SetColor(ShallowTintId, shallowTint);
