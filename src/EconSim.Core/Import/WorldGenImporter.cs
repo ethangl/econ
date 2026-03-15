@@ -250,6 +250,7 @@ namespace EconSim.Core.Import
             };
 
             mapData.BuildLookups();
+            mapData.PopulateEdgeArrays();
             mapData.AssertElevationInvariants();
             mapData.AssertWorldInvariants();
 

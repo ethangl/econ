@@ -64,7 +64,7 @@ namespace EconSim.Core
         /// True after the map has been loaded and simulation initialized.
         /// </summary>
         public static bool IsMapReady { get; private set; }
-        public static bool HasLastMapCache => File.Exists(GetLastMapPayloadPath());
+        public static bool HasLastMapCache => File.Exists(GetLastMapBinaryPayloadPath()) || File.Exists(GetLastMapPayloadPath());
 
         /// <summary>
         /// The site context from the most recent globe generation, or null.
@@ -89,6 +89,8 @@ namespace EconSim.Core
         private const int LastMapCacheVersion = 1;
         private const string LastMapCacheFolderName = "last-map";
         private const string LastMapPayloadFileName = "map_payload.json";
+        private const string LastMapBinaryPayloadFileName = "map_payload.bin";
+        private const string LastMapMetadataFileName = "map_cache_meta.json";
         private const string LastMapTexturesFolderName = "textures";
 
         [Serializable]
@@ -103,6 +105,7 @@ namespace EconSim.Core
             public float AspectRatio;
             public string Template;
             public string ContractVersion;
+            public float Latitude;
         }
 
         [Serializable]
@@ -362,12 +365,12 @@ namespace EconSim.Core
 
         /// <summary>
         /// Generate a map procedurally using the MapGen pipeline.
+        /// Loads from cache if the parameters match a previously generated map.
         /// </summary>
         public void GenerateMap(MapGenConfig config = null)
         {
             IsMapReady = false;
             Profiler.Reset();
-            Profiler.Begin("Total Startup");
 
             if (config == null)
             {
@@ -377,6 +380,18 @@ namespace EconSim.Core
                     Seed = UnityEngine.Random.Range(1, int.MaxValue)
                 };
             }
+
+            // Check if cache matches these exact parameters
+            if (IsCacheHit(config))
+            {
+                Debug.Log("Cache hit — loading cached map");
+                if (LoadLastMap())
+                    return;
+                Debug.LogWarning("Cache hit but load failed, regenerating");
+            }
+
+            Profiler.Reset();
+            Profiler.Begin("Total Startup");
 
             WorldGenerationContext generationContext = WorldGenerationContext.FromRootSeed(config.Seed);
             config.Seed = generationContext.MapGenSeed;
@@ -414,22 +429,63 @@ namespace EconSim.Core
             Profiler.LogResults();
         }
 
+        /// <summary>
+        /// Check if the cached map was generated with the same parameters.
+        /// Reads only the lightweight metadata sidecar (~500 bytes).
+        /// </summary>
+        private static bool IsCacheHit(MapGenConfig config)
+        {
+            string metaPath = GetLastMapMetadataPath();
+            if (!File.Exists(metaPath))
+                return false;
+            if (!File.Exists(GetLastMapBinaryPayloadPath()))
+                return false;
+
+            try
+            {
+                var meta = JsonUtility.FromJson<LastMapGenerationSettings>(File.ReadAllText(metaPath));
+                if (meta == null)
+                    return false;
+
+                WorldGenerationContext ctx = WorldGenerationContext.FromRootSeed(config.Seed);
+                if (meta.RootSeed != ctx.RootSeed)
+                    return false;
+                if (meta.CellCount != config.CellCount)
+                    return false;
+                if (Math.Abs(meta.AspectRatio - config.AspectRatio) > 0.001f)
+                    return false;
+                if (meta.Template != config.Template.ToString())
+                    return false;
+                if (Math.Abs(meta.Latitude - config.Latitude) > 0.001f)
+                    return false;
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public bool LoadLastMap()
         {
             IsMapReady = false;
             Profiler.Reset();
             Profiler.Begin("Load Cached Map");
 
+            Profiler.Begin("DeserializeMapData");
             if (!TryLoadLastMapCache(out MapData cachedMapData, out WorldGenerationContext generationContext, out string error))
             {
+                Profiler.End();
                 Debug.LogWarning(error);
                 Profiler.End();
                 return false;
             }
+            Profiler.End();
 
             MapGenResult = null;
             MapData = cachedMapData;
-            Debug.Log($"Loading cached map: {GetLastMapPayloadPath()}");
+            Debug.Log($"Loading cached map (binary)");
             InitializeWithMapData(
                 GetLastMapTexturesDirectory(),
                 preferCachedOverlayTextures: true);
@@ -660,6 +716,16 @@ namespace EconSim.Core
             return Path.Combine(GetLastMapCacheDirectory(), LastMapPayloadFileName);
         }
 
+        private static string GetLastMapBinaryPayloadPath()
+        {
+            return Path.Combine(GetLastMapCacheDirectory(), LastMapBinaryPayloadFileName);
+        }
+
+        private static string GetLastMapMetadataPath()
+        {
+            return Path.Combine(GetLastMapCacheDirectory(), LastMapMetadataFileName);
+        }
+
         private static string GetLastMapTexturesDirectory()
         {
             return Path.Combine(GetLastMapCacheDirectory(), LastMapTexturesFolderName);
@@ -674,29 +740,35 @@ namespace EconSim.Core
             {
                 Directory.CreateDirectory(GetLastMapCacheDirectory());
 
-                var payload = new LastMapCachePayload
+                string binaryPath = GetLastMapBinaryPayloadPath();
+                using (var stream = new FileStream(binaryPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
+                using (var writer = new BinaryWriter(stream))
                 {
-                    Version = LastMapCacheVersion,
-                    SavedAtUtc = DateTime.UtcNow.ToString("O"),
-                    Generation = new LastMapGenerationSettings
-                    {
-                        RootSeed = generationContext.RootSeed,
-                        MapGenSeed = generationContext.MapGenSeed,
-                        PopGenSeed = generationContext.PopGenSeed,
-                        EconomySeed = generationContext.EconomySeed,
-                        SimulationSeed = generationContext.SimulationSeed,
-                        CellCount = config != null ? config.CellCount : 0,
-                        AspectRatio = config != null ? config.AspectRatio : 0f,
-                        Template = config != null ? config.Template.ToString() : string.Empty,
-                        ContractVersion = generationContext.ContractVersion
-                    },
-                    MapData = mapData
-                };
+                    MapCacheBinary.Write(writer, mapData,
+                        generationContext.RootSeed,
+                        generationContext.MapGenSeed,
+                        generationContext.PopGenSeed,
+                        generationContext.EconomySeed,
+                        generationContext.SimulationSeed);
+                }
 
-                string payloadJson = JsonUtility.ToJson(payload, false);
-                string payloadPath = GetLastMapPayloadPath();
-                File.WriteAllText(payloadPath, payloadJson);
-                Debug.Log($"Saved last map cache: {payloadPath}");
+                // Write lightweight metadata sidecar for cache-hit detection
+                var meta = new LastMapGenerationSettings
+                {
+                    RootSeed = generationContext.RootSeed,
+                    MapGenSeed = generationContext.MapGenSeed,
+                    PopGenSeed = generationContext.PopGenSeed,
+                    EconomySeed = generationContext.EconomySeed,
+                    SimulationSeed = generationContext.SimulationSeed,
+                    CellCount = config != null ? config.CellCount : 0,
+                    AspectRatio = config != null ? config.AspectRatio : 0f,
+                    Template = config != null ? config.Template.ToString() : string.Empty,
+                    ContractVersion = generationContext.ContractVersion,
+                    Latitude = config != null ? config.Latitude : 0f
+                };
+                File.WriteAllText(GetLastMapMetadataPath(), JsonUtility.ToJson(meta, false));
+
+                Debug.Log($"Saved last map cache (binary): {binaryPath}");
             }
             catch (Exception ex)
             {
@@ -710,10 +782,43 @@ namespace EconSim.Core
             generationContext = default;
             error = null;
 
+            // Try binary cache first (fast)
+            string binaryPath = GetLastMapBinaryPayloadPath();
+            if (File.Exists(binaryPath))
+            {
+                try
+                {
+                    using (var stream = new FileStream(binaryPath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536))
+                    using (var reader = new BinaryReader(stream))
+                    {
+                        mapData = MapCacheBinary.Read(reader,
+                            out int rootSeed, out int mapGenSeed,
+                            out int popGenSeed, out int economySeed, out int simulationSeed);
+                    }
+
+                    if (mapData == null)
+                    {
+                        error = $"Binary cached map payload is invalid: {binaryPath}";
+                        return false;
+                    }
+
+                    mapData.BuildLookups();
+                    int resolvedSeed = mapData.Info?.RootSeed > 0 ? mapData.Info.RootSeed : 1;
+                    generationContext = WorldGenerationContext.FromRootSeed(resolvedSeed);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"Failed to load binary cached map, trying JSON fallback: {ex.Message}");
+                    mapData = null;
+                }
+            }
+
+            // Fall back to JSON cache (legacy)
             string payloadPath = GetLastMapPayloadPath();
             if (!File.Exists(payloadPath))
             {
-                error = $"No cached map exists at {payloadPath}";
+                error = $"No cached map exists at {binaryPath} or {payloadPath}";
                 return false;
             }
 

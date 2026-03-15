@@ -48,13 +48,13 @@ namespace EconSim.Core.Data
         /// <summary>
         /// Flux at or above which an edge is considered a major river (for transport bonus, borders).
         /// </summary>
-        [NonSerialized] public float RiverFluxThreshold;
+        public float RiverFluxThreshold;
 
         /// <summary>
         /// Flux at or above which an edge is a visible stream (tributaries, small rivers).
         /// Lower than RiverFluxThreshold.
         /// </summary>
-        [NonSerialized] public float RiverTraceFluxThreshold;
+        public float RiverTraceFluxThreshold;
 
         /// <summary>
         /// Voronoi vertex pairs for river edges. Key is normalized cell pair (smaller ID first).
@@ -68,6 +68,17 @@ namespace EconSim.Core.Data
         /// Values are (V0, V1) indices into MapData.Vertices.
         /// </summary>
         [NonSerialized] public Dictionary<(int, int), (int, int)> EdgeCoastVertices;
+
+        // Serializable edge data (parallel arrays backing the NonSerialized dicts above)
+        public List<int> EdgeRiverCell0;
+        public List<int> EdgeRiverCell1;
+        public List<float> EdgeRiverFluxValues;
+        public List<int> EdgeRiverV0;
+        public List<int> EdgeRiverV1;
+        public List<int> EdgeCoastCell0;
+        public List<int> EdgeCoastCell1;
+        public List<int> EdgeCoastV0;
+        public List<int> EdgeCoastV1;
 
         public void BuildLookups()
         {
@@ -123,6 +134,115 @@ namespace EconSim.Core.Data
                 {
                     ReligionById[religion.Id] = religion;
                 }
+            }
+
+            // Rebuild edge dicts from serializable arrays (cache load path)
+            if (EdgeRiverFlux == null)
+                RebuildEdgeData();
+        }
+
+        /// <summary>
+        /// Populate serializable parallel arrays from the NonSerialized edge dicts.
+        /// Call after building the dicts during generation.
+        /// </summary>
+        public void PopulateEdgeArrays()
+        {
+            if (EdgeRiverFlux != null)
+            {
+                int n = EdgeRiverFlux.Count;
+                EdgeRiverCell0 = new List<int>(n);
+                EdgeRiverCell1 = new List<int>(n);
+                EdgeRiverFluxValues = new List<float>(n);
+                EdgeRiverV0 = new List<int>(n);
+                EdgeRiverV1 = new List<int>(n);
+                foreach (var kv in EdgeRiverFlux)
+                {
+                    EdgeRiverCell0.Add(kv.Key.Item1);
+                    EdgeRiverCell1.Add(kv.Key.Item2);
+                    EdgeRiverFluxValues.Add(kv.Value);
+                    if (EdgeRiverVertices != null && EdgeRiverVertices.TryGetValue(kv.Key, out var vp))
+                    {
+                        EdgeRiverV0.Add(vp.Item1);
+                        EdgeRiverV1.Add(vp.Item2);
+                    }
+                    else
+                    {
+                        EdgeRiverV0.Add(-1);
+                        EdgeRiverV1.Add(-1);
+                    }
+                }
+            }
+
+            if (EdgeCoastVertices != null)
+            {
+                int n = EdgeCoastVertices.Count;
+                EdgeCoastCell0 = new List<int>(n);
+                EdgeCoastCell1 = new List<int>(n);
+                EdgeCoastV0 = new List<int>(n);
+                EdgeCoastV1 = new List<int>(n);
+                foreach (var kv in EdgeCoastVertices)
+                {
+                    EdgeCoastCell0.Add(kv.Key.Item1);
+                    EdgeCoastCell1.Add(kv.Key.Item2);
+                    EdgeCoastV0.Add(kv.Value.Item1);
+                    EdgeCoastV1.Add(kv.Value.Item2);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Rebuild NonSerialized edge dicts from the serializable parallel arrays.
+        /// Called by BuildLookups when loading from cache.
+        /// </summary>
+        private void RebuildEdgeData()
+        {
+            // River flux + vertices
+            if (EdgeRiverCell0 != null && EdgeRiverFluxValues != null && EdgeRiverCell0.Count > 0)
+            {
+                int n = EdgeRiverCell0.Count;
+                EdgeRiverFlux = new Dictionary<(int, int), float>(n);
+                EdgeRiverVertices = new Dictionary<(int, int), (int, int)>(n);
+                RiversideCells = new HashSet<int>();
+                for (int i = 0; i < n; i++)
+                {
+                    var key = (EdgeRiverCell0[i], EdgeRiverCell1[i]);
+                    float flux = EdgeRiverFluxValues[i];
+                    EdgeRiverFlux[key] = flux;
+                    if (EdgeRiverV0 != null && EdgeRiverV1 != null && i < EdgeRiverV0.Count)
+                    {
+                        int v0 = EdgeRiverV0[i];
+                        int v1 = EdgeRiverV1[i];
+                        if (v0 >= 0 && v1 >= 0)
+                            EdgeRiverVertices[key] = (v0, v1);
+                    }
+                    if (flux >= RiverFluxThreshold)
+                    {
+                        RiversideCells.Add(key.Item1);
+                        RiversideCells.Add(key.Item2);
+                    }
+                }
+            }
+            else
+            {
+                EdgeRiverFlux = new Dictionary<(int, int), float>();
+                EdgeRiverVertices = new Dictionary<(int, int), (int, int)>();
+                RiversideCells = new HashSet<int>();
+            }
+
+            // Coast vertices
+            if (EdgeCoastCell0 != null && EdgeCoastV0 != null && EdgeCoastCell0.Count > 0)
+            {
+                int n = EdgeCoastCell0.Count;
+                EdgeCoastVertices = new Dictionary<(int, int), (int, int)>(n);
+                for (int i = 0; i < n; i++)
+                {
+                    var key = (EdgeCoastCell0[i], EdgeCoastCell1[i]);
+                    EdgeCoastVertices[key] = (EdgeCoastV0[i], EdgeCoastV1[i]);
+                }
+            }
+            else
+            {
+                EdgeCoastVertices = new Dictionary<(int, int), (int, int)>();
             }
         }
 
