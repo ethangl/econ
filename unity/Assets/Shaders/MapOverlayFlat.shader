@@ -46,10 +46,14 @@ Shader "EconSim/MapOverlayFlat"
         _MapMode ("Map Mode", Int) = 0
         _DebugView ("Debug View", Int) = 0
 
-        // Compositing: base color → heightmap (multiply) → map mode (multiply)
+        // Compositing: base color × fill × heightmap (multiply)
         _BaseColor ("Base Color", Color) = (0.941, 0.890, 0.788, 1)
         _HeightmapOpacity ("Heightmap Opacity", Range(0, 1)) = 0.3
-        _HeightmapContrast ("Heightmap Contrast", Range(1, 5)) = 2.5
+        _HeightLevelsInBlack ("Height Levels Input Black", Range(0, 1)) = 0.0
+        _HeightLevelsInWhite ("Height Levels Input White", Range(0, 1)) = 1.0
+        _HeightLevelsGamma ("Height Levels Gamma", Range(0.1, 10)) = 1.0
+        _HeightLevelsOutBlack ("Height Levels Output Black", Range(0, 1)) = 0.0
+        _HeightLevelsOutWhite ("Height Levels Output White", Range(0, 1)) = 1.0
         _FillOpacity ("Fill Opacity", Range(0, 1)) = 0.5
 
         // Edge band style (flat border along realm/archdiocese edges)
@@ -166,7 +170,11 @@ Shader "EconSim/MapOverlayFlat"
                 int _DebugView;
                 float4 _BaseColor;
                 float _HeightmapOpacity;
-                float _HeightmapContrast;
+                float _HeightLevelsInBlack;
+                float _HeightLevelsInWhite;
+                float _HeightLevelsGamma;
+                float _HeightLevelsOutBlack;
+                float _HeightLevelsOutWhite;
                 float _FillOpacity;
                 float _EdgeWidth;
                 float _EdgeDarkening;
@@ -278,12 +286,8 @@ Shader "EconSim/MapOverlayFlat"
                 }
                 else
                 {
-                    // 3-layer compositing: base → heightmap (multiply) → fill (multiply).
-                    // Contrast-boost: remap height from [0,1] through pow to increase range.
-                    float h = saturate(pow(height, _HeightmapContrast));
-
+                    // Compositing: base × fill, then heightmap multiply on top.
                     float3 color = _BaseColor.rgb;
-                    color *= lerp(1.0, h, _HeightmapOpacity);
 
                     // Map mode fill (multiply with opacity).
                     if (mapMode.a > 0.001)
@@ -291,6 +295,14 @@ Shader "EconSim/MapOverlayFlat"
                         float3 fill = mapMode.rgb;
                         color *= lerp(float3(1,1,1), fill, _FillOpacity);
                     }
+
+                    // Heightmap multiply layer: invert then Levels adjustment.
+                    float invHeight = 1.0 - height;
+                    float inRange = max(_HeightLevelsInWhite - _HeightLevelsInBlack, 0.001);
+                    float normalized = saturate((invHeight - _HeightLevelsInBlack) / inRange);
+                    float leveled = pow(normalized, 1.0 / max(_HeightLevelsGamma, 0.001));
+                    float h = _HeightLevelsOutBlack + leveled * (_HeightLevelsOutWhite - _HeightLevelsOutBlack);
+                    color *= lerp(1.0, h, _HeightmapOpacity);
 
                     relitColor = color;
                 }
