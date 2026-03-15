@@ -92,6 +92,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _PaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _ParallaxMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -159,12 +163,12 @@ Material:
     - _Glossiness: 0.5
     - _GlossyReflections: 1
     - _HalftoneScale: 0.15
-    - _HeightScale: 0.3
+    - _HeightScale: 0.333
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.99999976
-    - _HoveredCountyId: 0.010833906
+    - _HoverIntensity: 3.0606023e-36
+    - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
     - _HoveredRealmId: -1

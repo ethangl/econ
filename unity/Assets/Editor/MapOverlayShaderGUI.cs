@@ -191,7 +191,6 @@ namespace EconSim.Editor
             "_HoveredMarketId",
             "_HoverIntensity",
             "_MapMode",
-            "_UseModeColorResolve",
             "_OverlayEnabled",
             "_UseHeightDisplacement",
             "_HeightScale",

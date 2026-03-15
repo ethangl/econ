@@ -116,6 +116,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _PaletteTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _ParallaxMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -197,7 +201,7 @@ Material:
     - _DebugView: 0
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
-    - _EdgeDarkening: 0.05
+    - _EdgeDarkening: 0.1
     - _EdgeWidth: 2
     - _FillOpacity: 1
     - _GlossMapScale: 1
@@ -205,16 +209,16 @@ Material:
     - _GlossyReflections: 1
     - _HalftoneScale: 0.15
     - _HeightScale: 0
-    - _HeightmapContrast: 1
-    - _HeightmapOpacity: 0
+    - _HeightmapContrast: 2
+    - _HeightmapOpacity: 0.75
     - _HoverDimming: 0.9992545
     - _HoverFillAlpha: 0.15
     - _HoverGradientRadius: 40
-    - _HoverIntensity: 0.9999997
+    - _HoverIntensity: 0.0000428122
     - _HoveredCountyId: -1
     - _HoveredMarketId: -1
     - _HoveredProvinceId: -1
-    - _HoveredRealmId: 0.000045777066
+    - _HoveredRealmId: -1
     - _MapMode: 1
     - _MarketBorderDarkening: 0.688
     - _MarketBorderWidth: 0.25
@@ -222,7 +226,7 @@ Material:
     - _Mode: 0
     - _OcclusionStrength: 1
     - _OverlayEnabled: 0
-    - _OverlayOpacity: 0
+    - _OverlayOpacity: 1
     - _Parallax: 0.02
     - _PathDashLength: 0.1
     - _PathGapLength: 1.5

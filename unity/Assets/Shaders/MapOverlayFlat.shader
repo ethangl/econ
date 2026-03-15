@@ -21,7 +21,6 @@ Shader "EconSim/MapOverlayFlat"
 
         // Resolved mode color texture (M3-S3)
         _ModeColorResolve ("Mode Color Resolve", 2D) = "black" {}
-        _UseModeColorResolve ("Use Mode Color Resolve", Int) = 1
         _OverlayOpacity ("Overlay Opacity", Range(0, 1)) = 0.65
         _OverlayEnabled ("Overlay Enabled", Int) = 0
 
@@ -160,7 +159,6 @@ Shader "EconSim/MapOverlayFlat"
                 float _SeaLevel;
                 int _UseHeightDisplacement;
 
-                int _UseModeColorResolve;
                 float _OverlayOpacity;
                 int _OverlayEnabled;
 
@@ -260,25 +258,16 @@ Shader "EconSim/MapOverlayFlat"
                 // ---- Compositing ----
 
                 // Decode map mode auxiliary data (marketId from resolve alpha).
-                float4 mapMode;
-                if (_UseModeColorResolve > 0)
-                {
-                    float4 resolvedMode = tex2D(_ModeColorResolve, uv);
-                    float3 resolvedBase = resolvedMode.rgb;
-                    float resolvedAlpha = resolvedMode.a;
-                    if (_MapMode == 4 || _MapMode == 8 || _MapMode == 9)
-                        marketId = resolvedAlpha;
-                    else if (_MapMode >= 10 && _MapMode <= 12)
-                        marketId = fmod(resolvedAlpha * 255.0, 64.0) / 255.0;
-                    else
-                        marketId = 0.0;
-                    mapMode = ComputeMapModeFromResolvedBase(uv, isCellWater, isRiver, height, resolvedBase, resolvedAlpha);
-                }
+                float4 resolvedMode = tex2D(_ModeColorResolve, uv);
+                float3 resolvedBase = resolvedMode.rgb;
+                float resolvedAlpha = resolvedMode.a;
+                if (_MapMode == 4 || _MapMode == 8 || _MapMode == 9)
+                    marketId = resolvedAlpha;
+                else if (_MapMode >= 10 && _MapMode <= 12)
+                    marketId = fmod(resolvedAlpha * 255.0, 64.0) / 255.0;
                 else
-                {
                     marketId = 0.0;
-                    mapMode = ComputeMapMode(uv, isCellWater, isRiver, height, realmId, provinceId, countyId, marketId);
-                }
+                float4 mapMode = ComputeMapModeFromResolvedBase(uv, isCellWater, isRiver, height, resolvedBase, resolvedAlpha);
 
                 float3 relitColor;
 
@@ -358,10 +347,7 @@ Shader "EconSim/MapOverlayFlat"
             {
                 if (_MapMode >= 1 && _MapMode <= 3)
                 {
-                    // Read per-pixel display level from resolve texture alpha
-                    float displayLevel = 1.0;
-                    if (_UseModeColorResolve > 0)
-                        displayLevel = tex2D(_ModeColorResolve, IN.dataUV).a * 255.0;
+                    float displayLevel = tex2D(_ModeColorResolve, IN.dataUV).a * 255.0;
 
                     float realmBorderDist = tex2D(_RealmBorderDistTex, IN.dataUV).r * 255.0;
                     bool inBorder = realmBorderDist < _RealmBorderWidth * _BorderTexelScale;
@@ -385,10 +371,7 @@ Shader "EconSim/MapOverlayFlat"
                 }
                 else if (_MapMode >= 10 && _MapMode <= 12)
                 {
-                    // Read per-pixel display level from resolve texture alpha (top 2 bits)
-                    float displayLevel = 1.0;
-                    if (_UseModeColorResolve > 0)
-                        displayLevel = floor(tex2D(_ModeColorResolve, IN.dataUV).a * 255.0 / 64.0);
+                    float displayLevel = floor(tex2D(_ModeColorResolve, IN.dataUV).a * 255.0 / 64.0);
 
                     float archBorderDist = tex2D(_ArchdioceseBorderDistTex, IN.dataUV).r * 255.0;
                     bool inBorder = archBorderDist < _RealmBorderWidth * _BorderTexelScale;

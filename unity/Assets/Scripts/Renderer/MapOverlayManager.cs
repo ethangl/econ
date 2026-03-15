@@ -53,7 +53,6 @@ public class MapOverlayManager
         private static readonly int GeographyBaseTexId = Shader.PropertyToID("_GeographyBaseTex");
         private static readonly int VegetationTexId = Shader.PropertyToID("_VegetationTex");
         private static readonly int ModeColorResolveTexId = Shader.PropertyToID("_ModeColorResolve");
-        private static readonly int UseModeColorResolveId = Shader.PropertyToID("_UseModeColorResolve");
         private static readonly int OverlayOpacityId = Shader.PropertyToID("_OverlayOpacity");
         private static readonly int OverlayEnabledId = Shader.PropertyToID("_OverlayEnabled");
         private static readonly int ColormapTexId = Shader.PropertyToID("_ColormapTex");
@@ -2777,7 +2776,7 @@ public class MapOverlayManager
 
             modeColorResolveTexture = cached;
             styleMaterial.SetTexture(ModeColorResolveTexId, cached);
-            styleMaterial.SetInt(UseModeColorResolveId, 1);
+
             return true;
         }
 
@@ -2788,7 +2787,7 @@ public class MapOverlayManager
 
             if (!IsModeResolveOverlay(currentMapMode))
             {
-                styleMaterial.SetInt(UseModeColorResolveId, 0);
+
                 return;
             }
 
@@ -3078,7 +3077,7 @@ public class MapOverlayManager
             modeColorResolveTexture.SetPixels(resolved);
             modeColorResolveTexture.Apply();
             styleMaterial.SetTexture(ModeColorResolveTexId, modeColorResolveTexture);
-            styleMaterial.SetInt(UseModeColorResolveId, 1);
+
             MapView.MapMode cacheKey = ResolveCacheKeyForMode(currentMapMode);
             modeColorResolveCacheRevisionByMode[cacheKey] = GetModeColorResolveRevision(cacheKey);
             TextureDebugger.SaveTexture(modeColorResolveTexture, "mode_color_resolve");
@@ -3647,7 +3646,7 @@ public class MapOverlayManager
             }
             else
             {
-                styleMaterial.SetInt(UseModeColorResolveId, 0);
+
             }
         }
 
@@ -4748,7 +4747,7 @@ public class MapOverlayManager
 
             if (!IsModeResolveOverlay(mode))
             {
-                styleMaterial.SetInt(UseModeColorResolveId, 0);
+
                 return;
             }
 
