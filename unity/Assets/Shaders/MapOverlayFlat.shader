@@ -25,13 +25,8 @@ Shader "EconSim/MapOverlayFlat"
         _OverlayOpacity ("Overlay Opacity", Range(0, 1)) = 0.65
         _OverlayEnabled ("Overlay Enabled", Int) = 0
 
-        // Cell to market mapping (dynamic, updated when economy changes)
-        _CellToMarketTex ("Cell To Market", 2D) = "black" {}
-
-        // Color palettes (256 entries each)
-        _RealmPaletteTex ("Realm Palette", 2D) = "white" {}
-        _MarketPaletteTex ("Market Palette", 2D) = "white" {}
-        _BiomePaletteTex ("Biome Palette", 2D) = "white" {}
+        // Combined palette (256×4: realm/biome/market/spare)
+        _PaletteTex ("Palette", 2D) = "white" {}
 
         // Selection highlight (only one should be >= 0 at a time)
         _SelectedRealmId ("Selected Realm ID (normalized)", Float) = -1
@@ -120,13 +115,15 @@ Shader "EconSim/MapOverlayFlat"
                 float2 dataUV : TEXCOORD0;    // Unified UV for all textures (Y-up coordinates)
             };
 
-            // Sampler budget note (Metal):
-            // Keep total fragment samplers <= 16 for this shader.
-            // Overlay uses _OverlayTex to avoid introducing another sampler.
+            // Sampler budget (Metal, 16 limit): 9 used.
+            // HeightmapTex, PoliticalIdsTex, GeographyBaseTex, VegetationTex,
+            // OverlayTex, ModeColorResolve, PaletteTex, RealmBorderDistTex (shared by 7 borders), RoadMaskTex.
+            // ReliefNormalTex shares sampler_HeightmapTex. 7 slots free for future use.
             TEXTURE2D(_HeightmapTex);
             SAMPLER(sampler_HeightmapTex);
             TEXTURE2D(_ReliefNormalTex);
-            SAMPLER(sampler_ReliefNormalTex);
+            // Share sampler with heightmap (both bilinear, debug-only usage in channel inspector).
+            #define sampler_ReliefNormalTex sampler_HeightmapTex
             float4 _HeightmapTex_TexelSize;  // (1/width, 1/height, width, height)
 
             TEXTURE2D(_PoliticalIdsTex);
@@ -139,15 +136,6 @@ Shader "EconSim/MapOverlayFlat"
             SAMPLER(sampler_OverlayTex);
             TEXTURE2D(_ModeColorResolve);
             SAMPLER(sampler_ModeColorResolve);
-            TEXTURE2D(_CellToMarketTex);
-            SAMPLER(sampler_CellToMarketTex);
-
-            TEXTURE2D(_RealmPaletteTex);
-            SAMPLER(sampler_RealmPaletteTex);
-            TEXTURE2D(_MarketPaletteTex);
-            SAMPLER(sampler_MarketPaletteTex);
-            TEXTURE2D(_BiomePaletteTex);
-            SAMPLER(sampler_BiomePaletteTex);
             TEXTURE2D(_RealmBorderDistTex);
             SAMPLER(sampler_RealmBorderDistTex);
             TEXTURE2D(_ProvinceBorderDistTex);

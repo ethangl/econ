@@ -112,12 +112,12 @@ float4 ComputeMapMode(float2 uv, bool isCellWater, bool isRiver, float height, f
 
     if (_MapMode >= 1 && _MapMode <= 3)
     {
-        color = LookupPaletteColor(_RealmPaletteTex, sampler_RealmPaletteTex, realmId);
+        color = LookupPaletteColor(PALETTE_ROW_REALM, realmId);
         color = ApplyPoliticalBorders(uv, color, 1.0);
     }
     else if (_MapMode == 4)
     {
-        color = LookupPaletteColor(_MarketPaletteTex, sampler_MarketPaletteTex, marketId);
+        color = LookupPaletteColor(PALETTE_ROW_MARKET, marketId);
         color = ApplyMarketBorders(uv, color);
     }
     else

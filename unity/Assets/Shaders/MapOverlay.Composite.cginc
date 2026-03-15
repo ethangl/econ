@@ -17,7 +17,7 @@ float3 ComputeTerrain(float2 uv, bool isCellWater, float biomeId, float height)
     {
         // Land: biome palette with elevation-based shading.
         float landHeight = NormalizeLandHeight(height);
-        float3 biomeColor = LookupPaletteColor(_BiomePaletteTex, sampler_BiomePaletteTex, biomeId);
+        float3 biomeColor = LookupPaletteColor(PALETTE_ROW_BIOME, biomeId);
 
         if (landHeight < 0.85)
         {

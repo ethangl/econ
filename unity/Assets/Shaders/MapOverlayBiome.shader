@@ -32,8 +32,8 @@ Shader "EconSim/MapOverlayBiome"
         _OverlayOpacity ("Overlay Opacity", Range(0, 1)) = 0.65
         _OverlayEnabled ("Overlay Enabled", Int) = 0
 
-        // Biome palette (kept for shared terrain helper compatibility).
-        _BiomePaletteTex ("Biome Palette", 2D) = "white" {}
+        // Combined palette (256×4: realm/biome/market/spare)
+        _PaletteTex ("Palette", 2D) = "white" {}
 
         // Selection highlight (only one should be >= 0 at a time)
         _SelectedRealmId ("Selected Realm ID (normalized)", Float) = -1
@@ -103,13 +103,14 @@ Shader "EconSim/MapOverlayBiome"
                 float2 dataUV : TEXCOORD0;    // Unified UV for all textures (Y-up coordinates)
             };
 
-            // Sampler budget note (Metal):
-            // Keep total fragment samplers <= 16 for this shader.
-            // Overlay uses _OverlayTex to avoid introducing another sampler.
+            // Sampler budget (Metal, 16 limit): 6 used.
+            // HeightmapTex, PoliticalIdsTex, GeographyBaseTex, VegetationTex, OverlayTex, PaletteTex.
+            // ReliefNormalTex and ColormapTex share sampler_HeightmapTex. 10 slots free.
             TEXTURE2D(_HeightmapTex);
             SAMPLER(sampler_HeightmapTex);
             TEXTURE2D(_ReliefNormalTex);
-            SAMPLER(sampler_ReliefNormalTex);
+            // Share sampler with heightmap (both bilinear).
+            #define sampler_ReliefNormalTex sampler_HeightmapTex
             float4 _HeightmapTex_TexelSize;  // (1/width, 1/height, width, height)
 
             TEXTURE2D(_PoliticalIdsTex);
@@ -121,8 +122,6 @@ Shader "EconSim/MapOverlayBiome"
             SAMPLER(sampler_VegetationTex);
             TEXTURE2D(_OverlayTex);
             SAMPLER(sampler_OverlayTex);
-            TEXTURE2D(_BiomePaletteTex);
-            SAMPLER(sampler_BiomePaletteTex);
             TEXTURE2D(_ColormapTex);
             // Share sampler with heightmap (both bilinear) to stay within Metal's 16 limit.
             #define sampler_ColormapTex sampler_HeightmapTex
