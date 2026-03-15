@@ -1054,7 +1054,9 @@ namespace EconSim.Renderer
             // Must happen after both mesh (with UV1 elevation) and overlays are ready.
             // We update UV1 with the overlay manager's processed heights (which include
             // Gaussian blur and fluvial erosion) rather than raw cell heights.
-            if (useGridMesh && useShaderOverlays && overlayManager != null && meshFilter != null)
+            // Skip when overlay textures (including baked heightmap) were loaded from cache.
+            if (useGridMesh && useShaderOverlays && overlayManager != null && meshFilter != null
+                && !overlayManager.LoadedFromTextureCache)
             {
                 Profiler.Begin("BakeElevation");
                 UpdateMeshElevationFromOverlay();

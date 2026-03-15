@@ -132,6 +132,7 @@ public class MapOverlayManager
         private string overlayTextureCacheDirectory;
         private int cachedRoadStateHash;
         private bool overlayCacheDirty;
+        public bool LoadedFromTextureCache { get; private set; }
         private bool[] cellIsLandById;
         private float[] cellHeight01ById;
         private int[] cellRealmIdById;
@@ -262,7 +263,7 @@ public class MapOverlayManager
         private const float DefaultNoisyEdgeAmplitudeCap = 8.0f;
         private const float DefaultNoisyEdgeBandPaddingPx = 1.5f;
 
-        private const int OverlayTextureCacheVersion = 11;
+        private const int OverlayTextureCacheVersion = 12;
         private const string OverlayTextureCacheMetadataFileName = "overlay_cache.json";
         private const string CacheSpatialGridFile = "spatial_grid.bin";
         private const string CachePoliticalIdsFile = "political_ids.bin";
@@ -274,6 +275,11 @@ public class MapOverlayManager
         private const string CacheProvinceBorderFile = "province_border_dist.bin";
         private const string CacheCountyBorderFile = "county_border_dist.bin";
         private const string CacheRoadDistFile = "road_dist.bin";
+        private const string CacheVegetationFile = "vegetation.bin";
+        private const string CacheMarketBorderFile = "market_border_dist.bin";
+        private const string CacheArchdioceseBorderFile = "archdiocese_border_dist.bin";
+        private const string CacheDioceseBorderFile = "diocese_border_dist.bin";
+        private const string CacheParishBorderFile = "parish_border_dist.bin";
 
         [Serializable]
         private sealed class OverlayTextureCacheMetadata
@@ -298,6 +304,8 @@ public class MapOverlayManager
             public float NoisyEdgeAmplitudePerResolution;
             public float NoisyEdgeAmplitudeCap;
             public float NoisyEdgeBandPaddingPx;
+            public int HeightmapWidth;
+            public int HeightmapHeight;
         }
 
         public readonly struct NoisyEdgeStyle : IEquatable<NoisyEdgeStyle>
@@ -484,6 +492,8 @@ public class MapOverlayManager
                 Profiler.End();
             }
 
+            LoadedFromTextureCache = loadedFromTextureCache;
+
             if (!loadedFromTextureCache)
             {
                 Profiler.Begin("GenerateDataTextures");
@@ -504,9 +514,12 @@ public class MapOverlayManager
             GeneratePaletteTextures();
             Profiler.End();
 
-            Profiler.Begin("GenerateVegetationTexture");
-            GenerateVegetationTexture();
-            Profiler.End();
+            if (vegetationTexture == null)
+            {
+                Profiler.Begin("GenerateVegetationTexture");
+                GenerateVegetationTexture();
+                Profiler.End();
+            }
 
             GenerateColormapTexture();
 
@@ -670,10 +683,12 @@ public class MapOverlayManager
                 if (File.Exists(riverMaskPath))
                     loadedRiverMaskPixels = File.ReadAllBytes(riverMaskPath);
 
+                int hmWidth = metadata.HeightmapWidth > 0 ? metadata.HeightmapWidth : gridWidth;
+                int hmHeight = metadata.HeightmapHeight > 0 ? metadata.HeightmapHeight : gridHeight;
                 Texture2D loadedHeightmap = LoadTextureFromRaw(
                     Path.Combine(cacheDirectory, CacheHeightmapFile),
-                    gridWidth,
-                    gridHeight,
+                    hmWidth,
+                    hmHeight,
                     TextureFormat.RFloat,
                     FilterMode.Bilinear,
                     TextureWrapMode.Clamp);
@@ -723,6 +738,14 @@ public class MapOverlayManager
                     TextureWrapMode.Clamp,
                     anisoLevel: 8);
 
+                Texture2D loadedVegetation = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheVegetationFile),
+                    gridWidth,
+                    gridHeight,
+                    TextureFormat.RGBAFloat,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp);
+
                 if (loadedPoliticalIds == null ||
                     loadedGeographyBase == null ||
                     loadedHeightmap == null ||
@@ -738,6 +761,7 @@ public class MapOverlayManager
                     DestroyTexture(loadedRealmBorder);
                     DestroyTexture(loadedProvinceBorder);
                     DestroyTexture(loadedCountyBorder);
+                    DestroyTexture(loadedVegetation);
                     return false;
                 }
 
@@ -749,10 +773,30 @@ public class MapOverlayManager
                 provinceBorderDistTexture = loadedProvinceBorder;
                 countyBorderDistTexture = loadedCountyBorder;
                 roadDistTexture = loadedRoadDist;
+                if (loadedVegetation != null)
+                    vegetationTexture = loadedVegetation;
                 riverMaskPixels = loadedRiverMaskPixels;
                 politicalIdsPixels = null;
                 geographyBasePixels = null;
                 cachedRoadStateHash = metadata.RoadStateHash;
+
+                // Load optional market/religion border textures (generated post-bootstrap)
+                marketBorderDistTexture = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheMarketBorderFile),
+                    borderWidth, borderHeight, TextureFormat.R8,
+                    FilterMode.Bilinear, TextureWrapMode.Clamp, anisoLevel: 8);
+                archdioceseBorderDistTexture = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheArchdioceseBorderFile),
+                    borderWidth, borderHeight, TextureFormat.R8,
+                    FilterMode.Bilinear, TextureWrapMode.Clamp, anisoLevel: 8);
+                dioceseBorderDistTexture = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheDioceseBorderFile),
+                    borderWidth, borderHeight, TextureFormat.R8,
+                    FilterMode.Bilinear, TextureWrapMode.Clamp, anisoLevel: 8);
+                parishBorderDistTexture = LoadTextureFromRaw(
+                    Path.Combine(cacheDirectory, CacheParishBorderFile),
+                    borderWidth, borderHeight, TextureFormat.R8,
+                    FilterMode.Bilinear, TextureWrapMode.Clamp, anisoLevel: 8);
 
                 Debug.Log($"MapOverlayManager: Loaded cached overlay textures from {cacheDirectory}");
                 return true;
@@ -785,6 +829,16 @@ public class MapOverlayManager
                 SaveTextureToRaw(Path.Combine(cacheDirectory, CacheCountyBorderFile), countyBorderDistTexture);
                 if (roadDistTexture != null)
                     SaveTextureToRaw(Path.Combine(cacheDirectory, CacheRoadDistFile), roadDistTexture);
+                if (vegetationTexture != null)
+                    SaveTextureToRaw(Path.Combine(cacheDirectory, CacheVegetationFile), vegetationTexture);
+                if (marketBorderDistTexture != null)
+                    SaveTextureToRaw(Path.Combine(cacheDirectory, CacheMarketBorderFile), marketBorderDistTexture);
+                if (archdioceseBorderDistTexture != null)
+                    SaveTextureToRaw(Path.Combine(cacheDirectory, CacheArchdioceseBorderFile), archdioceseBorderDistTexture);
+                if (dioceseBorderDistTexture != null)
+                    SaveTextureToRaw(Path.Combine(cacheDirectory, CacheDioceseBorderFile), dioceseBorderDistTexture);
+                if (parishBorderDistTexture != null)
+                    SaveTextureToRaw(Path.Combine(cacheDirectory, CacheParishBorderFile), parishBorderDistTexture);
 
                 var metadata = new OverlayTextureCacheMetadata
                 {
@@ -807,7 +861,9 @@ public class MapOverlayManager
                     NoisyEdgeRoughness = noisyEdgeStyle.Roughness,
                     NoisyEdgeAmplitudePerResolution = noisyEdgeStyle.AmplitudePerResolution,
                     NoisyEdgeAmplitudeCap = noisyEdgeStyle.AmplitudeCap,
-                    NoisyEdgeBandPaddingPx = noisyEdgeStyle.BandPaddingPx
+                    NoisyEdgeBandPaddingPx = noisyEdgeStyle.BandPaddingPx,
+                    HeightmapWidth = heightmapTexture != null ? heightmapTexture.width : gridWidth,
+                    HeightmapHeight = heightmapTexture != null ? heightmapTexture.height : gridHeight
                 };
 
                 string metadataPath = Path.Combine(cacheDirectory, OverlayTextureCacheMetadataFileName);
@@ -3987,9 +4043,15 @@ public class MapOverlayManager
                 paletteTexture.Apply();
             }
 
-            // Generate market border distance texture at border resolution
-            int[] borderGrid = BuildBorderSpatialGrid();
-            GenerateMarketBorderDistTexture(borderGrid, borderWidth, borderHeight);
+            // Generate market border distance texture at border resolution (skip if cached)
+            if (marketBorderDistTexture == null)
+            {
+                Profiler.Begin("GenerateMarketBorderDistTexture");
+                int[] borderGrid = BuildBorderSpatialGrid();
+                GenerateMarketBorderDistTexture(borderGrid, borderWidth, borderHeight);
+                overlayCacheDirty = true;
+                Profiler.End();
+            }
 
             // Bind textures to material
             if (styleMaterial != null)
@@ -4086,9 +4148,15 @@ public class MapOverlayManager
                 }
             }
 
-            // Generate religious territory border distance textures at border resolution
-            int[] religBorderGrid = BuildBorderSpatialGrid();
-            GenerateReligiousBorderDistTextures(religBorderGrid, borderWidth, borderHeight);
+            // Generate religious territory border distance textures at border resolution (skip if cached)
+            if (parishBorderDistTexture == null)
+            {
+                Profiler.Begin("GenerateReligiousBorderDistTextures");
+                int[] religBorderGrid = BuildBorderSpatialGrid();
+                GenerateReligiousBorderDistTextures(religBorderGrid, borderWidth, borderHeight);
+                overlayCacheDirty = true;
+                Profiler.End();
+            }
 
             // Bind border textures to material
             if (styleMaterial != null)
