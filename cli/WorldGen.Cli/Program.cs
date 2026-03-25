@@ -16,10 +16,14 @@ var oceanOption = new Option<float>("--ocean", () => 0.6f, "Ocean fraction (0-1)
 var jitterOption = new Option<float>("--jitter", () => 0.5f, "Point jitter (0-1)");
 var ultraOption = new Option<bool>("--ultra", () => false, "Enable ultra-dense mesh (~4x cells via subdivision)");
 var blurOption = new Option<float>("--blur", () => 0f, "Gaussian blur sigma in pixels (wraps horizontally)");
+var noiseOption = new Option<float>("--noise", () => 0f, "Noise overlay opacity (0-100%)");
+var sharpenOption = new Option<float>("--sharpen", () => 0f, "Unsharp mask amount (0=off, 1=normal, 2=strong)");
+var sharpenRadiusOption = new Option<float>("--sharpen-radius", () => 2f, "Unsharp mask blur radius in pixels");
+var colorOption = new Option<bool>("--color", () => false, "Output terrain-colored RGB instead of grayscale");
 
 var rootCommand = new RootCommand("Generate a 2D heightmap from spherical world generation")
 {
-    seedOption, cellsOption, widthOption, heightOption, outputOption, bit16Option, oceanOption, jitterOption, ultraOption, blurOption
+    seedOption, cellsOption, widthOption, heightOption, outputOption, bit16Option, oceanOption, jitterOption, ultraOption, blurOption, sharpenOption, sharpenRadiusOption, noiseOption, colorOption
 };
 
 rootCommand.SetHandler((InvocationContext ctx) =>
@@ -34,6 +38,10 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     float jitter = ctx.ParseResult.GetValueForOption(jitterOption);
     bool ultra = ctx.ParseResult.GetValueForOption(ultraOption);
     float blur = ctx.ParseResult.GetValueForOption(blurOption);
+    float noise = ctx.ParseResult.GetValueForOption(noiseOption);
+    float sharpen = ctx.ParseResult.GetValueForOption(sharpenOption);
+    float sharpenRadius = ctx.ParseResult.GetValueForOption(sharpenRadiusOption);
+    bool color = ctx.ParseResult.GetValueForOption(colorOption);
 
     Console.WriteLine($"Generating globe: seed={seed}, cells={cells}{(ultra ? " (ultra-dense)" : "")}, ocean={ocean:F2}, jitter={jitter:F2}");
 
@@ -69,13 +77,33 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     {
         using var image = HeightmapRenderer.Render(renderTerrain, width, height);
         if (blur > 0f) WrapBlur.Apply(image, blur);
-        image.SaveAsPng(output);
+        if (sharpen > 0f) WrapUnsharpMask.Apply(image, sharpen, sharpenRadius);
+        if (color)
+        {
+            using var rgb = ColorRamp.Apply(image);
+            rgb.SaveAsPng(output);
+        }
+        else
+        {
+            if (noise > 0f) NoiseOverlay.Apply(image, noise, seed);
+            image.SaveAsPng(output);
+        }
     }
     else
     {
         using var image = HeightmapRenderer.Render8(renderTerrain, width, height);
         if (blur > 0f) WrapBlur.Apply(image, blur);
-        image.SaveAsPng(output);
+        if (sharpen > 0f) WrapUnsharpMask.Apply(image, sharpen, sharpenRadius);
+        if (color)
+        {
+            using var rgb = ColorRamp.Apply(image);
+            rgb.SaveAsPng(output);
+        }
+        else
+        {
+            if (noise > 0f) NoiseOverlay.Apply(image, noise, seed);
+            image.SaveAsPng(output);
+        }
     }
 
     Console.WriteLine($"  Rendered in {sw.Elapsed.TotalSeconds:F1}s → {output}");
