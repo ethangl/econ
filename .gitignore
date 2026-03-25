@@ -91,3 +91,7 @@ crashlytics-build.properties
 **/__pycache__/
 
 /scripts/*.txt
+
+# CLI project files (not Unity-generated, should be committed)
+!src/WorldGen/WorldGen.csproj
+!cli/

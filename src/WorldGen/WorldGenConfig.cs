@@ -39,6 +39,9 @@ namespace WorldGen.Core
         /// <summary>Jitter for subdivision midpoints (0-1). Breaks grid regularity in ultra-dense mesh.</summary>
         public float SubdivisionJitter { get; set; } = 0.1f;
 
+        /// <summary>Enable ultra-dense mesh via midpoint subdivision (~4x dense cell count).</summary>
+        public bool EnableUltraDense { get; set; } = false;
+
         // --- Site selection ---
 
         /// <summary>Minimum degrees from equator for site candidates</summary>
