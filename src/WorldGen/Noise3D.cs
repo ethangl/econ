@@ -95,6 +95,35 @@ namespace WorldGen.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public float Fractal4Lacunarity2Persistence05(float x, float y, float z)
+        {
+            float sum = 0f;
+            float amp = 1f;
+            float freq = 1f;
+            float maxAmp = 0f;
+
+            sum += Sample(x * freq, y * freq, z * freq) * amp;
+            maxAmp += amp;
+            freq *= 2f;
+            amp *= 0.5f;
+
+            sum += Sample(x * freq, y * freq, z * freq) * amp;
+            maxAmp += amp;
+            freq *= 2f;
+            amp *= 0.5f;
+
+            sum += Sample(x * freq, y * freq, z * freq) * amp;
+            maxAmp += amp;
+            freq *= 2f;
+            amp *= 0.5f;
+
+            sum += Sample(x * freq, y * freq, z * freq) * amp;
+            maxAmp += amp;
+
+            return sum / maxAmp;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public float Fractal6Lacunarity2Persistence05(float x, float y, float z)
         {
             float sum = 0f;

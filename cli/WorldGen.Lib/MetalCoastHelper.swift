@@ -1,7 +1,7 @@
 import Foundation
 import Metal
 
-struct Params
+struct NoiseParams
 {
     var width: UInt32
     var height: UInt32
@@ -96,7 +96,7 @@ let shaderSource = """
 #include <metal_stdlib>
 using namespace metal;
 
-struct Params
+struct NoiseParams
 {
     uint width;
     uint height;
@@ -228,6 +228,34 @@ inline float fractal6(const device int* perm, float x, float y, float z)
     return sum / maxAmp;
 }
 
+inline float fractal4(const device int* perm, float x, float y, float z)
+{
+    float sum = 0.0f;
+    float amp = 1.0f;
+    float freq = 1.0f;
+    float maxAmp = 0.0f;
+
+    sum += sample_noise(perm, x * freq, y * freq, z * freq) * amp;
+    maxAmp += amp;
+    freq *= 2.0f;
+    amp *= 0.5f;
+
+    sum += sample_noise(perm, x * freq, y * freq, z * freq) * amp;
+    maxAmp += amp;
+    freq *= 2.0f;
+    amp *= 0.5f;
+
+    sum += sample_noise(perm, x * freq, y * freq, z * freq) * amp;
+    maxAmp += amp;
+    freq *= 2.0f;
+    amp *= 0.5f;
+
+    sum += sample_noise(perm, x * freq, y * freq, z * freq) * amp;
+    maxAmp += amp;
+
+    return sum / maxAmp;
+}
+
 inline int lat_index(float lat, int latBuckets)
 {
     float t = (lat + float(M_PI_F) / 2.0f) / float(M_PI_F);
@@ -248,11 +276,49 @@ inline int longitude_search_radius(float lat, int lonBuckets)
     return cosLat > 0.01f ? min(int(ceil(1.0f / cosLat)), lonBuckets / 2) : lonBuckets / 2;
 }
 
+inline float coast_fade(float elev)
+{
+    float normalized = fabs(elev - 0.5f) / 0.14f;
+    if (normalized >= 1.0f)
+    {
+        return 0.0f;
+    }
+
+    float n2 = normalized * normalized;
+    return 1.0f - n2 * n2;
+}
+
+kernel void apply_global_detail(
+    const device ushort* inputPixels [[buffer(0)]],
+    device ushort* outputPixels [[buffer(1)]],
+    const device int* perm [[buffer(2)]],
+    constant NoiseParams& params [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    uint pixelCount = params.width * params.height;
+    if (gid >= pixelCount)
+    {
+        return;
+    }
+
+    uint x = gid % params.width;
+    uint y = gid / params.width;
+    float theta = (float(x) + 0.5f) / float(params.width) * 2.0f * float(M_PI_F);
+    float wrapRadius = float(params.width) / (2.0f * float(M_PI_F) * 28.0f);
+    float px = cos(theta) * wrapRadius;
+    float py = (float(y) + 0.5f) / 28.0f;
+    float pz = sin(theta) * wrapRadius;
+    float elev = float(inputPixels[gid]) / 65535.0f;
+    float n = fractal4(perm, px, py, pz);
+    float result = elev + n * params.amplitude;
+    outputPixels[gid] = ushort(clamp(result * 65535.0f, 0.0f, 65535.0f));
+}
+
 kernel void apply_coast(
     const device ushort* inputPixels [[buffer(0)]],
     device ushort* outputPixels [[buffer(1)]],
     const device int* perm [[buffer(2)]],
-    constant Params& params [[buffer(3)]],
+    constant NoiseParams& params [[buffer(3)]],
     uint gid [[thread_position_in_grid]])
 {
     uint pixelCount = params.width * params.height;
@@ -265,9 +331,7 @@ kernel void apply_coast(
     uint y = gid / params.width;
     ushort packed = inputPixels[gid];
     float elev = float(packed) / 65535.0f;
-    float e = elev - 0.5f;
-    float e2 = e * e;
-    float fade = 1.0f - e2 * e2 * 16.0f;
+    float fade = coast_fade(elev);
     if (fade <= 0.0f)
     {
         outputPixels[gid] = packed;
@@ -522,7 +586,7 @@ func runCoast() throws
         return buffer
     }
 
-    var params = Params(width: width, height: height, amplitude: amplitude)
+    var params = NoiseParams(width: width, height: height, amplitude: amplitude)
     let paramsBuffer = try withUnsafeBytes(of: &params) { bytes in
         guard let buffer = device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared) else
         {
@@ -966,6 +1030,7 @@ func runPipeline() throws
     let bucketCountsPath = try argument(named: "--bucket-counts")
     let bucketCellsPath = try argument(named: "--bucket-cells")
     let elevationPath = try argument(named: "--elevation")
+    let detailPermPath = try argument(named: "--detail-perm")
     let permPath = try argument(named: "--perm")
     let width = try UInt32(argument(named: "--width")).unwrap("width")
     let height = try UInt32(argument(named: "--height")).unwrap("height")
@@ -973,6 +1038,7 @@ func runPipeline() throws
     let latBuckets = try Int32(argument(named: "--lat-buckets")).unwrap("lat-buckets")
     let lonBuckets = try Int32(argument(named: "--lon-buckets")).unwrap("lon-buckets")
     let sigma = try Float(argument(named: "--sigma")).unwrap("sigma")
+    let detail = try Float(argument(named: "--detail")).unwrap("detail")
     let amplitude = try Float(argument(named: "--amplitude")).unwrap("amplitude")
 
     let centerX = try readFloatArray(from: centerXPath)
@@ -982,6 +1048,7 @@ func runPipeline() throws
     let bucketCounts = try readInt32Array(from: bucketCountsPath)
     let bucketCells = try readInt32Array(from: bucketCellsPath)
     let elevation = try readFloatArray(from: elevationPath)
+    let detailPerm = try readInt32Array(from: detailPermPath)
     let perm = try readInt32Array(from: permPath)
 
     guard centerX.count == centerY.count, centerX.count == centerZ.count, centerX.count == elevation.count else
@@ -994,33 +1061,40 @@ func runPipeline() throws
         throw NSError(domain: "MetalCoastHelper", code: 52, userInfo: [NSLocalizedDescriptionKey: "Bucket metadata size mismatch"])
     }
 
+    guard detailPerm.count == 512 else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 53, userInfo: [NSLocalizedDescriptionKey: "Unexpected detail permutation count \(detailPerm.count), expected 512"])
+    }
+
     guard perm.count == 512 else
     {
-        throw NSError(domain: "MetalCoastHelper", code: 53, userInfo: [NSLocalizedDescriptionKey: "Unexpected permutation count \(perm.count), expected 512"])
+        throw NSError(domain: "MetalCoastHelper", code: 54, userInfo: [NSLocalizedDescriptionKey: "Unexpected permutation count \(perm.count), expected 512"])
     }
 
     guard let device = MTLCreateSystemDefaultDevice() else
     {
-        throw NSError(domain: "MetalCoastHelper", code: 54, userInfo: [NSLocalizedDescriptionKey: "No Metal device available"])
+        throw NSError(domain: "MetalCoastHelper", code: 55, userInfo: [NSLocalizedDescriptionKey: "No Metal device available"])
     }
 
     let library = try device.makeLibrary(source: shaderSource, options: nil)
     guard let renderFunction = library.makeFunction(name: "render_heightmap"),
           let blurHorizontalFunction = library.makeFunction(name: "blur_horizontal"),
           let blurVerticalFunction = library.makeFunction(name: "blur_vertical"),
+          let detailFunction = library.makeFunction(name: "apply_global_detail"),
           let coastFunction = library.makeFunction(name: "apply_coast") else
     {
-        throw NSError(domain: "MetalCoastHelper", code: 55, userInfo: [NSLocalizedDescriptionKey: "Failed to create Metal pipeline functions"])
+        throw NSError(domain: "MetalCoastHelper", code: 56, userInfo: [NSLocalizedDescriptionKey: "Failed to create Metal pipeline functions"])
     }
 
     let renderPipeline = try device.makeComputePipelineState(function: renderFunction)
     let blurHorizontalPipeline = try device.makeComputePipelineState(function: blurHorizontalFunction)
     let blurVerticalPipeline = try device.makeComputePipelineState(function: blurVerticalFunction)
+    let detailPipeline = try device.makeComputePipelineState(function: detailFunction)
     let coastPipeline = try device.makeComputePipelineState(function: coastFunction)
 
     guard let queue = device.makeCommandQueue() else
     {
-        throw NSError(domain: "MetalCoastHelper", code: 56, userInfo: [NSLocalizedDescriptionKey: "Failed to create Metal command queue"])
+        throw NSError(domain: "MetalCoastHelper", code: 57, userInfo: [NSLocalizedDescriptionKey: "Failed to create Metal command queue"])
     }
 
     func makeBuffer<T>(from values: [T], code: Int, label: String) throws -> MTLBuffer
@@ -1034,28 +1108,29 @@ func runPipeline() throws
         }
     }
 
-    let centerXBuffer = try makeBuffer(from: centerX, code: 57, label: "center-x")
-    let centerYBuffer = try makeBuffer(from: centerY, code: 58, label: "center-y")
-    let centerZBuffer = try makeBuffer(from: centerZ, code: 59, label: "center-z")
-    let bucketOffsetsBuffer = try makeBuffer(from: bucketOffsets, code: 60, label: "bucket-offsets")
-    let bucketCountsBuffer = try makeBuffer(from: bucketCounts, code: 61, label: "bucket-counts")
-    let bucketCellsBuffer = try makeBuffer(from: bucketCells, code: 62, label: "bucket-cells")
-    let elevationBuffer = try makeBuffer(from: elevation, code: 63, label: "elevation")
-    let permBuffer = try makeBuffer(from: perm, code: 64, label: "perm")
+    let centerXBuffer = try makeBuffer(from: centerX, code: 58, label: "center-x")
+    let centerYBuffer = try makeBuffer(from: centerY, code: 59, label: "center-y")
+    let centerZBuffer = try makeBuffer(from: centerZ, code: 60, label: "center-z")
+    let bucketOffsetsBuffer = try makeBuffer(from: bucketOffsets, code: 61, label: "bucket-offsets")
+    let bucketCountsBuffer = try makeBuffer(from: bucketCounts, code: 62, label: "bucket-counts")
+    let bucketCellsBuffer = try makeBuffer(from: bucketCells, code: 63, label: "bucket-cells")
+    let elevationBuffer = try makeBuffer(from: elevation, code: 64, label: "elevation")
+    let detailPermBuffer = try makeBuffer(from: detailPerm, code: 65, label: "detail-perm")
+    let permBuffer = try makeBuffer(from: perm, code: 66, label: "perm")
 
     let pixelCount = Int(width * height)
     guard let renderBuffer = device.makeBuffer(length: pixelCount * MemoryLayout<UInt16>.stride, options: .storageModeShared),
           let stageBuffer = device.makeBuffer(length: pixelCount * MemoryLayout<UInt16>.stride, options: .storageModeShared),
           let tempBuffer = device.makeBuffer(length: pixelCount * MemoryLayout<Float>.stride, options: .storageModeShared) else
     {
-        throw NSError(domain: "MetalCoastHelper", code: 65, userInfo: [NSLocalizedDescriptionKey: "Failed to create working buffers"])
+        throw NSError(domain: "MetalCoastHelper", code: 67, userInfo: [NSLocalizedDescriptionKey: "Failed to create working buffers"])
     }
 
     var renderParams = RenderParams(width: width, height: height, radius: radius, latBuckets: latBuckets, lonBuckets: lonBuckets)
     let renderParamsBuffer = try withUnsafeBytes(of: &renderParams) { bytes in
         guard let buffer = device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared) else
         {
-            throw NSError(domain: "MetalCoastHelper", code: 66, userInfo: [NSLocalizedDescriptionKey: "Failed to create render params buffer"])
+            throw NSError(domain: "MetalCoastHelper", code: 68, userInfo: [NSLocalizedDescriptionKey: "Failed to create render params buffer"])
         }
         return buffer
     }
@@ -1117,14 +1192,36 @@ func runPipeline() throws
 
         currentBuffer = stageBuffer
     }
+    var detailSeconds: Double = 0
+    if detail > 0
+    {
+        var detailParams = NoiseParams(width: width, height: height, amplitude: detail)
+        let detailParamsBuffer = try withUnsafeBytes(of: &detailParams) { bytes in
+            guard let buffer = device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared) else
+            {
+                throw NSError(domain: "MetalCoastHelper", code: 69, userInfo: [NSLocalizedDescriptionKey: "Failed to create detail params buffer"])
+            }
+            return buffer
+        }
+
+        let detailThreadgroup = MTLSize(width: min(detailPipeline.maxTotalThreadsPerThreadgroup, 256), height: 1, depth: 1)
+        detailSeconds = try dispatchCompute(queue: queue, pipeline: detailPipeline) { encoder in
+            encoder.setBuffer(currentBuffer, offset: 0, index: 0)
+            encoder.setBuffer(renderBuffer, offset: 0, index: 1)
+            encoder.setBuffer(detailPermBuffer, offset: 0, index: 2)
+            encoder.setBuffer(detailParamsBuffer, offset: 0, index: 3)
+            encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: detailThreadgroup)
+        }
+        currentBuffer = renderBuffer
+    }
     var coastSeconds: Double = 0
     if amplitude > 0
     {
-        var coastParams = Params(width: width, height: height, amplitude: amplitude)
+        var coastParams = NoiseParams(width: width, height: height, amplitude: amplitude)
         let coastParamsBuffer = try withUnsafeBytes(of: &coastParams) { bytes in
             guard let buffer = device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared) else
             {
-                throw NSError(domain: "MetalCoastHelper", code: 69, userInfo: [NSLocalizedDescriptionKey: "Failed to create coast params buffer"])
+                throw NSError(domain: "MetalCoastHelper", code: 70, userInfo: [NSLocalizedDescriptionKey: "Failed to create coast params buffer"])
             }
             return buffer
         }
@@ -1145,6 +1242,7 @@ func runPipeline() throws
     let timingsText = """
     TIMING raster \(rasterSeconds)
     TIMING blur \(blurSeconds)
+    TIMING detail \(detailSeconds)
     TIMING coast \(coastSeconds)
     """
     try timingsText.write(to: URL(fileURLWithPath: timingsPath), atomically: true, encoding: .utf8)
