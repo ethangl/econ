@@ -19,10 +19,11 @@ var noiseOption = new Option<float>("--noise", () => 0f, "Noise overlay opacity 
 var sharpenOption = new Option<float>("--sharpen", () => 0f, "Unsharp mask amount (0=off, 1=normal, 2=strong)");
 var sharpenRadiusOption = new Option<float>("--sharpen-radius", () => 2f, "Unsharp mask blur radius in pixels");
 var colorOption = new Option<bool>("--color", () => false, "Output terrain-colored RGB instead of grayscale");
+var coastOption = new Option<float>("--coast", () => 0.25f, "Coastal detail amplitude (0-1)");
 
 var rootCommand = new RootCommand("Generate a 2D heightmap from spherical world generation")
 {
-    seedOption, cellsOption, widthOption, heightOption, outputOption, oceanOption, jitterOption, ultraOption, blurOption, sharpenOption, sharpenRadiusOption, noiseOption, colorOption
+    seedOption, cellsOption, widthOption, heightOption, outputOption, oceanOption, jitterOption, ultraOption, coastOption, blurOption, sharpenOption, sharpenRadiusOption, noiseOption, colorOption
 };
 
 rootCommand.SetHandler((InvocationContext ctx) =>
@@ -40,6 +41,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     float sharpen = ctx.ParseResult.GetValueForOption(sharpenOption);
     float sharpenRadius = ctx.ParseResult.GetValueForOption(sharpenRadiusOption);
     bool color = ctx.ParseResult.GetValueForOption(colorOption);
+    float coast = ctx.ParseResult.GetValueForOption(coastOption);
 
     Console.WriteLine($"Generating globe: seed={seed}, cells={cells}{(ultra ? " (ultra-dense)" : "")}, ocean={ocean:F2}, jitter={jitter:F2}");
 
@@ -71,9 +73,11 @@ rootCommand.SetHandler((InvocationContext ctx) =>
         CellElevation = renderElev,
     };
 
+    // Pipeline: render → blur → sharpen → coast detail → color/noise → save
     using var image = HeightmapRenderer.Render(renderTerrain, width, height);
     if (blur > 0f) WrapBlur.Apply(image, blur);
     if (sharpen > 0f) WrapUnsharpMask.Apply(image, sharpen, sharpenRadius);
+    if (coast > 0f) CoastDetail.Apply(image, coast, seed);
     if (color)
     {
         using var rgb = ColorRamp.Apply(image);
