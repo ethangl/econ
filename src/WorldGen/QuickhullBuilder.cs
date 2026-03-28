@@ -10,6 +10,94 @@ namespace WorldGen.Core
     /// </summary>
     public static class QuickhullBuilder
     {
+        sealed class EdgeFaceMap
+        {
+            const byte Empty = 0;
+            const byte Occupied = 1;
+            const byte Tombstone = 2;
+
+            readonly long[] _keys;
+            readonly int[] _values;
+            readonly byte[] _states;
+            readonly int _mask;
+
+            public EdgeFaceMap(int capacity)
+            {
+                int size = 1;
+                while (size < capacity * 2)
+                    size <<= 1;
+
+                _keys = new long[size];
+                _values = new int[size];
+                _states = new byte[size];
+                _mask = size - 1;
+            }
+
+            public void Set(long key, int value)
+            {
+                int slot = FindSlot(key, forInsert: true);
+                _keys[slot] = key;
+                _values[slot] = value;
+                _states[slot] = Occupied;
+            }
+
+            public bool TryGetValue(long key, out int value)
+            {
+                int slot = FindSlot(key, forInsert: false);
+                if (slot >= 0)
+                {
+                    value = _values[slot];
+                    return true;
+                }
+
+                value = default;
+                return false;
+            }
+
+            public void Remove(long key)
+            {
+                int slot = FindSlot(key, forInsert: false);
+                if (slot >= 0)
+                    _states[slot] = Tombstone;
+            }
+
+            int FindSlot(long key, bool forInsert)
+            {
+                int firstTombstone = -1;
+                int slot = Hash(key) & _mask;
+
+                while (true)
+                {
+                    byte state = _states[slot];
+                    if (state == Empty)
+                        return forInsert ? (firstTombstone >= 0 ? firstTombstone : slot) : -1;
+
+                    if (state == Tombstone)
+                    {
+                        if (forInsert && firstTombstone < 0)
+                            firstTombstone = slot;
+                    }
+                    else if (_keys[slot] == key)
+                    {
+                        return slot;
+                    }
+
+                    slot = (slot + 1) & _mask;
+                }
+            }
+
+            static int Hash(long key)
+            {
+                ulong x = (ulong)key;
+                x ^= x >> 33;
+                x *= 0xff51afd7ed558ccdUL;
+                x ^= x >> 33;
+                x *= 0xc4ceb9fe1a85ec53UL;
+                x ^= x >> 33;
+                return (int)x;
+            }
+        }
+
         class QFace
         {
             public int V0, V1, V2;
@@ -43,7 +131,7 @@ namespace WorldGen.Core
             Vec3 center = (points[i0] + points[i1] + points[i2] + points[i3]) * 0.25f;
 
             var faces = new List<QFace>(expectedFaceCount);
-            var edgeToFace = new Dictionary<long, int>(expectedHalfedgeCount);
+            var edgeToFace = new EdgeFaceMap(expectedHalfedgeCount);
 
             AddFace(faces, edgeToFace, points, i0, i1, i2, center);
             AddFace(faces, edgeToFace, points, i0, i2, i3, center);
@@ -238,7 +326,7 @@ namespace WorldGen.Core
             return Compact(points, faces, edgeToFace);
         }
 
-        static void CheckNeighbor(List<QFace> faces, Dictionary<long, int> edgeToFace,
+        static void CheckNeighbor(List<QFace> faces, EdgeFaceMap edgeToFace,
             Queue<int> bfsQueue, bool[] isVisible, Vec3 apexPos, int edgeFrom, int edgeTo)
         {
             long oppositeKey = DirectedEdgeKey(edgeTo, edgeFrom);
@@ -258,7 +346,7 @@ namespace WorldGen.Core
             }
         }
 
-        static void CollectHorizonEdge(Dictionary<long, int> edgeToFace,
+        static void CollectHorizonEdge(EdgeFaceMap edgeToFace,
             List<(int, int)> horizonEdges, bool[] isVisible, int edgeFrom, int edgeTo)
         {
             long oppositeKey = DirectedEdgeKey(edgeTo, edgeFrom);
@@ -371,7 +459,7 @@ namespace WorldGen.Core
             return ((long)from << 32) | (uint)to;
         }
 
-        static void AddFace(List<QFace> faces, Dictionary<long, int> edgeToFace,
+        static void AddFace(List<QFace> faces, EdgeFaceMap edgeToFace,
             Vec3[] points, int v0, int v1, int v2, Vec3 interiorPoint)
         {
             Vec3 a = points[v0], b = points[v1], c = points[v2];
@@ -401,12 +489,12 @@ namespace WorldGen.Core
                 FarthestPoint = -1,
             });
 
-            edgeToFace[DirectedEdgeKey(v0, v1)] = fi * 3 + 0;
-            edgeToFace[DirectedEdgeKey(v1, v2)] = fi * 3 + 1;
-            edgeToFace[DirectedEdgeKey(v2, v0)] = fi * 3 + 2;
+            edgeToFace.Set(DirectedEdgeKey(v0, v1), fi * 3 + 0);
+            edgeToFace.Set(DirectedEdgeKey(v1, v2), fi * 3 + 1);
+            edgeToFace.Set(DirectedEdgeKey(v2, v0), fi * 3 + 2);
         }
 
-        static void RemoveFaceEdges(Dictionary<long, int> edgeToFace, int v0, int v1, int v2)
+        static void RemoveFaceEdges(EdgeFaceMap edgeToFace, int v0, int v1, int v2)
         {
             edgeToFace.Remove(DirectedEdgeKey(v0, v1));
             edgeToFace.Remove(DirectedEdgeKey(v1, v2));
@@ -442,7 +530,7 @@ namespace WorldGen.Core
             return result;
         }
 
-        static ConvexHull Compact(Vec3[] points, List<QFace> faces, Dictionary<long, int> edgeToFace)
+        static ConvexHull Compact(Vec3[] points, List<QFace> faces, EdgeFaceMap edgeToFace)
         {
             int aliveCount = 0;
             for (int i = 0; i < faces.Count; i++)
@@ -489,7 +577,7 @@ namespace WorldGen.Core
             };
         }
 
-        static int FindOpposite(Dictionary<long, int> edgeToFace, int[] faceMap, int from, int to)
+        static int FindOpposite(EdgeFaceMap edgeToFace, int[] faceMap, int from, int to)
         {
             long key = DirectedEdgeKey(from, to);
             if (edgeToFace.TryGetValue(key, out int oldHe))
