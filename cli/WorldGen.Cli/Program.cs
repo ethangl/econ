@@ -4,6 +4,7 @@ using System.CommandLine.Invocation;
 using System.Diagnostics;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.PixelFormats;
 using WorldGen.Core;
 using WorldGen.Cli.Lib;
 
@@ -79,58 +80,55 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     };
 
     // Pipeline: render → blur → sharpen → coast detail → color → save
-    bool useMetal = !forceCpu && MetalHeightmapRenderer.IsSupported;
-    var stepSw = Stopwatch.StartNew();
-    using var image = useMetal
-        ? MetalHeightmapRenderer.Render(renderTerrain, width, height)
-        : HeightmapRenderer.Render(renderTerrain, width, height);
-    string rasterMode = useMetal ? "Metal default" : (forceCpu ? "CPU forced" : "CPU fallback");
-    Console.WriteLine($"  Heightmap rasterized in {stepSw.Elapsed.TotalSeconds:F1}s ({rasterMode})");
-
+    bool useMetal = !forceCpu && MetalHeightmapPipeline.IsSupported;
     float blurSigma = blur * 5f * (width / 8192f);
-    if (blurSigma > 0f)
+    var stepSw = Stopwatch.StartNew();
+    Image<L16> image;
+    if (useMetal)
     {
-        stepSw.Restart();
-        if (useMetal && MetalWrapBlur.IsSupported)
+        image = MetalHeightmapPipeline.Render(renderTerrain, width, height, blurSigma, coast, seed, out var metalTimings);
+        Console.WriteLine($"  Heightmap rasterized in {metalTimings.RasterSeconds:F3}s (Metal default)");
+        if (blurSigma > 0f)
+            Console.WriteLine($"  Blur applied in {metalTimings.BlurSeconds:F3}s (sigma {blurSigma:F2}, Metal default)");
+        if (coast > 0f)
+            Console.WriteLine($"  Coast detail applied in {metalTimings.CoastSeconds:F3}s (amount {coast:F2}, Metal default)");
+    }
+    else
+    {
+        image = HeightmapRenderer.Render(renderTerrain, width, height);
+        string rasterMode = forceCpu ? "CPU forced" : "CPU fallback";
+        Console.WriteLine($"  Heightmap rasterized in {stepSw.Elapsed.TotalSeconds:F1}s ({rasterMode})");
+
+        if (blurSigma > 0f)
         {
-            MetalWrapBlur.Apply(image, blurSigma);
-            Console.WriteLine($"  Blur applied in {stepSw.Elapsed.TotalSeconds:F1}s (sigma {blurSigma:F2}, Metal default)");
-        }
-        else
-        {
+            stepSw.Restart();
             WrapBlur.Apply(image, blurSigma);
             string blurMode = forceCpu ? "CPU forced" : "CPU fallback";
             Console.WriteLine($"  Blur applied in {stepSw.Elapsed.TotalSeconds:F1}s (sigma {blurSigma:F2}, {blurMode})");
         }
-    }
 
-    if (sharpen > 0f)
-    {
-        stepSw.Restart();
-        WrapUnsharpMask.Apply(image, sharpen, blurSigma);
-        Console.WriteLine($"  Sharpen applied in {stepSw.Elapsed.TotalSeconds:F1}s (amount {sharpen:F2})");
-    }
-
-    if (coast > 0f)
-    {
-        stepSw.Restart();
-        if (useMetal)
+        if (coast > 0f)
         {
-            MetalCoastDetail.Apply(image, coast, seed);
-            Console.WriteLine($"  Coast detail applied in {stepSw.Elapsed.TotalSeconds:F1}s (amount {coast:F2}, Metal default)");
-        }
-        else
-        {
+            stepSw.Restart();
             CoastDetail.Apply(image, coast, seed);
             string reason = forceCpu ? "CPU forced" : "CPU fallback";
             Console.WriteLine($"  Coast detail applied in {stepSw.Elapsed.TotalSeconds:F1}s (amount {coast:F2}, {reason})");
         }
     }
 
+    using var ownedImage = image;
+
+    if (sharpen > 0f)
+    {
+        stepSw.Restart();
+        WrapUnsharpMask.Apply(ownedImage, sharpen, blurSigma);
+        Console.WriteLine($"  Sharpen applied in {stepSw.Elapsed.TotalSeconds:F1}s (amount {sharpen:F2})");
+    }
+
     if (color)
     {
         stepSw.Restart();
-        using var rgb = ColorRamp.Apply(image);
+        using var rgb = ColorRamp.Apply(ownedImage);
         Console.WriteLine($"  Color ramp applied in {stepSw.Elapsed.TotalSeconds:F1}s");
 
         stepSw.Restart();
@@ -140,7 +138,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     else
     {
         stepSw.Restart();
-        image.Save(output, pngEncoder);
+        ownedImage.Save(output, pngEncoder);
         Console.WriteLine($"  Saved PNG in {stepSw.Elapsed.TotalSeconds:F1}s");
     }
 

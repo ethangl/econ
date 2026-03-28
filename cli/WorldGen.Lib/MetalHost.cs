@@ -6,11 +6,10 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using WorldGen.Core;
 
 namespace WorldGen.Cli.Lib
 {
-    public static class MetalCoastDetail
+    internal static class MetalHost
     {
         const string HelperResourceName = "WorldGen.Cli.Lib.MetalCoastHelper.swift";
         static readonly object HelperLock = new();
@@ -18,83 +17,7 @@ namespace WorldGen.Cli.Lib
 
         public static bool IsSupported => OperatingSystem.IsMacOS();
 
-        public static void Apply(Image<L16> image, float amplitude, int seed)
-        {
-            if (amplitude <= 0f) return;
-            if (!OperatingSystem.IsMacOS())
-                throw new PlatformNotSupportedException("Metal coast detail is only supported on macOS.");
-
-            string helperPath = EnsureHelperBuilt();
-            string tempDir = Path.Combine(Path.GetTempPath(), "econsim-worldgen-metal", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(tempDir);
-
-            string inputPath = Path.Combine(tempDir, "input.raw");
-            string outputPath = Path.Combine(tempDir, "output.raw");
-            string permPath = Path.Combine(tempDir, "perm.raw");
-
-            try
-            {
-                ushort[] pixelData = ExtractPixels(image);
-                File.WriteAllBytes(inputPath, MemoryMarshal.AsBytes<ushort>(pixelData.AsSpan()).ToArray());
-
-                var perm = new Noise3D(seed + 777).GetPermutationTable();
-                File.WriteAllBytes(permPath, MemoryMarshal.AsBytes<int>(perm.AsSpan()).ToArray());
-
-                var psi = new ProcessStartInfo(helperPath)
-                {
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                };
-
-                psi.ArgumentList.Add("--mode");
-                psi.ArgumentList.Add("coast");
-                psi.ArgumentList.Add("--input");
-                psi.ArgumentList.Add(inputPath);
-                psi.ArgumentList.Add("--output");
-                psi.ArgumentList.Add(outputPath);
-                psi.ArgumentList.Add("--perm");
-                psi.ArgumentList.Add(permPath);
-                psi.ArgumentList.Add("--width");
-                psi.ArgumentList.Add(image.Width.ToString(CultureInfo.InvariantCulture));
-                psi.ArgumentList.Add("--height");
-                psi.ArgumentList.Add(image.Height.ToString(CultureInfo.InvariantCulture));
-                psi.ArgumentList.Add("--amplitude");
-                psi.ArgumentList.Add(amplitude.ToString("R", CultureInfo.InvariantCulture));
-
-                using var process = Process.Start(psi)
-                    ?? throw new InvalidOperationException("Failed to start Metal coast helper.");
-                string stdout = process.StandardOutput.ReadToEnd();
-                string stderr = process.StandardError.ReadToEnd();
-                process.WaitForExit();
-
-                if (process.ExitCode != 0)
-                {
-                    string detail = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
-                    throw new InvalidOperationException($"Metal coast helper failed with exit code {process.ExitCode}: {detail.Trim()}");
-                }
-
-                byte[] outputBytes = File.ReadAllBytes(outputPath);
-                if (outputBytes.Length != pixelData.Length * sizeof(ushort))
-                    throw new InvalidOperationException($"Metal coast helper returned {outputBytes.Length} bytes, expected {pixelData.Length * sizeof(ushort)}.");
-
-                MemoryMarshal.Cast<byte, ushort>(outputBytes.AsSpan()).CopyTo(pixelData);
-                WritePixels(image, pixelData);
-            }
-            finally
-            {
-                try
-                {
-                    Directory.Delete(tempDir, recursive: true);
-                }
-                catch
-                {
-                    // Best-effort temp cleanup.
-                }
-            }
-        }
-
-        internal static string EnsureHelperBuilt()
+        public static string EnsureHelperBuilt()
         {
             lock (HelperLock)
             {
@@ -107,7 +30,7 @@ namespace WorldGen.Cli.Lib
                 string sourcePath = Path.Combine(cacheDir, "MetalCoastHelper.swift");
                 string helperPath = Path.Combine(cacheDir, "metal-coast-helper");
 
-                using (Stream resource = typeof(MetalCoastDetail).Assembly.GetManifestResourceStream(HelperResourceName)
+                using (Stream resource = typeof(MetalHost).Assembly.GetManifestResourceStream(HelperResourceName)
                     ?? throw new InvalidOperationException($"Missing embedded helper resource '{HelperResourceName}'."))
                 using (var output = File.Create(sourcePath))
                 {
@@ -147,7 +70,7 @@ namespace WorldGen.Cli.Lib
             }
         }
 
-        internal static ushort[] ExtractPixels(Image<L16> image)
+        public static ushort[] ExtractPixels(Image<L16> image)
         {
             int width = image.Width;
             int height = image.Height;
@@ -171,7 +94,7 @@ namespace WorldGen.Cli.Lib
             return pixels;
         }
 
-        internal static void WritePixels(Image<L16> image, ushort[] pixels)
+        public static void WritePixels(Image<L16> image, ushort[] pixels)
         {
             int width = image.Width;
             int height = image.Height;
@@ -189,6 +112,38 @@ namespace WorldGen.Cli.Lib
                     pixels.AsSpan(y * width, width).CopyTo(MemoryMarshal.Cast<L16, ushort>(accessor.GetRowSpan(y)));
                 }
             });
+        }
+
+        public static void WriteRaw<T>(string path, T[] values) where T : struct
+        {
+            File.WriteAllBytes(path, MemoryMarshal.AsBytes(values.AsSpan()).ToArray());
+        }
+
+        public static (string StdOut, string StdErr) RunHelper(ProcessStartInfo psi, string failureLabel)
+        {
+            using var process = Process.Start(psi)
+                ?? throw new InvalidOperationException($"Failed to start {failureLabel}.");
+            string stdout = process.StandardOutput.ReadToEnd();
+            string stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            if (process.ExitCode != 0)
+            {
+                string detail = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+                throw new InvalidOperationException($"{failureLabel} failed with exit code {process.ExitCode}: {detail.Trim()}");
+            }
+
+            return (stdout, stderr);
+        }
+
+        public static ProcessStartInfo CreateHelperProcess(string helperPath)
+        {
+            return new ProcessStartInfo(helperPath)
+            {
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            };
         }
     }
 }
