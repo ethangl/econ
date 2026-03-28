@@ -7,12 +7,12 @@ using WorldGen.Core;
 namespace WorldGen.Cli.Lib
 {
     /// <summary>
-    /// Adds fractal coastal detail using the mapgen4 approach:
-    /// elevation += amplitude * (1 - e^4) * fractal_noise
+    /// Adds fractal coastal detail near sea level:
+    /// elevation += amplitude * band_falloff * fractal_noise
     ///
-    /// The quartic falloff (1 - e^4) concentrates noise near sea level (e ≈ 0.5)
-    /// while leaving deep ocean and high mountains smooth. Uses 3D Perlin noise
-    /// sampled on the sphere surface so it wraps naturally.
+    /// The quartic band falloff keeps this pass tightly focused around shorelines,
+    /// while leaving deeper ocean, inland lowlands, and high mountains alone.
+    /// Uses 3D Perlin noise sampled on the sphere surface so it wraps naturally.
     ///
     /// Noise frequency scales with image width so features stay a consistent
     /// pixel size regardless of resolution. Applied after blur so detail
@@ -24,6 +24,7 @@ namespace WorldGen.Cli.Lib
         const int Octaves = 6;
         const float Lacunarity = 2.0f;
         const float Persistence = 0.5f;
+        const float CoastBandHalfWidth = 0.14f;
 
         // Base noise features are ~50px wide at the equator.
         // Frequency on unit sphere = width / (2*pi * featurePixels).
@@ -128,9 +129,15 @@ namespace WorldGen.Cli.Lib
             for (int i = 0; i < lut.Length; i++)
             {
                 float elev = ElevationLut[i];
-                float e = elev - SeaLevel;
-                float e2 = e * e;
-                lut[i] = 1f - e2 * e2 * 16f;
+                float normalized = MathF.Abs(elev - SeaLevel) / CoastBandHalfWidth;
+                if (normalized >= 1f)
+                {
+                    lut[i] = 0f;
+                    continue;
+                }
+
+                float n2 = normalized * normalized;
+                lut[i] = 1f - n2 * n2;
             }
 
             return lut;

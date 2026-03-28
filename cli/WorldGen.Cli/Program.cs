@@ -18,8 +18,9 @@ var previewOutputOption = new Option<string>("--preview-output", () => null!, "O
 var previewWidthOption = new Option<int>("--preview-width", () => 2048, "Maximum width for the preview PNG");
 var oceanOption = new Option<float>("--ocean", () => 0.6f, "Ocean fraction (0-1)");
 var jitterOption = new Option<float>("--jitter", () => 0.5f, "Point jitter (0-1)");
-var ultraOption = new Option<bool>("--ultra", () => false, "Enable ultra-dense mesh (~4x cells via subdivision)");
-var blurOption = new Option<float>("--blur", () => 1.0f, "Blur strength (1.0 = 5px sigma at 8192 wide, scales with resolution)");
+var ultraOption = new Option<bool>("--ultra", () => true, "Enable ultra-dense mesh (~4x cells via subdivision)");
+var blurOption = new Option<float>("--blur", () => 0.6f, "Blur strength (1.0 = 5px sigma at 8192 wide, scales with resolution)");
+var detailOption = new Option<float>("--detail", () => 0.1f, "Full-map micro-relief amplitude (0-1)");
 
 var sharpenOption = new Option<float>("--sharpen", () => 0f, "Unsharp mask amount (0=off, 1=normal, 2=strong; uses blur sigma)");
 var colorOption = new Option<bool>("--color", () => true, "Apply the terrain color ramp to the preview PNG");
@@ -28,7 +29,7 @@ var cpuOption = new Option<bool>("--cpu", () => false, "Force the CPU heightmap 
 
 var rootCommand = new RootCommand("Generate a raw 2D heightmap plus preview from spherical world generation")
 {
-    seedOption, cellsOption, widthOption, heightOption, outputOption, previewOutputOption, previewWidthOption, oceanOption, jitterOption, ultraOption, coastOption, blurOption, sharpenOption, colorOption, cpuOption
+    seedOption, cellsOption, widthOption, heightOption, outputOption, previewOutputOption, previewWidthOption, oceanOption, jitterOption, ultraOption, coastOption, blurOption, detailOption, sharpenOption, colorOption, cpuOption
 };
 
 var previewPngEncoder = new PngEncoder
@@ -50,6 +51,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     float jitter = ctx.ParseResult.GetValueForOption(jitterOption);
     bool ultra = ctx.ParseResult.GetValueForOption(ultraOption);
     float blur = ctx.ParseResult.GetValueForOption(blurOption);
+    float detail = ctx.ParseResult.GetValueForOption(detailOption);
     float sharpen = ctx.ParseResult.GetValueForOption(sharpenOption);
     bool color = ctx.ParseResult.GetValueForOption(colorOption);
     float coast = ctx.ParseResult.GetValueForOption(coastOption);
@@ -97,7 +99,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
         CellElevation = renderElev,
     };
 
-    // Pipeline: render → blur → sharpen → coast detail → raw export → preview export
+    // Pipeline: render → blur → global detail → coast detail → sharpen → raw export → preview export
     bool metalSupported = !forceCpu && MetalHeightmapPipeline.IsSupported;
     bool useMetal = metalSupported;
     float blurSigma = blur * 5f * (width / 8192f);
@@ -112,6 +114,13 @@ rootCommand.SetHandler((InvocationContext ctx) =>
             stepSw.Restart();
             WrapBlur.Apply(cpuImage, blurSigma);
             Console.WriteLine($"  Blur applied in {stepSw.Elapsed.TotalSeconds:F1}s (sigma {blurSigma:F2}, {mode})");
+        }
+
+        if (detail > 0f)
+        {
+            stepSw.Restart();
+            GlobalDetail.Apply(cpuImage, detail, seed);
+            Console.WriteLine($"  Global detail applied in {stepSw.Elapsed.TotalSeconds:F1}s (amount {detail:F3}, {mode})");
         }
 
         if (coast > 0f)
@@ -129,10 +138,12 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     {
         try
         {
-            image = MetalHeightmapPipeline.Render(renderTerrain, width, height, blurSigma, coast, seed, out var metalTimings);
+            image = MetalHeightmapPipeline.Render(renderTerrain, width, height, blurSigma, detail, coast, seed, out var metalTimings);
             Console.WriteLine($"  Heightmap rasterized in {metalTimings.RasterSeconds:F3}s (Metal default)");
             if (blurSigma > 0f)
                 Console.WriteLine($"  Blur applied in {metalTimings.BlurSeconds:F3}s (sigma {blurSigma:F2}, Metal default)");
+            if (detail > 0f)
+                Console.WriteLine($"  Global detail applied in {metalTimings.DetailSeconds:F3}s (amount {detail:F3}, Metal default)");
             if (coast > 0f)
                 Console.WriteLine($"  Coast detail applied in {metalTimings.CoastSeconds:F3}s (amount {coast:F2}, Metal default)");
         }

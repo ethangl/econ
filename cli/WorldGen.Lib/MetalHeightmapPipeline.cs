@@ -9,7 +9,7 @@ using WorldGen.Core;
 
 namespace WorldGen.Cli.Lib
 {
-    public readonly record struct MetalStageTimings(double RasterSeconds, double BlurSeconds, double CoastSeconds);
+    public readonly record struct MetalStageTimings(double RasterSeconds, double BlurSeconds, double DetailSeconds, double CoastSeconds);
 
     public static class MetalHeightmapPipeline
     {
@@ -21,6 +21,7 @@ namespace WorldGen.Cli.Lib
             int width,
             int height,
             float blurSigma,
+            float detailAmplitude,
             float coastAmplitude,
             int seed,
             out MetalStageTimings timings)
@@ -40,6 +41,7 @@ namespace WorldGen.Cli.Lib
             string bucketCountsPath = Path.Combine(tempDir, "bucket-counts.raw");
             string bucketCellsPath = Path.Combine(tempDir, "bucket-cells.raw");
             string elevationPath = Path.Combine(tempDir, "elevation.raw");
+            string detailPermPath = Path.Combine(tempDir, "detail-perm.raw");
             string permPath = Path.Combine(tempDir, "perm.raw");
             string outputPath = Path.Combine(tempDir, "output.raw");
             string timingsPath = Path.Combine(tempDir, "timings.txt");
@@ -53,6 +55,7 @@ namespace WorldGen.Cli.Lib
                 MetalHost.WriteRaw(bucketCountsPath, lookup.BucketCounts);
                 MetalHost.WriteRaw(bucketCellsPath, lookup.BucketCells);
                 MetalHost.WriteRaw(elevationPath, terrain.CellElevation);
+                MetalHost.WriteRaw(detailPermPath, new Noise3D(seed + 1337).GetPermutationTable());
                 MetalHost.WriteRaw(permPath, new Noise3D(seed + 777).GetPermutationTable());
 
                 var psi = MetalHost.CreateHelperProcess(helperPath);
@@ -76,6 +79,8 @@ namespace WorldGen.Cli.Lib
                 psi.ArgumentList.Add(bucketCellsPath);
                 psi.ArgumentList.Add("--elevation");
                 psi.ArgumentList.Add(elevationPath);
+                psi.ArgumentList.Add("--detail-perm");
+                psi.ArgumentList.Add(detailPermPath);
                 psi.ArgumentList.Add("--perm");
                 psi.ArgumentList.Add(permPath);
                 psi.ArgumentList.Add("--width");
@@ -90,6 +95,8 @@ namespace WorldGen.Cli.Lib
                 psi.ArgumentList.Add(lookup.LonBucketCount.ToString(CultureInfo.InvariantCulture));
                 psi.ArgumentList.Add("--sigma");
                 psi.ArgumentList.Add(blurSigma.ToString("R", CultureInfo.InvariantCulture));
+                psi.ArgumentList.Add("--detail");
+                psi.ArgumentList.Add(detailAmplitude.ToString("R", CultureInfo.InvariantCulture));
                 psi.ArgumentList.Add("--amplitude");
                 psi.ArgumentList.Add(coastAmplitude.ToString("R", CultureInfo.InvariantCulture));
 
@@ -125,6 +132,7 @@ namespace WorldGen.Cli.Lib
         {
             double raster = 0;
             double blur = 0;
+            double detail = 0;
             double coast = 0;
 
             foreach (string line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -151,10 +159,13 @@ namespace WorldGen.Cli.Lib
                     case "coast":
                         coast = seconds;
                         break;
+                    case "detail":
+                        detail = seconds;
+                        break;
                 }
             }
 
-            return new MetalStageTimings(raster, blur, coast);
+            return new MetalStageTimings(raster, blur, detail, coast);
         }
     }
 }
