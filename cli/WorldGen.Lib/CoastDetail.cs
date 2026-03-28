@@ -28,6 +28,8 @@ namespace WorldGen.Cli.Lib
         // Base noise features are ~50px wide at the equator.
         // Frequency on unit sphere = width / (2*pi * featurePixels).
         const float FeaturePixels = 50f;
+        static readonly float[] ElevationLut = BuildElevationLut();
+        static readonly float[] FadeLut = BuildFadeLut();
 
         public static void Apply(Image<L16> image, float amplitude, int seed)
         {
@@ -67,19 +69,15 @@ namespace WorldGen.Cli.Lib
 
                     for (int x = 0; x < w; x++)
                     {
-                        float elev = row[x].PackedValue / 65535f;
-
-                        float e = elev - SeaLevel;
-                        float e2 = e * e;
-                        float fade = 1f - e2 * e2 * 16f;
+                        ushort packed = row[x].PackedValue;
+                        float elev = ElevationLut[packed];
+                        float fade = FadeLut[packed];
                         if (fade <= 0f) continue;
 
                         float px = rowCosLat * cosLon[x];
                         float py = rowSinLat;
                         float pz = rowCosLat * sinLon[x];
-                        float n = noise.Fractal(
-                            px * freq, py * freq, pz * freq,
-                            Octaves, Lacunarity, Persistence);
+                        float n = noise.Fractal6Lacunarity2Persistence05(px * freq, py * freq, pz * freq);
 
                         float result = elev + n * amplitude * fade;
                         row[x] = new L16((ushort)Math.Clamp(result * 65535f, 0f, 65535f));
@@ -98,19 +96,15 @@ namespace WorldGen.Cli.Lib
 
                         for (int x = 0; x < w; x++)
                         {
-                            float elev = row[x].PackedValue / 65535f;
-
-                            float e = elev - SeaLevel;
-                            float e2 = e * e;
-                            float fade = 1f - e2 * e2 * 16f;
+                            ushort packed = row[x].PackedValue;
+                            float elev = ElevationLut[packed];
+                            float fade = FadeLut[packed];
                             if (fade <= 0f) continue;
 
                             float px = rowCosLat * cosLon[x];
                             float py = rowSinLat;
                             float pz = rowCosLat * sinLon[x];
-                            float n = noise.Fractal(
-                                px * freq, py * freq, pz * freq,
-                                Octaves, Lacunarity, Persistence);
+                            float n = noise.Fractal6Lacunarity2Persistence05(px * freq, py * freq, pz * freq);
 
                             float result = elev + n * amplitude * fade;
                             row[x] = new L16((ushort)Math.Clamp(result * 65535f, 0f, 65535f));
@@ -118,6 +112,28 @@ namespace WorldGen.Cli.Lib
                     }
                 });
             }
+        }
+
+        static float[] BuildElevationLut()
+        {
+            var lut = new float[ushort.MaxValue + 1];
+            for (int i = 0; i < lut.Length; i++)
+                lut[i] = (ushort)i / 65535f;
+            return lut;
+        }
+
+        static float[] BuildFadeLut()
+        {
+            var lut = new float[ushort.MaxValue + 1];
+            for (int i = 0; i < lut.Length; i++)
+            {
+                float elev = ElevationLut[i];
+                float e = elev - SeaLevel;
+                float e2 = e * e;
+                lut[i] = 1f - e2 * e2 * 16f;
+            }
+
+            return lut;
         }
     }
 }
