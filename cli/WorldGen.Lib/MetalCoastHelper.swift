@@ -17,6 +17,13 @@ struct RenderParams
     var lonBuckets: Int32
 }
 
+struct BlurParams
+{
+    var width: UInt32
+    var height: UInt32
+    var radius: Int32
+}
+
 func argument(named name: String) throws -> String
 {
     let args = CommandLine.arguments
@@ -81,6 +88,13 @@ struct RenderParams
     float radius;
     int latBuckets;
     int lonBuckets;
+};
+
+struct BlurParams
+{
+    uint width;
+    uint height;
+    int radius;
 };
 
 inline int floor_bug(float v)
@@ -310,6 +324,70 @@ kernel void render_heightmap(
     float elev = clamp(elevation[bestCell], 0.0f, 1.0f);
     outputPixels[gid] = ushort(elev * 65535.0f);
 }
+
+kernel void blur_horizontal(
+    const device ushort* inputPixels [[buffer(0)]],
+    device float* tempPixels [[buffer(1)]],
+    const device float* weights [[buffer(2)]],
+    constant BlurParams& params [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    uint pixelCount = params.width * params.height;
+    if (gid >= pixelCount)
+    {
+        return;
+    }
+
+    int x = int(gid % params.width);
+    int y = int(gid / params.width);
+    int width = int(params.width);
+    int radius = params.radius;
+    int rowOffset = y * width;
+
+    float sum = float(inputPixels[rowOffset + x]) * weights[0];
+    for (int i = 1; i <= radius; i++)
+    {
+        int left = (x - i + width) % width;
+        int right = (x + i) % width;
+        float w = weights[i];
+        sum += float(inputPixels[rowOffset + left]) * w;
+        sum += float(inputPixels[rowOffset + right]) * w;
+    }
+
+    tempPixels[gid] = sum;
+}
+
+kernel void blur_vertical(
+    const device float* tempPixels [[buffer(0)]],
+    device ushort* outputPixels [[buffer(1)]],
+    const device float* weights [[buffer(2)]],
+    constant BlurParams& params [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    uint pixelCount = params.width * params.height;
+    if (gid >= pixelCount)
+    {
+        return;
+    }
+
+    int x = int(gid % params.width);
+    int y = int(gid / params.width);
+    int width = int(params.width);
+    int height = int(params.height);
+    int radius = params.radius;
+
+    float sum = tempPixels[gid] * weights[0];
+    for (int i = 1; i <= radius; i++)
+    {
+        int top = max(y - i, 0);
+        int bottom = min(y + i, height - 1);
+        float w = weights[i];
+        sum += tempPixels[top * width + x] * w;
+        sum += tempPixels[bottom * width + x] * w;
+    }
+
+    outputPixels[gid] = ushort(clamp(sum, 0.0f, 65535.0f));
+}
 """
 
 func runCoast() throws
@@ -532,6 +610,144 @@ func runRender() throws
     try outputData.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
 }
 
+func gaussianWeights(sigma: Float) -> [Float]
+{
+    let radius = Int(ceil(sigma * 3.0))
+    if radius <= 0
+    {
+        return [1.0]
+    }
+
+    let twoSigmaSq = 2.0 * sigma * sigma
+    var weights = [Float](repeating: 0, count: radius + 1)
+    var sum: Float = 0
+
+    for i in 0...radius
+    {
+        let x = Float(i)
+        let w = exp(-(x * x) / twoSigmaSq)
+        weights[i] = w
+        sum += (i == 0) ? w : (2.0 * w)
+    }
+
+    for i in 0...radius
+    {
+        weights[i] /= sum
+    }
+
+    return weights
+}
+
+func runBlur() throws
+{
+    let inputPath = try argument(named: "--input")
+    let outputPath = try argument(named: "--output")
+    let width = try UInt32(argument(named: "--width")).unwrap("width")
+    let height = try UInt32(argument(named: "--height")).unwrap("height")
+    let sigma = try Float(argument(named: "--sigma")).unwrap("sigma")
+
+    let inputPixels = try readUInt16Array(from: inputPath)
+    let pixelCount = Int(width * height)
+    guard inputPixels.count == pixelCount else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 40, userInfo: [NSLocalizedDescriptionKey: "Unexpected input pixel count \(inputPixels.count), expected \(pixelCount)"])
+    }
+
+    guard let device = MTLCreateSystemDefaultDevice() else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 41, userInfo: [NSLocalizedDescriptionKey: "No Metal device available"])
+    }
+
+    let library = try device.makeLibrary(source: shaderSource, options: nil)
+    guard let horizontalFunction = library.makeFunction(name: "blur_horizontal"),
+          let verticalFunction = library.makeFunction(name: "blur_vertical") else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 42, userInfo: [NSLocalizedDescriptionKey: "Failed to create Metal blur functions"])
+    }
+
+    let horizontalPipeline = try device.makeComputePipelineState(function: horizontalFunction)
+    let verticalPipeline = try device.makeComputePipelineState(function: verticalFunction)
+    guard let queue = device.makeCommandQueue() else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 43, userInfo: [NSLocalizedDescriptionKey: "Failed to create Metal command queue"])
+    }
+
+    let weights = gaussianWeights(sigma: sigma)
+    let radius = Int32(weights.count - 1)
+
+    let inputBuffer = try inputPixels.withUnsafeBytes { bytes in
+        guard let buffer = device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared) else
+        {
+            throw NSError(domain: "MetalCoastHelper", code: 44, userInfo: [NSLocalizedDescriptionKey: "Failed to create blur input buffer"])
+        }
+        return buffer
+    }
+
+    guard let tempBuffer = device.makeBuffer(length: pixelCount * MemoryLayout<Float>.stride, options: .storageModeShared),
+          let outputBuffer = device.makeBuffer(length: pixelCount * MemoryLayout<UInt16>.stride, options: .storageModeShared) else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 45, userInfo: [NSLocalizedDescriptionKey: "Failed to create blur working buffers"])
+    }
+
+    let weightsBuffer = try weights.withUnsafeBytes { bytes in
+        guard let buffer = device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared) else
+        {
+            throw NSError(domain: "MetalCoastHelper", code: 46, userInfo: [NSLocalizedDescriptionKey: "Failed to create blur weights buffer"])
+        }
+        return buffer
+    }
+
+    var params = BlurParams(width: width, height: height, radius: radius)
+    let paramsBuffer = try withUnsafeBytes(of: &params) { bytes in
+        guard let buffer = device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared) else
+        {
+            throw NSError(domain: "MetalCoastHelper", code: 47, userInfo: [NSLocalizedDescriptionKey: "Failed to create blur params buffer"])
+        }
+        return buffer
+    }
+
+    guard let commandBuffer = queue.makeCommandBuffer(),
+          let horizontalEncoder = commandBuffer.makeComputeCommandEncoder() else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 48, userInfo: [NSLocalizedDescriptionKey: "Failed to create blur command buffer"])
+    }
+
+    let threadsPerGrid = MTLSize(width: pixelCount, height: 1, depth: 1)
+    let horizontalThreads = MTLSize(width: min(horizontalPipeline.maxTotalThreadsPerThreadgroup, 256), height: 1, depth: 1)
+    horizontalEncoder.setComputePipelineState(horizontalPipeline)
+    horizontalEncoder.setBuffer(inputBuffer, offset: 0, index: 0)
+    horizontalEncoder.setBuffer(tempBuffer, offset: 0, index: 1)
+    horizontalEncoder.setBuffer(weightsBuffer, offset: 0, index: 2)
+    horizontalEncoder.setBuffer(paramsBuffer, offset: 0, index: 3)
+    horizontalEncoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: horizontalThreads)
+    horizontalEncoder.endEncoding()
+
+    guard let verticalEncoder = commandBuffer.makeComputeCommandEncoder() else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 49, userInfo: [NSLocalizedDescriptionKey: "Failed to create blur vertical encoder"])
+    }
+
+    let verticalThreads = MTLSize(width: min(verticalPipeline.maxTotalThreadsPerThreadgroup, 256), height: 1, depth: 1)
+    verticalEncoder.setComputePipelineState(verticalPipeline)
+    verticalEncoder.setBuffer(tempBuffer, offset: 0, index: 0)
+    verticalEncoder.setBuffer(outputBuffer, offset: 0, index: 1)
+    verticalEncoder.setBuffer(weightsBuffer, offset: 0, index: 2)
+    verticalEncoder.setBuffer(paramsBuffer, offset: 0, index: 3)
+    verticalEncoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: verticalThreads)
+    verticalEncoder.endEncoding()
+
+    commandBuffer.commit()
+    commandBuffer.waitUntilCompleted()
+
+    if let error = commandBuffer.error
+    {
+        throw error
+    }
+
+    let outputData = Data(bytes: outputBuffer.contents(), count: pixelCount * MemoryLayout<UInt16>.stride)
+    try outputData.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+}
+
 do
 {
     let mode = optionalArgument(named: "--mode") ?? "coast"
@@ -541,6 +757,8 @@ do
         try runCoast()
     case "render":
         try runRender()
+    case "blur":
+        try runBlur()
     default:
         throw NSError(domain: "MetalCoastHelper", code: 35, userInfo: [NSLocalizedDescriptionKey: "Unsupported mode \(mode)"])
     }

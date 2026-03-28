@@ -91,8 +91,17 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     if (blurSigma > 0f)
     {
         stepSw.Restart();
-        WrapBlur.Apply(image, blurSigma);
-        Console.WriteLine($"  Blur applied in {stepSw.Elapsed.TotalSeconds:F1}s (sigma {blurSigma:F2})");
+        if (useMetal && MetalWrapBlur.IsSupported)
+        {
+            MetalWrapBlur.Apply(image, blurSigma);
+            Console.WriteLine($"  Blur applied in {stepSw.Elapsed.TotalSeconds:F1}s (sigma {blurSigma:F2}, Metal default)");
+        }
+        else
+        {
+            WrapBlur.Apply(image, blurSigma);
+            string blurMode = forceCpu ? "CPU forced" : "CPU fallback";
+            Console.WriteLine($"  Blur applied in {stepSw.Elapsed.TotalSeconds:F1}s (sigma {blurSigma:F2}, {blurMode})");
+        }
     }
 
     if (sharpen > 0f)
