@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+using System.Threading.Tasks;
 
 namespace WorldGen.Core
 {
@@ -16,8 +18,9 @@ namespace WorldGen.Core
         /// Midpoints are jittered in the tangent plane then re-projected to the unit sphere.
         /// Edge flips restore the Delaunay property after subdivision.
         /// </summary>
-        public static ConvexHull Subdivide(ConvexHull hull, float jitter, Random rng)
+        public static ConvexHull Subdivide(ConvexHull hull, float jitter, Random rng, DenseTerrainTimingData timings = null)
         {
+            var stepSw = Stopwatch.StartNew();
             int origVertCount = hull.Points.Length;
             int origTriCount = hull.TriangleCount;
             int origEdgeCount = hull.Triangles.Length; // half-edge count
@@ -163,9 +166,14 @@ namespace WorldGen.Core
                 Triangles = newTriangles,
                 Halfedges = newHalfedges,
             };
+            if (timings != null)
+                timings.UltraSubdivisionSetupSeconds = stepSw.Elapsed.TotalSeconds;
 
             // 5. Restore Delaunay property via edge flips
+            stepSw.Restart();
             RestoreDelaunay(result);
+            if (timings != null)
+                timings.UltraSubdivisionRestoreSeconds = stepSw.Elapsed.TotalSeconds;
 
             return result;
         }
@@ -176,7 +184,10 @@ namespace WorldGen.Core
         /// </summary>
         static void RestoreDelaunay(ConvexHull hull)
         {
-            int edgeCount = hull.Triangles.Length;
+            Vec3[] points = hull.Points;
+            int[] triangles = hull.Triangles;
+            int[] halfedges = hull.Halfedges;
+            int edgeCount = triangles.Length;
             const int maxPasses = 100;
 
             for (int pass = 0; pass < maxPasses; pass++)
@@ -185,17 +196,17 @@ namespace WorldGen.Core
 
                 for (int e = 0; e < edgeCount; e++)
                 {
-                    int opp = hull.Halfedges[e];
+                    int opp = halfedges[e];
                     if (opp < 0 || e > opp) continue;
 
                     // Vertices: edge e goes A→B, triangle is (A, B, C)
                     // Opposite triangle has vertex D opposite the shared edge
-                    int a = hull.Triangles[e];
-                    int b = hull.Triangles[NextHE(e)];
-                    int c = hull.Triangles[PrevHE(e)];
-                    int d = hull.Triangles[PrevHE(opp)];
+                    int a = triangles[e];
+                    int b = triangles[NextHE(e)];
+                    int c = triangles[PrevHE(e)];
+                    int d = triangles[PrevHE(opp)];
 
-                    if (InCircle(hull.Points[a], hull.Points[b], hull.Points[c], hull.Points[d]))
+                    if (InCircle(points[a], points[b], points[c], points[d]))
                     {
                         FlipEdge(hull, e, opp);
                         flipped = true;
@@ -214,13 +225,12 @@ namespace WorldGen.Core
         static bool InCircle(Vec3 a, Vec3 b, Vec3 c, Vec3 d)
         {
             Vec3 normal = Vec3.Cross(b - a, c - a);
-            Vec3 centroid = (a + b + c) * (1f / 3f);
-            if (Vec3.Dot(normal, centroid) < 0)
+            if (Vec3.Dot(normal, a + b + c) < 0)
                 normal = -normal;
-            Vec3 cc = normal.Normalized;
 
-            float cosThreshold = Vec3.Dot(cc, a);
-            return Vec3.Dot(cc, d) > cosThreshold + 1e-10f;
+            float normalMag = normal.Magnitude;
+            float cosThreshold = Vec3.Dot(normal, a);
+            return Vec3.Dot(normal, d) > cosThreshold + 1e-10f * normalMag;
         }
 
         /// <summary>
@@ -229,9 +239,7 @@ namespace WorldGen.Core
         /// </summary>
         static void FlipEdge(ConvexHull hull, int e, int opp)
         {
-            int e1 = NextHE(e);
             int e2 = PrevHE(e);
-            int e4 = NextHE(opp);
             int e5 = PrevHE(opp);
 
             int ext2 = hull.Halfedges[e2];
@@ -265,28 +273,15 @@ namespace WorldGen.Core
             int origCount = original.Points.Length;
             int subCount = subdivided.Points.Length;
             var mapping = new int[subCount];
+            var lookup = new NearestCellLookup(original.Points);
 
             for (int i = 0; i < origCount; i++)
                 mapping[i] = i;
 
-            for (int i = origCount; i < subCount; i++)
+            Parallel.For(origCount, subCount, i =>
             {
-                Vec3 p = subdivided.Points[i];
-                float bestDist = float.MaxValue;
-                int bestIdx = 0;
-
-                for (int j = 0; j < origCount; j++)
-                {
-                    float d = Vec3.SqrDistance(p, original.Points[j]);
-                    if (d < bestDist)
-                    {
-                        bestDist = d;
-                        bestIdx = j;
-                    }
-                }
-
-                mapping[i] = bestIdx;
-            }
+                mapping[i] = lookup.Nearest(subdivided.Points[i]);
+            });
 
             return mapping;
         }

@@ -1,5 +1,23 @@
 namespace WorldGen.Core
 {
+    public class DenseTerrainTimingData
+    {
+        public double DensePointsSeconds;
+        public double DenseHullSeconds;
+        public double DenseVoronoiSeconds;
+        public double DenseAreaSeconds;
+        public double DenseMappingSeconds;
+        public double DenseElevationSeconds;
+        public double UltraSubdivisionSeconds;
+        public double UltraSubdivisionSetupSeconds;
+        public double UltraSubdivisionRestoreSeconds;
+        public double UltraVoronoiSeconds;
+        public double UltraAreaSeconds;
+        public double UltraMappingSeconds;
+        public double UltraElevationSeconds;
+        public double TotalSeconds;
+    }
+
     /// <summary>
     /// Dense terrain mesh with elevation derived from coarse tectonics + fractal noise.
     /// </summary>
@@ -22,6 +40,22 @@ namespace WorldGen.Core
 
         /// <summary>Elevation per ultra-dense cell (0-1, sea level 0.5)</summary>
         public float[] UltraDenseCellElevation;
+
+        /// <summary>Generation timings for dense and ultra-dense terrain stages.</summary>
+        public DenseTerrainTimingData Timings;
+    }
+
+    public class WorldGenTimingData
+    {
+        public double CoarsePointsSeconds;
+        public double CoarseHullSeconds;
+        public double CoarseVoronoiSeconds;
+        public double CoarseAreaSeconds;
+        public double TectonicsSeconds;
+        public double ElevationSeconds;
+        public double DenseTerrainSeconds;
+        public double SiteSelectionSeconds;
+        public double TotalSeconds;
     }
 
     /// <summary>
@@ -38,5 +72,8 @@ namespace WorldGen.Core
 
         /// <summary>Ranked candidate sites (best first), for UI cycling</summary>
         public System.Collections.Generic.List<SiteContext> Sites;
+
+        /// <summary>Generation timings for the major globe pipeline stages.</summary>
+        public WorldGenTimingData Timings;
     }
 }
