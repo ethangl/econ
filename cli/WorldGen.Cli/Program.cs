@@ -14,16 +14,15 @@ var outputOption = new Option<string>("--output", () => "heightmap.png", "Output
 var oceanOption = new Option<float>("--ocean", () => 0.6f, "Ocean fraction (0-1)");
 var jitterOption = new Option<float>("--jitter", () => 0.5f, "Point jitter (0-1)");
 var ultraOption = new Option<bool>("--ultra", () => false, "Enable ultra-dense mesh (~4x cells via subdivision)");
-var blurOption = new Option<float>("--blur", () => 0f, "Gaussian blur sigma in pixels (wraps horizontally)");
+var blurOption = new Option<float>("--blur", () => 1.0f, "Blur strength (1.0 = 5px sigma at 8192 wide, scales with resolution)");
 
-var sharpenOption = new Option<float>("--sharpen", () => 0f, "Unsharp mask amount (0=off, 1=normal, 2=strong)");
-var sharpenRadiusOption = new Option<float>("--sharpen-radius", () => 2f, "Unsharp mask blur radius in pixels");
+var sharpenOption = new Option<float>("--sharpen", () => 0f, "Unsharp mask amount (0=off, 1=normal, 2=strong; uses blur sigma)");
 var colorOption = new Option<bool>("--color", () => false, "Output terrain-colored RGB instead of grayscale");
 var coastOption = new Option<float>("--coast", () => 0.25f, "Coastal detail amplitude (0-1)");
 
 var rootCommand = new RootCommand("Generate a 2D heightmap from spherical world generation")
 {
-    seedOption, cellsOption, widthOption, heightOption, outputOption, oceanOption, jitterOption, ultraOption, coastOption, blurOption, sharpenOption, sharpenRadiusOption, colorOption
+    seedOption, cellsOption, widthOption, heightOption, outputOption, oceanOption, jitterOption, ultraOption, coastOption, blurOption, sharpenOption, colorOption
 };
 
 rootCommand.SetHandler((InvocationContext ctx) =>
@@ -38,7 +37,6 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     bool ultra = ctx.ParseResult.GetValueForOption(ultraOption);
     float blur = ctx.ParseResult.GetValueForOption(blurOption);
     float sharpen = ctx.ParseResult.GetValueForOption(sharpenOption);
-    float sharpenRadius = ctx.ParseResult.GetValueForOption(sharpenRadiusOption);
     bool color = ctx.ParseResult.GetValueForOption(colorOption);
     float coast = ctx.ParseResult.GetValueForOption(coastOption);
 
@@ -74,8 +72,9 @@ rootCommand.SetHandler((InvocationContext ctx) =>
 
     // Pipeline: render → blur → sharpen → coast detail → color → save
     using var image = HeightmapRenderer.Render(renderTerrain, width, height);
-    if (blur > 0f) WrapBlur.Apply(image, blur);
-    if (sharpen > 0f) WrapUnsharpMask.Apply(image, sharpen, sharpenRadius);
+    float blurSigma = blur * 5f * (width / 8192f);
+    if (blurSigma > 0f) WrapBlur.Apply(image, blurSigma);
+    if (sharpen > 0f) WrapUnsharpMask.Apply(image, sharpen, blurSigma);
     if (coast > 0f) CoastDetail.Apply(image, coast, seed);
     if (color)
     {
