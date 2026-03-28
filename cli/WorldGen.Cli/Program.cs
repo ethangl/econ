@@ -11,7 +11,6 @@ var cellsOption = new Option<int>("--cells", () => 20400, "Dense cell count");
 var widthOption = new Option<int>("--width", () => 8192, "Output image width");
 var heightOption = new Option<int>("--height", () => 4096, "Output image height");
 var outputOption = new Option<string>("--output", () => "heightmap.png", "Output file path");
-var bit16Option = new Option<bool>("--16bit", () => true, "Use 16-bit output");
 var oceanOption = new Option<float>("--ocean", () => 0.6f, "Ocean fraction (0-1)");
 var jitterOption = new Option<float>("--jitter", () => 0.5f, "Point jitter (0-1)");
 var ultraOption = new Option<bool>("--ultra", () => false, "Enable ultra-dense mesh (~4x cells via subdivision)");
@@ -23,7 +22,7 @@ var colorOption = new Option<bool>("--color", () => false, "Output terrain-color
 
 var rootCommand = new RootCommand("Generate a 2D heightmap from spherical world generation")
 {
-    seedOption, cellsOption, widthOption, heightOption, outputOption, bit16Option, oceanOption, jitterOption, ultraOption, blurOption, sharpenOption, sharpenRadiusOption, noiseOption, colorOption
+    seedOption, cellsOption, widthOption, heightOption, outputOption, oceanOption, jitterOption, ultraOption, blurOption, sharpenOption, sharpenRadiusOption, noiseOption, colorOption
 };
 
 rootCommand.SetHandler((InvocationContext ctx) =>
@@ -33,7 +32,6 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     int width = ctx.ParseResult.GetValueForOption(widthOption);
     int height = ctx.ParseResult.GetValueForOption(heightOption);
     string output = ctx.ParseResult.GetValueForOption(outputOption)!;
-    bool use16bit = ctx.ParseResult.GetValueForOption(bit16Option);
     float ocean = ctx.ParseResult.GetValueForOption(oceanOption);
     float jitter = ctx.ParseResult.GetValueForOption(jitterOption);
     bool ultra = ctx.ParseResult.GetValueForOption(ultraOption);
@@ -65,7 +63,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     Console.WriteLine($"  Globe generated in {sw.Elapsed.TotalSeconds:F1}s ({renderMesh.CellCount} cells)");
 
     sw.Restart();
-    Console.WriteLine($"Rendering heightmap: {width}x{height} ({(use16bit ? "16-bit" : "8-bit")})");
+    Console.WriteLine($"Rendering heightmap: {width}x{height} (16-bit)");
 
     var renderTerrain = new DenseTerrainData
     {
@@ -73,37 +71,18 @@ rootCommand.SetHandler((InvocationContext ctx) =>
         CellElevation = renderElev,
     };
 
-    if (use16bit)
+    using var image = HeightmapRenderer.Render(renderTerrain, width, height);
+    if (blur > 0f) WrapBlur.Apply(image, blur);
+    if (sharpen > 0f) WrapUnsharpMask.Apply(image, sharpen, sharpenRadius);
+    if (color)
     {
-        using var image = HeightmapRenderer.Render(renderTerrain, width, height);
-        if (blur > 0f) WrapBlur.Apply(image, blur);
-        if (sharpen > 0f) WrapUnsharpMask.Apply(image, sharpen, sharpenRadius);
-        if (color)
-        {
-            using var rgb = ColorRamp.Apply(image);
-            rgb.SaveAsPng(output);
-        }
-        else
-        {
-            if (noise > 0f) NoiseOverlay.Apply(image, noise, seed);
-            image.SaveAsPng(output);
-        }
+        using var rgb = ColorRamp.Apply(image);
+        rgb.SaveAsPng(output);
     }
     else
     {
-        using var image = HeightmapRenderer.Render8(renderTerrain, width, height);
-        if (blur > 0f) WrapBlur.Apply(image, blur);
-        if (sharpen > 0f) WrapUnsharpMask.Apply(image, sharpen, sharpenRadius);
-        if (color)
-        {
-            using var rgb = ColorRamp.Apply(image);
-            rgb.SaveAsPng(output);
-        }
-        else
-        {
-            if (noise > 0f) NoiseOverlay.Apply(image, noise, seed);
-            image.SaveAsPng(output);
-        }
+        if (noise > 0f) NoiseOverlay.Apply(image, noise, seed);
+        image.SaveAsPng(output);
     }
 
     Console.WriteLine($"  Rendered in {sw.Elapsed.TotalSeconds:F1}s → {output}");
