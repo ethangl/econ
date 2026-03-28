@@ -47,6 +47,8 @@ namespace WorldGen.Cli.Lib
                     UseShellExecute = false,
                 };
 
+                psi.ArgumentList.Add("--mode");
+                psi.ArgumentList.Add("coast");
                 psi.ArgumentList.Add("--input");
                 psi.ArgumentList.Add(inputPath);
                 psi.ArgumentList.Add("--output");
@@ -92,7 +94,7 @@ namespace WorldGen.Cli.Lib
             }
         }
 
-        static string EnsureHelperBuilt()
+        internal static string EnsureHelperBuilt()
         {
             lock (HelperLock)
             {
@@ -145,7 +147,7 @@ namespace WorldGen.Cli.Lib
             }
         }
 
-        static ushort[] ExtractPixels(Image<L16> image)
+        internal static ushort[] ExtractPixels(Image<L16> image)
         {
             int width = image.Width;
             int height = image.Height;
@@ -169,7 +171,7 @@ namespace WorldGen.Cli.Lib
             return pixels;
         }
 
-        static void WritePixels(Image<L16> image, ushort[] pixels)
+        internal static void WritePixels(Image<L16> image, ushort[] pixels)
         {
             int width = image.Width;
             int height = image.Height;

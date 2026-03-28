@@ -20,6 +20,16 @@ namespace WorldGen.Cli.Lib
         readonly int _latBuckets;
         readonly int _lonBuckets;
 
+        internal float Radius => _radius;
+        internal float[] CenterX => _centerX;
+        internal float[] CenterY => _centerY;
+        internal float[] CenterZ => _centerZ;
+        internal int[] BucketOffsets => _bucketOffsets;
+        internal int[] BucketCounts => _bucketCounts;
+        internal int[] BucketCells => _bucketCells;
+        internal int LatBucketCount => _latBuckets;
+        internal int LonBucketCount => _lonBuckets;
+
         public SphereLookup(Vec3[] cellCenters, float radius, int latBuckets = 180, int lonBuckets = 360)
         {
             _radius = radius;

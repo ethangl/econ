@@ -8,12 +8,32 @@ struct Params
     var amplitude: Float
 }
 
+struct RenderParams
+{
+    var width: UInt32
+    var height: UInt32
+    var radius: Float
+    var latBuckets: Int32
+    var lonBuckets: Int32
+}
+
 func argument(named name: String) throws -> String
 {
     let args = CommandLine.arguments
     guard let index = args.firstIndex(of: name), index + 1 < args.count else
     {
         throw NSError(domain: "MetalCoastHelper", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing argument \(name)"])
+    }
+
+    return args[index + 1]
+}
+
+func optionalArgument(named name: String) -> String?
+{
+    let args = CommandLine.arguments
+    guard let index = args.firstIndex(of: name), index + 1 < args.count else
+    {
+        return nil
     }
 
     return args[index + 1]
@@ -35,6 +55,14 @@ func readInt32Array(from path: String) throws -> [Int32]
     }
 }
 
+func readFloatArray(from path: String) throws -> [Float]
+{
+    let data = try Data(contentsOf: URL(fileURLWithPath: path))
+    return data.withUnsafeBytes { rawBuffer in
+        Array(rawBuffer.bindMemory(to: Float.self))
+    }
+}
+
 let shaderSource = """
 #include <metal_stdlib>
 using namespace metal;
@@ -44,6 +72,15 @@ struct Params
     uint width;
     uint height;
     float amplitude;
+};
+
+struct RenderParams
+{
+    uint width;
+    uint height;
+    float radius;
+    int latBuckets;
+    int lonBuckets;
 };
 
 inline int floor_bug(float v)
@@ -141,6 +178,26 @@ inline float fractal6(const device int* perm, float x, float y, float z)
     return sum / maxAmp;
 }
 
+inline int lat_index(float lat, int latBuckets)
+{
+    float t = (lat + float(M_PI_F) / 2.0f) / float(M_PI_F);
+    int idx = int(t * float(latBuckets));
+    return clamp(idx, 0, latBuckets - 1);
+}
+
+inline int lon_index(float lon, int lonBuckets)
+{
+    float t = (lon + float(M_PI_F)) / (2.0f * float(M_PI_F));
+    int idx = int(t * float(lonBuckets));
+    return clamp(idx, 0, lonBuckets - 1);
+}
+
+inline int longitude_search_radius(float lat, int lonBuckets)
+{
+    float cosLat = cos(lat);
+    return cosLat > 0.01f ? min(int(ceil(1.0f / cosLat)), lonBuckets / 2) : lonBuckets / 2;
+}
+
 kernel void apply_coast(
     const device ushort* inputPixels [[buffer(0)]],
     device ushort* outputPixels [[buffer(1)]],
@@ -181,9 +238,81 @@ kernel void apply_coast(
     float result = elev + n * params.amplitude * fade;
     outputPixels[gid] = ushort(clamp(result * 65535.0f, 0.0f, 65535.0f));
 }
+
+kernel void render_heightmap(
+    const device float* centerX [[buffer(0)]],
+    const device float* centerY [[buffer(1)]],
+    const device float* centerZ [[buffer(2)]],
+    const device int* bucketOffsets [[buffer(3)]],
+    const device int* bucketCounts [[buffer(4)]],
+    const device int* bucketCells [[buffer(5)]],
+    const device float* elevation [[buffer(6)]],
+    constant RenderParams& params [[buffer(7)]],
+    device ushort* outputPixels [[buffer(8)]],
+    uint gid [[thread_position_in_grid]])
+{
+    uint pixelCount = params.width * params.height;
+    if (gid >= pixelCount)
+    {
+        return;
+    }
+
+    uint x = gid % params.width;
+    uint y = gid / params.width;
+    float width = float(params.width);
+    float height = float(params.height);
+    float lat = float(M_PI_F) / 2.0f - (float(y) + 0.5f) / height * float(M_PI_F);
+    float lon = (float(x) + 0.5f) / width * 2.0f * float(M_PI_F) - float(M_PI_F);
+    float cosLat = cos(lat);
+    float px = params.radius * cosLat * cos(lon);
+    float py = params.radius * sin(lat);
+    float pz = params.radius * cosLat * sin(lon);
+
+    int latIdx = lat_index(lat, params.latBuckets);
+    int lonIdx = lon_index(lon, params.lonBuckets);
+    int lonRadius = longitude_search_radius(lat, params.lonBuckets);
+
+    float bestDist = FLT_MAX;
+    int bestCell = 0;
+
+    for (int dLat = -1; dLat <= 1; dLat++)
+    {
+        int li = latIdx + dLat;
+        if (li < 0 || li >= params.latBuckets)
+        {
+            continue;
+        }
+
+        int rowOffset = li * params.lonBuckets;
+        for (int dLon = -lonRadius; dLon <= lonRadius; dLon++)
+        {
+            int lj = (lonIdx + dLon + params.lonBuckets) % params.lonBuckets;
+            int bucketIndex = rowOffset + lj;
+            int start = bucketOffsets[bucketIndex];
+            int end = start + bucketCounts[bucketIndex];
+
+            for (int i = start; i < end; i++)
+            {
+                int c = bucketCells[i];
+                float dx = px - centerX[c];
+                float dy = py - centerY[c];
+                float dz = pz - centerZ[c];
+                float dist = dx * dx + dy * dy + dz * dz;
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    bestCell = c;
+                }
+            }
+        }
+    }
+
+    float elev = clamp(elevation[bestCell], 0.0f, 1.0f);
+    outputPixels[gid] = ushort(elev * 65535.0f);
+}
 """
 
-do
+func runCoast() throws
 {
     let inputPath = try argument(named: "--input")
     let outputPath = try argument(named: "--output")
@@ -281,6 +410,140 @@ do
 
     let outputData = Data(bytes: outputBuffer.contents(), count: pixelCount * MemoryLayout<UInt16>.stride)
     try outputData.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+}
+
+func runRender() throws
+{
+    let outputPath = try argument(named: "--output")
+    let centerXPath = try argument(named: "--center-x")
+    let centerYPath = try argument(named: "--center-y")
+    let centerZPath = try argument(named: "--center-z")
+    let bucketOffsetsPath = try argument(named: "--bucket-offsets")
+    let bucketCountsPath = try argument(named: "--bucket-counts")
+    let bucketCellsPath = try argument(named: "--bucket-cells")
+    let elevationPath = try argument(named: "--elevation")
+    let width = try UInt32(argument(named: "--width")).unwrap("width")
+    let height = try UInt32(argument(named: "--height")).unwrap("height")
+    let radius = try Float(argument(named: "--radius")).unwrap("radius")
+    let latBuckets = try Int32(argument(named: "--lat-buckets")).unwrap("lat-buckets")
+    let lonBuckets = try Int32(argument(named: "--lon-buckets")).unwrap("lon-buckets")
+
+    let centerX = try readFloatArray(from: centerXPath)
+    let centerY = try readFloatArray(from: centerYPath)
+    let centerZ = try readFloatArray(from: centerZPath)
+    let bucketOffsets = try readInt32Array(from: bucketOffsetsPath)
+    let bucketCounts = try readInt32Array(from: bucketCountsPath)
+    let bucketCells = try readInt32Array(from: bucketCellsPath)
+    let elevation = try readFloatArray(from: elevationPath)
+
+    guard centerX.count == centerY.count, centerX.count == centerZ.count, centerX.count == elevation.count else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 20, userInfo: [NSLocalizedDescriptionKey: "Center/elevation array size mismatch"])
+    }
+
+    guard bucketOffsets.count == Int(latBuckets * lonBuckets), bucketCounts.count == Int(latBuckets * lonBuckets) else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 21, userInfo: [NSLocalizedDescriptionKey: "Bucket metadata size mismatch"])
+    }
+
+    guard let device = MTLCreateSystemDefaultDevice() else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 22, userInfo: [NSLocalizedDescriptionKey: "No Metal device available"])
+    }
+
+    let library = try device.makeLibrary(source: shaderSource, options: nil)
+    guard let function = library.makeFunction(name: "render_heightmap") else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 23, userInfo: [NSLocalizedDescriptionKey: "Failed to create Metal render function"])
+    }
+
+    let pipeline = try device.makeComputePipelineState(function: function)
+    guard let queue = device.makeCommandQueue() else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 24, userInfo: [NSLocalizedDescriptionKey: "Failed to create Metal command queue"])
+    }
+
+    func makeBuffer<T>(from values: [T], code: Int, label: String) throws -> MTLBuffer
+    {
+        try values.withUnsafeBytes { bytes in
+            guard let buffer = device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared) else
+            {
+                throw NSError(domain: "MetalCoastHelper", code: code, userInfo: [NSLocalizedDescriptionKey: "Failed to create \(label) buffer"])
+            }
+            return buffer
+        }
+    }
+
+    let centerXBuffer = try makeBuffer(from: centerX, code: 25, label: "center-x")
+    let centerYBuffer = try makeBuffer(from: centerY, code: 26, label: "center-y")
+    let centerZBuffer = try makeBuffer(from: centerZ, code: 27, label: "center-z")
+    let bucketOffsetsBuffer = try makeBuffer(from: bucketOffsets, code: 28, label: "bucket-offsets")
+    let bucketCountsBuffer = try makeBuffer(from: bucketCounts, code: 29, label: "bucket-counts")
+    let bucketCellsBuffer = try makeBuffer(from: bucketCells, code: 30, label: "bucket-cells")
+    let elevationBuffer = try makeBuffer(from: elevation, code: 31, label: "elevation")
+
+    let pixelCount = Int(width * height)
+    guard let outputBuffer = device.makeBuffer(length: pixelCount * MemoryLayout<UInt16>.stride, options: .storageModeShared) else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 32, userInfo: [NSLocalizedDescriptionKey: "Failed to create output buffer"])
+    }
+
+    var params = RenderParams(width: width, height: height, radius: radius, latBuckets: latBuckets, lonBuckets: lonBuckets)
+    let paramsBuffer = try withUnsafeBytes(of: &params) { bytes in
+        guard let buffer = device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared) else
+        {
+            throw NSError(domain: "MetalCoastHelper", code: 33, userInfo: [NSLocalizedDescriptionKey: "Failed to create render params buffer"])
+        }
+        return buffer
+    }
+
+    guard let commandBuffer = queue.makeCommandBuffer(),
+          let encoder = commandBuffer.makeComputeCommandEncoder() else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 34, userInfo: [NSLocalizedDescriptionKey: "Failed to create render command buffer or encoder"])
+    }
+
+    encoder.setComputePipelineState(pipeline)
+    encoder.setBuffer(centerXBuffer, offset: 0, index: 0)
+    encoder.setBuffer(centerYBuffer, offset: 0, index: 1)
+    encoder.setBuffer(centerZBuffer, offset: 0, index: 2)
+    encoder.setBuffer(bucketOffsetsBuffer, offset: 0, index: 3)
+    encoder.setBuffer(bucketCountsBuffer, offset: 0, index: 4)
+    encoder.setBuffer(bucketCellsBuffer, offset: 0, index: 5)
+    encoder.setBuffer(elevationBuffer, offset: 0, index: 6)
+    encoder.setBuffer(paramsBuffer, offset: 0, index: 7)
+    encoder.setBuffer(outputBuffer, offset: 0, index: 8)
+
+    let threadWidth = min(pipeline.maxTotalThreadsPerThreadgroup, 256)
+    let threadsPerGroup = MTLSize(width: threadWidth, height: 1, depth: 1)
+    let threadsPerGrid = MTLSize(width: pixelCount, height: 1, depth: 1)
+    encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerGroup)
+    encoder.endEncoding()
+
+    commandBuffer.commit()
+    commandBuffer.waitUntilCompleted()
+
+    if let error = commandBuffer.error
+    {
+        throw error
+    }
+
+    let outputData = Data(bytes: outputBuffer.contents(), count: pixelCount * MemoryLayout<UInt16>.stride)
+    try outputData.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+}
+
+do
+{
+    let mode = optionalArgument(named: "--mode") ?? "coast"
+    switch mode
+    {
+    case "coast":
+        try runCoast()
+    case "render":
+        try runRender()
+    default:
+        throw NSError(domain: "MetalCoastHelper", code: 35, userInfo: [NSLocalizedDescriptionKey: "Unsupported mode \(mode)"])
+    }
 }
 catch
 {

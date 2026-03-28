@@ -25,7 +25,7 @@ dotnet run --project WorldGen.Cli -- [options]
 | `--blur <float>`           | 1.0           | Blur strength (1.0 = 5px sigma at 8192w, scales with resolution)      |
 | `--sharpen <float>`        | 0             | Unsharp mask amount (0=off, 1=normal, 2=strong; uses blur sigma)       |
 | `--color`                  | false         | Output terrain-colored RGB instead of grayscale                        |
-| `--cpu`                    | false         | Force CPU coast detail instead of the default Metal path on macOS      |
+| `--cpu`                    | false         | Force the CPU heightmap pipeline instead of the default Metal path on macOS |
 | `--output <path>`          | heightmap.png | Output file path                                                       |
 
 ### Examples
@@ -40,7 +40,7 @@ dotnet run --project WorldGen.Cli -- --seed 7 --ultra --blur 2 --output world_hd
 # More ocean, fewer cells for faster iteration
 dotnet run --project WorldGen.Cli -- --seed 99 --ocean 0.75 --cells 5000 --output quick.png
 
-# Force the exact CPU coast-detail path
+# Force the CPU heightmap path
 dotnet run --project WorldGen.Cli -- --cpu --output world_cpu.png
 ```
 
@@ -58,7 +58,7 @@ dotnet run --project WorldGen.Cli -- --cpu --output world_cpu.png
 10. **Coast detail** — fractal 3D Perlin noise near sea level creates islands, inlets, and irregular coastlines; frequency scales with image resolution so features are consistent pixel size
 11. **Color ramp** (optional) — maps elevation to terrain colors (ocean blue → green → brown → snow)
 
-On macOS, coast detail uses an accelerated Metal path by default. Use `--cpu` to force the reference CPU implementation instead. The Metal result is not bit-exact with CPU output, but observed drift is only ±1 on the 16-bit height scale.
+On macOS, the heightmap rasterization and coast-detail stages use Metal by default. Use `--cpu` to force the reference CPU implementation instead. The Metal result is not bit-exact with CPU output.
 
 
 ### Output format

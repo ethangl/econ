@@ -19,7 +19,7 @@ var blurOption = new Option<float>("--blur", () => 1.0f, "Blur strength (1.0 = 5
 var sharpenOption = new Option<float>("--sharpen", () => 0f, "Unsharp mask amount (0=off, 1=normal, 2=strong; uses blur sigma)");
 var colorOption = new Option<bool>("--color", () => false, "Output terrain-colored RGB instead of grayscale");
 var coastOption = new Option<float>("--coast", () => 0.25f, "Coastal detail amplitude (0-1)");
-var cpuOption = new Option<bool>("--cpu", () => false, "Force CPU coast detail instead of the default Metal path on macOS");
+var cpuOption = new Option<bool>("--cpu", () => false, "Force the CPU heightmap pipeline instead of the default Metal path on macOS");
 
 var rootCommand = new RootCommand("Generate a 2D heightmap from spherical world generation")
 {
@@ -73,9 +73,13 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     };
 
     // Pipeline: render → blur → sharpen → coast detail → color → save
+    bool useMetal = !forceCpu && MetalHeightmapRenderer.IsSupported;
     var stepSw = Stopwatch.StartNew();
-    using var image = HeightmapRenderer.Render(renderTerrain, width, height);
-    Console.WriteLine($"  Heightmap rasterized in {stepSw.Elapsed.TotalSeconds:F1}s");
+    using var image = useMetal
+        ? MetalHeightmapRenderer.Render(renderTerrain, width, height)
+        : HeightmapRenderer.Render(renderTerrain, width, height);
+    string rasterMode = useMetal ? "Metal default" : (forceCpu ? "CPU forced" : "CPU fallback");
+    Console.WriteLine($"  Heightmap rasterized in {stepSw.Elapsed.TotalSeconds:F1}s ({rasterMode})");
 
     float blurSigma = blur * 5f * (width / 8192f);
     if (blurSigma > 0f)
@@ -95,8 +99,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     if (coast > 0f)
     {
         stepSw.Restart();
-        bool useMetalCoast = !forceCpu && MetalCoastDetail.IsSupported;
-        if (useMetalCoast)
+        if (useMetal)
         {
             MetalCoastDetail.Apply(image, coast, seed);
             Console.WriteLine($"  Coast detail applied in {stepSw.Elapsed.TotalSeconds:F1}s (amount {coast:F2}, Metal default)");
