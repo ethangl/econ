@@ -21,11 +21,11 @@ dotnet run --project WorldGen.Cli -- [options]
 | `--jitter <float>`         | 0.5           | Point distribution jitter (0-1)                                        |
 | `--width <int>`            | 8192          | Output image width                                                     |
 | `--height <int>`           | 4096          | Output image height                                                    |
-| `--16bit`                  | true          | 16-bit grayscale output                                                |
+| `--coast <float>`          | 0.25          | Coastal detail amplitude (fractal noise near sea level, 0-1)           |
 | `--blur <float>`           | 0             | Gaussian blur sigma in pixels (wraps horizontally for seamless tiling) |
 | `--sharpen <float>`        | 0             | Unsharp mask amount (0=off, 1=normal, 2=strong)                        |
 | `--sharpen-radius <float>` | 2             | Unsharp mask blur radius in pixels                                     |
-| `--noise <float>`          | 0             | B&W noise overlay opacity (0-100%, overlay blend mode)                 |
+
 | `--color`                  | false         | Output terrain-colored RGB instead of grayscale                        |
 | `--output <path>`          | heightmap.png | Output file path                                                       |
 
@@ -53,8 +53,9 @@ dotnet run --project WorldGen.Cli -- --seed 99 --ocean 0.75 --cells 5000 --outpu
 7. **Projection** — equirectangular unwrap with spatial-hash nearest-cell lookup
 8. **Blur** (optional) — Gaussian blur with horizontal wrapping to avoid tiling seams
 9. **Sharpen** (optional) — unsharp mask (also wraps horizontally) to recover terrain edges after blur
-10. **Color ramp** (optional) — maps elevation to terrain colors (ocean blue → green → brown → snow)
-11. **Noise** (optional) — 1px B&W noise with overlay blend mode for texture (grayscale only)
+10. **Coast detail** — fractal 3D Perlin noise near sea level creates islands, inlets, and irregular coastlines; frequency scales with image resolution so features are consistent pixel size
+11. **Color ramp** (optional) — maps elevation to terrain colors (ocean blue → green → brown → snow)
+
 
 ### Output format
 
