@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace WorldGen.Core
 {
@@ -29,8 +30,10 @@ namespace WorldGen.Core
         /// <summary>
         /// 3D Perlin noise, returns value in approximately [-1, 1].
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public float Sample(float x, float y, float z)
         {
+            var perm = _perm;
             int xi = Floor(x);
             int yi = Floor(y);
             int zi = Floor(z);
@@ -45,19 +48,19 @@ namespace WorldGen.Core
             float v = Fade(yf);
             float w = Fade(zf);
 
-            int a  = _perm[xi] + yi;
-            int aa = _perm[a] + zi;
-            int ab = _perm[a + 1] + zi;
-            int b  = _perm[xi + 1] + yi;
-            int ba = _perm[b] + zi;
-            int bb = _perm[b + 1] + zi;
+            int a  = perm[xi] + yi;
+            int aa = perm[a] + zi;
+            int ab = perm[a + 1] + zi;
+            int b  = perm[xi + 1] + yi;
+            int ba = perm[b] + zi;
+            int bb = perm[b + 1] + zi;
 
-            float x1 = Lerp(Grad(_perm[aa], xf, yf, zf), Grad(_perm[ba], xf - 1f, yf, zf), u);
-            float x2 = Lerp(Grad(_perm[ab], xf, yf - 1f, zf), Grad(_perm[bb], xf - 1f, yf - 1f, zf), u);
+            float x1 = Lerp(Grad(perm[aa], xf, yf, zf), Grad(perm[ba], xf - 1f, yf, zf), u);
+            float x2 = Lerp(Grad(perm[ab], xf, yf - 1f, zf), Grad(perm[bb], xf - 1f, yf - 1f, zf), u);
             float y1 = Lerp(x1, x2, v);
 
-            float x3 = Lerp(Grad(_perm[aa + 1], xf, yf, zf - 1f), Grad(_perm[ba + 1], xf - 1f, yf, zf - 1f), u);
-            float x4 = Lerp(Grad(_perm[ab + 1], xf, yf - 1f, zf - 1f), Grad(_perm[bb + 1], xf - 1f, yf - 1f, zf - 1f), u);
+            float x3 = Lerp(Grad(perm[aa + 1], xf, yf, zf - 1f), Grad(perm[ba + 1], xf - 1f, yf, zf - 1f), u);
+            float x4 = Lerp(Grad(perm[ab + 1], xf, yf - 1f, zf - 1f), Grad(perm[bb + 1], xf - 1f, yf - 1f, zf - 1f), u);
             float y2 = Lerp(x3, x4, v);
 
             return Lerp(y1, y2, w);
@@ -84,13 +87,63 @@ namespace WorldGen.Core
             return sum / maxAmp;
         }
 
+        public int[] GetPermutationTable()
+        {
+            int[] copy = new int[_perm.Length];
+            Array.Copy(_perm, copy, _perm.Length);
+            return copy;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public float Fractal6Lacunarity2Persistence05(float x, float y, float z)
+        {
+            float sum = 0f;
+            float amp = 1f;
+            float freq = 1f;
+            float maxAmp = 0f;
+
+            sum += Sample(x * freq, y * freq, z * freq) * amp;
+            maxAmp += amp;
+            freq *= 2f;
+            amp *= 0.5f;
+
+            sum += Sample(x * freq, y * freq, z * freq) * amp;
+            maxAmp += amp;
+            freq *= 2f;
+            amp *= 0.5f;
+
+            sum += Sample(x * freq, y * freq, z * freq) * amp;
+            maxAmp += amp;
+            freq *= 2f;
+            amp *= 0.5f;
+
+            sum += Sample(x * freq, y * freq, z * freq) * amp;
+            maxAmp += amp;
+            freq *= 2f;
+            amp *= 0.5f;
+
+            sum += Sample(x * freq, y * freq, z * freq) * amp;
+            maxAmp += amp;
+            freq *= 2f;
+            amp *= 0.5f;
+
+            sum += Sample(x * freq, y * freq, z * freq) * amp;
+            maxAmp += amp;
+
+            return sum / maxAmp;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static int Floor(float v) => v >= 0 ? (int)v : (int)v - 1;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static float Fade(float t) => t * t * t * (t * (t * 6f - 15f) + 10f);
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static float Lerp(float a, float b, float t) => a + t * (b - a);
 
         // Ken Perlin's optimized gradient for 3D (12 edge vectors via bit ops)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static float Grad(int hash, float x, float y, float z)
         {
             int h = hash & 15;

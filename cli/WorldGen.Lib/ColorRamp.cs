@@ -10,6 +10,8 @@ namespace WorldGen.Cli.Lib
     /// </summary>
     public static class ColorRamp
     {
+        internal readonly record struct GpuStop(float T, float R, float G, float B);
+
         struct Stop
         {
             public float T;
@@ -35,6 +37,18 @@ namespace WorldGen.Cli.Lib
             new(0.90f, 170, 160, 150),  // high mountain gray
             new(1.00f, 240, 240, 245),  // snow peak
         };
+
+        internal static GpuStop[] GetGpuStops()
+        {
+            var gpuStops = new GpuStop[Stops.Length];
+            for (int i = 0; i < Stops.Length; i++)
+            {
+                var stop = Stops[i];
+                gpuStops[i] = new GpuStop(stop.T, stop.R, stop.G, stop.B);
+            }
+
+            return gpuStops;
+        }
 
         /// <summary>
         /// Apply color ramp to a 16-bit grayscale image, producing an RGB image.
