@@ -7,7 +7,7 @@ using WorldGen.Core;
 namespace WorldGen.Cli.Lib
 {
     /// <summary>
-    /// Renders a sphere's cell elevation data to a 2D equirectangular heightmap image.
+    /// Renders a sphere's cell elevation data to a 2D equirectangular heightmap buffer.
     /// </summary>
     public static class HeightmapRenderer
     {
