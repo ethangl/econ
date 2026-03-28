@@ -3,6 +3,7 @@ using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.Diagnostics;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Png;
 using WorldGen.Core;
 using WorldGen.Cli.Lib;
 
@@ -24,6 +25,11 @@ var cpuOption = new Option<bool>("--cpu", () => false, "Force the CPU heightmap 
 var rootCommand = new RootCommand("Generate a 2D heightmap from spherical world generation")
 {
     seedOption, cellsOption, widthOption, heightOption, outputOption, oceanOption, jitterOption, ultraOption, coastOption, blurOption, sharpenOption, colorOption, cpuOption
+};
+
+var pngEncoder = new PngEncoder
+{
+    CompressionLevel = PngCompressionLevel.BestSpeed,
 };
 
 rootCommand.SetHandler((InvocationContext ctx) =>
@@ -119,13 +125,13 @@ rootCommand.SetHandler((InvocationContext ctx) =>
         Console.WriteLine($"  Color ramp applied in {stepSw.Elapsed.TotalSeconds:F1}s");
 
         stepSw.Restart();
-        rgb.SaveAsPng(output);
+        rgb.Save(output, pngEncoder);
         Console.WriteLine($"  Saved PNG in {stepSw.Elapsed.TotalSeconds:F1}s");
     }
     else
     {
         stepSw.Restart();
-        image.SaveAsPng(output);
+        image.Save(output, pngEncoder);
         Console.WriteLine($"  Saved PNG in {stepSw.Elapsed.TotalSeconds:F1}s");
     }
 
