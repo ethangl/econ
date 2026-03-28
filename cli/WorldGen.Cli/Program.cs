@@ -90,8 +90,8 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     };
 
     // Pipeline: render → blur → sharpen → coast detail → raw export → preview export
-    bool metalSupported = MetalHeightmapPipeline.IsSupported;
-    bool useMetal = !forceCpu && metalSupported;
+    bool metalSupported = !forceCpu && MetalHeightmapPipeline.IsSupported;
+    bool useMetal = metalSupported;
     float blurSigma = blur * 5f * (width / 8192f);
     var stepSw = Stopwatch.StartNew();
     Image<L16> RenderOnCpu(string mode)
@@ -159,6 +159,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
 
     stepSw.Restart();
     using var previewGray = HeightmapOutput.CreatePreview(ownedImage, previewWidth);
+    Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(previewPath))!);
     if (color)
     {
         Image<Rgb24> previewColor;
