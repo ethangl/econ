@@ -22,9 +22,8 @@ dotnet run --project WorldGen.Cli -- [options]
 | `--width <int>`            | 8192          | Output image width                                                     |
 | `--height <int>`           | 4096          | Output image height                                                    |
 | `--coast <float>`          | 0.25          | Coastal detail amplitude (fractal noise near sea level, 0-1)           |
-| `--blur <float>`           | 0             | Gaussian blur sigma in pixels (wraps horizontally for seamless tiling) |
-| `--sharpen <float>`        | 0             | Unsharp mask amount (0=off, 1=normal, 2=strong)                        |
-| `--sharpen-radius <float>` | 2             | Unsharp mask blur radius in pixels                                     |
+| `--blur <float>`           | 1.0           | Blur strength (1.0 = 5px sigma at 8192w, scales with resolution)      |
+| `--sharpen <float>`        | 0             | Unsharp mask amount (0=off, 1=normal, 2=strong; uses blur sigma)       |
 
 | `--color`                  | false         | Output terrain-colored RGB instead of grayscale                        |
 | `--output <path>`          | heightmap.png | Output file path                                                       |
