@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using WorldGen.Core;
@@ -37,15 +38,32 @@ namespace WorldGen.Cli.Lib
             int h = image.Height;
 
             float freq = w / (2f * MathF.PI * FeaturePixels);
+            var cosLon = new float[w];
+            var sinLon = new float[w];
+            var cosLat = new float[h];
+            var sinLat = new float[h];
 
-            image.ProcessPixelRows(accessor =>
+            for (int x = 0; x < w; x++)
             {
-                for (int y = 0; y < h; y++)
+                float lon = (x + 0.5f) / w * 2f * MathF.PI - MathF.PI;
+                cosLon[x] = MathF.Cos(lon);
+                sinLon[x] = MathF.Sin(lon);
+            }
+
+            for (int y = 0; y < h; y++)
+            {
+                float lat = MathF.PI / 2f - (y + 0.5f) / h * MathF.PI;
+                cosLat[y] = MathF.Cos(lat);
+                sinLat[y] = MathF.Sin(lat);
+            }
+
+            if (image.DangerousTryGetSinglePixelMemory(out var pixels))
+            {
+                Parallel.For(0, h, y =>
                 {
-                    float lat = MathF.PI / 2f - (y + 0.5f) / h * MathF.PI;
-                    float cosLat = MathF.Cos(lat);
-                    float sinLat = MathF.Sin(lat);
-                    var row = accessor.GetRowSpan(y);
+                    var row = pixels.Span.Slice(y * w, w);
+                    float rowCosLat = cosLat[y];
+                    float rowSinLat = sinLat[y];
 
                     for (int x = 0; x < w; x++)
                     {
@@ -56,12 +74,9 @@ namespace WorldGen.Cli.Lib
                         float fade = 1f - e2 * e2 * 16f;
                         if (fade <= 0f) continue;
 
-                        float lon = (x + 0.5f) / w * 2f * MathF.PI - MathF.PI;
-
-                        float px = cosLat * MathF.Cos(lon);
-                        float py = sinLat;
-                        float pz = cosLat * MathF.Sin(lon);
-
+                        float px = rowCosLat * cosLon[x];
+                        float py = rowSinLat;
+                        float pz = rowCosLat * sinLon[x];
                         float n = noise.Fractal(
                             px * freq, py * freq, pz * freq,
                             Octaves, Lacunarity, Persistence);
@@ -69,8 +84,40 @@ namespace WorldGen.Cli.Lib
                         float result = elev + n * amplitude * fade;
                         row[x] = new L16((ushort)Math.Clamp(result * 65535f, 0f, 65535f));
                     }
-                }
-            });
+                });
+            }
+            else
+            {
+                image.ProcessPixelRows(accessor =>
+                {
+                    for (int y = 0; y < h; y++)
+                    {
+                        float rowCosLat = cosLat[y];
+                        float rowSinLat = sinLat[y];
+                        var row = accessor.GetRowSpan(y);
+
+                        for (int x = 0; x < w; x++)
+                        {
+                            float elev = row[x].PackedValue / 65535f;
+
+                            float e = elev - SeaLevel;
+                            float e2 = e * e;
+                            float fade = 1f - e2 * e2 * 16f;
+                            if (fade <= 0f) continue;
+
+                            float px = rowCosLat * cosLon[x];
+                            float py = rowSinLat;
+                            float pz = rowCosLat * sinLon[x];
+                            float n = noise.Fractal(
+                                px * freq, py * freq, pz * freq,
+                                Octaves, Lacunarity, Persistence);
+
+                            float result = elev + n * amplitude * fade;
+                            row[x] = new L16((ushort)Math.Clamp(result * 65535f, 0f, 65535f));
+                        }
+                    }
+                });
+            }
         }
     }
 }

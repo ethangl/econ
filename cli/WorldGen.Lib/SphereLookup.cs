@@ -10,28 +10,55 @@ namespace WorldGen.Cli.Lib
     /// </summary>
     public class SphereLookup
     {
-        readonly Vec3[] _centers;
         readonly float _radius;
-        readonly List<int>[] _buckets;
+        readonly float[] _centerX;
+        readonly float[] _centerY;
+        readonly float[] _centerZ;
+        readonly int[] _bucketOffsets;
+        readonly int[] _bucketCounts;
+        readonly int[] _bucketCells;
         readonly int _latBuckets;
         readonly int _lonBuckets;
 
         public SphereLookup(Vec3[] cellCenters, float radius, int latBuckets = 180, int lonBuckets = 360)
         {
-            _centers = cellCenters;
             _radius = radius;
             _latBuckets = latBuckets;
             _lonBuckets = lonBuckets;
-            _buckets = new List<int>[latBuckets * lonBuckets];
+            _centerX = new float[cellCenters.Length];
+            _centerY = new float[cellCenters.Length];
+            _centerZ = new float[cellCenters.Length];
 
-            for (int i = 0; i < _buckets.Length; i++)
-                _buckets[i] = new List<int>();
+            var buckets = new List<int>[latBuckets * lonBuckets];
+            for (int i = 0; i < buckets.Length; i++)
+                buckets[i] = new List<int>();
 
             for (int c = 0; c < cellCenters.Length; c++)
             {
+                _centerX[c] = cellCenters[c].X;
+                _centerY[c] = cellCenters[c].Y;
+                _centerZ[c] = cellCenters[c].Z;
+
                 var (lat, lon) = CartesianToLatLon(cellCenters[c]);
                 int bi = LatLonToBucket(lat, lon);
-                _buckets[bi].Add(c);
+                buckets[bi].Add(c);
+            }
+
+            _bucketOffsets = new int[buckets.Length];
+            _bucketCounts = new int[buckets.Length];
+
+            int totalCells = 0;
+            for (int i = 0; i < buckets.Length; i++)
+            {
+                _bucketOffsets[i] = totalCells;
+                _bucketCounts[i] = buckets[i].Count;
+                totalCells += buckets[i].Count;
+            }
+
+            _bucketCells = new int[totalCells];
+            for (int i = 0; i < buckets.Length; i++)
+            {
+                buckets[i].CopyTo(_bucketCells, _bucketOffsets[i]);
             }
         }
 
@@ -39,16 +66,38 @@ namespace WorldGen.Cli.Lib
         public int Nearest(Vec3 point)
         {
             var (lat, lon) = CartesianToLatLon(point);
-            int latIdx = LatIndex(lat);
-            int lonIdx = LonIndex(lon);
+            return Nearest(point.X, point.Y, point.Z, LatIndex(lat), LonIndex(lon), GetLongitudeSearchRadius(lat));
+        }
 
+        /// <summary>Find nearest cell index given lat/lon in radians.</summary>
+        public int NearestFromLatLon(float lat, float lon)
+        {
+            float cosLat = MathF.Cos(lat);
+            return Nearest(
+                _radius * cosLat * MathF.Cos(lon),
+                _radius * MathF.Sin(lat),
+                _radius * cosLat * MathF.Sin(lon),
+                LatIndex(lat),
+                LonIndex(lon),
+                GetLongitudeSearchRadius(lat));
+        }
+
+        public int GetLatitudeBucket(float lat) => LatIndex(lat);
+
+        public int GetLongitudeBucket(float lon) => LonIndex(lon);
+
+        public int GetLongitudeSearchRadius(float lat)
+        {
             // Near poles, longitude buckets are tiny in actual distance.
             // Expand lon search radius by 1/cos(lat) so we always cover enough real area.
             float cosLat = MathF.Cos(lat);
-            int lonRadius = cosLat > 0.01f
+            return cosLat > 0.01f
                 ? Math.Min((int)MathF.Ceiling(1f / cosLat), _lonBuckets / 2)
-                : _lonBuckets / 2; // at the pole, search all longitudes
+                : _lonBuckets / 2;
+        }
 
+        public int Nearest(float px, float py, float pz, int latIdx, int lonIdx, int lonRadius)
+        {
             float bestDist = float.MaxValue;
             int bestCell = 0;
 
@@ -57,15 +106,21 @@ namespace WorldGen.Cli.Lib
                 int li = latIdx + dLat;
                 if (li < 0 || li >= _latBuckets) continue;
 
+                int rowOffset = li * _lonBuckets;
                 for (int dLon = -lonRadius; dLon <= lonRadius; dLon++)
                 {
                     int lj = (lonIdx + dLon + _lonBuckets) % _lonBuckets;
-                    var bucket = _buckets[li * _lonBuckets + lj];
+                    int bucketIndex = rowOffset + lj;
+                    int start = _bucketOffsets[bucketIndex];
+                    int end = start + _bucketCounts[bucketIndex];
 
-                    for (int i = 0; i < bucket.Count; i++)
+                    for (int i = start; i < end; i++)
                     {
-                        int c = bucket[i];
-                        float dist = Vec3.SqrDistance(point, _centers[c]);
+                        int c = _bucketCells[i];
+                        float dx = px - _centerX[c];
+                        float dy = py - _centerY[c];
+                        float dz = pz - _centerZ[c];
+                        float dist = dx * dx + dy * dy + dz * dz;
                         if (dist < bestDist)
                         {
                             bestDist = dist;
@@ -76,12 +131,6 @@ namespace WorldGen.Cli.Lib
             }
 
             return bestCell;
-        }
-
-        /// <summary>Find nearest cell index given lat/lon in radians.</summary>
-        public int NearestFromLatLon(float lat, float lon)
-        {
-            return Nearest(LatLonToCartesian(lat, lon, _radius));
         }
 
         int LatIndex(float lat)
@@ -118,7 +167,5 @@ namespace WorldGen.Cli.Lib
                 radius * cosLat * MathF.Sin(lon)
             );
         }
-
-        static float Math_Clamp(float v, float min, float max) => v < min ? min : (v > max ? max : v);
     }
 }

@@ -71,22 +71,50 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     };
 
     // Pipeline: render → blur → sharpen → coast detail → color → save
+    var stepSw = Stopwatch.StartNew();
     using var image = HeightmapRenderer.Render(renderTerrain, width, height);
+    Console.WriteLine($"  Heightmap rasterized in {stepSw.Elapsed.TotalSeconds:F1}s");
+
     float blurSigma = blur * 5f * (width / 8192f);
-    if (blurSigma > 0f) WrapBlur.Apply(image, blurSigma);
-    if (sharpen > 0f) WrapUnsharpMask.Apply(image, sharpen, blurSigma);
-    if (coast > 0f) CoastDetail.Apply(image, coast, seed);
+    if (blurSigma > 0f)
+    {
+        stepSw.Restart();
+        WrapBlur.Apply(image, blurSigma);
+        Console.WriteLine($"  Blur applied in {stepSw.Elapsed.TotalSeconds:F1}s (sigma {blurSigma:F2})");
+    }
+
+    if (sharpen > 0f)
+    {
+        stepSw.Restart();
+        WrapUnsharpMask.Apply(image, sharpen, blurSigma);
+        Console.WriteLine($"  Sharpen applied in {stepSw.Elapsed.TotalSeconds:F1}s (amount {sharpen:F2})");
+    }
+
+    if (coast > 0f)
+    {
+        stepSw.Restart();
+        CoastDetail.Apply(image, coast, seed);
+        Console.WriteLine($"  Coast detail applied in {stepSw.Elapsed.TotalSeconds:F1}s (amount {coast:F2})");
+    }
+
     if (color)
     {
+        stepSw.Restart();
         using var rgb = ColorRamp.Apply(image);
+        Console.WriteLine($"  Color ramp applied in {stepSw.Elapsed.TotalSeconds:F1}s");
+
+        stepSw.Restart();
         rgb.SaveAsPng(output);
+        Console.WriteLine($"  Saved PNG in {stepSw.Elapsed.TotalSeconds:F1}s");
     }
     else
     {
+        stepSw.Restart();
         image.SaveAsPng(output);
+        Console.WriteLine($"  Saved PNG in {stepSw.Elapsed.TotalSeconds:F1}s");
     }
 
-    Console.WriteLine($"  Rendered in {sw.Elapsed.TotalSeconds:F1}s → {output}");
+    Console.WriteLine($"  Render pipeline completed in {sw.Elapsed.TotalSeconds:F1}s → {output}");
 });
 
 return rootCommand.Invoke(args);
