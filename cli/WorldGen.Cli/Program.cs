@@ -19,10 +19,11 @@ var blurOption = new Option<float>("--blur", () => 1.0f, "Blur strength (1.0 = 5
 var sharpenOption = new Option<float>("--sharpen", () => 0f, "Unsharp mask amount (0=off, 1=normal, 2=strong; uses blur sigma)");
 var colorOption = new Option<bool>("--color", () => false, "Output terrain-colored RGB instead of grayscale");
 var coastOption = new Option<float>("--coast", () => 0.25f, "Coastal detail amplitude (0-1)");
+var cpuOption = new Option<bool>("--cpu", () => false, "Force CPU coast detail instead of the default Metal path on macOS");
 
 var rootCommand = new RootCommand("Generate a 2D heightmap from spherical world generation")
 {
-    seedOption, cellsOption, widthOption, heightOption, outputOption, oceanOption, jitterOption, ultraOption, coastOption, blurOption, sharpenOption, colorOption
+    seedOption, cellsOption, widthOption, heightOption, outputOption, oceanOption, jitterOption, ultraOption, coastOption, blurOption, sharpenOption, colorOption, cpuOption
 };
 
 rootCommand.SetHandler((InvocationContext ctx) =>
@@ -39,6 +40,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     float sharpen = ctx.ParseResult.GetValueForOption(sharpenOption);
     bool color = ctx.ParseResult.GetValueForOption(colorOption);
     float coast = ctx.ParseResult.GetValueForOption(coastOption);
+    bool forceCpu = ctx.ParseResult.GetValueForOption(cpuOption);
 
     Console.WriteLine($"Generating globe: seed={seed}, cells={cells}{(ultra ? " (ultra-dense)" : "")}, ocean={ocean:F2}, jitter={jitter:F2}");
 
@@ -93,8 +95,18 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     if (coast > 0f)
     {
         stepSw.Restart();
-        CoastDetail.Apply(image, coast, seed);
-        Console.WriteLine($"  Coast detail applied in {stepSw.Elapsed.TotalSeconds:F1}s (amount {coast:F2})");
+        bool useMetalCoast = !forceCpu && MetalCoastDetail.IsSupported;
+        if (useMetalCoast)
+        {
+            MetalCoastDetail.Apply(image, coast, seed);
+            Console.WriteLine($"  Coast detail applied in {stepSw.Elapsed.TotalSeconds:F1}s (amount {coast:F2}, Metal default)");
+        }
+        else
+        {
+            CoastDetail.Apply(image, coast, seed);
+            string reason = forceCpu ? "CPU forced" : "CPU fallback";
+            Console.WriteLine($"  Coast detail applied in {stepSw.Elapsed.TotalSeconds:F1}s (amount {coast:F2}, {reason})");
+        }
     }
 
     if (color)
