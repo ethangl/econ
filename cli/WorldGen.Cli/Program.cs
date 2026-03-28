@@ -90,40 +90,58 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     };
 
     // Pipeline: render → blur → sharpen → coast detail → raw export → preview export
-    bool useMetal = !forceCpu && MetalHeightmapPipeline.IsSupported;
+    bool metalSupported = MetalHeightmapPipeline.IsSupported;
+    bool useMetal = !forceCpu && metalSupported;
     float blurSigma = blur * 5f * (width / 8192f);
     var stepSw = Stopwatch.StartNew();
+    Image<L16> RenderOnCpu(string mode)
+    {
+        var cpuImage = HeightmapRenderer.Render(renderTerrain, width, height);
+        Console.WriteLine($"  Heightmap rasterized in {stepSw.Elapsed.TotalSeconds:F1}s ({mode})");
+
+        if (blurSigma > 0f)
+        {
+            stepSw.Restart();
+            WrapBlur.Apply(cpuImage, blurSigma);
+            Console.WriteLine($"  Blur applied in {stepSw.Elapsed.TotalSeconds:F1}s (sigma {blurSigma:F2}, {mode})");
+        }
+
+        if (coast > 0f)
+        {
+            stepSw.Restart();
+            CoastDetail.Apply(cpuImage, coast, seed);
+            Console.WriteLine($"  Coast detail applied in {stepSw.Elapsed.TotalSeconds:F1}s (amount {coast:F2}, {mode})");
+        }
+
+        return cpuImage;
+    }
+
     Image<L16> image;
     if (useMetal)
     {
-        image = MetalHeightmapPipeline.Render(renderTerrain, width, height, blurSigma, coast, seed, out var metalTimings);
-        Console.WriteLine($"  Heightmap rasterized in {metalTimings.RasterSeconds:F3}s (Metal default)");
-        if (blurSigma > 0f)
-            Console.WriteLine($"  Blur applied in {metalTimings.BlurSeconds:F3}s (sigma {blurSigma:F2}, Metal default)");
-        if (coast > 0f)
-            Console.WriteLine($"  Coast detail applied in {metalTimings.CoastSeconds:F3}s (amount {coast:F2}, Metal default)");
+        try
+        {
+            image = MetalHeightmapPipeline.Render(renderTerrain, width, height, blurSigma, coast, seed, out var metalTimings);
+            Console.WriteLine($"  Heightmap rasterized in {metalTimings.RasterSeconds:F3}s (Metal default)");
+            if (blurSigma > 0f)
+                Console.WriteLine($"  Blur applied in {metalTimings.BlurSeconds:F3}s (sigma {blurSigma:F2}, Metal default)");
+            if (coast > 0f)
+                Console.WriteLine($"  Coast detail applied in {metalTimings.CoastSeconds:F3}s (amount {coast:F2}, Metal default)");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  Metal render failed; falling back to CPU ({ex.Message})");
+            useMetal = false;
+            stepSw.Restart();
+            image = RenderOnCpu("CPU fallback");
+        }
     }
     else
     {
-        image = HeightmapRenderer.Render(renderTerrain, width, height);
-        string rasterMode = forceCpu ? "CPU forced" : "CPU fallback";
-        Console.WriteLine($"  Heightmap rasterized in {stepSw.Elapsed.TotalSeconds:F1}s ({rasterMode})");
+        if (!forceCpu && OperatingSystem.IsMacOS() && !metalSupported)
+            Console.WriteLine($"  Metal unavailable; falling back to CPU ({MetalHeightmapPipeline.UnavailableReason})");
 
-        if (blurSigma > 0f)
-        {
-            stepSw.Restart();
-            WrapBlur.Apply(image, blurSigma);
-            string blurMode = forceCpu ? "CPU forced" : "CPU fallback";
-            Console.WriteLine($"  Blur applied in {stepSw.Elapsed.TotalSeconds:F1}s (sigma {blurSigma:F2}, {blurMode})");
-        }
-
-        if (coast > 0f)
-        {
-            stepSw.Restart();
-            CoastDetail.Apply(image, coast, seed);
-            string reason = forceCpu ? "CPU forced" : "CPU fallback";
-            Console.WriteLine($"  Coast detail applied in {stepSw.Elapsed.TotalSeconds:F1}s (amount {coast:F2}, {reason})");
-        }
+        image = RenderOnCpu(forceCpu ? "CPU forced" : "CPU fallback");
     }
 
     using var ownedImage = image;
@@ -143,15 +161,36 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     using var previewGray = HeightmapOutput.CreatePreview(ownedImage, previewWidth);
     if (color)
     {
-        using var previewColor = useMetal
-            ? MetalColorRamp.Apply(previewGray)
-            : ColorRamp.Apply(previewGray);
-        string colorMode = useMetal ? "Metal default" : (forceCpu ? "CPU forced" : "CPU fallback");
-        Console.WriteLine($"  Color ramp applied to preview in {stepSw.Elapsed.TotalSeconds:F1}s ({colorMode})");
+        Image<Rgb24> previewColor;
+        string colorMode;
+        if (useMetal)
+        {
+            try
+            {
+                previewColor = MetalColorRamp.Apply(previewGray);
+                colorMode = "Metal default";
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  Metal preview color failed; falling back to CPU ({ex.Message})");
+                previewColor = ColorRamp.Apply(previewGray);
+                colorMode = "CPU fallback";
+            }
+        }
+        else
+        {
+            previewColor = ColorRamp.Apply(previewGray);
+            colorMode = forceCpu ? "CPU forced" : "CPU fallback";
+        }
 
-        stepSw.Restart();
-        previewColor.Save(previewPath, previewPngEncoder);
-        Console.WriteLine($"  Saved preview PNG in {stepSw.Elapsed.TotalSeconds:F1}s ({previewColor.Width}x{previewColor.Height})");
+        using (previewColor)
+        {
+            Console.WriteLine($"  Color ramp applied to preview in {stepSw.Elapsed.TotalSeconds:F1}s ({colorMode})");
+
+            stepSw.Restart();
+            previewColor.Save(previewPath, previewPngEncoder);
+            Console.WriteLine($"  Saved preview PNG in {stepSw.Elapsed.TotalSeconds:F1}s ({previewColor.Width}x{previewColor.Height})");
+        }
     }
     else
     {

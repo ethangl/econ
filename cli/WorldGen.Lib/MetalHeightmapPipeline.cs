@@ -14,6 +14,7 @@ namespace WorldGen.Cli.Lib
     public static class MetalHeightmapPipeline
     {
         public static bool IsSupported => MetalHost.IsSupported;
+        public static string UnavailableReason => MetalHost.UnavailableReason;
 
         public static Image<L16> Render(
             DenseTerrainData terrain,

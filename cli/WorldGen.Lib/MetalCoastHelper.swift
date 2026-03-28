@@ -918,6 +918,14 @@ func runColor() throws
     try outputData.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
 }
 
+func runProbe() throws
+{
+    guard MTLCreateSystemDefaultDevice() != nil else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 70, userInfo: [NSLocalizedDescriptionKey: "No Metal device available"])
+    }
+}
+
 @discardableResult
 func dispatchCompute(
     queue: MTLCommandQueue,
@@ -1157,6 +1165,8 @@ do
         try runBlur()
     case "color":
         try runColor()
+    case "probe":
+        try runProbe()
     default:
         throw NSError(domain: "MetalCoastHelper", code: 35, userInfo: [NSLocalizedDescriptionKey: "Unsupported mode \(mode)"])
     }

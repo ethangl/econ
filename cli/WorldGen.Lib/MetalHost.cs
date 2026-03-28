@@ -14,8 +14,61 @@ namespace WorldGen.Cli.Lib
         const string HelperResourceName = "WorldGen.Cli.Lib.MetalCoastHelper.swift";
         static readonly object HelperLock = new();
         static string _helperPath = string.Empty;
+        static bool _hasProbeResult;
+        static bool _isSupported;
+        static string _unavailableReason = string.Empty;
 
-        public static bool IsSupported => OperatingSystem.IsMacOS();
+        public static bool IsSupported => ProbeSupport(out _);
+        public static string UnavailableReason
+        {
+            get
+            {
+                ProbeSupport(out _);
+                return _unavailableReason;
+            }
+        }
+
+        public static bool ProbeSupport(out string reason)
+        {
+            lock (HelperLock)
+            {
+                if (_hasProbeResult)
+                {
+                    reason = _unavailableReason;
+                    return _isSupported;
+                }
+
+                if (!OperatingSystem.IsMacOS())
+                {
+                    _isSupported = false;
+                    _unavailableReason = "Metal is only available on macOS.";
+                    _hasProbeResult = true;
+                    reason = _unavailableReason;
+                    return false;
+                }
+
+                try
+                {
+                    string helperPath = EnsureHelperBuilt();
+                    var psi = CreateHelperProcess(helperPath);
+                    psi.ArgumentList.Add("--mode");
+                    psi.ArgumentList.Add("probe");
+                    RunHelper(psi, "Metal readiness probe");
+
+                    _isSupported = true;
+                    _unavailableReason = string.Empty;
+                }
+                catch (Exception ex)
+                {
+                    _isSupported = false;
+                    _unavailableReason = ex.Message;
+                }
+
+                _hasProbeResult = true;
+                reason = _unavailableReason;
+                return _isSupported;
+            }
+        }
 
         public static string EnsureHelperBuilt()
         {
@@ -30,14 +83,22 @@ namespace WorldGen.Cli.Lib
                 string sourcePath = Path.Combine(cacheDir, "MetalCoastHelper.swift");
                 string helperPath = Path.Combine(cacheDir, "metal-coast-helper");
 
+                byte[] sourceBytes;
                 using (Stream resource = typeof(MetalHost).Assembly.GetManifestResourceStream(HelperResourceName)
                     ?? throw new InvalidOperationException($"Missing embedded helper resource '{HelperResourceName}'."))
-                using (var output = File.Create(sourcePath))
                 {
-                    resource.CopyTo(output);
+                    using var buffer = new MemoryStream();
+                    resource.CopyTo(buffer);
+                    sourceBytes = buffer.ToArray();
                 }
 
+                bool sourceUpdated = !File.Exists(sourcePath) ||
+                    !File.ReadAllBytes(sourcePath).AsSpan().SequenceEqual(sourceBytes);
+                if (sourceUpdated)
+                    File.WriteAllBytes(sourcePath, sourceBytes);
+
                 bool needsBuild = !File.Exists(helperPath) ||
+                    sourceUpdated ||
                     File.GetLastWriteTimeUtc(helperPath) < File.GetLastWriteTimeUtc(sourcePath);
                 if (needsBuild)
                 {
