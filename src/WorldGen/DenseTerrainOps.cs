@@ -79,7 +79,7 @@ namespace WorldGen.Core
             var rng = new Random(config.Seed + 300);
 
             stepSw.Restart();
-            ConvexHull ultraHull = SubdivisionBuilder.Subdivide(denseHull, config.SubdivisionJitter, rng);
+            ConvexHull ultraHull = SubdivisionBuilder.Subdivide(denseHull, config.SubdivisionJitter, rng, timings);
             timings.UltraSubdivisionSeconds = stepSw.Elapsed.TotalSeconds;
 
             stepSw.Restart();

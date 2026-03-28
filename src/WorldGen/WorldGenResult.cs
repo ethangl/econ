@@ -9,6 +9,8 @@ namespace WorldGen.Core
         public double DenseMappingSeconds;
         public double DenseElevationSeconds;
         public double UltraSubdivisionSeconds;
+        public double UltraSubdivisionSetupSeconds;
+        public double UltraSubdivisionRestoreSeconds;
         public double UltraVoronoiSeconds;
         public double UltraAreaSeconds;
         public double UltraMappingSeconds;

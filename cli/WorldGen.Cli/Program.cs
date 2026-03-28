@@ -85,7 +85,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     Console.WriteLine($"    Tectonics: plates {globeTimings.TectonicsSeconds:F2}s, elevation {globeTimings.ElevationSeconds:F2}s");
     Console.WriteLine($"    Dense terrain: total {denseTimings.TotalSeconds:F2}s (points {denseTimings.DensePointsSeconds:F2}s, hull {denseTimings.DenseHullSeconds:F2}s, voronoi {denseTimings.DenseVoronoiSeconds:F2}s, areas {denseTimings.DenseAreaSeconds:F2}s, map {denseTimings.DenseMappingSeconds:F2}s, elev {denseTimings.DenseElevationSeconds:F2}s)");
     if (ultra)
-        Console.WriteLine($"    Ultra-dense: subdivision {denseTimings.UltraSubdivisionSeconds:F2}s, voronoi {denseTimings.UltraVoronoiSeconds:F2}s, areas {denseTimings.UltraAreaSeconds:F2}s, map {denseTimings.UltraMappingSeconds:F2}s, elev {denseTimings.UltraElevationSeconds:F2}s");
+        Console.WriteLine($"    Ultra-dense: subdivision {denseTimings.UltraSubdivisionSeconds:F2}s (setup {denseTimings.UltraSubdivisionSetupSeconds:F2}s, restore {denseTimings.UltraSubdivisionRestoreSeconds:F2}s), voronoi {denseTimings.UltraVoronoiSeconds:F2}s, areas {denseTimings.UltraAreaSeconds:F2}s, map {denseTimings.UltraMappingSeconds:F2}s, elev {denseTimings.UltraElevationSeconds:F2}s");
     Console.WriteLine($"    Site selection: {globeTimings.SiteSelectionSeconds:F2}s");
 
     sw.Restart();
