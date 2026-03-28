@@ -37,34 +37,6 @@ namespace WorldGen.Cli.Lib
         };
 
         /// <summary>
-        /// Apply color ramp to an 8-bit grayscale image, producing an RGB image.
-        /// </summary>
-        public static Image<Rgb24> Apply(Image<L8> grayscale)
-        {
-            int w = grayscale.Width;
-            int h = grayscale.Height;
-            var color = new Image<Rgb24>(w, h);
-
-            color.ProcessPixelRows(grayscale, (cAcc, gAcc) =>
-            {
-                for (int y = 0; y < h; y++)
-                {
-                    var dst = cAcc.GetRowSpan(y);
-                    var src = gAcc.GetRowSpan(y);
-
-                    for (int x = 0; x < w; x++)
-                    {
-                        float t = src[x].PackedValue / 255f;
-                        var (r, g, b) = Sample(t);
-                        dst[x] = new Rgb24(r, g, b);
-                    }
-                }
-            });
-
-            return color;
-        }
-
-        /// <summary>
         /// Apply color ramp to a 16-bit grayscale image, producing an RGB image.
         /// </summary>
         public static Image<Rgb24> Apply(Image<L16> grayscale)

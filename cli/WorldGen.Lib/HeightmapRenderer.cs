@@ -42,35 +42,5 @@ namespace WorldGen.Cli.Lib
             return image;
         }
 
-        /// <summary>
-        /// Render an 8-bit grayscale heightmap.
-        /// </summary>
-        public static Image<L8> Render8(DenseTerrainData terrain, int width, int height)
-        {
-            var mesh = terrain.Mesh;
-            var elevation = terrain.CellElevation;
-            var lookup = new SphereLookup(mesh.CellCenters, mesh.Radius);
-            var image = new Image<L8>(width, height);
-
-            image.ProcessPixelRows(accessor =>
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    float lat = MathF.PI / 2f - (y + 0.5f) / height * MathF.PI;
-                    var row = accessor.GetRowSpan(y);
-
-                    for (int x = 0; x < width; x++)
-                    {
-                        float lon = (x + 0.5f) / width * 2f * MathF.PI - MathF.PI;
-                        int cell = lookup.NearestFromLatLon(lat, lon);
-                        float elev = elevation[cell];
-                        byte val = (byte)(Math.Clamp(elev, 0f, 1f) * 255f);
-                        row[x] = new L8(val);
-                    }
-                }
-            });
-
-            return image;
-        }
     }
 }

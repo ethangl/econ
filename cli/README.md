@@ -58,6 +58,4 @@ dotnet run --project WorldGen.Cli -- --seed 99 --ocean 0.75 --cells 5000 --outpu
 
 ### Output format
 
-- **16-bit** (default): elevation 0.0-1.0 mapped to grayscale 0-65535
-- **8-bit** (`--16bit false`): elevation 0.0-1.0 mapped to grayscale 0-255
-- Sea level is at 0.5 (128 in 8-bit, 32768 in 16-bit)
+- Sea level is at 0.5 (32768 in 16-bit)
