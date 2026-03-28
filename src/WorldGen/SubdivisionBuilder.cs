@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace WorldGen.Core
 {
@@ -265,28 +266,15 @@ namespace WorldGen.Core
             int origCount = original.Points.Length;
             int subCount = subdivided.Points.Length;
             var mapping = new int[subCount];
+            var lookup = new NearestCellLookup(original.Points);
 
             for (int i = 0; i < origCount; i++)
                 mapping[i] = i;
 
-            for (int i = origCount; i < subCount; i++)
+            Parallel.For(origCount, subCount, i =>
             {
-                Vec3 p = subdivided.Points[i];
-                float bestDist = float.MaxValue;
-                int bestIdx = 0;
-
-                for (int j = 0; j < origCount; j++)
-                {
-                    float d = Vec3.SqrDistance(p, original.Points[j]);
-                    if (d < bestDist)
-                    {
-                        bestDist = d;
-                        bestIdx = j;
-                    }
-                }
-
-                mapping[i] = bestIdx;
-            }
+                mapping[i] = lookup.Nearest(subdivided.Points[i]);
+            });
 
             return mapping;
         }

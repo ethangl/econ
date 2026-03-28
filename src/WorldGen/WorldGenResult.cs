@@ -11,6 +11,7 @@ namespace WorldGen.Core
         public double UltraSubdivisionSeconds;
         public double UltraVoronoiSeconds;
         public double UltraAreaSeconds;
+        public double UltraMappingSeconds;
         public double UltraElevationSeconds;
         public double TotalSeconds;
     }

@@ -91,7 +91,9 @@ namespace WorldGen.Core
             timings.UltraAreaSeconds = stepSw.Elapsed.TotalSeconds;
 
             // 5. Map ultra-dense → coarse via dense
+            stepSw.Restart();
             int[] ultraToDense = SubdivisionBuilder.BuildParentMapping(denseHull, ultraHull);
+            timings.UltraMappingSeconds = stepSw.Elapsed.TotalSeconds;
             int ultraCount = ultraMesh.CellCount;
             int[] ultraToCoarse = new int[ultraCount];
             for (int u = 0; u < ultraCount; u++)
