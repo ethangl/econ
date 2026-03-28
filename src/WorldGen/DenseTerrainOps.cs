@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+using System.Threading.Tasks;
 
 namespace WorldGen.Core
 {
@@ -19,44 +21,49 @@ namespace WorldGen.Core
 
         public static DenseTerrainData Generate(SphereMesh coarseMesh, TectonicData tectonics, WorldGenConfig config)
         {
+            var timings = new DenseTerrainTimingData();
+            var totalSw = Stopwatch.StartNew();
+            var stepSw = Stopwatch.StartNew();
+
             // 1. Generate dense mesh
             Vec3[] densePoints = FibonacciSphere.Generate(config.DenseCellCount, config.Jitter, config.Seed + 100);
+            timings.DensePointsSeconds = stepSw.Elapsed.TotalSeconds;
+
+            stepSw.Restart();
             ConvexHull denseHull = ConvexHull.Build(densePoints);
+            timings.DenseHullSeconds = stepSw.Elapsed.TotalSeconds;
+
+            stepSw.Restart();
             SphereMesh denseMesh = SphericalVoronoiBuilder.Build(denseHull, config.Radius);
+            timings.DenseVoronoiSeconds = stepSw.Elapsed.TotalSeconds;
+
+            stepSw.Restart();
             denseMesh.ComputeAreas();
+            timings.DenseAreaSeconds = stepSw.Elapsed.TotalSeconds;
 
             // 2. Map each dense cell to nearest coarse cell
             int denseCount = denseMesh.CellCount;
-            int coarseCount = coarseMesh.CellCount;
             int[] denseToCoarse = new int[denseCount];
+            var coarseLookup = new NearestCellLookup(coarseMesh.CellCenters);
 
-            for (int d = 0; d < denseCount; d++)
+            stepSw.Restart();
+            Parallel.For(0, denseCount, d =>
             {
-                Vec3 dp = denseMesh.CellCenters[d];
-                float bestDist = float.MaxValue;
-                int bestCoarse = 0;
-
-                for (int c = 0; c < coarseCount; c++)
-                {
-                    float dist = Vec3.SqrDistance(dp, coarseMesh.CellCenters[c]);
-                    if (dist < bestDist)
-                    {
-                        bestDist = dist;
-                        bestCoarse = c;
-                    }
-                }
-
-                denseToCoarse[d] = bestCoarse;
-            }
+                denseToCoarse[d] = coarseLookup.Nearest(denseMesh.CellCenters[d]);
+            });
+            timings.DenseMappingSeconds = stepSw.Elapsed.TotalSeconds;
 
             // 3. Transfer elevation + fractal noise for dense mesh
+            stepSw.Restart();
             float[] elevation = ComputeElevation(denseMesh, denseToCoarse, tectonics, config);
+            timings.DenseElevationSeconds = stepSw.Elapsed.TotalSeconds;
 
             var result = new DenseTerrainData
             {
                 Mesh = denseMesh,
                 DenseToCoarse = denseToCoarse,
                 CellElevation = elevation,
+                Timings = timings,
             };
 
             if (!config.EnableUltraDense)
@@ -64,14 +71,24 @@ namespace WorldGen.Core
                 result.UltraDenseMesh = denseMesh;
                 result.UltraDenseToCoarse = denseToCoarse;
                 result.UltraDenseCellElevation = elevation;
+                timings.TotalSeconds = totalSw.Elapsed.TotalSeconds;
                 return result;
             }
 
             // 4. Tessellate dense hull → ultra-dense mesh
             var rng = new Random(config.Seed + 300);
+
+            stepSw.Restart();
             ConvexHull ultraHull = SubdivisionBuilder.Subdivide(denseHull, config.SubdivisionJitter, rng);
+            timings.UltraSubdivisionSeconds = stepSw.Elapsed.TotalSeconds;
+
+            stepSw.Restart();
             SphereMesh ultraMesh = SphericalVoronoiBuilder.Build(ultraHull, config.Radius);
+            timings.UltraVoronoiSeconds = stepSw.Elapsed.TotalSeconds;
+
+            stepSw.Restart();
             ultraMesh.ComputeAreas();
+            timings.UltraAreaSeconds = stepSw.Elapsed.TotalSeconds;
 
             // 5. Map ultra-dense → coarse via dense
             int[] ultraToDense = SubdivisionBuilder.BuildParentMapping(denseHull, ultraHull);
@@ -81,11 +98,14 @@ namespace WorldGen.Core
                 ultraToCoarse[u] = denseToCoarse[ultraToDense[u]];
 
             // 6. Transfer elevation + noise at ultra-dense resolution
+            stepSw.Restart();
             float[] ultraElevation = ComputeElevation(ultraMesh, ultraToCoarse, tectonics, config);
+            timings.UltraElevationSeconds = stepSw.Elapsed.TotalSeconds;
 
             result.UltraDenseMesh = ultraMesh;
             result.UltraDenseToCoarse = ultraToCoarse;
             result.UltraDenseCellElevation = ultraElevation;
+            timings.TotalSeconds = totalSw.Elapsed.TotalSeconds;
 
             return result;
         }
@@ -94,23 +114,27 @@ namespace WorldGen.Core
         {
             int count = mesh.CellCount;
             float[] elevation = new float[count];
-            var noise = new Noise3D(config.Seed + 200);
+            Parallel.For(
+                0,
+                count,
+                () => new Noise3D(config.Seed + 200),
+                (d, _, noise) =>
+                {
+                    float baseElev = tectonics.CellElevation[toCoarse[d]];
 
-            for (int d = 0; d < count; d++)
-            {
-                float baseElev = tectonics.CellElevation[toCoarse[d]];
+                    Vec3 p = mesh.CellCenters[d];
+                    float nx = p.X / config.Radius * NoiseFrequency;
+                    float ny = p.Y / config.Radius * NoiseFrequency;
+                    float nz = p.Z / config.Radius * NoiseFrequency;
+                    float noiseVal = noise.Fractal(nx, ny, nz, NoiseOctaves, NoiseLacunarity, NoisePersistence);
 
-                Vec3 p = mesh.CellCenters[d];
-                float nx = p.X / config.Radius * NoiseFrequency;
-                float ny = p.Y / config.Radius * NoiseFrequency;
-                float nz = p.Z / config.Radius * NoiseFrequency;
-                float noiseVal = noise.Fractal(nx, ny, nz, NoiseOctaves, NoiseLacunarity, NoisePersistence);
+                    float distFromCoast = Math.Abs(baseElev - SeaLevel);
+                    float dampFactor = Math.Min(distFromCoast / CoastDampingRange, 1.0f);
 
-                float distFromCoast = Math.Abs(baseElev - SeaLevel);
-                float dampFactor = Math.Min(distFromCoast / CoastDampingRange, 1.0f);
-
-                elevation[d] = Clamp01(baseElev + noiseVal * NoiseAmplitude * dampFactor);
-            }
+                    elevation[d] = Clamp01(baseElev + noiseVal * NoiseAmplitude * dampFactor);
+                    return noise;
+                },
+                _ => { });
 
             return elevation;
         }

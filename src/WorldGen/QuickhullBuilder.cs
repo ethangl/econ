@@ -34,14 +34,16 @@ namespace WorldGen.Core
                 throw new ArgumentException("Need at least 4 points", nameof(points));
 
             int n = points.Length;
+            int expectedFaceCount = Math.Max(4, 2 * n - 4);
+            int expectedHalfedgeCount = expectedFaceCount * 3;
 
             // Phase 1: Find initial tetrahedron
             FindInitialTetrahedron(points, out int i0, out int i1, out int i2, out int i3);
 
             Vec3 center = (points[i0] + points[i1] + points[i2] + points[i3]) * 0.25f;
 
-            var faces = new List<QFace>();
-            var edgeToFace = new Dictionary<long, int>();
+            var faces = new List<QFace>(expectedFaceCount);
+            var edgeToFace = new Dictionary<long, int>(expectedHalfedgeCount);
 
             AddFace(faces, edgeToFace, points, i0, i1, i2, center);
             AddFace(faces, edgeToFace, points, i0, i2, i3, center);
@@ -96,13 +98,13 @@ namespace WorldGen.Core
             }
 
             // Phase 3: Main loop — process faces with non-empty conflict lists
-            var visibleFaces = new List<int>();
-            var horizonEdges = new List<(int From, int To)>();
-            var bfsQueue = new Queue<int>();
-            var orphanPoints = new List<int>();
+            var visibleFaces = new List<int>(64);
+            var horizonEdges = new List<(int From, int To)>(64);
+            var bfsQueue = new Queue<int>(64);
+            var orphanPoints = new List<int>(Math.Max(16, n / 4));
 
             // Reusable bool[] for visible set (grows as faces list grows)
-            bool[] isVisible = new bool[Math.Max(16, n)];
+            bool[] isVisible = new bool[Math.Max(16, expectedFaceCount)];
 
             while (heapCount > 0)
             {
@@ -394,7 +396,7 @@ namespace WorldGen.Core
                 V0 = v0, V1 = v1, V2 = v2,
                 Normal = normal, Dist = dist,
                 Alive = true,
-                ConflictList = new List<int>(),
+                ConflictList = new List<int>(4),
                 FarthestDist = -1f,
                 FarthestPoint = -1,
             });

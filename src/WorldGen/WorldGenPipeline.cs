@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 
 namespace WorldGen.Core
 {
@@ -19,27 +20,44 @@ namespace WorldGen.Core
             if (config.DenseCellCount < config.CoarseCellCount)
                 throw new ArgumentException("DenseCellCount must be >= CoarseCellCount", nameof(config));
 
+            var timings = new WorldGenTimingData();
+            var totalSw = Stopwatch.StartNew();
+            var stepSw = Stopwatch.StartNew();
+
             // 1. Generate points on unit sphere (coarse tectonic mesh)
             Vec3[] points = FibonacciSphere.Generate(config.CoarseCellCount, config.Jitter, config.Seed);
+            timings.CoarsePointsSeconds = stepSw.Elapsed.TotalSeconds;
 
             // 2. Build convex hull (= spherical Delaunay triangulation)
+            stepSw.Restart();
             ConvexHull hull = ConvexHull.Build(points);
+            timings.CoarseHullSeconds = stepSw.Elapsed.TotalSeconds;
 
             // 3. Build Voronoi dual
+            stepSw.Restart();
             SphereMesh mesh = SphericalVoronoiBuilder.Build(hull, config.Radius);
+            timings.CoarseVoronoiSeconds = stepSw.Elapsed.TotalSeconds;
 
             // 4. Compute cell areas
+            stepSw.Restart();
             mesh.ComputeAreas();
+            timings.CoarseAreaSeconds = stepSw.Elapsed.TotalSeconds;
 
             // 5. Generate tectonic plates
+            stepSw.Restart();
             TectonicData tectonics = TectonicOps.Generate(mesh, config.MajorPlateCount, config.MinorPlateCount,
                 config.MajorHeadStartRounds, config.Seed, config.PolarCapLatitude);
+            timings.TectonicsSeconds = stepSw.Elapsed.TotalSeconds;
 
             // 6. Compute tectonic elevation
+            stepSw.Restart();
             ElevationOps.Generate(mesh, tectonics, config.OceanFraction, config.Seed + 1);
+            timings.ElevationSeconds = stepSw.Elapsed.TotalSeconds;
 
             // 7. Generate dense terrain mesh with fractal noise
+            stepSw.Restart();
             DenseTerrainData denseTerrain = DenseTerrainOps.Generate(mesh, tectonics, config);
+            timings.DenseTerrainSeconds = stepSw.Elapsed.TotalSeconds;
 
             // 8. Select candidate sites for flat map generation
             var partialResult = new WorldGenResult
@@ -47,9 +65,14 @@ namespace WorldGen.Core
                 Mesh = mesh,
                 Tectonics = tectonics,
                 DenseTerrain = denseTerrain,
+                Timings = timings,
             };
+
+            stepSw.Restart();
             partialResult.Sites = SiteSelector.SelectMultiple(partialResult, config);
+            timings.SiteSelectionSeconds = stepSw.Elapsed.TotalSeconds;
             partialResult.Site = partialResult.Sites.Count > 0 ? partialResult.Sites[0] : null;
+            timings.TotalSeconds = totalSw.Elapsed.TotalSeconds;
 
             return partialResult;
         }
