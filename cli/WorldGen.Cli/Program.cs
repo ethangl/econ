@@ -128,8 +128,11 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     if (color)
     {
         stepSw.Restart();
-        using var rgb = ColorRamp.Apply(ownedImage);
-        Console.WriteLine($"  Color ramp applied in {stepSw.Elapsed.TotalSeconds:F1}s");
+        using var rgb = useMetal
+            ? MetalColorRamp.Apply(ownedImage)
+            : ColorRamp.Apply(ownedImage);
+        string colorMode = useMetal ? "Metal default" : (forceCpu ? "CPU forced" : "CPU fallback");
+        Console.WriteLine($"  Color ramp applied in {stepSw.Elapsed.TotalSeconds:F1}s ({colorMode})");
 
         stepSw.Restart();
         rgb.Save(output, pngEncoder);

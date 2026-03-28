@@ -58,7 +58,7 @@ dotnet run --project WorldGen.Cli -- --cpu --output world_cpu.png
 10. **Coast detail** — fractal 3D Perlin noise near sea level creates islands, inlets, and irregular coastlines; frequency scales with image resolution so features are consistent pixel size
 11. **Color ramp** (optional) — maps elevation to terrain colors (ocean blue → green → brown → snow)
 
-On macOS, the heightmap rasterization and coast-detail stages use Metal by default. Use `--cpu` to force the reference CPU implementation instead. The Metal result is not bit-exact with CPU output.
+On macOS, the heightmap rasterization, blur, coast-detail, and optional color-ramp stages use Metal by default. Sharpen and PNG encoding still run on CPU. Use `--cpu` to force the reference CPU implementation instead. The Metal result is not bit-exact with CPU output.
 
 
 ### Output format

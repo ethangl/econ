@@ -114,6 +114,26 @@ namespace WorldGen.Cli.Lib
             });
         }
 
+        public static void WritePixels(Image<Rgb24> image, byte[] pixels)
+        {
+            int width = image.Width;
+            int height = image.Height;
+
+            if (image.DangerousTryGetSinglePixelMemory(out var contiguous))
+            {
+                pixels.AsSpan().CopyTo(MemoryMarshal.Cast<Rgb24, byte>(contiguous.Span));
+                return;
+            }
+
+            image.ProcessPixelRows(accessor =>
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    pixels.AsSpan(y * width * 3, width * 3).CopyTo(MemoryMarshal.Cast<Rgb24, byte>(accessor.GetRowSpan(y)));
+                }
+            });
+        }
+
         public static void WriteRaw<T>(string path, T[] values) where T : struct
         {
             File.WriteAllBytes(path, MemoryMarshal.AsBytes(values.AsSpan()).ToArray());

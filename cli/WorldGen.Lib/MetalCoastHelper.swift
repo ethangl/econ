@@ -24,6 +24,20 @@ struct BlurParams
     var radius: Int32
 }
 
+struct ColorParams
+{
+    var pixelCount: UInt32
+    var stopCount: UInt32
+}
+
+struct ColorStop
+{
+    var t: Float
+    var r: Float
+    var g: Float
+    var b: Float
+}
+
 func argument(named name: String) throws -> String
 {
     let args = CommandLine.arguments
@@ -70,6 +84,14 @@ func readFloatArray(from path: String) throws -> [Float]
     }
 }
 
+func readColorStopArray(from path: String) throws -> [ColorStop]
+{
+    let data = try Data(contentsOf: URL(fileURLWithPath: path))
+    return data.withUnsafeBytes { rawBuffer in
+        Array(rawBuffer.bindMemory(to: ColorStop.self))
+    }
+}
+
 let shaderSource = """
 #include <metal_stdlib>
 using namespace metal;
@@ -95,6 +117,20 @@ struct BlurParams
     uint width;
     uint height;
     int radius;
+};
+
+struct ColorParams
+{
+    uint pixelCount;
+    uint stopCount;
+};
+
+struct ColorStop
+{
+    float t;
+    float r;
+    float g;
+    float b;
 };
 
 inline int floor_bug(float v)
@@ -387,6 +423,41 @@ kernel void blur_vertical(
     }
 
     outputPixels[gid] = ushort(clamp(sum, 0.0f, 65535.0f));
+}
+
+kernel void apply_color_ramp(
+    const device ushort* inputPixels [[buffer(0)]],
+    device uchar* outputPixels [[buffer(1)]],
+    const device ColorStop* stops [[buffer(2)]],
+    constant ColorParams& params [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= params.pixelCount)
+    {
+        return;
+    }
+
+    float t = clamp(float(inputPixels[gid]) / 65535.0f, 0.0f, 1.0f);
+    uint stopIndex = params.stopCount - 1;
+
+    for (uint i = 0; i + 1 < params.stopCount; i++)
+    {
+        if (t <= stops[i + 1].t)
+        {
+            stopIndex = i;
+            break;
+        }
+    }
+
+    ColorStop a = stops[stopIndex];
+    ColorStop b = stops[min(stopIndex + 1, params.stopCount - 1)];
+    float range = b.t - a.t;
+    float f = range > 0.0f ? (t - a.t) / range : 0.0f;
+    uint base = gid * 3;
+
+    outputPixels[base + 0] = uchar(clamp(a.r + f * (b.r - a.r), 0.0f, 255.0f));
+    outputPixels[base + 1] = uchar(clamp(a.g + f * (b.g - a.g), 0.0f, 255.0f));
+    outputPixels[base + 2] = uchar(clamp(a.b + f * (b.b - a.b), 0.0f, 255.0f));
 }
 """
 
@@ -748,6 +819,105 @@ func runBlur() throws
     try outputData.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
 }
 
+func runColor() throws
+{
+    let inputPath = try argument(named: "--input")
+    let stopsPath = try argument(named: "--stops")
+    let outputPath = try argument(named: "--output")
+    let width = try UInt32(argument(named: "--width")).unwrap("width")
+    let height = try UInt32(argument(named: "--height")).unwrap("height")
+
+    let pixelCount = Int(width * height)
+    let inputPixels = try readUInt16Array(from: inputPath)
+    let stops = try readColorStopArray(from: stopsPath)
+
+    guard inputPixels.count == pixelCount else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 60, userInfo: [NSLocalizedDescriptionKey: "Unexpected input pixel count \(inputPixels.count), expected \(pixelCount)"])
+    }
+
+    guard !stops.isEmpty else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 61, userInfo: [NSLocalizedDescriptionKey: "Missing color ramp stops"])
+    }
+
+    guard let device = MTLCreateSystemDefaultDevice() else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 62, userInfo: [NSLocalizedDescriptionKey: "No Metal device available"])
+    }
+
+    let library = try device.makeLibrary(source: shaderSource, options: nil)
+    guard let function = library.makeFunction(name: "apply_color_ramp") else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 63, userInfo: [NSLocalizedDescriptionKey: "Failed to create Metal color function"])
+    }
+
+    let pipeline = try device.makeComputePipelineState(function: function)
+    guard let queue = device.makeCommandQueue() else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 64, userInfo: [NSLocalizedDescriptionKey: "Failed to create Metal command queue"])
+    }
+
+    let inputBuffer = try inputPixels.withUnsafeBytes { bytes in
+        guard let buffer = device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared) else
+        {
+            throw NSError(domain: "MetalCoastHelper", code: 65, userInfo: [NSLocalizedDescriptionKey: "Failed to create input buffer"])
+        }
+        return buffer
+    }
+
+    let stopsBuffer = try stops.withUnsafeBytes { bytes in
+        guard let buffer = device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared) else
+        {
+            throw NSError(domain: "MetalCoastHelper", code: 66, userInfo: [NSLocalizedDescriptionKey: "Failed to create color stops buffer"])
+        }
+        return buffer
+    }
+
+    guard let outputBuffer = device.makeBuffer(length: pixelCount * 3, options: .storageModeShared) else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 67, userInfo: [NSLocalizedDescriptionKey: "Failed to create output buffer"])
+    }
+
+    var params = ColorParams(pixelCount: UInt32(pixelCount), stopCount: UInt32(stops.count))
+    let paramsBuffer = try withUnsafeBytes(of: &params) { bytes in
+        guard let buffer = device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared) else
+        {
+            throw NSError(domain: "MetalCoastHelper", code: 68, userInfo: [NSLocalizedDescriptionKey: "Failed to create color params buffer"])
+        }
+        return buffer
+    }
+
+    guard let commandBuffer = queue.makeCommandBuffer(),
+          let encoder = commandBuffer.makeComputeCommandEncoder() else
+    {
+        throw NSError(domain: "MetalCoastHelper", code: 69, userInfo: [NSLocalizedDescriptionKey: "Failed to create color command buffer or encoder"])
+    }
+
+    encoder.setComputePipelineState(pipeline)
+    encoder.setBuffer(inputBuffer, offset: 0, index: 0)
+    encoder.setBuffer(outputBuffer, offset: 0, index: 1)
+    encoder.setBuffer(stopsBuffer, offset: 0, index: 2)
+    encoder.setBuffer(paramsBuffer, offset: 0, index: 3)
+
+    let threadWidth = min(pipeline.maxTotalThreadsPerThreadgroup, 256)
+    let threadsPerGroup = MTLSize(width: threadWidth, height: 1, depth: 1)
+    let threadsPerGrid = MTLSize(width: pixelCount, height: 1, depth: 1)
+    encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerGroup)
+    encoder.endEncoding()
+
+    commandBuffer.commit()
+    commandBuffer.waitUntilCompleted()
+
+    if let error = commandBuffer.error
+    {
+        throw error
+    }
+
+    let outputData = Data(bytes: outputBuffer.contents(), count: pixelCount * 3)
+    try outputData.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+}
+
 @discardableResult
 func dispatchCompute(
     queue: MTLCommandQueue,
@@ -985,6 +1155,8 @@ do
         try runRender()
     case "blur":
         try runBlur()
+    case "color":
+        try runColor()
     default:
         throw NSError(domain: "MetalCoastHelper", code: 35, userInfo: [NSLocalizedDescriptionKey: "Unsupported mode \(mode)"])
     }
