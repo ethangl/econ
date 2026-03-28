@@ -25,11 +25,12 @@ var detailOption = new Option<float>("--detail", () => 0.1f, "Full-map micro-rel
 var sharpenOption = new Option<float>("--sharpen", () => 0f, "Unsharp mask amount (0=off, 1=normal, 2=strong; uses blur sigma)");
 var colorOption = new Option<bool>("--color", () => true, "Apply the terrain color ramp to the preview PNG");
 var coastOption = new Option<float>("--coast", () => 0.25f, "Coastal detail amplitude (0-1)");
+var stepsOption = new Option<int>("--steps", () => 10, "Number of tectonic time steps (1=single-shot, 10+=multi-step with boundary migration)");
 var cpuOption = new Option<bool>("--cpu", () => false, "Force the CPU heightmap pipeline instead of the default Metal path on macOS");
 
 var rootCommand = new RootCommand("Generate a raw 2D heightmap plus preview from spherical world generation")
 {
-    seedOption, cellsOption, widthOption, heightOption, outputOption, previewOutputOption, previewWidthOption, oceanOption, jitterOption, ultraOption, coastOption, blurOption, detailOption, sharpenOption, colorOption, cpuOption
+    seedOption, cellsOption, widthOption, heightOption, outputOption, previewOutputOption, previewWidthOption, oceanOption, jitterOption, ultraOption, coastOption, blurOption, detailOption, sharpenOption, colorOption, stepsOption, cpuOption
 };
 
 var previewPngEncoder = new PngEncoder
@@ -55,13 +56,14 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     float sharpen = ctx.ParseResult.GetValueForOption(sharpenOption);
     bool color = ctx.ParseResult.GetValueForOption(colorOption);
     float coast = ctx.ParseResult.GetValueForOption(coastOption);
+    int steps = ctx.ParseResult.GetValueForOption(stepsOption);
     bool forceCpu = ctx.ParseResult.GetValueForOption(cpuOption);
     string previewPath = string.IsNullOrWhiteSpace(previewOutput) ? GetDefaultPreviewPath(output) : previewOutput;
 
     if (!string.Equals(Path.GetExtension(output), ".r16", StringComparison.OrdinalIgnoreCase))
         throw new ArgumentException("Primary output must use the .r16 extension.");
 
-    Console.WriteLine($"Generating globe: seed={seed}, cells={cells}{(ultra ? " (ultra-dense)" : "")}, ocean={ocean:F2}, jitter={jitter:F2}");
+    Console.WriteLine($"Generating globe: seed={seed}, cells={cells}{(ultra ? " (ultra-dense)" : "")}, ocean={ocean:F2}, jitter={jitter:F2}, steps={steps}");
 
     var sw = Stopwatch.StartNew();
 
@@ -72,6 +74,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
         OceanFraction = ocean,
         Jitter = jitter,
         EnableUltraDense = ultra,
+        TectonicSteps = steps,
     };
 
     var result = WorldGenPipeline.Generate(config);
