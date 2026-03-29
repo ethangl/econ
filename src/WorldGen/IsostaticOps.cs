@@ -91,9 +91,15 @@ namespace WorldGen.Core
             float maxSink = 0f;
             float maxRise = 0f;
 
+            int[] basinId = tectonics.CellBasinId;
+
             for (int c = 0; c < cellCount; c++)
             {
                 if (tectonics.CellCrustOceanic[c])
+                    continue;
+
+                // Skip basin cells — BasinOps already flattened them to correct elevation.
+                if (basinId != null && basinId[c] != 0)
                     continue;
 
                 float delta = strength * (support[c] - tectonics.CellElevation[c]);
