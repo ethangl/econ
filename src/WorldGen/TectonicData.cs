@@ -42,5 +42,19 @@ namespace WorldGen.Core
 
         /// <summary>Normalized elevation per cell (0-1). Sea level ~0.4.</summary>
         public float[] CellElevation;
+
+        // --- Multi-step history (populated when TectonicSteps > 1) ---
+
+        /// <summary>How many steps this cell was adjacent to a plate boundary.
+        /// High = geologically active zone.</summary>
+        public int[] CellBoundaryExposure;
+
+        /// <summary>How many steps this cell stayed in the same plate.
+        /// High = stable craton candidate.</summary>
+        public int[] CellPlateContinuity;
+
+        /// <summary>Last step index (0-based) when this cell was near a boundary.
+        /// Recent = fresh terrain, ancient = eroded remnant.</summary>
+        public int[] CellLastBoundaryStep;
     }
 }

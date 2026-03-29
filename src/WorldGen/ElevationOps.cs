@@ -46,6 +46,247 @@ namespace WorldGen.Core
         }
 
         /// <summary>
+        /// Multi-step tectonic elevation via boundary migration. Each step:
+        /// 1) Erode existing elevation toward plate base
+        /// 2) Migrate boundaries — convergent edges flip cells from retreating to advancing plate
+        /// 3) Reclassify boundaries from updated plate assignments
+        /// 4) Apply boundary elevation effects as deltas
+        /// Populates tectonics.PlateIsOceanic, CellElevation, and history arrays.
+        /// </summary>
+        public static void GenerateMultiStep(SphereMesh mesh, TectonicData tectonics,
+            float oceanFraction, int seed, int steps, float erosionFactor)
+        {
+            var rng = new Random(seed);
+            int cellCount = mesh.CellCount;
+            int plateCount = tectonics.PlateCount;
+
+            // Assign plate types (oceanic/continental) once — stays fixed across steps
+            bool[] isOceanic = AssignPlateTypes(plateCount, oceanFraction, rng);
+            for (int i = 0; i < tectonics.PolarPlateCount; i++)
+                isOceanic[i] = true;
+
+            var plateNeighbors = BuildPlateAdjacency(mesh, tectonics.CellPlate, plateCount);
+            PromoteSubcontinents(isOceanic, tectonics.PlateIsMajor, plateNeighbors, MaxSubcontinents, rng);
+
+            // Working copy of plate assignment (mutated each step by boundary migration)
+            int[] cellPlate = new int[cellCount];
+            Array.Copy(tectonics.CellPlate, cellPlate, cellCount);
+
+            // Per-cell crust type — stays with the cell regardless of plate ownership.
+            // When an oceanic cell is absorbed by a continental plate, it remains oceanic crust.
+            bool[] cellCrustOceanic = new bool[cellCount];
+            for (int c = 0; c < cellCount; c++)
+                cellCrustOceanic[c] = isOceanic[cellPlate[c]];
+
+            // Base elevation from crust type (erosion target)
+            float[] baseElevation = ComputeBaseElevation(cellCount, cellCrustOceanic);
+
+            // Initialize elevation from step 0 (original plate assignment + boundaries)
+            float[] elevation = new float[cellCount];
+            Array.Copy(baseElevation, elevation, cellCount);
+            ApplyBoundaryEffects(mesh, tectonics, elevation);
+            Smooth(mesh, elevation);
+
+            // Initialize history arrays
+            int[] boundaryExposure = new int[cellCount];
+            int[] plateContinuity = new int[cellCount];
+            int[] lastBoundaryStep = new int[cellCount];
+            int[] prevPlate = new int[cellCount];
+            Array.Copy(cellPlate, prevPlate, cellCount);
+            for (int i = 0; i < cellCount; i++)
+                lastBoundaryStep[i] = -1;
+
+            // Record step 0 history (prevPlate == cellPlate, so all cells gain continuity)
+            UpdateHistory(mesh, tectonics.EdgeBoundary, prevPlate, cellPlate,
+                boundaryExposure, plateContinuity, lastBoundaryStep, 0);
+
+            // Current boundary state (mutated each step)
+            BoundaryType[] edgeBoundary = tectonics.EdgeBoundary;
+            float[] edgeConvergence = tectonics.EdgeConvergence;
+
+            // Steps 1..steps-1: erode, migrate boundaries, reclassify, apply effects
+            for (int step = 1; step < steps; step++)
+            {
+                // Erode toward base elevation
+                for (int c = 0; c < cellCount; c++)
+                    elevation[c] += (baseElevation[c] - elevation[c]) * erosionFactor;
+
+                // Snapshot plate state and pre-migration boundaries for history
+                Array.Copy(cellPlate, prevPlate, cellCount);
+                BoundaryType[] preMigrationBoundary = edgeBoundary;
+
+                // Migrate boundaries: flip cells at convergent edges
+                MigrateBoundaries(mesh, cellPlate, edgeBoundary, edgeConvergence,
+                    tectonics.PlateDrift, isOceanic);
+
+                // Base elevation always comes from crust type, not plate ownership
+                // (cellCrustOceanic doesn't change — subducted ocean stays ocean)
+
+                // Reclassify boundaries from updated plate assignments
+                var (newBoundary, newConvergence) = TectonicOps.ClassifyBoundaries(
+                    mesh, cellPlate, tectonics.PlateDrift);
+                edgeBoundary = newBoundary;
+                edgeConvergence = newConvergence;
+
+                // Apply boundary effects as deltas
+                var stepTectonics = new TectonicData
+                {
+                    CellPlate = cellPlate,
+                    PlateCount = plateCount,
+                    EdgeBoundary = edgeBoundary,
+                    EdgeConvergence = edgeConvergence,
+                };
+                ApplyBoundaryEffects(mesh, stepTectonics, elevation);
+                Smooth(mesh, elevation);
+
+                // Update history using pre-migration boundaries (so cells at the
+                // subduction front get exposure credit even if the edge moved away)
+                // and post-migration plates (so continuity resets on flipped cells)
+                UpdateHistory(mesh, preMigrationBoundary, prevPlate, cellPlate,
+                    boundaryExposure, plateContinuity, lastBoundaryStep, step);
+            }
+
+            Clamp01(elevation);
+
+            // Write final state back to tectonics
+            Array.Copy(cellPlate, tectonics.CellPlate, cellCount);
+            tectonics.PlateIsOceanic = isOceanic;
+            tectonics.CellElevation = elevation;
+            tectonics.EdgeBoundary = edgeBoundary;
+            tectonics.EdgeConvergence = edgeConvergence;
+            tectonics.CellBoundaryExposure = boundaryExposure;
+            tectonics.CellPlateContinuity = plateContinuity;
+            tectonics.CellLastBoundaryStep = lastBoundaryStep;
+        }
+
+        /// <summary>
+        /// Migrate plate boundaries based on drift vectors. At convergent edges,
+        /// the cell on the retreating plate flips to the advancing plate.
+        /// At ocean-continent convergent edges, the oceanic cell subducts (flips to continental).
+        /// </summary>
+        internal static void MigrateBoundaries(SphereMesh mesh, int[] cellPlate,
+            BoundaryType[] edgeBoundary, float[] edgeConvergence,
+            Vec3[] plateDrift, bool[] isOceanic)
+        {
+            int edgeCount = mesh.EdgeCount;
+
+            // Collect cells to flip (defer mutation to avoid order-dependent artifacts)
+            // Key: cell index, Value: plate to flip to. Strongest convergence wins.
+            var flips = new Dictionary<int, int>();
+            var flipStrength = new Dictionary<int, float>();
+
+            for (int e = 0; e < edgeCount; e++)
+            {
+                if (edgeBoundary[e] != BoundaryType.Convergent)
+                    continue;
+
+                float conv = edgeConvergence[e];
+                if (Math.Abs(conv) < 0.3f)
+                    continue; // weak convergence — boundary doesn't migrate
+
+                var (c0, c1) = mesh.EdgeCells[e];
+                int p0 = cellPlate[c0];
+                int p1 = cellPlate[c1];
+                if (p0 == p1)
+                    continue;
+
+                // Determine which plate is advancing (overriding) and which retreats.
+                // At ocean-continent boundaries, the oceanic plate always subducts.
+                // At same-type boundaries, compare each plate's drift component toward
+                // the boundary. This is edge-ordering invariant (proj0+proj1 flips sign
+                // when c0/c1 swap, and so does the plate-to-cell mapping).
+                int advancingPlate, retreatingCell;
+                if (isOceanic[p0] != isOceanic[p1])
+                {
+                    // Ocean-continent: oceanic plate subducts
+                    if (isOceanic[p0])
+                    {
+                        advancingPlate = p1;
+                        retreatingCell = c0;
+                    }
+                    else
+                    {
+                        advancingPlate = p0;
+                        retreatingCell = c1;
+                    }
+                }
+                else
+                {
+                    // Same type: the plate pushing harder toward the boundary advances.
+                    // proj0 = drift[p0] projected onto c0→c1 (positive = p0 moves toward boundary)
+                    // proj1 projected onto c1→c0 = -proj1 (positive = p1 moves toward boundary)
+                    // Advancing plate has larger toward-boundary component.
+                    Vec3 edgeDir = (mesh.CellCenters[c1] - mesh.CellCenters[c0]).Normalized;
+                    float proj0 = Vec3.Dot(plateDrift[p0], edgeDir);
+                    float proj1 = Vec3.Dot(plateDrift[p1], edgeDir);
+                    // p0 push = proj0, p1 push = -proj1
+                    if (proj0 > -proj1)
+                    {
+                        advancingPlate = p0;
+                        retreatingCell = c1;
+                    }
+                    else
+                    {
+                        advancingPlate = p1;
+                        retreatingCell = c0;
+                    }
+                }
+
+                // Strongest convergence wins at triple junctions
+                float strength = Math.Abs(conv);
+                if (!flipStrength.TryGetValue(retreatingCell, out float existing) || strength > existing)
+                {
+                    flips[retreatingCell] = advancingPlate;
+                    flipStrength[retreatingCell] = strength;
+                }
+            }
+
+            // Apply flips
+            foreach (var (cell, plate) in flips)
+                cellPlate[cell] = plate;
+        }
+
+        /// <summary>
+        /// Update per-cell history arrays for one step.
+        /// prevPlate/currPlate track ownership changes — continuity resets when a cell changes plates.
+        /// </summary>
+        internal static void UpdateHistory(SphereMesh mesh, BoundaryType[] edgeBoundary,
+            int[] prevPlate, int[] currPlate,
+            int[] boundaryExposure, int[] plateContinuity,
+            int[] lastBoundaryStep, int step)
+        {
+            int cellCount = mesh.CellCount;
+
+            // Mark cells adjacent to boundaries
+            bool[] nearBoundary = new bool[cellCount];
+            int edgeCount = mesh.EdgeCount;
+            for (int e = 0; e < edgeCount; e++)
+            {
+                if (edgeBoundary[e] != BoundaryType.None)
+                {
+                    var (c0, c1) = mesh.EdgeCells[e];
+                    nearBoundary[c0] = true;
+                    nearBoundary[c1] = true;
+                }
+            }
+
+            for (int c = 0; c < cellCount; c++)
+            {
+                if (nearBoundary[c])
+                {
+                    boundaryExposure[c]++;
+                    lastBoundaryStep[c] = step;
+                }
+
+                // Continuity resets to 0 when plate ownership changes, otherwise increments
+                if (currPlate[c] != prevPlate[c])
+                    plateContinuity[c] = 0;
+                else
+                    plateContinuity[c]++;
+            }
+        }
+
+        /// <summary>
         /// Fisher-Yates shuffle plate indices; first floor(count * fraction) are oceanic.
         /// </summary>
         internal static bool[] AssignPlateTypes(int plateCount, float oceanFraction, Random rng)
@@ -143,6 +384,17 @@ namespace WorldGen.Core
             float[] elevation = new float[cellCount];
             for (int c = 0; c < cellCount; c++)
                 elevation[c] = isOceanic[cellPlate[c]] ? OceanicBase : ContinentalBase;
+            return elevation;
+        }
+
+        /// <summary>
+        /// Compute base elevation from per-cell crust type (for multi-step mode).
+        /// </summary>
+        internal static float[] ComputeBaseElevation(int cellCount, bool[] cellCrustOceanic)
+        {
+            float[] elevation = new float[cellCount];
+            for (int c = 0; c < cellCount; c++)
+                elevation[c] = cellCrustOceanic[c] ? OceanicBase : ContinentalBase;
             return elevation;
         }
 
