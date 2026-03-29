@@ -21,6 +21,11 @@ namespace WorldGen.Core
         const float OceanicTrenchDrop = -0.2f;           // subducting plate: trench
         const int ContinentalPropagationDepth = 5;       // mountains extend further inland
         const int OceanicPropagationDepth = 1;            // trench is narrow
+        // Rift graben profile: steep falloff creates shoulders relative to the rift floor.
+        // Depth-1 cells retain only this fraction of the divergent drop (vs 0.75 for linear decay),
+        // so the rift has steep walls with nearly flat flanks — a graben shape without positive uplift.
+        const float RiftFlankFraction = 0.15f;
+
         const int SmoothingPasses = 2;
         const float SmoothingWeight = 0.2f;
 
@@ -427,6 +432,7 @@ namespace WorldGen.Core
             int cellCount = mesh.CellCount;
             float[] effect = new float[cellCount];
             int[] maxDepth = new int[cellCount]; // per-cell propagation depth limit
+            bool[] isDivergent = new bool[cellCount]; // tracks divergent sources for graben profile
 
             // Collect boundary cells and their direct effects
             int edgeCount = mesh.EdgeCount;
@@ -462,22 +468,25 @@ namespace WorldGen.Core
                     {
                         effect[oceanCell] = trenchEffect;
                         maxDepth[oceanCell] = OceanicPropagationDepth;
+                        isDivergent[oceanCell] = false;
                     }
                     if (Math.Abs(mountainEffect) > Math.Abs(effect[continentCell]))
                     {
                         effect[continentCell] = mountainEffect;
                         maxDepth[continentCell] = ContinentalPropagationDepth;
+                        isDivergent[continentCell] = false;
                     }
                 }
                 else
                 {
                     // Symmetric: same effect on both sides
                     float baseLift;
+                    bool divergent;
                     switch (tectonics.EdgeBoundary[e])
                     {
-                        case BoundaryType.Convergent: baseLift = ConvergentLift; break;
-                        case BoundaryType.Divergent: baseLift = DivergentDrop; break;
-                        case BoundaryType.Transform: baseLift = TransformLift; break;
+                        case BoundaryType.Convergent: baseLift = ConvergentLift; divergent = false; break;
+                        case BoundaryType.Divergent: baseLift = DivergentDrop; divergent = true; break;
+                        case BoundaryType.Transform: baseLift = TransformLift; divergent = false; break;
                         default: continue;
                     }
 
@@ -486,19 +495,25 @@ namespace WorldGen.Core
                     // Skip divergent drop on oceanic cells when seafloor age already
                     // set their depth profile (initial step only). Subsequent multi-step
                     // iterations should still apply divergent drops normally.
-                    bool divergent = tectonics.EdgeBoundary[e] == BoundaryType.Divergent;
                     bool skipC0 = skipOceanicDivergent && divergent && plateIsOceanic != null && plateIsOceanic[p0];
                     bool skipC1 = skipOceanicDivergent && divergent && plateIsOceanic != null && plateIsOceanic[p1];
+
+                    // Graben profile (shoulder lift) only applies to continental rifts.
+                    // Oceanic ridges keep linear decay — SeafloorAgeOps handles their profile.
+                    bool continentalC0 = divergent && (plateIsOceanic == null || !plateIsOceanic[p0]);
+                    bool continentalC1 = divergent && (plateIsOceanic == null || !plateIsOceanic[p1]);
 
                     if (!skipC0 && Math.Abs(edgeEffect) > Math.Abs(effect[c0]))
                     {
                         effect[c0] = edgeEffect;
                         maxDepth[c0] = PropagationDepth;
+                        isDivergent[c0] = continentalC0;
                     }
                     if (!skipC1 && Math.Abs(edgeEffect) > Math.Abs(effect[c1]))
                     {
                         effect[c1] = edgeEffect;
                         maxDepth[c1] = PropagationDepth;
+                        isDivergent[c1] = continentalC1;
                     }
                 }
             }
@@ -506,6 +521,8 @@ namespace WorldGen.Core
             // BFS propagation inward from boundary cells.
             // Effects do not cross plate boundaries — each side propagates
             // within its own plate, keeping asymmetric profiles intact.
+            // Divergent sources use a graben profile (drop → shoulder lift → decay)
+            // instead of linear decay, creating raised flanks around rift valleys.
             int[] cellPlate = tectonics.CellPlate;
             var queue = new Queue<int>();
             int[] depth = new int[cellCount];
@@ -534,8 +551,27 @@ namespace WorldGen.Core
                     continue;
 
                 int nextDepth = d + 1;
-                float decay = 1f - (float)nextDepth / (cellMaxDepth + 1);
-                float propagated = sourceEffect[cell] * decay;
+                float propagated;
+                if (isDivergent[cell])
+                {
+                    // Graben profile: steep falloff from rift floor to nearly flat flanks.
+                    // Depth-1 keeps only RiftFlankFraction of the drop, decaying to 0.
+                    // This creates steep-walled rifts without positive uplift.
+                    float flank = sourceEffect[cell] * RiftFlankFraction;
+                    if (cellMaxDepth <= 1)
+                        propagated = flank;
+                    else
+                    {
+                        float flankDecay = 1f - (float)(nextDepth - 1) / (cellMaxDepth - 1);
+                        propagated = flank * flankDecay;
+                    }
+                }
+                else
+                {
+                    // Standard linear decay
+                    float decay = 1f - (float)nextDepth / (cellMaxDepth + 1);
+                    propagated = sourceEffect[cell] * decay;
+                }
                 int plate = cellPlate[cell];
 
                 int[] neighbors = mesh.CellNeighbors[cell];
@@ -550,6 +586,7 @@ namespace WorldGen.Core
                     depth[nb] = nextDepth;
                     sourceEffect[nb] = sourceEffect[cell];
                     sourceMaxDepth[nb] = cellMaxDepth;
+                    isDivergent[nb] = isDivergent[cell];
                     if (Math.Abs(propagated) > Math.Abs(effect[nb]))
                         effect[nb] = propagated;
                     queue.Enqueue(nb);

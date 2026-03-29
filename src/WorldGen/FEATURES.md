@@ -10,9 +10,9 @@ Cell/edge attributes computed on the sphere mesh (`src/WorldGen/`).
 
 ~~Convergent ocean-continent boundaries should produce a steep subduction face and a gradual backslope. BFS propagation is currently symmetric — biasing it by plate type would make ranges more realistic.~~
 
-### Rift Morphology
+### ~~Rift Morphology~~
 
-Divergent boundaries currently just lower elevation. Real rifts have a graben profile: a central low flanked by raised shoulders. A shaped profile function instead of flat depression.
+~~Divergent boundaries currently just lower elevation. Real rifts have a graben profile: a central low flanked by raised shoulders. A shaped profile function instead of flat depression.~~
 
 ### Cratons / Shields
 
@@ -74,7 +74,7 @@ Either commit to multi-step early and design features within it, or defer it and
 
 - **Sedimentary basins** — post-process on existing cell elevations
 - **Cratons / shields** — tag interior cells, reduce noise
-- **Rift morphology** — reshape divergent boundary elevation profile
+- ~~**Rift morphology** — reshape divergent boundary elevation profile~~
 - **Hydraulic erosion** — pure heightmap post-process
 
 ### Boundary Refinements (soft chain)
