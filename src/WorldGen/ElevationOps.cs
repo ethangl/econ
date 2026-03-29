@@ -47,7 +47,7 @@ namespace WorldGen.Core
             // Seafloor age gradient replaces flat oceanic base with ridge-to-deep profile
             SeafloorAgeOps.Apply(mesh, tectonics, isOceanic, elevation);
 
-            ApplyBoundaryEffects(mesh, tectonics, elevation, isOceanic);
+            ApplyBoundaryEffects(mesh, tectonics, elevation, isOceanic, skipOceanicDivergent: true);
             Smooth(mesh, elevation);
             Clamp01(elevation);
 
@@ -97,7 +97,7 @@ namespace WorldGen.Core
             // Initialize elevation from step 0 (original plate assignment + boundaries)
             float[] elevation = new float[cellCount];
             Array.Copy(baseElevation, elevation, cellCount);
-            ApplyBoundaryEffects(mesh, tectonics, elevation, isOceanic);
+            ApplyBoundaryEffects(mesh, tectonics, elevation, isOceanic, skipOceanicDivergent: true);
             Smooth(mesh, elevation);
 
             // Initialize history arrays
@@ -419,8 +419,10 @@ namespace WorldGen.Core
         /// </summary>
         /// <param name="plateIsOceanic">Per-plate oceanic flag. When non-null, enables asymmetric
         /// mountain/trench profiles at ocean-continent convergent boundaries.</param>
+        /// <param name="skipOceanicDivergent">When true, skip divergent drop on oceanic cells
+        /// (seafloor age gradient already set their depth profile).</param>
         internal static void ApplyBoundaryEffects(SphereMesh mesh, TectonicData tectonics,
-            float[] elevation, bool[] plateIsOceanic = null)
+            float[] elevation, bool[] plateIsOceanic = null, bool skipOceanicDivergent = false)
         {
             int cellCount = mesh.CellCount;
             float[] effect = new float[cellCount];
@@ -481,28 +483,22 @@ namespace WorldGen.Core
 
                     float edgeEffect = baseLift * scale;
 
-                    // Skip divergent drop on oceanic cells when seafloor age gradient
-                    // already handles their depth profile (avoids double-counting)
-                    bool isDivergent = tectonics.EdgeBoundary[e] == BoundaryType.Divergent;
-                    bool hasSeafloorAge = tectonics.CellSeafloorAge != null;
-                    bool c0Oceanic = plateIsOceanic != null && plateIsOceanic[p0];
-                    bool c1Oceanic = plateIsOceanic != null && plateIsOceanic[p1];
+                    // Skip divergent drop on oceanic cells when seafloor age already
+                    // set their depth profile (initial step only). Subsequent multi-step
+                    // iterations should still apply divergent drops normally.
+                    bool divergent = tectonics.EdgeBoundary[e] == BoundaryType.Divergent;
+                    bool skipC0 = skipOceanicDivergent && divergent && plateIsOceanic != null && plateIsOceanic[p0];
+                    bool skipC1 = skipOceanicDivergent && divergent && plateIsOceanic != null && plateIsOceanic[p1];
 
-                    if (!(isDivergent && hasSeafloorAge && c0Oceanic))
+                    if (!skipC0 && Math.Abs(edgeEffect) > Math.Abs(effect[c0]))
                     {
-                        if (Math.Abs(edgeEffect) > Math.Abs(effect[c0]))
-                        {
-                            effect[c0] = edgeEffect;
-                            maxDepth[c0] = PropagationDepth;
-                        }
+                        effect[c0] = edgeEffect;
+                        maxDepth[c0] = PropagationDepth;
                     }
-                    if (!(isDivergent && hasSeafloorAge && c1Oceanic))
+                    if (!skipC1 && Math.Abs(edgeEffect) > Math.Abs(effect[c1]))
                     {
-                        if (Math.Abs(edgeEffect) > Math.Abs(effect[c1]))
-                        {
-                            effect[c1] = edgeEffect;
-                            maxDepth[c1] = PropagationDepth;
-                        }
+                        effect[c1] = edgeEffect;
+                        maxDepth[c1] = PropagationDepth;
                     }
                 }
             }
