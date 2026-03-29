@@ -38,9 +38,9 @@ Thick crust floats higher (Airy isostasy). Estimate crustal thickness from plate
 
 Require both sphere-level data (placement, classification) and heightmap-level detail (shapes too fine for coarse cells).
 
-### Hotspot Volcanism
+### ~~Hotspot Volcanism~~
 
-Data: identify hotspot positions, trace drift trails across plates, mark affected cells. Rendering: stamp volcanic cone profiles onto the heightmap at trail points — individual peaks and calderas are sub-cell features.
+~~Data: identify hotspot positions, trace drift trails across plates, mark affected cells. Rendering: stamp volcanic cone profiles onto the heightmap at trail points — individual peaks and calderas are sub-cell features.~~
 
 ### Volcanic Arcs
 
