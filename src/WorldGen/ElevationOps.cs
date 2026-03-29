@@ -466,11 +466,13 @@ namespace WorldGen.Core
                     {
                         effect[oceanCell] = trenchEffect;
                         maxDepth[oceanCell] = OceanicPropagationDepth;
+                        isDivergent[oceanCell] = false;
                     }
                     if (Math.Abs(mountainEffect) > Math.Abs(effect[continentCell]))
                     {
                         effect[continentCell] = mountainEffect;
                         maxDepth[continentCell] = ContinentalPropagationDepth;
+                        isDivergent[continentCell] = false;
                     }
                 }
                 else
@@ -551,7 +553,7 @@ namespace WorldGen.Core
                         propagated = shoulder;
                     else
                     {
-                        float shoulderDecay = 1f - (float)(nextDepth - 1) / cellMaxDepth;
+                        float shoulderDecay = 1f - (float)(nextDepth - 1) / (cellMaxDepth - 1);
                         propagated = shoulder * shoulderDecay;
                     }
                 }
