@@ -26,7 +26,7 @@ var sharpenOption = new Option<float>("--sharpen", () => 0f, "Unsharp mask amoun
 var colorOption = new Option<bool>("--color", () => true, "Apply the terrain color ramp to the preview PNG");
 var coastOption = new Option<float>("--coast", () => 0.125f, "Coastal detail amplitude (0-1)");
 var stepsOption = new Option<int>("--steps", () => 15, "Number of tectonic time steps (1=single-shot, ~10 Myr per step via boundary migration)");
-var debugOption = new Option<bool>("--debug", () => false, "Draw debug overlays (hotspot trails, etc.) on the preview PNG");
+var debugOption = new Option<bool>("--debug", () => false, "Draw debug overlays and save standalone debug images");
 var cpuOption = new Option<bool>("--cpu", () => false, "Force the CPU heightmap pipeline instead of the default Metal path on macOS");
 
 var rootCommand = new RootCommand("Generate a raw 2D heightmap plus preview from spherical world generation")
@@ -89,7 +89,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
 
     Console.WriteLine($"  Globe generated in {sw.Elapsed.TotalSeconds:F1}s ({renderMesh.CellCount} cells)");
     Console.WriteLine($"    Coarse mesh: points {globeTimings.CoarsePointsSeconds:F2}s, hull {globeTimings.CoarseHullSeconds:F2}s, voronoi {globeTimings.CoarseVoronoiSeconds:F2}s, areas {globeTimings.CoarseAreaSeconds:F2}s");
-    Console.WriteLine($"    Tectonics: plates {globeTimings.TectonicsSeconds:F2}s, elevation {globeTimings.ElevationSeconds:F2}s, hotspots {globeTimings.HotspotsSeconds:F2}s, arcs {globeTimings.VolcanicArcsSeconds:F2}s, cratons {globeTimings.CratonsSeconds:F2}s, basins {globeTimings.BasinsSeconds:F2}s, seamounts {globeTimings.SeamountsSeconds:F2}s, isostasy {globeTimings.IsostasySeconds:F2}s");
+    Console.WriteLine($"    Tectonics: plates {globeTimings.TectonicsSeconds:F2}s, elevation {globeTimings.ElevationSeconds:F2}s, hotspots {globeTimings.HotspotsSeconds:F2}s, arcs {globeTimings.VolcanicArcsSeconds:F2}s, cratons {globeTimings.CratonsSeconds:F2}s, basins {globeTimings.BasinsSeconds:F2}s, seamounts {globeTimings.SeamountsSeconds:F2}s, isostasy {globeTimings.IsostasySeconds:F2}s, wind {globeTimings.WindSeconds:F2}s, precip {globeTimings.PrecipitationSeconds:F2}s");
     Console.WriteLine($"    Dense terrain: total {denseTimings.TotalSeconds:F2}s (points {denseTimings.DensePointsSeconds:F2}s, hull {denseTimings.DenseHullSeconds:F2}s, voronoi {denseTimings.DenseVoronoiSeconds:F2}s, areas {denseTimings.DenseAreaSeconds:F2}s, map {denseTimings.DenseMappingSeconds:F2}s, elev {denseTimings.DenseElevationSeconds:F2}s)");
     if (ultra)
         Console.WriteLine($"    Ultra-dense: subdivision {denseTimings.UltraSubdivisionSeconds:F2}s (setup {denseTimings.UltraSubdivisionSetupSeconds:F2}s, restore {denseTimings.UltraSubdivisionRestoreSeconds:F2}s), voronoi {denseTimings.UltraVoronoiSeconds:F2}s, areas {denseTimings.UltraAreaSeconds:F2}s, map {denseTimings.UltraMappingSeconds:F2}s, elev {denseTimings.UltraElevationSeconds:F2}s");
@@ -236,11 +236,15 @@ rootCommand.SetHandler((InvocationContext ctx) =>
                     DrawBasinOverlay(previewColor, result.Tectonics, result.Mesh);
                 if (result.Tectonics.Seamounts != null)
                     DrawSeamountOverlay(previewColor, result.Tectonics, result.Mesh);
+                AtmosphericDebugRenderer.DrawWindOverlay(previewColor, result.Tectonics, result.Mesh);
+                AtmosphericDebugRenderer.DrawPrecipitationOverlay(previewColor, result.Tectonics, result.Mesh);
                 string debugPath = Path.Combine(
                     Path.GetDirectoryName(previewPath) ?? string.Empty,
                     Path.GetFileNameWithoutExtension(previewPath) + ".debug.png");
                 previewColor.Save(debugPath, previewPngEncoder);
                 Console.WriteLine($"  Saved debug PNG in {stepSw.Elapsed.TotalSeconds:F1}s → {debugPath}");
+                AtmosphericDebugRenderer.SaveStandaloneMaps(previewPath, previewColor.Width, previewColor.Height, result.Tectonics, result.Mesh, previewPngEncoder);
+                Console.WriteLine($"  Saved atmospheric debug PNGs → {Path.GetFileNameWithoutExtension(previewPath)}.wind.png / .precip.png");
             }
         }
     }
@@ -248,6 +252,11 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     {
         previewGray.Save(previewPath, previewPngEncoder);
         Console.WriteLine($"  Saved preview PNG in {stepSw.Elapsed.TotalSeconds:F1}s ({previewGray.Width}x{previewGray.Height})");
+        if (debug)
+        {
+            AtmosphericDebugRenderer.SaveStandaloneMaps(previewPath, previewGray.Width, previewGray.Height, result.Tectonics, result.Mesh, previewPngEncoder);
+            Console.WriteLine($"  Saved atmospheric debug PNGs → {Path.GetFileNameWithoutExtension(previewPath)}.wind.png / .precip.png");
+        }
     }
 
     Console.WriteLine($"  Export completed in {sw.Elapsed.TotalSeconds:F1}s → {output} (+ {previewPath})");

@@ -54,9 +54,15 @@ Require both sphere-level data (placement, classification) and heightmap-level d
 
 Heightmap-level processing during rasterization/post-processing (`cli/WorldGen.Lib/`).
 
-### Hydraulic Erosion
+### ~~Hydraulic Erosion~~
 
-Particle-based or flow-accumulation erosion on the rendered heightmap grid. Carves river valleys, creates alluvial plains, breaks up plateau uniformity. Works best on a regular grid rather than irregular sphere cells.
+~~Particle-based or flow-accumulation erosion on the rendered heightmap grid. Carves river valleys, creates alluvial plains, breaks up plateau uniformity. Works best on a regular grid rather than irregular sphere cells.~~
+
+Removed — at ~2.45 km/pixel, erosion effects are sub-pixel. Gaea handles erosion well on detailed heightmap tiles.
+
+### Large-Scale River Systems
+
+Compute continental drainage basins and major river courses at world scale. At this resolution only rivers ≥ ~2.5 km wide are visible, so this targets trunk rivers and large tributaries. Requires precipitation and flow accumulation on the sphere mesh. Output feeds into the Gaea export as constraints for detailed tile hydrology.
 
 ## Dependencies & Implementation Order
 
@@ -75,7 +81,8 @@ Either commit to multi-step early and design features within it, or defer it and
 - ~~**Sedimentary basins** — post-process on existing cell elevations~~
 - ~~**Cratons / shields** — tag interior cells, reduce noise~~
 - ~~**Rift morphology** — reshape divergent boundary elevation profile~~
-- **Hydraulic erosion** — pure heightmap post-process
+- ~~**Hydraulic erosion** — removed; sub-pixel at world scale, delegated to Gaea~~
+- **Large-scale river systems** — drainage basins + trunk rivers for Gaea export
 
 ### Boundary Refinements (soft chain)
 

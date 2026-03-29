@@ -59,6 +59,8 @@ namespace WorldGen.Core
         public double BasinsSeconds;
         public double SeamountsSeconds;
         public double IsostasySeconds;
+        public double WindSeconds;
+        public double PrecipitationSeconds;
         public double DenseTerrainSeconds;
         public double SiteSelectionSeconds;
         public double TotalSeconds;

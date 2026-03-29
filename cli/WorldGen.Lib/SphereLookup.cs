@@ -109,9 +109,36 @@ namespace WorldGen.Cli.Lib
         public int Nearest(float px, float py, float pz, int latIdx, int lonIdx, int lonRadius)
         {
             float bestDist = float.MaxValue;
-            int bestCell = 0;
+            int bestCell = -1;
 
-            for (int dLat = -1; dLat <= 1; dLat++)
+            SearchWindow(px, py, pz, latIdx, lonIdx, lonRadius, ref bestDist, ref bestCell);
+            if (bestCell >= 0)
+                return bestCell;
+
+            // Sparse lookups can leave the initial 3-row search empty. Expand until we
+            // hit populated buckets so callers never silently fall back to cell 0.
+            for (int latRadius = 2; latRadius < _latBuckets && bestCell < 0; latRadius++)
+            {
+                SearchWindow(px, py, pz, latIdx, lonIdx, _lonBuckets / 2, ref bestDist, ref bestCell, latRadius);
+            }
+
+            return bestCell >= 0 ? bestCell : 0;
+        }
+
+        void SearchWindow(
+            float px,
+            float py,
+            float pz,
+            int latIdx,
+            int lonIdx,
+            int lonRadius,
+            ref float bestDist,
+            ref int bestCell,
+            int latRadius = 1)
+        {
+            lonRadius = Math.Clamp(lonRadius, 0, _lonBuckets / 2);
+
+            for (int dLat = -latRadius; dLat <= latRadius; dLat++)
             {
                 int li = latIdx + dLat;
                 if (li < 0 || li >= _latBuckets) continue;
@@ -139,8 +166,6 @@ namespace WorldGen.Cli.Lib
                     }
                 }
             }
-
-            return bestCell;
         }
 
         int LatIndex(float lat)
