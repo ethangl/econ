@@ -58,12 +58,20 @@ namespace WorldGen.Core
                 ElevationOps.Generate(mesh, tectonics, config.OceanFraction, config.Seed + 1);
             timings.ElevationSeconds = stepSw.Elapsed.TotalSeconds;
 
-            // 7. Generate dense terrain mesh with fractal noise
+            // 7. Volcanic hotspots (after elevation, before dense terrain)
+            if (config.HotspotCount > 0)
+            {
+                stepSw.Restart();
+                HotspotOps.Generate(mesh, tectonics, config);
+                timings.HotspotsSeconds = stepSw.Elapsed.TotalSeconds;
+            }
+
+            // 8. Generate dense terrain mesh with fractal noise
             stepSw.Restart();
             DenseTerrainData denseTerrain = DenseTerrainOps.Generate(mesh, tectonics, config);
             timings.DenseTerrainSeconds = stepSw.Elapsed.TotalSeconds;
 
-            // 8. Select candidate sites for flat map generation
+            // 9. Select candidate sites for flat map generation
             var partialResult = new WorldGenResult
             {
                 Mesh = mesh,

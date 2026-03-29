@@ -26,9 +26,9 @@ Identify enclosed low areas between mountain ranges on continental plates, flatt
 
 Track distance from divergent boundaries across oceanic plates. Older crust = cooler = denser = deeper. Gives ocean floors a realistic depth gradient instead of flat base elevation.
 
-### Multi-step Plate Motion
+### ~~Multi-step Plate Motion~~
 
-Instead of a single static snapshot, run 3-5 time steps of drift + re-classify boundaries + re-compute elevation. Produces layered orogeny, closed basins, and more complex coastlines.
+~~Instead of a single static snapshot, run 3-5 time steps of drift + re-classify boundaries + re-compute elevation. Produces layered orogeny, closed basins, and more complex coastlines.~~
 
 ### Isostatic Adjustment
 
@@ -38,9 +38,9 @@ Thick crust floats higher (Airy isostasy). Estimate crustal thickness from plate
 
 Require both sphere-level data (placement, classification) and heightmap-level detail (shapes too fine for coarse cells).
 
-### Hotspot Volcanism
+### ~~Hotspot Volcanism~~
 
-Data: identify hotspot positions, trace drift trails across plates, mark affected cells. Rendering: stamp volcanic cone profiles onto the heightmap at trail points — individual peaks and calderas are sub-cell features.
+~~Data: identify hotspot positions, trace drift trails across plates, mark affected cells. Rendering: stamp volcanic cone profiles onto the heightmap at trail points — individual peaks and calderas are sub-cell features.~~
 
 ### Volcanic Arcs
 
