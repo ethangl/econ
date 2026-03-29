@@ -34,6 +34,20 @@ namespace WorldGen.Core
                 int plate = tectonics.CellPlate[sourceCell];
                 Vec3 drift = tectonics.PlateDrift[plate];
 
+                // Zero drift (e.g. polar cap plates) — stationary plume, no trail
+                if (drift.SqrMagnitude < 1e-8f)
+                {
+                    intensity[sourceCell] = Math.Max(intensity[sourceCell], 1f);
+                    hotspots.Add(new HotspotData
+                    {
+                        Position = pos,
+                        SourceCell = sourceCell,
+                        TrailCells = new[] { sourceCell },
+                        TrailIntensity = new[] { 1f },
+                    });
+                    continue;
+                }
+
                 // Trail goes opposite to drift (plate moved over the hotspot,
                 // so older volcanism is upstream of the drift direction)
                 Vec3 trailDir = -drift;
@@ -60,7 +74,7 @@ namespace WorldGen.Core
                     if (cellIntensity > intensity[current])
                         intensity[current] = cellIntensity;
 
-                    // Find neighbor most aligned with trail direction
+                    // Find neighbor most aligned with trail direction (same plate only)
                     int bestNeighbor = -1;
                     float bestDot = float.MinValue;
                     int[] neighbors = mesh.CellNeighbors[current];
@@ -68,6 +82,8 @@ namespace WorldGen.Core
                     {
                         int nb = neighbors[i];
                         if (visited.Contains(nb))
+                            continue;
+                        if (tectonics.CellPlate[nb] != plate)
                             continue;
                         Vec3 dir = mesh.CellCenters[nb] - mesh.CellCenters[current];
                         float d = Vec3.Dot(dir, trailDir);
