@@ -91,7 +91,17 @@ namespace WorldGen.Core
             IsostaticOps.Generate(mesh, tectonics, config);
             timings.IsostasySeconds = stepSw.Elapsed.TotalSeconds;
 
-            // 13. Generate dense terrain mesh with fractal noise + seamount cones
+            // 13. Atmospheric circulation on the coarse sphere
+            stepSw.Restart();
+            WindOps.Generate(mesh, tectonics, config);
+            timings.WindSeconds = stepSw.Elapsed.TotalSeconds;
+
+            // 14. Moisture transport and precipitation on the coarse sphere
+            stepSw.Restart();
+            PrecipitationOps.Generate(mesh, tectonics, config);
+            timings.PrecipitationSeconds = stepSw.Elapsed.TotalSeconds;
+
+            // 15. Generate dense terrain mesh with fractal noise + seamount cones
             stepSw.Restart();
             DenseTerrainData denseTerrain = DenseTerrainOps.Generate(mesh, tectonics, config);
             timings.DenseTerrainSeconds = stepSw.Elapsed.TotalSeconds;

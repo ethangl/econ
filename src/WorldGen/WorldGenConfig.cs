@@ -118,6 +118,41 @@ namespace WorldGen.Core
         /// Mountains sink slightly, continental interiors with cratonic roots rise slightly.</summary>
         public float IsostaticStrength { get; set; } = 0.4f;
 
+        // --- Atmosphere / Precipitation ---
+
+        /// <summary>Curl noise strength relative to base zonal wind (0-1).</summary>
+        public float WindNoiseAmplitude { get; set; } = 0.35f;
+
+        /// <summary>Curl noise frequency on the sphere surface.</summary>
+        public float WindNoiseFrequency { get; set; } = 4f;
+
+        /// <summary>Number of curl-noise octaves.</summary>
+        public int WindNoiseOctaves { get; set; } = 3;
+
+        /// <summary>Fixed humidity for ocean boundary cells.</summary>
+        public float OceanBaseHumidity { get; set; } = 0.9f;
+
+        /// <summary>Fraction of gathered humidity deposited over land.</summary>
+        public float BasePrecipitationRate { get; set; } = 0.03f;
+
+        /// <summary>How strongly upslope flow removes moisture.</summary>
+        public float OrographicScale { get; set; } = 0.25f;
+
+        /// <summary>Sea-level temperature at the equator in Celsius.</summary>
+        public float EquatorTempC { get; set; } = 29f;
+
+        /// <summary>Sea-level temperature at the poles in Celsius.</summary>
+        public float PoleTempC { get; set; } = -20f;
+
+        /// <summary>Temperature lapse rate in Celsius per kilometer.</summary>
+        public float LapseRateCPerKm { get; set; } = 6.5f;
+
+        /// <summary>Below this temperature, humidity is capped to a low frozen-air value.</summary>
+        public float PermafrostThresholdC { get; set; } = -5f;
+
+        /// <summary>Physical height of the highest land point (CellElevation = 1.0), in kilometers.</summary>
+        public float MaxLandElevationKm { get; set; } = 10f;
+
         // --- Site selection ---
 
         /// <summary>Minimum degrees from equator for site candidates</summary>

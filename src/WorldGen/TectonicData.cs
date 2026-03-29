@@ -40,7 +40,7 @@ namespace WorldGen.Core
         /// <summary>Number of polar cap plates (0..PolarPlateCount-1 are polar caps)</summary>
         public int PolarPlateCount;
 
-        /// <summary>Normalized elevation per cell (0-1). Sea level ~0.4.</summary>
+        /// <summary>Normalized elevation per cell (0-1). Sea level is 0.5 in the current pipeline.</summary>
         public float[] CellElevation;
 
         /// <summary>Per-cell crust type. In multi-step mode, plate ownership can change
@@ -109,6 +109,20 @@ namespace WorldGen.Core
         /// can sustain based on thickness estimates (plate type, boundary proximity, craton roots).
         /// Continental cells only; oceanic cells store their current elevation (no adjustment).</summary>
         public float[] CellIsostaticSupport;
+
+        // --- Atmospheric data ---
+
+        /// <summary>Per-cell surface wind vector tangent to the sphere.</summary>
+        public Vec3[] CellWind;
+
+        /// <summary>Per-cell normalized wind speed in [0,1].</summary>
+        public float[] CellWindSpeed;
+
+        /// <summary>Per-cell normalized precipitation in [0,1].</summary>
+        public float[] CellPrecipitation;
+
+        /// <summary>Per-cell remaining atmospheric humidity after precipitation losses.</summary>
+        public float[] CellHumidity;
 
         // --- Seamount / Abyssal Hill data ---
 
