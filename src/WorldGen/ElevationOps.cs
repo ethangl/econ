@@ -44,6 +44,9 @@ namespace WorldGen.Core
             PromoteSubcontinents(isOceanic, tectonics.PlateIsMajor, plateNeighbors, MaxSubcontinents, rng);
             float[] elevation = ComputeBaseElevation(cellCount, tectonics.CellPlate, isOceanic);
 
+            // Seafloor age gradient replaces flat oceanic base with ridge-to-deep profile
+            SeafloorAgeOps.Apply(mesh, tectonics, isOceanic, elevation);
+
             ApplyBoundaryEffects(mesh, tectonics, elevation, isOceanic);
             Smooth(mesh, elevation);
             Clamp01(elevation);
@@ -87,6 +90,9 @@ namespace WorldGen.Core
 
             // Base elevation from crust type (erosion target)
             float[] baseElevation = ComputeBaseElevation(cellCount, cellCrustOceanic);
+
+            // Seafloor age gradient replaces flat oceanic base with ridge-to-deep profile
+            SeafloorAgeOps.Apply(mesh, tectonics, isOceanic, baseElevation);
 
             // Initialize elevation from step 0 (original plate assignment + boundaries)
             float[] elevation = new float[cellCount];
