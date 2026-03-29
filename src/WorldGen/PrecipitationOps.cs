@@ -213,7 +213,7 @@ namespace WorldGen.Core
         {
             int[] neighbors = mesh.CellNeighbors[cell];
             float gathered = 0f;
-            float totalWeight = 0f;
+            float totalAlignment = 0f;
 
             for (int i = 0; i < neighbors.Length; i++)
             {
@@ -222,15 +222,21 @@ namespace WorldGen.Core
                 if (alignment <= 0f)
                     continue;
 
-                float weight = alignment * alignment * tectonics.CellWindSpeed[nb];
-                if (weight <= 1e-6f)
+                float alignmentWeight = alignment * alignment;
+                if (alignmentWeight <= 1e-6f)
                     continue;
 
-                gathered += humidity[nb] * weight;
-                totalWeight += weight;
+                float speed = tectonics.CellWindSpeed[nb];
+                if (speed <= 1e-6f)
+                    continue;
+
+                // Normalize by directional support so mesh valence does not dominate,
+                // but keep wind speed as an absolute attenuation term on transport.
+                gathered += humidity[nb] * alignmentWeight * speed;
+                totalAlignment += alignmentWeight;
             }
 
-            return totalWeight > 1e-6f ? gathered / totalWeight : 0f;
+            return totalAlignment > 1e-6f ? gathered / totalAlignment : 0f;
         }
     }
 }
