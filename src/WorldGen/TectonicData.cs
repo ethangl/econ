@@ -57,6 +57,12 @@ namespace WorldGen.Core
         /// Recent = fresh terrain, ancient = eroded remnant.</summary>
         public int[] CellLastBoundaryStep;
 
+        // --- Seafloor age ---
+
+        /// <summary>BFS hop distance from nearest divergent boundary per oceanic cell.
+        /// -1 for continental cells. 0 = at the ridge, higher = older crust.</summary>
+        public int[] CellSeafloorAge;
+
         // --- Hotspot data ---
 
         /// <summary>Per-cell hotspot intensity (0 = none, 1 = directly on hotspot source,

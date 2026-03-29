@@ -22,9 +22,9 @@ Mark some interior continental cells as ancient stable cores: slightly flattened
 
 Identify enclosed low areas between mountain ranges on continental plates, flatten them further. These become plains, river basins, breadbaskets.
 
-### Seafloor Age Gradient
+### ~~Seafloor Age Gradient~~
 
-Track distance from divergent boundaries across oceanic plates. Older crust = cooler = denser = deeper. Gives ocean floors a realistic depth gradient instead of flat base elevation.
+~~Track distance from divergent boundaries across oceanic plates. Older crust = cooler = denser = deeper. Gives ocean floors a realistic depth gradient instead of flat base elevation.~~
 
 ### ~~Multi-step Plate Motion~~
 
