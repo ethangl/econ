@@ -71,7 +71,17 @@ namespace WorldGen.Core
             VolcanicArcOps.Generate(mesh, tectonics, config);
             timings.VolcanicArcsSeconds = stepSw.Elapsed.TotalSeconds;
 
-            // 9. Generate dense terrain mesh with fractal noise
+            // 9. Cratons / shields
+            stepSw.Restart();
+            CratonOps.Generate(mesh, tectonics, config);
+            timings.CratonsSeconds = stepSw.Elapsed.TotalSeconds;
+
+            // 10. Sedimentary basins
+            stepSw.Restart();
+            BasinOps.Generate(mesh, tectonics, config);
+            timings.BasinsSeconds = stepSw.Elapsed.TotalSeconds;
+
+            // 11. Generate dense terrain mesh with fractal noise
             stepSw.Restart();
             DenseTerrainData denseTerrain = DenseTerrainOps.Generate(mesh, tectonics, config);
             timings.DenseTerrainSeconds = stepSw.Elapsed.TotalSeconds;

@@ -133,7 +133,16 @@ namespace WorldGen.Core
                     float distFromCoast = Math.Abs(baseElev - SeaLevel);
                     float dampFactor = Math.Min(distFromCoast / CoastDampingRange, 1.0f);
 
-                    elevation[d] = Clamp01(baseElev + noiseVal * NoiseAmplitude * dampFactor);
+                    // Dampen noise on craton cells
+                    float cratonDamp = 1f;
+                    if (tectonics.CellCratonStrength != null)
+                    {
+                        float cratonStr = tectonics.CellCratonStrength[toCoarse[d]];
+                        if (cratonStr > 0f)
+                            cratonDamp = 1f - cratonStr * (1f - config.CratonNoiseMultiplier);
+                    }
+
+                    elevation[d] = Clamp01(baseElev + noiseVal * NoiseAmplitude * dampFactor * cratonDamp);
                     return noise;
                 },
                 _ => { });

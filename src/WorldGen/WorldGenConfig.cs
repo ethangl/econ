@@ -70,6 +70,34 @@ namespace WorldGen.Core
         /// <summary>Enable ultra-dense mesh via midpoint subdivision (~4x dense cell count).</summary>
         public bool EnableUltraDense { get; set; } = false;
 
+        // --- Cratons / Shields ---
+
+        /// <summary>Minimum BFS hops from any plate boundary for a cell to be craton.</summary>
+        public int CratonMinBoundaryDistance { get; set; } = 3;
+
+        /// <summary>BFS hops over which craton strength ramps from 0 to 1.</summary>
+        public int CratonRampWidth { get; set; } = 3;
+
+        /// <summary>How much to flatten craton cells toward ContinentalBase (0-1).</summary>
+        public float CratonFlattenStrength { get; set; } = 0.6f;
+
+        /// <summary>Noise amplitude multiplier for craton cells in DenseTerrainOps (0-1).</summary>
+        public float CratonNoiseMultiplier { get; set; } = 0.25f;
+
+        // --- Sedimentary Basins ---
+
+        /// <summary>Elevation below ContinentalBase to qualify as basin candidate.</summary>
+        public float BasinElevationThreshold { get; set; } = 0.12f;
+
+        /// <summary>Minimum cell count for a basin to be kept.</summary>
+        public int BasinMinCells { get; set; } = 3;
+
+        /// <summary>How much to flatten basin cells toward the basin floor (0-1).</summary>
+        public float BasinFlattenStrength { get; set; } = 0.5f;
+
+        /// <summary>Elevation offset above the lowest cell to set basin floor.</summary>
+        public float BasinFloorOffset { get; set; } = 0.02f;
+
         // --- Site selection ---
 
         /// <summary>Minimum degrees from equator for site candidates</summary>

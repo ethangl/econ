@@ -80,6 +80,21 @@ namespace WorldGen.Core
 
         /// <summary>Volcanic arc segment data for rendering (cone stamping at heightmap resolution).</summary>
         public VolcanicArcData[] VolcanicArcs;
+
+        // --- Craton / Shield data ---
+
+        /// <summary>Per-cell craton strength (0 = not a craton, 1 = deep interior craton).
+        /// Used to dampen fractal noise in DenseTerrainOps and for debug visualization.</summary>
+        public float[] CellCratonStrength;
+
+        // --- Sedimentary Basin data ---
+
+        /// <summary>Per-cell basin ID (0 = not in a basin, 1..N = basin assignment).
+        /// Used for elevation flattening and debug visualization.</summary>
+        public int[] CellBasinId;
+
+        /// <summary>Number of sedimentary basins found.</summary>
+        public int BasinCount;
     }
 
     /// <summary>
