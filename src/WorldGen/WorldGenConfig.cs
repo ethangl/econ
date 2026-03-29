@@ -112,6 +112,12 @@ namespace WorldGen.Core
         /// <summary>Cone falloff radius in km. Peaks taper to zero over this distance.</summary>
         public float SeamountRadius { get; set; } = 200f;
 
+        // --- Isostatic Adjustment ---
+
+        /// <summary>How strongly to adjust elevation toward isostatic equilibrium (0=disabled, 1=full).
+        /// Mountains sink slightly, continental interiors with cratonic roots rise slightly.</summary>
+        public float IsostaticStrength { get; set; } = 0.4f;
+
         // --- Site selection ---
 
         /// <summary>Minimum degrees from equator for site candidates</summary>

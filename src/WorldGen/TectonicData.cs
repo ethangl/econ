@@ -103,6 +103,13 @@ namespace WorldGen.Core
         /// <summary>Number of sedimentary basins found.</summary>
         public int BasinCount;
 
+        // --- Isostatic Adjustment data ---
+
+        /// <summary>Per-cell isostatic support level: the equilibrium elevation the crust
+        /// can sustain based on thickness estimates (plate type, boundary proximity, craton roots).
+        /// Continental cells only; oceanic cells store their current elevation (no adjustment).</summary>
+        public float[] CellIsostaticSupport;
+
         // --- Seamount / Abyssal Hill data ---
 
         /// <summary>Per-cell seamount density (0 = none, >0 = tagged for seamount placement).
