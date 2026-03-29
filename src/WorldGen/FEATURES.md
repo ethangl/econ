@@ -6,9 +6,9 @@ Brainstormed geological features to add to the pipeline.
 
 Cell/edge attributes computed on the sphere mesh (`src/WorldGen/`).
 
-### Mountain Range Asymmetry
+### ~~Mountain Range Asymmetry~~
 
-Convergent ocean-continent boundaries should produce a steep subduction face and a gradual backslope. BFS propagation is currently symmetric — biasing it by plate type would make ranges more realistic.
+~~Convergent ocean-continent boundaries should produce a steep subduction face and a gradual backslope. BFS propagation is currently symmetric — biasing it by plate type would make ranges more realistic.~~
 
 ### Rift Morphology
 
