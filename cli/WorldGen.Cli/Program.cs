@@ -212,12 +212,19 @@ rootCommand.SetHandler((InvocationContext ctx) =>
         {
             Console.WriteLine($"  Color ramp applied to preview in {stepSw.Elapsed.TotalSeconds:F1}s ({colorMode})");
 
-            if (debug && result.Tectonics.Hotspots != null)
-                DrawHotspotOverlay(previewColor, result.Tectonics, result.Mesh);
-
             stepSw.Restart();
             previewColor.Save(previewPath, previewPngEncoder);
             Console.WriteLine($"  Saved preview PNG in {stepSw.Elapsed.TotalSeconds:F1}s ({previewColor.Width}x{previewColor.Height})");
+
+            if (debug && result.Tectonics.Hotspots != null)
+            {
+                DrawHotspotOverlay(previewColor, result.Tectonics, result.Mesh);
+                string debugPath = Path.Combine(
+                    Path.GetDirectoryName(previewPath) ?? string.Empty,
+                    Path.GetFileNameWithoutExtension(previewPath) + ".debug.png");
+                previewColor.Save(debugPath, previewPngEncoder);
+                Console.WriteLine($"  Saved debug PNG in {stepSw.Elapsed.TotalSeconds:F1}s → {debugPath}");
+            }
         }
     }
     else

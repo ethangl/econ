@@ -133,8 +133,10 @@ namespace WorldGen.Core
                 float lonDeg = (float)(Math.Atan2(p.Z, p.X) * 180.0 / Math.PI);
                 bool oceanic = tectonics.PlateIsOceanic != null &&
                     tectonics.PlateIsOceanic[tectonics.CellPlate[hs.SourceCell]];
+                float srcElev = tectonics.CellElevation[hs.SourceCell];
                 Console.WriteLine($"    Hotspot {h}: lat {latDeg:F1} lon {lonDeg:F1}, " +
-                    $"{(oceanic ? "oceanic" : "continental")}, trail {hs.TrailCells.Length} cells");
+                    $"{(oceanic ? "oceanic" : "continental")}, trail {hs.TrailCells.Length} cells, " +
+                    $"elev {srcElev:F3}");
             }
         }
 
