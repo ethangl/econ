@@ -26,7 +26,7 @@ namespace WorldGen.Core
 
             for (int c = 0; c < cellCount; c++)
             {
-                if (tectonics.PlateIsOceanic[tectonics.CellPlate[c]])
+                if (tectonics.CellCrustOceanic[c])
                     continue;
                 float e = tectonics.CellElevation[c];
                 if (e >= SeaLevel && e < maxElev)

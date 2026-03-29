@@ -73,7 +73,7 @@ namespace WorldGen.Core
 
             for (int c = 0; c < cellCount; c++)
             {
-                if (tectonics.PlateIsOceanic[tectonics.CellPlate[c]])
+                if (tectonics.CellCrustOceanic[c])
                     continue;
                 if (tectonics.CellElevation[c] < SeaLevel)
                     continue;
