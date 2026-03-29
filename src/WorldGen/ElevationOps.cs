@@ -481,15 +481,28 @@ namespace WorldGen.Core
 
                     float edgeEffect = baseLift * scale;
 
-                    if (Math.Abs(edgeEffect) > Math.Abs(effect[c0]))
+                    // Skip divergent drop on oceanic cells when seafloor age gradient
+                    // already handles their depth profile (avoids double-counting)
+                    bool isDivergent = tectonics.EdgeBoundary[e] == BoundaryType.Divergent;
+                    bool hasSeafloorAge = tectonics.CellSeafloorAge != null;
+                    bool c0Oceanic = plateIsOceanic != null && plateIsOceanic[p0];
+                    bool c1Oceanic = plateIsOceanic != null && plateIsOceanic[p1];
+
+                    if (!(isDivergent && hasSeafloorAge && c0Oceanic))
                     {
-                        effect[c0] = edgeEffect;
-                        maxDepth[c0] = PropagationDepth;
+                        if (Math.Abs(edgeEffect) > Math.Abs(effect[c0]))
+                        {
+                            effect[c0] = edgeEffect;
+                            maxDepth[c0] = PropagationDepth;
+                        }
                     }
-                    if (Math.Abs(edgeEffect) > Math.Abs(effect[c1]))
+                    if (!(isDivergent && hasSeafloorAge && c1Oceanic))
                     {
-                        effect[c1] = edgeEffect;
-                        maxDepth[c1] = PropagationDepth;
+                        if (Math.Abs(edgeEffect) > Math.Abs(effect[c1]))
+                        {
+                            effect[c1] = edgeEffect;
+                            maxDepth[c1] = PropagationDepth;
+                        }
                     }
                 }
             }

@@ -53,11 +53,15 @@ namespace WorldGen.Core
                 }
             }
 
-            // BFS across oceanic cells only
+            // BFS across oceanic cells within the same plate.
+            // Don't cross plate boundaries — each oceanic plate gets its own
+            // age gradient from its own ridges, preserving depth discontinuities
+            // at convergent and transform boundaries between oceanic plates.
             while (queue.Count > 0)
             {
                 int cell = queue.Dequeue();
                 int nextAge = age[cell] + 1;
+                int plate = tectonics.CellPlate[cell];
 
                 int[] neighbors = mesh.CellNeighbors[cell];
                 for (int i = 0; i < neighbors.Length; i++)
@@ -65,12 +69,20 @@ namespace WorldGen.Core
                     int nb = neighbors[i];
                     if (age[nb] != -1)
                         continue;
-                    if (!plateIsOceanic[tectonics.CellPlate[nb]])
+                    if (tectonics.CellPlate[nb] != plate)
                         continue;
 
                     age[nb] = nextAge;
                     queue.Enqueue(nb);
                 }
+            }
+
+            // Oceanic cells unreached by BFS (no divergent boundary in their plate)
+            // are treated as maximum-age old crust
+            for (int c = 0; c < cellCount; c++)
+            {
+                if (age[c] == -1 && plateIsOceanic[tectonics.CellPlate[c]])
+                    age[c] = MaxAgeHops;
             }
 
             // Apply depth gradient to oceanic cells
