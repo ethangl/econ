@@ -58,6 +58,12 @@ namespace WorldGen.Core
 
             tectonics.PlateIsOceanic = isOceanic;
             tectonics.CellElevation = elevation;
+
+            // Single-step: crust type == plate type (no migration)
+            bool[] cellCrustOceanic = new bool[cellCount];
+            for (int c = 0; c < cellCount; c++)
+                cellCrustOceanic[c] = isOceanic[tectonics.CellPlate[c]];
+            tectonics.CellCrustOceanic = cellCrustOceanic;
         }
 
         /// <summary>
@@ -172,6 +178,7 @@ namespace WorldGen.Core
             tectonics.CellElevation = elevation;
             tectonics.EdgeBoundary = edgeBoundary;
             tectonics.EdgeConvergence = edgeConvergence;
+            tectonics.CellCrustOceanic = cellCrustOceanic;
             tectonics.CellBoundaryExposure = boundaryExposure;
             tectonics.CellPlateContinuity = plateContinuity;
             tectonics.CellLastBoundaryStep = lastBoundaryStep;

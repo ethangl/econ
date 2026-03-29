@@ -14,13 +14,13 @@ Cell/edge attributes computed on the sphere mesh (`src/WorldGen/`).
 
 ~~Divergent boundaries currently just lower elevation. Real rifts have a graben profile: a central low flanked by raised shoulders. A shaped profile function instead of flat depression.~~
 
-### Cratons / Shields
+### ~~Cratons / Shields~~
 
-Mark some interior continental cells as ancient stable cores: slightly flattened terrain, reduced noise amplitude. Gives continents internal structure beyond "flat plateau + boundary mountains."
+~~Mark some interior continental cells as ancient stable cores: slightly flattened terrain, reduced noise amplitude. Gives continents internal structure beyond "flat plateau + boundary mountains."~~
 
-### Sedimentary Basins
+### ~~Sedimentary Basins~~
 
-Identify enclosed low areas between mountain ranges on continental plates, flatten them further. These become plains, river basins, breadbaskets.
+~~Identify enclosed low areas between mountain ranges on continental plates, flatten them further. These become plains, river basins, breadbaskets.~~
 
 ### ~~Seafloor Age Gradient~~
 
@@ -72,8 +72,8 @@ Either commit to multi-step early and design features within it, or defer it and
 
 ### Isolated (implement any time, no dependencies)
 
-- **Sedimentary basins** — post-process on existing cell elevations
-- **Cratons / shields** — tag interior cells, reduce noise
+- ~~**Sedimentary basins** — post-process on existing cell elevations~~
+- ~~**Cratons / shields** — tag interior cells, reduce noise~~
 - ~~**Rift morphology** — reshape divergent boundary elevation profile~~
 - **Hydraulic erosion** — pure heightmap post-process
 

@@ -43,6 +43,13 @@ namespace WorldGen.Core
         /// <summary>Normalized elevation per cell (0-1). Sea level ~0.4.</summary>
         public float[] CellElevation;
 
+        /// <summary>Per-cell crust type. In multi-step mode, plate ownership can change
+        /// via boundary migration but crust type is immutable — an oceanic cell absorbed
+        /// by a continental plate remains oceanic crust. In single-step mode, matches
+        /// PlateIsOceanic[CellPlate[c]]. Use this instead of PlateIsOceanic for per-cell
+        /// continental/oceanic classification.</summary>
+        public bool[] CellCrustOceanic;
+
         // --- Multi-step history (populated when TectonicSteps > 1) ---
 
         /// <summary>How many steps this cell was adjacent to a plate boundary.
@@ -80,6 +87,21 @@ namespace WorldGen.Core
 
         /// <summary>Volcanic arc segment data for rendering (cone stamping at heightmap resolution).</summary>
         public VolcanicArcData[] VolcanicArcs;
+
+        // --- Craton / Shield data ---
+
+        /// <summary>Per-cell craton strength (0 = not a craton, 1 = deep interior craton).
+        /// Used to dampen fractal noise in DenseTerrainOps and for debug visualization.</summary>
+        public float[] CellCratonStrength;
+
+        // --- Sedimentary Basin data ---
+
+        /// <summary>Per-cell basin ID (0 = not in a basin, 1..N = basin assignment).
+        /// Used for elevation flattening and debug visualization.</summary>
+        public int[] CellBasinId;
+
+        /// <summary>Number of sedimentary basins found.</summary>
+        public int BasinCount;
     }
 
     /// <summary>

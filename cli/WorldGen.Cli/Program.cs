@@ -89,7 +89,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
 
     Console.WriteLine($"  Globe generated in {sw.Elapsed.TotalSeconds:F1}s ({renderMesh.CellCount} cells)");
     Console.WriteLine($"    Coarse mesh: points {globeTimings.CoarsePointsSeconds:F2}s, hull {globeTimings.CoarseHullSeconds:F2}s, voronoi {globeTimings.CoarseVoronoiSeconds:F2}s, areas {globeTimings.CoarseAreaSeconds:F2}s");
-    Console.WriteLine($"    Tectonics: plates {globeTimings.TectonicsSeconds:F2}s, elevation {globeTimings.ElevationSeconds:F2}s, hotspots {globeTimings.HotspotsSeconds:F2}s, arcs {globeTimings.VolcanicArcsSeconds:F2}s");
+    Console.WriteLine($"    Tectonics: plates {globeTimings.TectonicsSeconds:F2}s, elevation {globeTimings.ElevationSeconds:F2}s, hotspots {globeTimings.HotspotsSeconds:F2}s, arcs {globeTimings.VolcanicArcsSeconds:F2}s, cratons {globeTimings.CratonsSeconds:F2}s, basins {globeTimings.BasinsSeconds:F2}s");
     Console.WriteLine($"    Dense terrain: total {denseTimings.TotalSeconds:F2}s (points {denseTimings.DensePointsSeconds:F2}s, hull {denseTimings.DenseHullSeconds:F2}s, voronoi {denseTimings.DenseVoronoiSeconds:F2}s, areas {denseTimings.DenseAreaSeconds:F2}s, map {denseTimings.DenseMappingSeconds:F2}s, elev {denseTimings.DenseElevationSeconds:F2}s)");
     if (ultra)
         Console.WriteLine($"    Ultra-dense: subdivision {denseTimings.UltraSubdivisionSeconds:F2}s (setup {denseTimings.UltraSubdivisionSetupSeconds:F2}s, restore {denseTimings.UltraSubdivisionRestoreSeconds:F2}s), voronoi {denseTimings.UltraVoronoiSeconds:F2}s, areas {denseTimings.UltraAreaSeconds:F2}s, map {denseTimings.UltraMappingSeconds:F2}s, elev {denseTimings.UltraElevationSeconds:F2}s");
@@ -230,6 +230,10 @@ rootCommand.SetHandler((InvocationContext ctx) =>
                     DrawHotspotOverlay(previewColor, result.Tectonics, result.Mesh);
                 if (result.Tectonics.VolcanicArcs != null)
                     DrawVolcanicArcOverlay(previewColor, result.Tectonics, result.Mesh);
+                if (result.Tectonics.CellCratonStrength != null)
+                    DrawCratonOverlay(previewColor, result.Tectonics, result.Mesh);
+                if (result.Tectonics.CellBasinId != null)
+                    DrawBasinOverlay(previewColor, result.Tectonics, result.Mesh);
                 string debugPath = Path.Combine(
                     Path.GetDirectoryName(previewPath) ?? string.Empty,
                     Path.GetFileNameWithoutExtension(previewPath) + ".debug.png");
@@ -310,6 +314,62 @@ static void DrawVolcanicArcOverlay(Image<Rgb24> image, WorldGen.Core.TectonicDat
         // Red dots for peaks (larger)
         foreach (var peak in arc.Peaks)
             DrawDot(image, peak.Position, red, dotRadius * 2, w, h);
+    }
+}
+
+static void DrawCratonOverlay(Image<Rgb24> image, WorldGen.Core.TectonicData tectonics, WorldGen.Core.SphereMesh mesh)
+{
+    int w = image.Width;
+    int h = image.Height;
+    int dotRadius = Math.Max(2, w / 400);
+
+    for (int c = 0; c < mesh.CellCount; c++)
+    {
+        float strength = tectonics.CellCratonStrength[c];
+        if (strength <= 0f) continue;
+
+        // Amber: pale yellow at edges, bright amber at deep interior
+        byte r = (byte)(180 + 75 * strength);
+        byte g = (byte)(140 + 60 * strength);
+        byte b = 30;
+        DrawDot(image, mesh.CellCenters[c], new Rgb24(r, g, b), dotRadius, w, h);
+    }
+}
+
+static void DrawBasinOverlay(Image<Rgb24> image, WorldGen.Core.TectonicData tectonics, WorldGen.Core.SphereMesh mesh)
+{
+    int w = image.Width;
+    int h = image.Height;
+    int dotRadius = Math.Max(2, w / 400);
+    var teal = new Rgb24(0, 200, 180);
+
+    for (int c = 0; c < mesh.CellCount; c++)
+    {
+        if (tectonics.CellBasinId[c] <= 0) continue;
+
+        // Teal/cyan, vary hue by basin ID
+        int basin = tectonics.CellBasinId[c];
+        float hue = (basin * 0.618034f) % 1f;
+        // Map to teal range: H=0.42-0.60
+        float h01 = 0.42f + hue * 0.18f;
+        // Simple HSV→RGB for S=0.7 V=0.85
+        float s = 0.7f, v = 0.85f;
+        float c1 = v * s;
+        float x = c1 * (1f - Math.Abs((h01 * 6f) % 2f - 1f));
+        float m = v - c1;
+        float rf, gf, bf;
+        int hi = (int)(h01 * 6f);
+        switch (hi)
+        {
+            case 0: rf = c1; gf = x; bf = 0; break;
+            case 1: rf = x; gf = c1; bf = 0; break;
+            case 2: rf = 0; gf = c1; bf = x; break;
+            case 3: rf = 0; gf = x; bf = c1; break;
+            case 4: rf = x; gf = 0; bf = c1; break;
+            default: rf = c1; gf = 0; bf = x; break;
+        }
+        var color = new Rgb24((byte)((rf + m) * 255), (byte)((gf + m) * 255), (byte)((bf + m) * 255));
+        DrawDot(image, mesh.CellCenters[c], color, dotRadius, w, h);
     }
 }
 

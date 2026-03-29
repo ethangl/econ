@@ -8,7 +8,8 @@ namespace EconSim.Renderer
     {
         Plates,
         Elevation,
-        UltraDense
+        UltraDense,
+        CratonsBasins
     }
 
     /// <summary>
@@ -74,7 +75,8 @@ namespace EconSim.Renderer
                 viewMode = viewMode switch
                 {
                     SphereViewMode.Plates => SphereViewMode.Elevation,
-                    SphereViewMode.Elevation => SphereViewMode.UltraDense,
+                    SphereViewMode.Elevation => SphereViewMode.CratonsBasins,
+                    SphereViewMode.CratonsBasins => SphereViewMode.UltraDense,
                     SphereViewMode.UltraDense => SphereViewMode.Plates,
                     _ => SphereViewMode.Plates,
                 };
@@ -200,6 +202,10 @@ namespace EconSim.Renderer
                 {
                     color = SiteHighlightColor;
                 }
+                else if (viewMode == SphereViewMode.CratonsBasins)
+                {
+                    color = CratonBasinColor(coarseCell, elev[c], result.Tectonics);
+                }
                 else if (viewMode == SphereViewMode.Plates)
                 {
                     color = palette[result.Tectonics.CellPlate[coarseCell]];
@@ -216,6 +222,38 @@ namespace EconSim.Renderer
             }
 
             return colors;
+        }
+
+        /// <summary>
+        /// Debug coloring for cratons (amber) and basins (teal), elevation fallback for unmarked cells.
+        /// </summary>
+        private static Color32 CratonBasinColor(int coarseCell, float elev, TectonicData tectonics)
+        {
+            float cratonStr = tectonics.CellCratonStrength != null ? tectonics.CellCratonStrength[coarseCell] : 0f;
+            int basin = tectonics.CellBasinId != null ? tectonics.CellBasinId[coarseCell] : 0;
+
+            if (cratonStr > 0f)
+            {
+                // Amber: pale yellow at edges, bright amber at deep interior
+                byte r = (byte)(180 + 75 * cratonStr);
+                byte g = (byte)(140 + 60 * cratonStr);
+                byte b = (byte)(30);
+                return new Color32(r, g, b, 255);
+            }
+
+            if (basin > 0)
+            {
+                // Teal/cyan, hue varies by basin ID for visual distinction
+                float hue = (basin * 0.618034f) % 1f; // golden ratio spacing
+                Color bc = Color.HSVToRGB(0.42f + hue * 0.18f, 0.7f, 0.85f);
+                return new Color32(
+                    (byte)(bc.r * 255),
+                    (byte)(bc.g * 255),
+                    (byte)(bc.b * 255),
+                    255);
+            }
+
+            return ElevationColor(elev);
         }
 
         /// <summary>
