@@ -91,12 +91,14 @@ namespace WorldGen.Core
             int[] boundaryExposure = new int[cellCount];
             int[] plateContinuity = new int[cellCount];
             int[] lastBoundaryStep = new int[cellCount];
+            int[] prevPlate = new int[cellCount];
+            Array.Copy(cellPlate, prevPlate, cellCount);
             for (int i = 0; i < cellCount; i++)
                 lastBoundaryStep[i] = -1;
 
-            // Record step 0 history
-            UpdateHistory(mesh, tectonics.EdgeBoundary, boundaryExposure, plateContinuity,
-                lastBoundaryStep, 0);
+            // Record step 0 history (prevPlate == cellPlate, so all cells gain continuity)
+            UpdateHistory(mesh, tectonics.EdgeBoundary, prevPlate, cellPlate,
+                boundaryExposure, plateContinuity, lastBoundaryStep, 0);
 
             // Current boundary state (mutated each step)
             BoundaryType[] edgeBoundary = tectonics.EdgeBoundary;
@@ -108,6 +110,9 @@ namespace WorldGen.Core
                 // Erode toward base elevation
                 for (int c = 0; c < cellCount; c++)
                     elevation[c] += (baseElevation[c] - elevation[c]) * erosionFactor;
+
+                // Snapshot plate state before migration
+                Array.Copy(cellPlate, prevPlate, cellCount);
 
                 // Migrate boundaries: flip cells at convergent edges
                 MigrateBoundaries(mesh, cellPlate, edgeBoundary, edgeConvergence,
@@ -133,9 +138,9 @@ namespace WorldGen.Core
                 ApplyBoundaryEffects(mesh, stepTectonics, elevation);
                 Smooth(mesh, elevation);
 
-                // Update history
-                UpdateHistory(mesh, edgeBoundary, boundaryExposure, plateContinuity,
-                    lastBoundaryStep, step);
+                // Update history (compares prevPlate to cellPlate to detect ownership changes)
+                UpdateHistory(mesh, edgeBoundary, prevPlate, cellPlate,
+                    boundaryExposure, plateContinuity, lastBoundaryStep, step);
             }
 
             Clamp01(elevation);
@@ -163,8 +168,9 @@ namespace WorldGen.Core
             int edgeCount = mesh.EdgeCount;
 
             // Collect cells to flip (defer mutation to avoid order-dependent artifacts)
-            // Key: cell index, Value: plate to flip to
+            // Key: cell index, Value: plate to flip to. Strongest convergence wins.
             var flips = new Dictionary<int, int>();
+            var flipStrength = new Dictionary<int, float>();
 
             for (int e = 0; e < edgeCount; e++)
             {
@@ -182,8 +188,10 @@ namespace WorldGen.Core
                     continue;
 
                 // Determine which plate is advancing (overriding) and which retreats.
-                // Edge direction is c0→c1. Positive convergence = p0 moves toward c1.
                 // At ocean-continent boundaries, the oceanic plate always subducts.
+                // At same-type boundaries, compare each plate's drift component toward
+                // the boundary. This is edge-ordering invariant (proj0+proj1 flips sign
+                // when c0/c1 swap, and so does the plate-to-cell mapping).
                 int advancingPlate, retreatingCell;
                 if (isOceanic[p0] != isOceanic[p1])
                 {
@@ -201,8 +209,15 @@ namespace WorldGen.Core
                 }
                 else
                 {
-                    // Same type: advancing plate determined by convergence direction
-                    if (conv > 0)
+                    // Same type: the plate pushing harder toward the boundary advances.
+                    // proj0 = drift[p0] projected onto c0→c1 (positive = p0 moves toward boundary)
+                    // proj1 projected onto c1→c0 = -proj1 (positive = p1 moves toward boundary)
+                    // Advancing plate has larger toward-boundary component.
+                    Vec3 edgeDir = (mesh.CellCenters[c1] - mesh.CellCenters[c0]).Normalized;
+                    float proj0 = Vec3.Dot(plateDrift[p0], edgeDir);
+                    float proj1 = Vec3.Dot(plateDrift[p1], edgeDir);
+                    // p0 push = proj0, p1 push = -proj1
+                    if (proj0 > -proj1)
                     {
                         advancingPlate = p0;
                         retreatingCell = c1;
@@ -214,9 +229,13 @@ namespace WorldGen.Core
                     }
                 }
 
-                // Only flip if not already claimed by a stronger convergence
-                if (!flips.ContainsKey(retreatingCell))
+                // Strongest convergence wins at triple junctions
+                float strength = Math.Abs(conv);
+                if (!flipStrength.TryGetValue(retreatingCell, out float existing) || strength > existing)
+                {
                     flips[retreatingCell] = advancingPlate;
+                    flipStrength[retreatingCell] = strength;
+                }
             }
 
             // Apply flips
@@ -226,8 +245,10 @@ namespace WorldGen.Core
 
         /// <summary>
         /// Update per-cell history arrays for one step.
+        /// prevPlate/currPlate track ownership changes — continuity resets when a cell changes plates.
         /// </summary>
         internal static void UpdateHistory(SphereMesh mesh, BoundaryType[] edgeBoundary,
+            int[] prevPlate, int[] currPlate,
             int[] boundaryExposure, int[] plateContinuity,
             int[] lastBoundaryStep, int step)
         {
@@ -253,10 +274,12 @@ namespace WorldGen.Core
                     boundaryExposure[c]++;
                     lastBoundaryStep[c] = step;
                 }
+
+                // Continuity resets to 0 when plate ownership changes, otherwise increments
+                if (currPlate[c] != prevPlate[c])
+                    plateContinuity[c] = 0;
                 else
-                {
                     plateContinuity[c]++;
-                }
             }
         }
 
