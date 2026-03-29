@@ -87,7 +87,7 @@ namespace WorldGen.Core
         // --- Sedimentary Basins ---
 
         /// <summary>Elevation below ContinentalBase to qualify as basin candidate.</summary>
-        public float BasinElevationThreshold { get; set; } = 0.12f;
+        public float BasinElevationThreshold { get; set; } = 0.04f;
 
         /// <summary>Minimum cell count for a basin to be kept.</summary>
         public int BasinMinCells { get; set; } = 3;

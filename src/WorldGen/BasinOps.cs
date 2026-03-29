@@ -18,11 +18,11 @@ namespace WorldGen.Core
             int cellCount = mesh.CellCount;
 
             // Step 1: Identify basin candidate cells.
-            // Continental cells above sea level but below the threshold —
-            // these are the low-lying areas pulled down by erosion, rifts, or being
-            // between mountain ranges.
+            // Continental cells above sea level but at least BasinElevationThreshold
+            // below ContinentalBase — the low-lying areas pulled down by erosion,
+            // rifts, or sitting between mountain ranges.
             bool[] isCandidate = new bool[cellCount];
-            float maxElev = SeaLevel + config.BasinElevationThreshold;
+            float maxElev = ContinentalBase - config.BasinElevationThreshold;
 
             for (int c = 0; c < cellCount; c++)
             {
@@ -34,9 +34,12 @@ namespace WorldGen.Core
             }
 
             // Step 2: Flood-fill connected components of candidate cells.
+            // Track whether each component touches the ocean (has a neighbor
+            // below sea level) — coastal plains are not enclosed basins.
             int[] basinId = new int[cellCount];
             int currentBasin = 0;
             var basinCellLists = new List<List<int>>();
+            var basinTouchesOcean = new List<bool>();
 
             for (int c = 0; c < cellCount; c++)
             {
@@ -46,6 +49,7 @@ namespace WorldGen.Core
                 currentBasin++;
                 var component = new List<int>();
                 var queue = new Queue<int>();
+                bool touchesOcean = false;
                 queue.Enqueue(c);
                 basinId[c] = currentBasin;
 
@@ -62,19 +66,24 @@ namespace WorldGen.Core
                             basinId[nb] = currentBasin;
                             queue.Enqueue(nb);
                         }
+                        else if (!isCandidate[nb] && tectonics.PlateIsOceanic[tectonics.CellPlate[nb]])
+                        {
+                            touchesOcean = true;
+                        }
                     }
                 }
 
                 basinCellLists.Add(component);
+                basinTouchesOcean.Add(touchesOcean);
             }
 
-            // Step 3: Filter small basins and compact IDs.
+            // Step 3: Filter basins that are too small or touch the ocean, then compact IDs.
             int finalBasinCount = 0;
             int[] idRemap = new int[currentBasin + 1]; // old ID -> new ID (0 = removed)
 
             for (int b = 0; b < basinCellLists.Count; b++)
             {
-                if (basinCellLists[b].Count >= config.BasinMinCells)
+                if (basinCellLists[b].Count >= config.BasinMinCells && !basinTouchesOcean[b])
                 {
                     finalBasinCount++;
                     idRemap[b + 1] = finalBasinCount;

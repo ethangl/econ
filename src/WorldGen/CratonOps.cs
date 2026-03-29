@@ -62,9 +62,14 @@ namespace WorldGen.Core
             }
 
             // Step 2: Compute craton strength for continental cells above sea level.
+            // When multi-step history is available, require high plate continuity —
+            // cells that were recently accreted via boundary migration are geologically
+            // young and should not be tagged as ancient shields.
             float[] cratonStrength = new float[cellCount];
             int minDist = config.CratonMinBoundaryDistance;
             int rampWidth = config.CratonRampWidth;
+            int[] continuity = tectonics.CellPlateContinuity;
+            int totalSteps = config.TectonicSteps;
 
             for (int c = 0; c < cellCount; c++)
             {
@@ -80,7 +85,18 @@ namespace WorldGen.Core
                 float strength = rampWidth > 0
                     ? Math.Min(1f, (float)(dist - minDist) / rampWidth)
                     : 1f;
-                cratonStrength[c] = strength;
+
+                // Scale by plate stability: continuity/totalSteps gives 0-1 fraction
+                // of how long this cell has been in its current plate.
+                // Recently accreted cells (low continuity) get near-zero strength.
+                if (continuity != null && totalSteps > 1)
+                {
+                    float stability = (float)continuity[c] / totalSteps;
+                    strength *= stability;
+                }
+
+                if (strength > 0f)
+                    cratonStrength[c] = strength;
             }
 
             // Step 3: Flatten elevation toward ContinentalBase.
