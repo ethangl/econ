@@ -35,7 +35,7 @@ namespace WorldGen.Core
         /// <summary>Number of tectonic time steps. Each step rotates plate seeds,
         /// re-grows plates, reclassifies boundaries, and applies elevation deltas.
         /// 1 = original single-shot behavior.</summary>
-        public int TectonicSteps { get; set; } = 3;
+        public int TectonicSteps { get; set; } = 15;
 
         /// <summary>Inter-step erosion factor (0-1). Each step pulls elevation
         /// toward base plate elevation by this fraction, simulating geological aging.</summary>

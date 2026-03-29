@@ -25,7 +25,7 @@ var detailOption = new Option<float>("--detail", () => 0.1f, "Full-map micro-rel
 var sharpenOption = new Option<float>("--sharpen", () => 0f, "Unsharp mask amount (0=off, 1=normal, 2=strong; uses blur sigma)");
 var colorOption = new Option<bool>("--color", () => true, "Apply the terrain color ramp to the preview PNG");
 var coastOption = new Option<float>("--coast", () => 0.25f, "Coastal detail amplitude (0-1)");
-var stepsOption = new Option<int>("--steps", () => 3, "Number of tectonic time steps (1=single-shot, 3+=multi-step with boundary migration)");
+var stepsOption = new Option<int>("--steps", () => 15, "Number of tectonic time steps (1=single-shot, ~10 Myr per step via boundary migration)");
 var cpuOption = new Option<bool>("--cpu", () => false, "Force the CPU heightmap pipeline instead of the default Metal path on macOS");
 
 var rootCommand = new RootCommand("Generate a raw 2D heightmap plus preview from spherical world generation")
