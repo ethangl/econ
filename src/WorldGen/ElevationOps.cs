@@ -15,6 +15,12 @@ namespace WorldGen.Core
         const float DivergentDrop = -0.4f;
         const float TransformLift = 0.4f;
         const int PropagationDepth = 3;
+
+        // Asymmetric convergent boundary constants (ocean-continent subduction)
+        const float ContinentalConvergentLift = 0.5f;   // overriding plate: broader, higher mountains
+        const float OceanicTrenchDrop = -0.2f;           // subducting plate: trench
+        const int ContinentalPropagationDepth = 5;       // mountains extend further inland
+        const int OceanicPropagationDepth = 1;            // trench is narrow
         const int SmoothingPasses = 2;
         const float SmoothingWeight = 0.2f;
 
@@ -37,7 +43,13 @@ namespace WorldGen.Core
             var plateNeighbors = BuildPlateAdjacency(mesh, tectonics.CellPlate, tectonics.PlateCount);
             PromoteSubcontinents(isOceanic, tectonics.PlateIsMajor, plateNeighbors, MaxSubcontinents, rng);
             float[] elevation = ComputeBaseElevation(cellCount, tectonics.CellPlate, isOceanic);
-            ApplyBoundaryEffects(mesh, tectonics, elevation);
+
+            // Build per-cell crust type for asymmetric boundary effects
+            bool[] cellIsOceanic = new bool[cellCount];
+            for (int c = 0; c < cellCount; c++)
+                cellIsOceanic[c] = isOceanic[tectonics.CellPlate[c]];
+
+            ApplyBoundaryEffects(mesh, tectonics, elevation, cellIsOceanic);
             Smooth(mesh, elevation);
             Clamp01(elevation);
 
@@ -84,7 +96,7 @@ namespace WorldGen.Core
             // Initialize elevation from step 0 (original plate assignment + boundaries)
             float[] elevation = new float[cellCount];
             Array.Copy(baseElevation, elevation, cellCount);
-            ApplyBoundaryEffects(mesh, tectonics, elevation);
+            ApplyBoundaryEffects(mesh, tectonics, elevation, cellCrustOceanic);
             Smooth(mesh, elevation);
 
             // Initialize history arrays
@@ -136,7 +148,7 @@ namespace WorldGen.Core
                     EdgeBoundary = edgeBoundary,
                     EdgeConvergence = edgeConvergence,
                 };
-                ApplyBoundaryEffects(mesh, stepTectonics, elevation);
+                ApplyBoundaryEffects(mesh, stepTectonics, elevation, cellCrustOceanic);
                 Smooth(mesh, elevation);
 
                 // Update history using pre-migration boundaries (so cells at the
@@ -401,46 +413,86 @@ namespace WorldGen.Core
         /// <summary>
         /// For each boundary edge, compute effect magnitude and BFS-propagate inward
         /// with linear decay. Max-abs-wins for overlapping effects.
+        /// At convergent ocean-continent boundaries, applies asymmetric effects:
+        /// continental side gets broader/higher mountains, oceanic side gets a narrow trench.
         /// </summary>
-        internal static void ApplyBoundaryEffects(SphereMesh mesh, TectonicData tectonics, float[] elevation)
+        internal static void ApplyBoundaryEffects(SphereMesh mesh, TectonicData tectonics,
+            float[] elevation, bool[] cellIsOceanic = null)
         {
             int cellCount = mesh.CellCount;
-            float[] effect = new float[cellCount]; // accumulated boundary effect per cell
+            float[] effect = new float[cellCount];
+            int[] maxDepth = new int[cellCount]; // per-cell propagation depth limit
 
             // Collect boundary cells and their direct effects
-            // For each boundary edge, both adjacent cells get the effect
             int edgeCount = mesh.EdgeCount;
             for (int e = 0; e < edgeCount; e++)
             {
                 if (tectonics.EdgeBoundary[e] == BoundaryType.None)
                     continue;
 
-                float baseLift;
-                switch (tectonics.EdgeBoundary[e])
-                {
-                    case BoundaryType.Convergent: baseLift = ConvergentLift; break;
-                    case BoundaryType.Divergent: baseLift = DivergentDrop; break;
-                    case BoundaryType.Transform: baseLift = TransformLift; break;
-                    default: continue;
-                }
+                var (c0, c1) = mesh.EdgeCells[e];
 
                 // Scale by convergence magnitude
                 float scale = Math.Min(Math.Abs(tectonics.EdgeConvergence[e]) / 2f, 1f);
-                float edgeEffect = baseLift * scale;
 
-                var (c0, c1) = mesh.EdgeCells[e];
-                // Max-abs-wins
-                if (Math.Abs(edgeEffect) > Math.Abs(effect[c0]))
-                    effect[c0] = edgeEffect;
-                if (Math.Abs(edgeEffect) > Math.Abs(effect[c1]))
-                    effect[c1] = edgeEffect;
+                // Check for asymmetric ocean-continent convergent boundary
+                bool isConvergent = tectonics.EdgeBoundary[e] == BoundaryType.Convergent;
+                bool asymmetric = isConvergent && cellIsOceanic != null &&
+                    cellIsOceanic[c0] != cellIsOceanic[c1];
+
+                if (asymmetric)
+                {
+                    // Ocean-continent subduction: asymmetric effects
+                    int oceanCell = cellIsOceanic[c0] ? c0 : c1;
+                    int continentCell = cellIsOceanic[c0] ? c1 : c0;
+
+                    float trenchEffect = OceanicTrenchDrop * scale;
+                    float mountainEffect = ContinentalConvergentLift * scale;
+
+                    if (Math.Abs(trenchEffect) > Math.Abs(effect[oceanCell]))
+                    {
+                        effect[oceanCell] = trenchEffect;
+                        maxDepth[oceanCell] = OceanicPropagationDepth;
+                    }
+                    if (Math.Abs(mountainEffect) > Math.Abs(effect[continentCell]))
+                    {
+                        effect[continentCell] = mountainEffect;
+                        maxDepth[continentCell] = ContinentalPropagationDepth;
+                    }
+                }
+                else
+                {
+                    // Symmetric: same effect on both sides
+                    float baseLift;
+                    switch (tectonics.EdgeBoundary[e])
+                    {
+                        case BoundaryType.Convergent: baseLift = ConvergentLift; break;
+                        case BoundaryType.Divergent: baseLift = DivergentDrop; break;
+                        case BoundaryType.Transform: baseLift = TransformLift; break;
+                        default: continue;
+                    }
+
+                    float edgeEffect = baseLift * scale;
+
+                    if (Math.Abs(edgeEffect) > Math.Abs(effect[c0]))
+                    {
+                        effect[c0] = edgeEffect;
+                        maxDepth[c0] = PropagationDepth;
+                    }
+                    if (Math.Abs(edgeEffect) > Math.Abs(effect[c1]))
+                    {
+                        effect[c1] = edgeEffect;
+                        maxDepth[c1] = PropagationDepth;
+                    }
+                }
             }
 
             // BFS propagation inward from boundary cells
-            // Each hop decays linearly: depth 0 = full, depth PropagationDepth = 1/(PropagationDepth+1)
+            // Each cell has its own max propagation depth for asymmetric ranges
             var queue = new Queue<int>();
             int[] depth = new int[cellCount];
-            float[] sourceEffect = new float[cellCount]; // original boundary effect to decay from
+            float[] sourceEffect = new float[cellCount];
+            int[] sourceMaxDepth = new int[cellCount];
             for (int i = 0; i < cellCount; i++)
                 depth[i] = -1;
 
@@ -451,6 +503,7 @@ namespace WorldGen.Core
                     queue.Enqueue(c);
                     depth[c] = 0;
                     sourceEffect[c] = effect[c];
+                    sourceMaxDepth[c] = maxDepth[c];
                 }
             }
 
@@ -458,11 +511,12 @@ namespace WorldGen.Core
             {
                 int cell = queue.Dequeue();
                 int d = depth[cell];
-                if (d >= PropagationDepth)
+                int cellMaxDepth = sourceMaxDepth[cell];
+                if (d >= cellMaxDepth)
                     continue;
 
                 int nextDepth = d + 1;
-                float decay = 1f - (float)nextDepth / (PropagationDepth + 1);
+                float decay = 1f - (float)nextDepth / (cellMaxDepth + 1);
                 float propagated = sourceEffect[cell] * decay;
 
                 int[] neighbors = mesh.CellNeighbors[cell];
@@ -474,7 +528,7 @@ namespace WorldGen.Core
 
                     depth[nb] = nextDepth;
                     sourceEffect[nb] = sourceEffect[cell];
-                    // Max-abs-wins for the propagated effect
+                    sourceMaxDepth[nb] = cellMaxDepth;
                     if (Math.Abs(propagated) > Math.Abs(effect[nb]))
                         effect[nb] = propagated;
                     queue.Enqueue(nb);
