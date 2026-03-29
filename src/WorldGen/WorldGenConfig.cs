@@ -32,6 +32,15 @@ namespace WorldGen.Core
         /// <summary>Fraction of plates that are oceanic (0-1)</summary>
         public float OceanFraction { get; set; } = 0.6f;
 
+        /// <summary>Number of tectonic time steps. Each step rotates plate seeds,
+        /// re-grows plates, reclassifies boundaries, and applies elevation deltas.
+        /// 1 = original single-shot behavior.</summary>
+        public int TectonicSteps { get; set; } = 10;
+
+        /// <summary>Inter-step erosion factor (0-1). Each step pulls elevation
+        /// toward base plate elevation by this fraction, simulating geological aging.</summary>
+        public float InterStepErosion { get; set; } = 0.15f;
+
         /// <summary>Polar cap latitude threshold in degrees from equator. Cells above this latitude
         /// are pre-assigned to polar cap plates (north=0, south=1) before normal seeding. Set to 0 to disable.</summary>
         public float PolarCapLatitude { get; set; } = 65f;

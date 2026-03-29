@@ -51,7 +51,11 @@ namespace WorldGen.Core
 
             // 6. Compute tectonic elevation
             stepSw.Restart();
-            ElevationOps.Generate(mesh, tectonics, config.OceanFraction, config.Seed + 1);
+            if (config.TectonicSteps > 1)
+                ElevationOps.GenerateMultiStep(mesh, tectonics, config.OceanFraction,
+                    config.Seed + 1, config.TectonicSteps, config.InterStepErosion);
+            else
+                ElevationOps.Generate(mesh, tectonics, config.OceanFraction, config.Seed + 1);
             timings.ElevationSeconds = stepSw.Elapsed.TotalSeconds;
 
             // 7. Generate dense terrain mesh with fractal noise
