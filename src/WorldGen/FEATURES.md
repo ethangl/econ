@@ -42,9 +42,9 @@ Require both sphere-level data (placement, classification) and heightmap-level d
 
 ~~Data: identify hotspot positions, trace drift trails across plates, mark affected cells. Rendering: stamp volcanic cone profiles onto the heightmap at trail points — individual peaks and calderas are sub-cell features.~~
 
-### Volcanic Arcs
+### ~~Volcanic Arcs~~
 
-Data: identify convergent ocean-continent boundaries, place arc positions offset inland on the overriding plate. Rendering: stamp individual stratovolcano peaks along the arc at heightmap resolution.
+~~Data: identify convergent ocean-continent boundaries, place arc positions offset inland on the overriding plate. Rendering: stamp individual stratovolcano peaks along the arc at heightmap resolution.~~
 
 ### Seamounts / Abyssal Hills
 
@@ -79,14 +79,14 @@ Either commit to multi-step early and design features within it, or defer it and
 
 ### Boundary Refinements (soft chain)
 
-1. **Mountain range asymmetry** — biased BFS by plate type
-2. **Volcanic arcs** — offset inland from convergent boundaries; easier to place correctly after asymmetry reshapes the overriding plate profile
+1. ~~**Mountain range asymmetry** — biased BFS by plate type~~
+2. ~~**Volcanic arcs** — offset inland from convergent boundaries; easier to place correctly after asymmetry reshapes the overriding plate profile~~
 
 ### Volcanism + Ocean Floor (dependency chain)
 
-- **Hotspot volcanism** → informs **seamount** placement (hotspot tracks)
-- **Seafloor age gradient** → informs **seamount** placement (young crust regions)
-- **Hotspots + volcanic arcs** share cone-stamping rendering infrastructure; implement one first, second reuses it
+- ~~**Hotspot volcanism** → informs **seamount** placement (hotspot tracks)~~
+- ~~**Seafloor age gradient** → informs **seamount** placement (young crust regions)~~
+- ~~**Hotspots + volcanic arcs** share cone-stamping rendering infrastructure; ~~implement one first, second reuses it~~ volcanic arcs implemented cone-stamping (`VolcanicArcDetail`); hotspots can reuse it~~
 
 ### Always Last
 

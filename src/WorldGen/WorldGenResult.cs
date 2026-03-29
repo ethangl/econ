@@ -54,6 +54,7 @@ namespace WorldGen.Core
         public double TectonicsSeconds;
         public double ElevationSeconds;
         public double HotspotsSeconds;
+        public double VolcanicArcsSeconds;
         public double DenseTerrainSeconds;
         public double SiteSelectionSeconds;
         public double TotalSeconds;
