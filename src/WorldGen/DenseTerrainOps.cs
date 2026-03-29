@@ -155,6 +155,9 @@ namespace WorldGen.Core
 
                 Parallel.For(0, count, d =>
                 {
+                    if (!tectonics.CellCrustOceanic[toCoarse[d]])
+                        return;
+
                     Vec3 p = mesh.CellCenters[d];
                     for (int i = 0; i < peaks.Length; i++)
                     {
