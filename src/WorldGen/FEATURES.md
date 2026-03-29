@@ -46,9 +46,9 @@ Require both sphere-level data (placement, classification) and heightmap-level d
 
 ~~Data: identify convergent ocean-continent boundaries, place arc positions offset inland on the overriding plate. Rendering: stamp individual stratovolcano peaks along the arc at heightmap resolution.~~
 
-### Seamounts / Abyssal Hills
+### ~~Seamounts / Abyssal Hills~~
 
-Data: mark hotspot tracks and young oceanic crust regions on cells to guide placement. Rendering: scatter cone-shaped elevation bumps at pixel resolution across tagged ocean floor.
+~~Data: mark hotspot tracks and young oceanic crust regions on cells to guide placement. Rendering: scatter cone-shaped elevation bumps at pixel resolution across tagged ocean floor.~~
 
 ## Rendering Features
 
@@ -86,6 +86,7 @@ Either commit to multi-step early and design features within it, or defer it and
 
 - ~~**Hotspot volcanism** → informs **seamount** placement (hotspot tracks)~~
 - ~~**Seafloor age gradient** → informs **seamount** placement (young crust regions)~~
+- ~~**Seamounts / abyssal hills** — cone bumps at dense terrain resolution from hotspot trails + young crust~~
 - ~~**Hotspots + volcanic arcs** share cone-stamping rendering infrastructure; ~~implement one first, second reuses it~~ volcanic arcs implemented cone-stamping (`VolcanicArcDetail`); hotspots can reuse it~~
 
 ### Always Last

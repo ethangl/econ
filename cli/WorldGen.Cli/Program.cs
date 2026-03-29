@@ -89,7 +89,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
 
     Console.WriteLine($"  Globe generated in {sw.Elapsed.TotalSeconds:F1}s ({renderMesh.CellCount} cells)");
     Console.WriteLine($"    Coarse mesh: points {globeTimings.CoarsePointsSeconds:F2}s, hull {globeTimings.CoarseHullSeconds:F2}s, voronoi {globeTimings.CoarseVoronoiSeconds:F2}s, areas {globeTimings.CoarseAreaSeconds:F2}s");
-    Console.WriteLine($"    Tectonics: plates {globeTimings.TectonicsSeconds:F2}s, elevation {globeTimings.ElevationSeconds:F2}s, hotspots {globeTimings.HotspotsSeconds:F2}s, arcs {globeTimings.VolcanicArcsSeconds:F2}s, cratons {globeTimings.CratonsSeconds:F2}s, basins {globeTimings.BasinsSeconds:F2}s");
+    Console.WriteLine($"    Tectonics: plates {globeTimings.TectonicsSeconds:F2}s, elevation {globeTimings.ElevationSeconds:F2}s, hotspots {globeTimings.HotspotsSeconds:F2}s, arcs {globeTimings.VolcanicArcsSeconds:F2}s, cratons {globeTimings.CratonsSeconds:F2}s, basins {globeTimings.BasinsSeconds:F2}s, seamounts {globeTimings.SeamountsSeconds:F2}s");
     Console.WriteLine($"    Dense terrain: total {denseTimings.TotalSeconds:F2}s (points {denseTimings.DensePointsSeconds:F2}s, hull {denseTimings.DenseHullSeconds:F2}s, voronoi {denseTimings.DenseVoronoiSeconds:F2}s, areas {denseTimings.DenseAreaSeconds:F2}s, map {denseTimings.DenseMappingSeconds:F2}s, elev {denseTimings.DenseElevationSeconds:F2}s)");
     if (ultra)
         Console.WriteLine($"    Ultra-dense: subdivision {denseTimings.UltraSubdivisionSeconds:F2}s (setup {denseTimings.UltraSubdivisionSetupSeconds:F2}s, restore {denseTimings.UltraSubdivisionRestoreSeconds:F2}s), voronoi {denseTimings.UltraVoronoiSeconds:F2}s, areas {denseTimings.UltraAreaSeconds:F2}s, map {denseTimings.UltraMappingSeconds:F2}s, elev {denseTimings.UltraElevationSeconds:F2}s");
@@ -234,6 +234,8 @@ rootCommand.SetHandler((InvocationContext ctx) =>
                     DrawCratonOverlay(previewColor, result.Tectonics, result.Mesh);
                 if (result.Tectonics.CellBasinId != null)
                     DrawBasinOverlay(previewColor, result.Tectonics, result.Mesh);
+                if (result.Tectonics.Seamounts != null)
+                    DrawSeamountOverlay(previewColor, result.Tectonics, result.Mesh);
                 string debugPath = Path.Combine(
                     Path.GetDirectoryName(previewPath) ?? string.Empty,
                     Path.GetFileNameWithoutExtension(previewPath) + ".debug.png");
@@ -371,6 +373,17 @@ static void DrawBasinOverlay(Image<Rgb24> image, WorldGen.Core.TectonicData tect
         var color = new Rgb24((byte)((rf + m) * 255), (byte)((gf + m) * 255), (byte)((bf + m) * 255));
         DrawDot(image, mesh.CellCenters[c], color, dotRadius, w, h);
     }
+}
+
+static void DrawSeamountOverlay(Image<Rgb24> image, WorldGen.Core.TectonicData tectonics, WorldGen.Core.SphereMesh mesh)
+{
+    int w = image.Width;
+    int h = image.Height;
+    var cyan = new Rgb24(0, 220, 255);
+    int dotRadius = Math.Max(2, w / 500);
+
+    foreach (var peak in tectonics.Seamounts)
+        DrawDot(image, peak.Position, cyan, dotRadius, w, h);
 }
 
 static void DrawDot(Image<Rgb24> image, WorldGen.Core.Vec3 position, Rgb24 color, int radius, int w, int h)
