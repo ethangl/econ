@@ -111,8 +111,9 @@ namespace WorldGen.Core
                 for (int c = 0; c < cellCount; c++)
                     elevation[c] += (baseElevation[c] - elevation[c]) * erosionFactor;
 
-                // Snapshot plate state before migration
+                // Snapshot plate state and pre-migration boundaries for history
                 Array.Copy(cellPlate, prevPlate, cellCount);
+                BoundaryType[] preMigrationBoundary = edgeBoundary;
 
                 // Migrate boundaries: flip cells at convergent edges
                 MigrateBoundaries(mesh, cellPlate, edgeBoundary, edgeConvergence,
@@ -138,8 +139,10 @@ namespace WorldGen.Core
                 ApplyBoundaryEffects(mesh, stepTectonics, elevation);
                 Smooth(mesh, elevation);
 
-                // Update history (compares prevPlate to cellPlate to detect ownership changes)
-                UpdateHistory(mesh, edgeBoundary, prevPlate, cellPlate,
+                // Update history using pre-migration boundaries (so cells at the
+                // subduction front get exposure credit even if the edge moved away)
+                // and post-migration plates (so continuity resets on flipped cells)
+                UpdateHistory(mesh, preMigrationBoundary, prevPlate, cellPlate,
                     boundaryExposure, plateContinuity, lastBoundaryStep, step);
             }
 
