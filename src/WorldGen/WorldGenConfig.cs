@@ -41,6 +41,16 @@ namespace WorldGen.Core
         /// toward base plate elevation by this fraction, simulating geological aging.</summary>
         public float InterStepErosion { get; set; } = 0.15f;
 
+        /// <summary>Number of volcanic hotspots (fixed mantle plumes). Trails are projected
+        /// opposite to plate drift, length scales with TectonicSteps.</summary>
+        public int HotspotCount { get; set; } = 10;
+
+        /// <summary>Maximum trail length in cell hops per hotspot.</summary>
+        public int HotspotTrailLength { get; set; } = 8;
+
+        /// <summary>Elevation bump at the hotspot source (decays along trail).</summary>
+        public float HotspotElevation { get; set; } = 0.45f;
+
         /// <summary>Polar cap latitude threshold in degrees from equator. Cells above this latitude
         /// are pre-assigned to polar cap plates (north=0, south=1) before normal seeding. Set to 0 to disable.</summary>
         public float PolarCapLatitude { get; set; } = 0f;

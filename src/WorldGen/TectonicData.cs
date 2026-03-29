@@ -56,5 +56,33 @@ namespace WorldGen.Core
         /// <summary>Last step index (0-based) when this cell was near a boundary.
         /// Recent = fresh terrain, ancient = eroded remnant.</summary>
         public int[] CellLastBoundaryStep;
+
+        // --- Hotspot data ---
+
+        /// <summary>Per-cell hotspot intensity (0 = none, 1 = directly on hotspot source,
+        /// decaying along trail). Used for elevation bumps and downstream rendering.</summary>
+        public float[] CellHotspotIntensity;
+
+        /// <summary>Hotspot trail data for rendering (cone stamping at heightmap resolution).</summary>
+        public HotspotData[] Hotspots;
+    }
+
+    /// <summary>
+    /// A single volcanic hotspot: fixed mantle position with a trail of affected cells
+    /// projected opposite to the owning plate's drift vector.
+    /// </summary>
+    public class HotspotData
+    {
+        /// <summary>Fixed position on sphere surface (mantle plume location).</summary>
+        public Vec3 Position;
+
+        /// <summary>Cell index at the hotspot source (youngest volcanism).</summary>
+        public int SourceCell;
+
+        /// <summary>Trail cell indices from source (youngest) to tail (oldest).</summary>
+        public int[] TrailCells;
+
+        /// <summary>Intensity per trail cell (1.0 at source, decaying toward tail).</summary>
+        public float[] TrailIntensity;
     }
 }

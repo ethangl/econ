@@ -26,11 +26,12 @@ var sharpenOption = new Option<float>("--sharpen", () => 0f, "Unsharp mask amoun
 var colorOption = new Option<bool>("--color", () => true, "Apply the terrain color ramp to the preview PNG");
 var coastOption = new Option<float>("--coast", () => 0.25f, "Coastal detail amplitude (0-1)");
 var stepsOption = new Option<int>("--steps", () => 15, "Number of tectonic time steps (1=single-shot, ~10 Myr per step via boundary migration)");
+var debugOption = new Option<bool>("--debug", () => false, "Draw debug overlays (hotspot trails, etc.) on the preview PNG");
 var cpuOption = new Option<bool>("--cpu", () => false, "Force the CPU heightmap pipeline instead of the default Metal path on macOS");
 
 var rootCommand = new RootCommand("Generate a raw 2D heightmap plus preview from spherical world generation")
 {
-    seedOption, cellsOption, widthOption, heightOption, outputOption, previewOutputOption, previewWidthOption, oceanOption, jitterOption, ultraOption, coastOption, blurOption, detailOption, sharpenOption, colorOption, stepsOption, cpuOption
+    seedOption, cellsOption, widthOption, heightOption, outputOption, previewOutputOption, previewWidthOption, oceanOption, jitterOption, ultraOption, coastOption, blurOption, detailOption, sharpenOption, colorOption, stepsOption, debugOption, cpuOption
 };
 
 var previewPngEncoder = new PngEncoder
@@ -57,6 +58,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
     bool color = ctx.ParseResult.GetValueForOption(colorOption);
     float coast = ctx.ParseResult.GetValueForOption(coastOption);
     int steps = ctx.ParseResult.GetValueForOption(stepsOption);
+    bool debug = ctx.ParseResult.GetValueForOption(debugOption);
     bool forceCpu = ctx.ParseResult.GetValueForOption(cpuOption);
     string previewPath = string.IsNullOrWhiteSpace(previewOutput) ? GetDefaultPreviewPath(output) : previewOutput;
 
@@ -87,7 +89,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
 
     Console.WriteLine($"  Globe generated in {sw.Elapsed.TotalSeconds:F1}s ({renderMesh.CellCount} cells)");
     Console.WriteLine($"    Coarse mesh: points {globeTimings.CoarsePointsSeconds:F2}s, hull {globeTimings.CoarseHullSeconds:F2}s, voronoi {globeTimings.CoarseVoronoiSeconds:F2}s, areas {globeTimings.CoarseAreaSeconds:F2}s");
-    Console.WriteLine($"    Tectonics: plates {globeTimings.TectonicsSeconds:F2}s, elevation {globeTimings.ElevationSeconds:F2}s");
+    Console.WriteLine($"    Tectonics: plates {globeTimings.TectonicsSeconds:F2}s, elevation {globeTimings.ElevationSeconds:F2}s, hotspots {globeTimings.HotspotsSeconds:F2}s");
     Console.WriteLine($"    Dense terrain: total {denseTimings.TotalSeconds:F2}s (points {denseTimings.DensePointsSeconds:F2}s, hull {denseTimings.DenseHullSeconds:F2}s, voronoi {denseTimings.DenseVoronoiSeconds:F2}s, areas {denseTimings.DenseAreaSeconds:F2}s, map {denseTimings.DenseMappingSeconds:F2}s, elev {denseTimings.DenseElevationSeconds:F2}s)");
     if (ultra)
         Console.WriteLine($"    Ultra-dense: subdivision {denseTimings.UltraSubdivisionSeconds:F2}s (setup {denseTimings.UltraSubdivisionSetupSeconds:F2}s, restore {denseTimings.UltraSubdivisionRestoreSeconds:F2}s), voronoi {denseTimings.UltraVoronoiSeconds:F2}s, areas {denseTimings.UltraAreaSeconds:F2}s, map {denseTimings.UltraMappingSeconds:F2}s, elev {denseTimings.UltraElevationSeconds:F2}s");
@@ -210,6 +212,9 @@ rootCommand.SetHandler((InvocationContext ctx) =>
         {
             Console.WriteLine($"  Color ramp applied to preview in {stepSw.Elapsed.TotalSeconds:F1}s ({colorMode})");
 
+            if (debug && result.Tectonics.Hotspots != null)
+                DrawHotspotOverlay(previewColor, result.Tectonics, result.Mesh);
+
             stepSw.Restart();
             previewColor.Save(previewPath, previewPngEncoder);
             Console.WriteLine($"  Saved preview PNG in {stepSw.Elapsed.TotalSeconds:F1}s ({previewColor.Width}x{previewColor.Height})");
@@ -231,4 +236,41 @@ static string GetDefaultPreviewPath(string outputPath)
     string directory = Path.GetDirectoryName(outputPath) ?? string.Empty;
     string stem = Path.GetFileNameWithoutExtension(outputPath);
     return Path.Combine(directory, $"{stem}.preview.png");
+}
+
+static void DrawHotspotOverlay(Image<Rgb24> image, WorldGen.Core.TectonicData tectonics, WorldGen.Core.SphereMesh mesh)
+{
+    int w = image.Width;
+    int h = image.Height;
+    var magenta = new Rgb24(255, 0, 255);
+    int dotRadius = Math.Max(2, w / 400);
+
+    foreach (var hotspot in tectonics.Hotspots)
+    {
+        for (int t = 0; t < hotspot.TrailCells.Length; t++)
+        {
+            int cell = hotspot.TrailCells[t];
+            WorldGen.Core.Vec3 p = mesh.CellCenters[cell].Normalized;
+            float lat = (float)Math.Asin(p.Y);
+            float lon = (float)Math.Atan2(p.Z, p.X);
+
+            // Equirectangular projection: lon [-pi,pi] -> x [0,w], lat [pi/2,-pi/2] -> y [0,h]
+            int px = (int)((lon / MathF.PI + 1f) * 0.5f * w);
+            int py = (int)((0.5f - lat / MathF.PI) * h);
+
+            // Source cell gets a larger dot
+            int r = t == 0 ? dotRadius * 2 : dotRadius;
+
+            for (int dy = -r; dy <= r; dy++)
+            {
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    if (dx * dx + dy * dy > r * r) continue;
+                    int ix = (px + dx + w) % w; // wrap horizontally
+                    int iy = Math.Clamp(py + dy, 0, h - 1);
+                    image[ix, iy] = magenta;
+                }
+            }
+        }
+    }
 }

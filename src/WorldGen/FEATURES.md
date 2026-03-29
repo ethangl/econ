@@ -26,9 +26,9 @@ Identify enclosed low areas between mountain ranges on continental plates, flatt
 
 Track distance from divergent boundaries across oceanic plates. Older crust = cooler = denser = deeper. Gives ocean floors a realistic depth gradient instead of flat base elevation.
 
-### Multi-step Plate Motion
+### ~~Multi-step Plate Motion~~
 
-Instead of a single static snapshot, run 3-5 time steps of drift + re-classify boundaries + re-compute elevation. Produces layered orogeny, closed basins, and more complex coastlines.
+~~Instead of a single static snapshot, run 3-5 time steps of drift + re-classify boundaries + re-compute elevation. Produces layered orogeny, closed basins, and more complex coastlines.~~
 
 ### Isostatic Adjustment
 
