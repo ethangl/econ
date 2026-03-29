@@ -21,8 +21,10 @@ namespace WorldGen.Core
         const float OceanicTrenchDrop = -0.2f;           // subducting plate: trench
         const int ContinentalPropagationDepth = 5;       // mountains extend further inland
         const int OceanicPropagationDepth = 1;            // trench is narrow
-        // Rift graben profile: shoulders lift flanking the divergent drop
-        const float RiftShoulderFraction = 0.4f;  // shoulder height = |DivergentDrop| * this
+        // Rift graben profile: steep falloff creates shoulders relative to the rift floor.
+        // Depth-1 cells retain only this fraction of the divergent drop (vs 0.75 for linear decay),
+        // so the rift has steep walls with nearly flat flanks — a graben shape without positive uplift.
+        const float RiftFlankFraction = 0.15f;
 
         const int SmoothingPasses = 2;
         const float SmoothingWeight = 0.2f;
@@ -496,17 +498,22 @@ namespace WorldGen.Core
                     bool skipC0 = skipOceanicDivergent && divergent && plateIsOceanic != null && plateIsOceanic[p0];
                     bool skipC1 = skipOceanicDivergent && divergent && plateIsOceanic != null && plateIsOceanic[p1];
 
+                    // Graben profile (shoulder lift) only applies to continental rifts.
+                    // Oceanic ridges keep linear decay — SeafloorAgeOps handles their profile.
+                    bool continentalC0 = divergent && (plateIsOceanic == null || !plateIsOceanic[p0]);
+                    bool continentalC1 = divergent && (plateIsOceanic == null || !plateIsOceanic[p1]);
+
                     if (!skipC0 && Math.Abs(edgeEffect) > Math.Abs(effect[c0]))
                     {
                         effect[c0] = edgeEffect;
                         maxDepth[c0] = PropagationDepth;
-                        isDivergent[c0] = divergent;
+                        isDivergent[c0] = continentalC0;
                     }
                     if (!skipC1 && Math.Abs(edgeEffect) > Math.Abs(effect[c1]))
                     {
                         effect[c1] = edgeEffect;
                         maxDepth[c1] = PropagationDepth;
-                        isDivergent[c1] = divergent;
+                        isDivergent[c1] = continentalC1;
                     }
                 }
             }
@@ -547,14 +554,16 @@ namespace WorldGen.Core
                 float propagated;
                 if (isDivergent[cell])
                 {
-                    // Graben profile: shoulder lift at depth 1, decaying beyond
-                    float shoulder = Math.Abs(sourceEffect[cell]) * RiftShoulderFraction;
+                    // Graben profile: steep falloff from rift floor to nearly flat flanks.
+                    // Depth-1 keeps only RiftFlankFraction of the drop, decaying to 0.
+                    // This creates steep-walled rifts without positive uplift.
+                    float flank = sourceEffect[cell] * RiftFlankFraction;
                     if (cellMaxDepth <= 1)
-                        propagated = shoulder;
+                        propagated = flank;
                     else
                     {
-                        float shoulderDecay = 1f - (float)(nextDepth - 1) / (cellMaxDepth - 1);
-                        propagated = shoulder * shoulderDecay;
+                        float flankDecay = 1f - (float)(nextDepth - 1) / (cellMaxDepth - 1);
+                        propagated = flank * flankDecay;
                     }
                 }
                 else
