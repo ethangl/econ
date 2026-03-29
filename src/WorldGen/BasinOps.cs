@@ -34,12 +34,13 @@ namespace WorldGen.Core
             }
 
             // Step 2: Flood-fill connected components of candidate cells.
-            // Track whether each component touches the ocean (has a neighbor
-            // below sea level) — coastal plains are not enclosed basins.
+            // For each component, count how many external boundary neighbors are
+            // below sea level vs above. Components where a large fraction of the
+            // perimeter faces water are coastal plains, not enclosed basins.
             int[] basinId = new int[cellCount];
             int currentBasin = 0;
             var basinCellLists = new List<List<int>>();
-            var basinTouchesOcean = new List<bool>();
+            var basinOceanFraction = new List<float>();
 
             for (int c = 0; c < cellCount; c++)
             {
@@ -49,7 +50,8 @@ namespace WorldGen.Core
                 currentBasin++;
                 var component = new List<int>();
                 var queue = new Queue<int>();
-                bool touchesOcean = false;
+                int borderTotal = 0;
+                int borderOcean = 0;
                 queue.Enqueue(c);
                 basinId[c] = currentBasin;
 
@@ -66,24 +68,30 @@ namespace WorldGen.Core
                             basinId[nb] = currentBasin;
                             queue.Enqueue(nb);
                         }
-                        else if (!isCandidate[nb] && tectonics.PlateIsOceanic[tectonics.CellPlate[nb]])
+                        else if (!isCandidate[nb])
                         {
-                            touchesOcean = true;
+                            borderTotal++;
+                            if (tectonics.CellElevation[nb] < SeaLevel)
+                                borderOcean++;
                         }
                     }
                 }
 
+                float oceanFrac = borderTotal > 0 ? (float)borderOcean / borderTotal : 0f;
                 basinCellLists.Add(component);
-                basinTouchesOcean.Add(touchesOcean);
+                basinOceanFraction.Add(oceanFrac);
             }
 
-            // Step 3: Filter basins that are too small or touch the ocean, then compact IDs.
+            // Step 3: Filter basins that are too small or too exposed to ocean, then compact IDs.
+            // A basin with more than half its perimeter facing sub-sea-level cells
+            // is a coastal lowland, not an enclosed interior basin.
+            const float MaxOceanFraction = 0.5f;
             int finalBasinCount = 0;
             int[] idRemap = new int[currentBasin + 1]; // old ID -> new ID (0 = removed)
 
             for (int b = 0; b < basinCellLists.Count; b++)
             {
-                if (basinCellLists[b].Count >= config.BasinMinCells && !basinTouchesOcean[b])
+                if (basinCellLists[b].Count >= config.BasinMinCells && basinOceanFraction[b] <= MaxOceanFraction)
                 {
                     finalBasinCount++;
                     idRemap[b + 1] = finalBasinCount;
