@@ -44,12 +44,7 @@ namespace WorldGen.Core
             PromoteSubcontinents(isOceanic, tectonics.PlateIsMajor, plateNeighbors, MaxSubcontinents, rng);
             float[] elevation = ComputeBaseElevation(cellCount, tectonics.CellPlate, isOceanic);
 
-            // Build per-cell crust type for asymmetric boundary effects
-            bool[] cellIsOceanic = new bool[cellCount];
-            for (int c = 0; c < cellCount; c++)
-                cellIsOceanic[c] = isOceanic[tectonics.CellPlate[c]];
-
-            ApplyBoundaryEffects(mesh, tectonics, elevation, cellIsOceanic);
+            ApplyBoundaryEffects(mesh, tectonics, elevation, isOceanic);
             Smooth(mesh, elevation);
             Clamp01(elevation);
 
@@ -96,7 +91,7 @@ namespace WorldGen.Core
             // Initialize elevation from step 0 (original plate assignment + boundaries)
             float[] elevation = new float[cellCount];
             Array.Copy(baseElevation, elevation, cellCount);
-            ApplyBoundaryEffects(mesh, tectonics, elevation, cellCrustOceanic);
+            ApplyBoundaryEffects(mesh, tectonics, elevation, isOceanic);
             Smooth(mesh, elevation);
 
             // Initialize history arrays
@@ -148,7 +143,7 @@ namespace WorldGen.Core
                     EdgeBoundary = edgeBoundary,
                     EdgeConvergence = edgeConvergence,
                 };
-                ApplyBoundaryEffects(mesh, stepTectonics, elevation, cellCrustOceanic);
+                ApplyBoundaryEffects(mesh, stepTectonics, elevation, isOceanic);
                 Smooth(mesh, elevation);
 
                 // Update history using pre-migration boundaries (so cells at the
@@ -416,8 +411,10 @@ namespace WorldGen.Core
         /// At convergent ocean-continent boundaries, applies asymmetric effects:
         /// continental side gets broader/higher mountains, oceanic side gets a narrow trench.
         /// </summary>
+        /// <param name="plateIsOceanic">Per-plate oceanic flag. When non-null, enables asymmetric
+        /// mountain/trench profiles at ocean-continent convergent boundaries.</param>
         internal static void ApplyBoundaryEffects(SphereMesh mesh, TectonicData tectonics,
-            float[] elevation, bool[] cellIsOceanic = null)
+            float[] elevation, bool[] plateIsOceanic = null)
         {
             int cellCount = mesh.CellCount;
             float[] effect = new float[cellCount];
@@ -436,15 +433,19 @@ namespace WorldGen.Core
                 float scale = Math.Min(Math.Abs(tectonics.EdgeConvergence[e]) / 2f, 1f);
 
                 // Check for asymmetric ocean-continent convergent boundary
+                // Uses plate type (not cell crust type) so asymmetry persists
+                // after boundary migration absorbs oceanic cells into continental plates
                 bool isConvergent = tectonics.EdgeBoundary[e] == BoundaryType.Convergent;
-                bool asymmetric = isConvergent && cellIsOceanic != null &&
-                    cellIsOceanic[c0] != cellIsOceanic[c1];
+                int p0 = tectonics.CellPlate[c0];
+                int p1 = tectonics.CellPlate[c1];
+                bool asymmetric = isConvergent && plateIsOceanic != null &&
+                    p0 != p1 && plateIsOceanic[p0] != plateIsOceanic[p1];
 
                 if (asymmetric)
                 {
                     // Ocean-continent subduction: asymmetric effects
-                    int oceanCell = cellIsOceanic[c0] ? c0 : c1;
-                    int continentCell = cellIsOceanic[c0] ? c1 : c0;
+                    int oceanCell = plateIsOceanic[p0] ? c0 : c1;
+                    int continentCell = plateIsOceanic[p0] ? c1 : c0;
 
                     float trenchEffect = OceanicTrenchDrop * scale;
                     float mountainEffect = ContinentalConvergentLift * scale;
@@ -487,8 +488,10 @@ namespace WorldGen.Core
                 }
             }
 
-            // BFS propagation inward from boundary cells
-            // Each cell has its own max propagation depth for asymmetric ranges
+            // BFS propagation inward from boundary cells.
+            // Effects do not cross plate boundaries — each side propagates
+            // within its own plate, keeping asymmetric profiles intact.
+            int[] cellPlate = tectonics.CellPlate;
             var queue = new Queue<int>();
             int[] depth = new int[cellCount];
             float[] sourceEffect = new float[cellCount];
@@ -518,6 +521,7 @@ namespace WorldGen.Core
                 int nextDepth = d + 1;
                 float decay = 1f - (float)nextDepth / (cellMaxDepth + 1);
                 float propagated = sourceEffect[cell] * decay;
+                int plate = cellPlate[cell];
 
                 int[] neighbors = mesh.CellNeighbors[cell];
                 for (int i = 0; i < neighbors.Length; i++)
@@ -525,6 +529,8 @@ namespace WorldGen.Core
                     int nb = neighbors[i];
                     if (depth[nb] != -1)
                         continue;
+                    if (cellPlate[nb] != plate)
+                        continue; // don't cross plate boundaries
 
                     depth[nb] = nextDepth;
                     sourceEffect[nb] = sourceEffect[cell];
