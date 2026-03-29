@@ -82,7 +82,7 @@ namespace WorldGen.Cli.Lib
             int height,
             Func<float, Rgb24> colorize)
         {
-            var lookup = new SphereLookup(mesh.CellCenters, mesh.Radius);
+            var lookup = BuildClimateLookup(mesh);
             var image = new Image<Rgb24>(width, height);
 
             image.ProcessPixelRows(accessor =>
@@ -101,6 +101,15 @@ namespace WorldGen.Cli.Lib
             });
 
             return image;
+        }
+
+        static SphereLookup BuildClimateLookup(SphereMesh mesh)
+        {
+            // The climate debug maps render from the coarse tectonic mesh, so the
+            // dense heightmap bucket defaults leave most buckets empty.
+            int latBuckets = Math.Clamp((int)Math.Round(Math.Sqrt(Math.Max(1, mesh.CellCount) / 2.0)), 18, 90);
+            int lonBuckets = latBuckets * 2;
+            return new SphereLookup(mesh.CellCenters, mesh.Radius, latBuckets, lonBuckets);
         }
 
         static void DrawWindArrow(Image<Rgb24> image, Vec3 position, Vec3 wind, Rgb24 color, int arrowLength)
