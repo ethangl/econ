@@ -58,6 +58,7 @@ namespace WorldGen.Core
         public double CratonsSeconds;
         public double BasinsSeconds;
         public double SeamountsSeconds;
+        public double IsostasySeconds;
         public double DenseTerrainSeconds;
         public double SiteSelectionSeconds;
         public double TotalSeconds;

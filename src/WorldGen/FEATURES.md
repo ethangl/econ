@@ -30,9 +30,9 @@ Cell/edge attributes computed on the sphere mesh (`src/WorldGen/`).
 
 ~~Instead of a single static snapshot, run 3-5 time steps of drift + re-classify boundaries + re-compute elevation. Produces layered orogeny, closed basins, and more complex coastlines.~~
 
-### Isostatic Adjustment
+### ~~Isostatic Adjustment~~
 
-Thick crust floats higher (Airy isostasy). Estimate crustal thickness from plate type + boundary proximity, adjust elevation. Mountains sink slightly, continental interiors rise.
+~~Thick crust floats higher (Airy isostasy). Estimate crustal thickness from plate type + boundary proximity, adjust elevation. Mountains sink slightly, continental interiors rise.~~
 
 ## Data + Rendering Features
 
@@ -91,4 +91,4 @@ Either commit to multi-step early and design features within it, or defer it and
 
 ### Always Last
 
-- **Isostatic adjustment** — post-process that rebalances all elevation. Everything that modifies cell elevation should run before it.
+- ~~**Isostatic adjustment** — post-process that rebalances all elevation. Everything that modifies cell elevation should run before it.~~

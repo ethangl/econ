@@ -86,7 +86,12 @@ namespace WorldGen.Core
             SeamountOps.Generate(mesh, tectonics, config);
             timings.SeamountsSeconds = stepSw.Elapsed.TotalSeconds;
 
-            // 12. Generate dense terrain mesh with fractal noise + seamount cones
+            // 12. Isostatic adjustment (last elevation modifier before dense terrain)
+            stepSw.Restart();
+            IsostaticOps.Generate(mesh, tectonics, config);
+            timings.IsostasySeconds = stepSw.Elapsed.TotalSeconds;
+
+            // 13. Generate dense terrain mesh with fractal noise + seamount cones
             stepSw.Restart();
             DenseTerrainData denseTerrain = DenseTerrainOps.Generate(mesh, tectonics, config);
             timings.DenseTerrainSeconds = stepSw.Elapsed.TotalSeconds;

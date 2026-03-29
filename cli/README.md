@@ -21,8 +21,8 @@ dotnet run --project WorldGen.Cli -- [options]
 | `--jitter <float>`        | 0.5           | Point distribution jitter (0-1)                                             |
 | `--width <int>`           | 8192          | Heightmap width                                                             |
 | `--height <int>`          | 4096          | Heightmap height                                                            |
-| `--coast <float>`         | 0.25          | Coastal detail amplitude (fractal noise near sea level, 0-1)                |
-| `--blur <float>`          | 0.6           | Blur strength (1.0 = 5px sigma at 8192w, scales with resolution)            |
+| `--coast <float>`         | 0.125         | Coastal detail amplitude (fractal noise near sea level, 0-1)                |
+| `--blur <float>`          | 0.5           | Blur strength (1.0 = 5px sigma at 8192w, scales with resolution)            |
 | `--detail <float>`        | 0.1           | Full-map micro-relief amplitude (adds small hills in pixel space, 0-1)      |
 | `--sharpen <float>`       | 0             | Unsharp mask amount (0=off, 1=normal, 2=strong; uses blur sigma)            |
 | `--color`                 | true          | Apply the terrain color ramp to the preview PNG                             |

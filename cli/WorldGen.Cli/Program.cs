@@ -19,12 +19,12 @@ var previewWidthOption = new Option<int>("--preview-width", () => 2048, "Maximum
 var oceanOption = new Option<float>("--ocean", () => 0.8f, "Ocean fraction (0-1)");
 var jitterOption = new Option<float>("--jitter", () => 0.5f, "Point jitter (0-1)");
 var ultraOption = new Option<bool>("--ultra", () => true, "Enable ultra-dense mesh (~4x cells via subdivision)");
-var blurOption = new Option<float>("--blur", () => 0.6f, "Blur strength (1.0 = 5px sigma at 8192 wide, scales with resolution)");
+var blurOption = new Option<float>("--blur", () => 0.5f, "Blur strength (1.0 = 5px sigma at 8192 wide, scales with resolution)");
 var detailOption = new Option<float>("--detail", () => 0.1f, "Full-map micro-relief amplitude (0-1)");
 
 var sharpenOption = new Option<float>("--sharpen", () => 0f, "Unsharp mask amount (0=off, 1=normal, 2=strong; uses blur sigma)");
 var colorOption = new Option<bool>("--color", () => true, "Apply the terrain color ramp to the preview PNG");
-var coastOption = new Option<float>("--coast", () => 0.25f, "Coastal detail amplitude (0-1)");
+var coastOption = new Option<float>("--coast", () => 0.125f, "Coastal detail amplitude (0-1)");
 var stepsOption = new Option<int>("--steps", () => 15, "Number of tectonic time steps (1=single-shot, ~10 Myr per step via boundary migration)");
 var debugOption = new Option<bool>("--debug", () => false, "Draw debug overlays (hotspot trails, etc.) on the preview PNG");
 var cpuOption = new Option<bool>("--cpu", () => false, "Force the CPU heightmap pipeline instead of the default Metal path on macOS");
@@ -89,7 +89,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
 
     Console.WriteLine($"  Globe generated in {sw.Elapsed.TotalSeconds:F1}s ({renderMesh.CellCount} cells)");
     Console.WriteLine($"    Coarse mesh: points {globeTimings.CoarsePointsSeconds:F2}s, hull {globeTimings.CoarseHullSeconds:F2}s, voronoi {globeTimings.CoarseVoronoiSeconds:F2}s, areas {globeTimings.CoarseAreaSeconds:F2}s");
-    Console.WriteLine($"    Tectonics: plates {globeTimings.TectonicsSeconds:F2}s, elevation {globeTimings.ElevationSeconds:F2}s, hotspots {globeTimings.HotspotsSeconds:F2}s, arcs {globeTimings.VolcanicArcsSeconds:F2}s, cratons {globeTimings.CratonsSeconds:F2}s, basins {globeTimings.BasinsSeconds:F2}s, seamounts {globeTimings.SeamountsSeconds:F2}s");
+    Console.WriteLine($"    Tectonics: plates {globeTimings.TectonicsSeconds:F2}s, elevation {globeTimings.ElevationSeconds:F2}s, hotspots {globeTimings.HotspotsSeconds:F2}s, arcs {globeTimings.VolcanicArcsSeconds:F2}s, cratons {globeTimings.CratonsSeconds:F2}s, basins {globeTimings.BasinsSeconds:F2}s, seamounts {globeTimings.SeamountsSeconds:F2}s, isostasy {globeTimings.IsostasySeconds:F2}s");
     Console.WriteLine($"    Dense terrain: total {denseTimings.TotalSeconds:F2}s (points {denseTimings.DensePointsSeconds:F2}s, hull {denseTimings.DenseHullSeconds:F2}s, voronoi {denseTimings.DenseVoronoiSeconds:F2}s, areas {denseTimings.DenseAreaSeconds:F2}s, map {denseTimings.DenseMappingSeconds:F2}s, elev {denseTimings.DenseElevationSeconds:F2}s)");
     if (ultra)
         Console.WriteLine($"    Ultra-dense: subdivision {denseTimings.UltraSubdivisionSeconds:F2}s (setup {denseTimings.UltraSubdivisionSetupSeconds:F2}s, restore {denseTimings.UltraSubdivisionRestoreSeconds:F2}s), voronoi {denseTimings.UltraVoronoiSeconds:F2}s, areas {denseTimings.UltraAreaSeconds:F2}s, map {denseTimings.UltraMappingSeconds:F2}s, elev {denseTimings.UltraElevationSeconds:F2}s");
