@@ -73,11 +73,13 @@ namespace WorldGen.Core
             if (absLat <= 30f - TransitionWidthDeg)
                 return band0;
             if (absLat < 30f + TransitionWidthDeg)
-                return LerpDirection(band0, band1, (absLat - (30f - TransitionWidthDeg)) / (2f * TransitionWidthDeg));
+                return InterpolateDirection(east, north, band0, band1,
+                    (absLat - (30f - TransitionWidthDeg)) / (2f * TransitionWidthDeg));
             if (absLat <= 60f - TransitionWidthDeg)
                 return band1;
             if (absLat < 60f + TransitionWidthDeg)
-                return LerpDirection(band1, band2, (absLat - (60f - TransitionWidthDeg)) / (2f * TransitionWidthDeg));
+                return InterpolateDirection(east, north, band1, band2,
+                    (absLat - (60f - TransitionWidthDeg)) / (2f * TransitionWidthDeg));
             return band2;
         }
 
@@ -107,11 +109,29 @@ namespace WorldGen.Core
             return (east * eastWeight + north * northWeight).Normalized;
         }
 
-        static Vec3 LerpDirection(Vec3 a, Vec3 b, float t)
+        static Vec3 InterpolateDirection(Vec3 east, Vec3 north, Vec3 a, Vec3 b, float t)
         {
             t = Math.Clamp(t, 0f, 1f);
-            Vec3 mixed = a * (1f - t) + b * t;
-            return mixed.Magnitude > 1e-6f ? mixed.Normalized : a;
+            float aAngle = MathF.Atan2(Vec3.Dot(a, north), Vec3.Dot(a, east));
+            float bAngle = MathF.Atan2(Vec3.Dot(b, north), Vec3.Dot(b, east));
+            float delta = WrapAngle(bAngle - aAngle);
+
+            // Opposing belt vectors are ambiguous under shortest-arc interpolation;
+            // pick a consistent half-turn instead of collapsing through a zero vector.
+            if (Math.Abs(Math.Abs(delta) - MathF.PI) < 1e-4f)
+                delta = MathF.PI;
+
+            float angle = aAngle + delta * t;
+            return (east * MathF.Cos(angle) + north * MathF.Sin(angle)).Normalized;
+        }
+
+        static float WrapAngle(float angle)
+        {
+            while (angle <= -MathF.PI)
+                angle += 2f * MathF.PI;
+            while (angle > MathF.PI)
+                angle -= 2f * MathF.PI;
+            return angle;
         }
 
         internal static Vec3 ProjectOntoTangent(Vec3 vector, Vec3 normal)
