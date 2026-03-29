@@ -98,6 +98,20 @@ namespace WorldGen.Core
         /// <summary>Elevation offset above the lowest cell to set basin floor.</summary>
         public float BasinFloorOffset { get; set; } = 0.02f;
 
+        // --- Seamounts / Abyssal Hills ---
+
+        /// <summary>Maximum seafloor age (BFS hops from ridge) for young-crust abyssal hills.</summary>
+        public int SeamountYoungCrustMaxAge { get; set; } = 3;
+
+        /// <summary>Average seamount peaks scattered per tagged coarse cell (at full density).</summary>
+        public float SeamountPeaksPerCell { get; set; } = 2f;
+
+        /// <summary>Maximum elevation bump at a seamount apex (normalized 0-1).</summary>
+        public float SeamountMaxElevation { get; set; } = 0.08f;
+
+        /// <summary>Cone falloff radius in km. Peaks taper to zero over this distance.</summary>
+        public float SeamountRadius { get; set; } = 200f;
+
         // --- Site selection ---
 
         /// <summary>Minimum degrees from equator for site candidates</summary>

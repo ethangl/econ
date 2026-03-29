@@ -142,10 +142,38 @@ namespace WorldGen.Core
                             cratonDamp = 1f - cratonStr * (1f - config.CratonNoiseMultiplier);
                     }
 
-                    elevation[d] = Clamp01(baseElev + noiseVal * NoiseAmplitude * dampFactor * cratonDamp);
+                    elevation[d] = baseElev + noiseVal * NoiseAmplitude * dampFactor * cratonDamp;
                     return noise;
                 },
                 _ => { });
+
+            // Seamount cone bumps — applied after base noise so cones sit on top of ocean floor
+            if (tectonics.Seamounts != null && tectonics.Seamounts.Length > 0)
+            {
+                float radiusSq = config.SeamountRadius * config.SeamountRadius;
+                var peaks = tectonics.Seamounts;
+
+                Parallel.For(0, count, d =>
+                {
+                    if (!tectonics.CellCrustOceanic[toCoarse[d]])
+                        return;
+
+                    Vec3 p = mesh.CellCenters[d];
+                    for (int i = 0; i < peaks.Length; i++)
+                    {
+                        float dSq = Vec3.SqrDistance(p, peaks[i].Position);
+                        if (dSq < radiusSq)
+                        {
+                            float t = 1f - (float)Math.Sqrt(dSq) / config.SeamountRadius;
+                            elevation[d] += peaks[i].Height * t * t; // quadratic falloff
+                        }
+                    }
+                });
+            }
+
+            // Final clamp
+            for (int d = 0; d < count; d++)
+                elevation[d] = Clamp01(elevation[d]);
 
             return elevation;
         }

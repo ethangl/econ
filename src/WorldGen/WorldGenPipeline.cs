@@ -81,7 +81,12 @@ namespace WorldGen.Core
             BasinOps.Generate(mesh, tectonics, config);
             timings.BasinsSeconds = stepSw.Elapsed.TotalSeconds;
 
-            // 11. Generate dense terrain mesh with fractal noise
+            // 11. Seamounts / abyssal hills (tags oceanic cells, scatters peak positions)
+            stepSw.Restart();
+            SeamountOps.Generate(mesh, tectonics, config);
+            timings.SeamountsSeconds = stepSw.Elapsed.TotalSeconds;
+
+            // 12. Generate dense terrain mesh with fractal noise + seamount cones
             stepSw.Restart();
             DenseTerrainData denseTerrain = DenseTerrainOps.Generate(mesh, tectonics, config);
             timings.DenseTerrainSeconds = stepSw.Elapsed.TotalSeconds;

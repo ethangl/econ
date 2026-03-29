@@ -102,6 +102,15 @@ namespace WorldGen.Core
 
         /// <summary>Number of sedimentary basins found.</summary>
         public int BasinCount;
+
+        // --- Seamount / Abyssal Hill data ---
+
+        /// <summary>Per-cell seamount density (0 = none, >0 = tagged for seamount placement).
+        /// Derived from hotspot trails on oceanic crust and young crust near ridges.</summary>
+        public float[] CellSeamountDensity;
+
+        /// <summary>Scattered seamount peak positions for cone-stamping at dense terrain resolution.</summary>
+        public SeamountPeakData[] Seamounts;
     }
 
     /// <summary>
@@ -154,5 +163,22 @@ namespace WorldGen.Core
 
         /// <summary>Peak intensity (0-1). Higher = taller cone.</summary>
         public float Intensity;
+    }
+
+    /// <summary>
+    /// A single seamount or abyssal hill peak on the ocean floor.
+    /// Position is scattered within a tagged coarse cell; elevation bump
+    /// is applied at dense terrain resolution via radial cone falloff.
+    /// </summary>
+    public class SeamountPeakData
+    {
+        /// <summary>Coarse cell index containing this peak.</summary>
+        public int Cell;
+
+        /// <summary>3D position on the sphere surface.</summary>
+        public Vec3 Position;
+
+        /// <summary>Peak elevation bump (added at apex, falls off with distance).</summary>
+        public float Height;
     }
 }
