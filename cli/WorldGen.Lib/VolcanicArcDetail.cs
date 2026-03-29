@@ -32,9 +32,13 @@ namespace WorldGen.Cli.Lib
             var noise = new Noise3D(seed + 900);
             float noiseFreq = 8f; // high frequency for small-scale variation
 
-            // Pixels per km at equator
-            float pxPerKm = w / EarthCircumferenceKm;
-            float coneRadiusPx = ConeRadiusKm * pxPerKm;
+            // Equirectangular: w pixels span 2*pi, h pixels span pi.
+            // Derive independent px-per-km for each axis so cones stay
+            // circular on any w:h ratio, not just 2:1.
+            float pxPerKmX = w / EarthCircumferenceKm;
+            float pxPerKmY = h / (EarthCircumferenceKm * 0.5f);
+            float coneRadiusPxX = ConeRadiusKm * pxPerKmX;
+            float coneRadiusPxY = ConeRadiusKm * pxPerKmY;
 
             if (!image.DangerousTryGetSinglePixelMemory(out var pixels))
                 return;
@@ -45,13 +49,14 @@ namespace WorldGen.Cli.Lib
             {
                 foreach (var peak in arc.Peaks)
                 {
-                    StampCone(span, w, h, peak, coneRadiusPx, noise, noiseFreq);
+                    StampCone(span, w, h, peak, coneRadiusPxX, coneRadiusPxY, noise, noiseFreq);
                 }
             }
         }
 
         static void StampCone(Span<L16> pixels, int w, int h,
-            VolcanoPeakData peak, float baseRadiusPx, Noise3D noise, float noiseFreq)
+            VolcanoPeakData peak, float baseRadiusPxX, float baseRadiusPxY,
+            Noise3D noise, float noiseFreq)
         {
             Vec3 p = peak.Position.Normalized;
             float lat = (float)Math.Asin(p.Y);
@@ -65,8 +70,8 @@ namespace WorldGen.Cli.Lib
 
             // Scale horizontal radius by 1/cos(lat) for equirectangular distortion
             float cosLat = MathF.Cos(lat);
-            float radiusX = cosLat > 0.05f ? baseRadiusPx / cosLat : baseRadiusPx * 20f;
-            float radiusY = baseRadiusPx;
+            float radiusX = cosLat > 0.05f ? baseRadiusPxX / cosLat : baseRadiusPxX * 20f;
+            float radiusY = baseRadiusPxY;
 
             int rx = (int)MathF.Ceiling(radiusX) + 1;
             int ry = (int)MathF.Ceiling(radiusY) + 1;

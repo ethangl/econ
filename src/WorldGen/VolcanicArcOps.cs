@@ -63,6 +63,8 @@ namespace WorldGen.Core
 
             // Step 2: Group into contiguous arc segments via BFS through
             // continental boundary cells connected by neighbor adjacency.
+            // Segments are constrained to a single overriding plate so that
+            // triple junctions or narrow seams don't merge two plates' arcs.
             var visited = new HashSet<int>();
             var segments = new List<List<int>>(); // each segment = list of continental boundary cells
 
@@ -71,6 +73,7 @@ namespace WorldGen.Core
                 if (visited.Contains(startCell))
                     continue;
 
+                int plate = cellPlate[startCell];
                 var segment = new List<int>();
                 var queue = new Queue<int>();
                 queue.Enqueue(startCell);
@@ -85,7 +88,8 @@ namespace WorldGen.Core
                     for (int i = 0; i < neighbors.Length; i++)
                     {
                         int nb = neighbors[i];
-                        if (!visited.Contains(nb) && continentalBoundaryCells.Contains(nb))
+                        if (!visited.Contains(nb) && continentalBoundaryCells.Contains(nb)
+                            && cellPlate[nb] == plate)
                         {
                             visited.Add(nb);
                             queue.Enqueue(nb);
@@ -131,8 +135,9 @@ namespace WorldGen.Core
                 if (overridingPlate < 0)
                     continue;
 
-                var arcCells = BfsInland(mesh, segment, cellPlate, overridingPlate,
-                    continentalBoundaryCells, arcOffset);
+                var (arcCells, arcConvergence) = BfsInland(mesh, segment, cellPlate,
+                    overridingPlate, continentalBoundaryCells, arcOffset,
+                    tectonics, cellToEdges);
 
                 if (arcCells.Count == 0)
                     continue;
@@ -142,9 +147,7 @@ namespace WorldGen.Core
                 for (int i = 0; i < arcCells.Count; i += 2)
                 {
                     int cell = arcCells[i];
-
-                    // Modulate intensity by nearest boundary convergence
-                    float conv = FindNearestConvergence(mesh, cell, tectonics, continentalBoundaryCells);
+                    float conv = arcConvergence[i];
                     float peakIntensity = 0.7f + 0.3f * conv;
 
                     peaks.Add(new VolcanoPeakData
@@ -215,29 +218,50 @@ namespace WorldGen.Core
         /// <summary>
         /// Multi-source BFS from boundary cells, returning cells at exactly targetDepth
         /// hops inland on the overriding plate. Falls back to shallower depths if needed.
+        /// Each returned cell carries the normalized convergence strength of the boundary
+        /// cell it was reached from, so intensity scales with local subduction strength
+        /// regardless of offset distance.
         /// </summary>
-        static List<int> BfsInland(SphereMesh mesh, List<int> boundaryCells,
-            int[] cellPlate, int plate, HashSet<int> excludeCells, int targetDepth)
+        static (List<int> cells, List<float> convergence) BfsInland(SphereMesh mesh,
+            List<int> boundaryCells, int[] cellPlate, int plate,
+            HashSet<int> excludeCells, int targetDepth,
+            TectonicData tectonics, Dictionary<int, List<int>> cellToEdges)
         {
             var depth = new Dictionary<int, int>();
+            var cellConv = new Dictionary<int, float>(); // propagated convergence per cell
             var queue = new Queue<int>();
 
+            // Seed BFS from boundary cells, each carrying its max convergence
             foreach (int cell in boundaryCells)
             {
                 depth[cell] = 0;
+                float maxConv = 0f;
+                if (cellToEdges.TryGetValue(cell, out var edges))
+                {
+                    foreach (int e in edges)
+                    {
+                        float c = Math.Abs(tectonics.EdgeConvergence[e]);
+                        if (c > maxConv) maxConv = c;
+                    }
+                }
+                cellConv[cell] = Math.Min(maxConv / 4f, 1f);
                 queue.Enqueue(cell);
             }
 
-            // Also mark all excluded cells (other boundary cells) as visited
+            // Mark other boundary cells as visited so BFS doesn't cross them
             foreach (int cell in excludeCells)
             {
                 if (!depth.ContainsKey(cell))
-                    depth[cell] = -1; // sentinel: visited but not part of this segment
+                    depth[cell] = -1;
             }
 
             var cellsByDepth = new List<int>[targetDepth + 1];
+            var convByDepth = new List<float>[targetDepth + 1];
             for (int d = 0; d <= targetDepth; d++)
+            {
                 cellsByDepth[d] = new List<int>();
+                convByDepth[d] = new List<float>();
+            }
 
             while (queue.Count > 0)
             {
@@ -246,6 +270,7 @@ namespace WorldGen.Core
                 if (d >= targetDepth)
                     continue;
 
+                float parentConv = cellConv[cell];
                 int[] neighbors = mesh.CellNeighbors[cell];
                 for (int i = 0; i < neighbors.Length; i++)
                 {
@@ -257,7 +282,9 @@ namespace WorldGen.Core
 
                     int nd = d + 1;
                     depth[nb] = nd;
+                    cellConv[nb] = parentConv;
                     cellsByDepth[nd].Add(nb);
+                    convByDepth[nd].Add(parentConv);
                     queue.Enqueue(nb);
                 }
             }
@@ -266,47 +293,14 @@ namespace WorldGen.Core
             for (int d = targetDepth; d >= 1; d--)
             {
                 if (cellsByDepth[d].Count > 0)
-                    return cellsByDepth[d];
+                    return (cellsByDepth[d], convByDepth[d]);
             }
 
             // Last resort: boundary cells themselves
-            return boundaryCells;
-        }
-
-        /// <summary>
-        /// Find the strongest convergence magnitude among boundary edges near a cell.
-        /// Returns a normalized value in [0, 1].
-        /// </summary>
-        static float FindNearestConvergence(SphereMesh mesh, int cell,
-            TectonicData tectonics, HashSet<int> boundaryCells)
-        {
-            // Search the cell's neighbors (and their neighbors) for boundary cells,
-            // then check their edges for convergence.
-            float maxConv = 0f;
-            int[] neighbors = mesh.CellNeighbors[cell];
-            for (int i = 0; i < neighbors.Length; i++)
-            {
-                int nb = neighbors[i];
-                int[] nbNeighbors = mesh.CellNeighbors[nb];
-                for (int j = 0; j < nbNeighbors.Length; j++)
-                {
-                    int nb2 = nbNeighbors[j];
-                    if (!boundaryCells.Contains(nb2))
-                        continue;
-
-                    // Check edges of nb2 for convergence
-                    int[] edges = mesh.CellEdges[nb2];
-                    for (int k = 0; k < edges.Length; k++)
-                    {
-                        float conv = Math.Abs(tectonics.EdgeConvergence[edges[k]]);
-                        if (conv > maxConv)
-                            maxConv = conv;
-                    }
-                }
-            }
-
-            // Normalize: convergence values are typically 0-4, clamp to [0,1]
-            return Math.Min(maxConv / 4f, 1f);
+            var boundaryConv = new List<float>();
+            foreach (int cell in boundaryCells)
+                boundaryConv.Add(cellConv.TryGetValue(cell, out float v) ? v : 0f);
+            return (boundaryCells, boundaryConv);
         }
     }
 }

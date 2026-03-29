@@ -84,9 +84,9 @@ Either commit to multi-step early and design features within it, or defer it and
 
 ### Volcanism + Ocean Floor (dependency chain)
 
-- **Hotspot volcanism** → informs **seamount** placement (hotspot tracks)
-- **Seafloor age gradient** → informs **seamount** placement (young crust regions)
-- **Hotspots + volcanic arcs** share cone-stamping rendering infrastructure; ~~implement one first, second reuses it~~ volcanic arcs implemented cone-stamping (`VolcanicArcDetail`); hotspots can reuse it
+- ~~**Hotspot volcanism** → informs **seamount** placement (hotspot tracks)~~
+- ~~**Seafloor age gradient** → informs **seamount** placement (young crust regions)~~
+- ~~**Hotspots + volcanic arcs** share cone-stamping rendering infrastructure; ~~implement one first, second reuses it~~ volcanic arcs implemented cone-stamping (`VolcanicArcDetail`); hotspots can reuse it~~
 
 ### Always Last
 
