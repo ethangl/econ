@@ -12,7 +12,7 @@ namespace WorldGen.Core
         public int DenseCellCount { get; set; } = 20400;
 
         /// <summary>Random seed</summary>
-        public int Seed { get; set; } = 42;
+        public int Seed { get; set; } = 7;
 
         /// <summary>Sphere radius (km)</summary>
         public float Radius { get; set; } = 6371f;
@@ -50,6 +50,15 @@ namespace WorldGen.Core
 
         /// <summary>Elevation bump at the hotspot source (decays along trail).</summary>
         public float HotspotElevation { get; set; } = 0.5f;
+
+        /// <summary>BFS hops from convergent boundary to arc position on overriding plate.</summary>
+        public int VolcanicArcOffset { get; set; } = 2;
+
+        /// <summary>Elevation bump at arc volcano peaks.</summary>
+        public float VolcanicArcElevation { get; set; } = 0.25f;
+
+        /// <summary>Minimum boundary edge count to form an arc segment.</summary>
+        public int VolcanicArcMinEdges { get; set; } = 3;
 
         /// <summary>Polar cap latitude threshold in degrees from equator. Cells above this latitude
         /// are pre-assigned to polar cap plates (north=0, south=1) before normal seeding. Set to 0 to disable.</summary>

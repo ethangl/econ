@@ -71,6 +71,15 @@ namespace WorldGen.Core
 
         /// <summary>Hotspot trail data for rendering (cone stamping at heightmap resolution).</summary>
         public HotspotData[] Hotspots;
+
+        // --- Volcanic arc data ---
+
+        /// <summary>Per-cell volcanic arc intensity (0 = none, >0 = arc cell).
+        /// Used for elevation bumps and downstream rendering.</summary>
+        public float[] CellVolcanicArcIntensity;
+
+        /// <summary>Volcanic arc segment data for rendering (cone stamping at heightmap resolution).</summary>
+        public VolcanicArcData[] VolcanicArcs;
     }
 
     /// <summary>
@@ -90,5 +99,38 @@ namespace WorldGen.Core
 
         /// <summary>Intensity per trail cell (1.0 at source, decaying toward tail).</summary>
         public float[] TrailIntensity;
+    }
+
+    /// <summary>
+    /// A contiguous volcanic arc segment along a convergent ocean-continent boundary.
+    /// </summary>
+    public class VolcanicArcData
+    {
+        /// <summary>Continental (overriding) plate cells directly at the boundary.</summary>
+        public int[] BoundaryCells;
+
+        /// <summary>Arc cells offset inland on the overriding plate.</summary>
+        public int[] ArcCells;
+
+        /// <summary>Individual volcano peaks along this arc.</summary>
+        public VolcanoPeakData[] Peaks;
+
+        /// <summary>Plate index of the overriding (continental) plate.</summary>
+        public int OverridingPlate;
+    }
+
+    /// <summary>
+    /// A single stratovolcano peak within a volcanic arc.
+    /// </summary>
+    public class VolcanoPeakData
+    {
+        /// <summary>Coarse cell index where the peak is located.</summary>
+        public int Cell;
+
+        /// <summary>3D position on the sphere surface (for heightmap stamping).</summary>
+        public Vec3 Position;
+
+        /// <summary>Peak intensity (0-1). Higher = taller cone.</summary>
+        public float Intensity;
     }
 }

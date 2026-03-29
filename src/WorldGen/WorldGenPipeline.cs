@@ -66,7 +66,12 @@ namespace WorldGen.Core
                 timings.HotspotsSeconds = stepSw.Elapsed.TotalSeconds;
             }
 
-            // 8. Generate dense terrain mesh with fractal noise
+            // 8. Volcanic arcs (after elevation + hotspots, before dense terrain)
+            stepSw.Restart();
+            VolcanicArcOps.Generate(mesh, tectonics, config);
+            timings.VolcanicArcsSeconds = stepSw.Elapsed.TotalSeconds;
+
+            // 9. Generate dense terrain mesh with fractal noise
             stepSw.Restart();
             DenseTerrainData denseTerrain = DenseTerrainOps.Generate(mesh, tectonics, config);
             timings.DenseTerrainSeconds = stepSw.Elapsed.TotalSeconds;

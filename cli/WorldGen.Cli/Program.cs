@@ -9,7 +9,7 @@ using SixLabors.ImageSharp.PixelFormats;
 using WorldGen.Core;
 using WorldGen.Cli.Lib;
 
-var seedOption = new Option<int>("--seed", () => 42, "Random seed");
+var seedOption = new Option<int>("--seed", () => 7, "Random seed");
 var cellsOption = new Option<int>("--cells", () => 20400, "Dense cell count");
 var widthOption = new Option<int>("--width", () => 8192, "Heightmap width");
 var heightOption = new Option<int>("--height", () => 4096, "Heightmap height");
@@ -89,7 +89,7 @@ rootCommand.SetHandler((InvocationContext ctx) =>
 
     Console.WriteLine($"  Globe generated in {sw.Elapsed.TotalSeconds:F1}s ({renderMesh.CellCount} cells)");
     Console.WriteLine($"    Coarse mesh: points {globeTimings.CoarsePointsSeconds:F2}s, hull {globeTimings.CoarseHullSeconds:F2}s, voronoi {globeTimings.CoarseVoronoiSeconds:F2}s, areas {globeTimings.CoarseAreaSeconds:F2}s");
-    Console.WriteLine($"    Tectonics: plates {globeTimings.TectonicsSeconds:F2}s, elevation {globeTimings.ElevationSeconds:F2}s, hotspots {globeTimings.HotspotsSeconds:F2}s");
+    Console.WriteLine($"    Tectonics: plates {globeTimings.TectonicsSeconds:F2}s, elevation {globeTimings.ElevationSeconds:F2}s, hotspots {globeTimings.HotspotsSeconds:F2}s, arcs {globeTimings.VolcanicArcsSeconds:F2}s");
     Console.WriteLine($"    Dense terrain: total {denseTimings.TotalSeconds:F2}s (points {denseTimings.DensePointsSeconds:F2}s, hull {denseTimings.DenseHullSeconds:F2}s, voronoi {denseTimings.DenseVoronoiSeconds:F2}s, areas {denseTimings.DenseAreaSeconds:F2}s, map {denseTimings.DenseMappingSeconds:F2}s, elev {denseTimings.DenseElevationSeconds:F2}s)");
     if (ultra)
         Console.WriteLine($"    Ultra-dense: subdivision {denseTimings.UltraSubdivisionSeconds:F2}s (setup {denseTimings.UltraSubdivisionSetupSeconds:F2}s, restore {denseTimings.UltraSubdivisionRestoreSeconds:F2}s), voronoi {denseTimings.UltraVoronoiSeconds:F2}s, areas {denseTimings.UltraAreaSeconds:F2}s, map {denseTimings.UltraMappingSeconds:F2}s, elev {denseTimings.UltraElevationSeconds:F2}s");
@@ -170,6 +170,14 @@ rootCommand.SetHandler((InvocationContext ctx) =>
 
     using var ownedImage = image;
 
+    // Volcanic arc cone stamping (CPU-only, sparse — works after Metal or CPU pipeline)
+    if (result.Tectonics.VolcanicArcs != null && result.Tectonics.VolcanicArcs.Length > 0)
+    {
+        stepSw.Restart();
+        VolcanicArcDetail.Apply(ownedImage, result.Tectonics, result.Mesh, seed);
+        Console.WriteLine($"  Volcanic arc cones stamped in {stepSw.Elapsed.TotalSeconds:F1}s ({result.Tectonics.VolcanicArcs.Length} arcs)");
+    }
+
     if (sharpen > 0f)
     {
         stepSw.Restart();
@@ -216,9 +224,12 @@ rootCommand.SetHandler((InvocationContext ctx) =>
             previewColor.Save(previewPath, previewPngEncoder);
             Console.WriteLine($"  Saved preview PNG in {stepSw.Elapsed.TotalSeconds:F1}s ({previewColor.Width}x{previewColor.Height})");
 
-            if (debug && result.Tectonics.Hotspots != null)
+            if (debug)
             {
-                DrawHotspotOverlay(previewColor, result.Tectonics, result.Mesh);
+                if (result.Tectonics.Hotspots != null)
+                    DrawHotspotOverlay(previewColor, result.Tectonics, result.Mesh);
+                if (result.Tectonics.VolcanicArcs != null)
+                    DrawVolcanicArcOverlay(previewColor, result.Tectonics, result.Mesh);
                 string debugPath = Path.Combine(
                     Path.GetDirectoryName(previewPath) ?? string.Empty,
                     Path.GetFileNameWithoutExtension(previewPath) + ".debug.png");
@@ -278,6 +289,46 @@ static void DrawHotspotOverlay(Image<Rgb24> image, WorldGen.Core.TectonicData te
                     image[ix, iy] = magenta;
                 }
             }
+        }
+    }
+}
+
+static void DrawVolcanicArcOverlay(Image<Rgb24> image, WorldGen.Core.TectonicData tectonics, WorldGen.Core.SphereMesh mesh)
+{
+    int w = image.Width;
+    int h = image.Height;
+    var orange = new Rgb24(255, 165, 0);
+    var red = new Rgb24(255, 40, 40);
+    int dotRadius = Math.Max(2, w / 400);
+
+    foreach (var arc in tectonics.VolcanicArcs)
+    {
+        // Orange dots for arc cells
+        foreach (int cell in arc.ArcCells)
+            DrawDot(image, mesh.CellCenters[cell], orange, dotRadius, w, h);
+
+        // Red dots for peaks (larger)
+        foreach (var peak in arc.Peaks)
+            DrawDot(image, peak.Position, red, dotRadius * 2, w, h);
+    }
+}
+
+static void DrawDot(Image<Rgb24> image, WorldGen.Core.Vec3 position, Rgb24 color, int radius, int w, int h)
+{
+    WorldGen.Core.Vec3 p = position.Normalized;
+    float lat = (float)Math.Asin(p.Y);
+    float lon = (float)Math.Atan2(p.Z, p.X);
+    int px = (int)((lon / MathF.PI + 1f) * 0.5f * w);
+    int py = (int)((0.5f - lat / MathF.PI) * h);
+
+    for (int dy = -radius; dy <= radius; dy++)
+    {
+        for (int dx = -radius; dx <= radius; dx++)
+        {
+            if (dx * dx + dy * dy > radius * radius) continue;
+            int ix = (px + dx + w) % w;
+            int iy = Math.Clamp(py + dy, 0, h - 1);
+            image[ix, iy] = color;
         }
     }
 }
