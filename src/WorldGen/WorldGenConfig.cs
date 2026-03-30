@@ -21,16 +21,16 @@ namespace WorldGen.Core
         public float Jitter { get; set; } = 0.5f;
 
         /// <summary>Number of major tectonic plates (seeded first, get a BFS head start)</summary>
-        public int MajorPlateCount { get; set; } = 8;
+        public int MajorPlateCount { get; set; } = 5;
 
         /// <summary>Number of minor tectonic plates (seeded after major plates have grown)</summary>
-        public int MinorPlateCount { get; set; } = 40;
+        public int MinorPlateCount { get; set; } = 11;
 
         /// <summary>BFS rounds major plates grow before minor plates are seeded</summary>
-        public int MajorHeadStartRounds { get; set; } = 3;
+        public int MajorHeadStartRounds { get; set; } = 5;
 
         /// <summary>Fraction of plates that are oceanic (0-1)</summary>
-        public float OceanFraction { get; set; } = 0.8f;
+        public float OceanFraction { get; set; } = 0.9f;
 
         /// <summary>Number of tectonic time steps. Each step rotates plate seeds,
         /// re-grows plates, reclassifies boundaries, and applies elevation deltas.
