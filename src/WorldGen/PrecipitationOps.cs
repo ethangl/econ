@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace WorldGen.Core
 {
@@ -12,6 +13,16 @@ namespace WorldGen.Core
         const float ConvergenceThreshold = 0.001f;
         const int MaxPasses = 50;
         const double NormalizationExponent = 0.225;
+        const float DryThreshold = 0.20f;
+        const float WetThreshold = 0.60f;
+        const int InlandThresholdHops = 3;
+        static readonly (string Label, int Min, int Max)[] CoastBands = new[]
+        {
+            ("coast", 1, 1),
+            ("near", 2, 3),
+            ("mid", 4, 6),
+            ("deep", 7, int.MaxValue),
+        };
 
         public static void Generate(SphereMesh mesh, TectonicData tectonics, WorldGenConfig config)
         {
@@ -83,16 +94,17 @@ namespace WorldGen.Core
             for (int c = 0; c < cellCount; c++)
             {
                 totalHumidity += prev[c];
-                if (isOcean[c])
-                    continue;
+                float transportHumidity = GatherHumidity(c, mesh, tectonics, prev, incomingDirs);
+                float availableHumidity = isOcean[c]
+                    ? Math.Max(prev[c], transportHumidity)
+                    : transportHumidity;
 
-                float gathered = GatherHumidity(c, mesh, tectonics, prev, incomingDirs);
-                float baseLoss = config.BasePrecipitationRate * gathered;
-                float oroLoss = config.OrographicScale * oroFactor[c] * gathered;
-                float remainder = gathered - baseLoss - oroLoss;
-                float capExcess = Math.Max(0f, remainder - moistureCapacity[c]);
+                float baseLoss = config.BasePrecipitationRate * availableHumidity;
+                float oroLoss = isOcean[c] ? 0f : config.OrographicScale * oroFactor[c] * availableHumidity;
+                float remainder = availableHumidity - baseLoss - oroLoss;
+                float capExcess = isOcean[c] ? 0f : Math.Max(0f, remainder - moistureCapacity[c]);
                 float afterCap = remainder - capExcess;
-                float permafrostLoss = tempC[c] < config.PermafrostThresholdC
+                float permafrostLoss = !isOcean[c] && tempC[c] < config.PermafrostThresholdC
                     ? Math.Max(0f, afterCap - PermafrostHumidityCap)
                     : 0f;
                 float precip = baseLoss + oroLoss + capExcess + permafrostLoss;
@@ -116,7 +128,7 @@ namespace WorldGen.Core
             tectonics.CellPrecipitation = precipitation;
 
             float avgHumidity = cellCount > 0 ? totalHumidity / cellCount : 0f;
-            Console.WriteLine($"    Precipitation: {passCount} passes, avg humidity {avgHumidity:F2}, max precip {maxPrecip:F2}");
+            EmitDiagnostics(mesh, isOcean, prev, precipitation, passCount, avgHumidity, maxPrecip);
         }
 
         static void PrecomputeCellFields(
@@ -237,6 +249,173 @@ namespace WorldGen.Core
             }
 
             return totalAlignment > 1e-6f ? gathered / totalAlignment : 0f;
+        }
+
+        static void EmitDiagnostics(
+            SphereMesh mesh,
+            bool[] isOcean,
+            float[] humidity,
+            float[] precipitation,
+            int passCount,
+            float avgHumidity,
+            float maxPrecip)
+        {
+            int[] coastDist = ComputeCoastDistance(mesh, isOcean);
+
+            int landCount = 0;
+            int oceanCount = 0;
+            int dryCount = 0;
+            int wetCount = 0;
+            int coastalCount = 0;
+            int inlandCount = 0;
+            float totalLandArea = 0f;
+            float totalOceanArea = 0f;
+            float dryArea = 0f;
+            float wetArea = 0f;
+            float landHumiditySum = 0f;
+            float landPrecipSum = 0f;
+            float oceanHumiditySum = 0f;
+            float oceanPrecipSum = 0f;
+            float coastalPrecipSum = 0f;
+            float inlandPrecipSum = 0f;
+            float weightedLandPrecipSum = 0f;
+            float weightedLandHumiditySum = 0f;
+            float weightedOceanHumiditySum = 0f;
+            float weightedOceanPrecipSum = 0f;
+            float weightedCoastalPrecipSum = 0f;
+            float weightedInlandPrecipSum = 0f;
+            float coastalArea = 0f;
+            float inlandArea = 0f;
+            float totalArea = 0f;
+            float weightedTotalPrecipSum = 0f;
+            var bandArea = new float[CoastBands.Length];
+            var bandPrecip = new float[CoastBands.Length];
+            var bandCount = new int[CoastBands.Length];
+
+            for (int c = 0; c < mesh.CellCount; c++)
+            {
+                float precip = precipitation[c];
+                float area = mesh.CellAreas != null && c < mesh.CellAreas.Length ? mesh.CellAreas[c] : 1f;
+                totalArea += area;
+                weightedTotalPrecipSum += precip * area;
+
+                if (isOcean[c])
+                {
+                    oceanCount++;
+                    totalOceanArea += area;
+                    oceanHumiditySum += humidity[c];
+                    oceanPrecipSum += precip;
+                    weightedOceanHumiditySum += humidity[c] * area;
+                    weightedOceanPrecipSum += precip * area;
+                    continue;
+                }
+
+                landCount++;
+                totalLandArea += area;
+                landHumiditySum += humidity[c];
+                landPrecipSum += precip;
+                weightedLandHumiditySum += humidity[c] * area;
+                weightedLandPrecipSum += precip * area;
+
+                if (precip <= DryThreshold)
+                {
+                    dryCount++;
+                    dryArea += area;
+                }
+                if (precip >= WetThreshold)
+                {
+                    wetCount++;
+                    wetArea += area;
+                }
+
+                if (coastDist[c] == 1)
+                {
+                    coastalCount++;
+                    coastalPrecipSum += precip;
+                    coastalArea += area;
+                    weightedCoastalPrecipSum += precip * area;
+                }
+                else if (coastDist[c] >= InlandThresholdHops)
+                {
+                    inlandCount++;
+                    inlandPrecipSum += precip;
+                    inlandArea += area;
+                    weightedInlandPrecipSum += precip * area;
+                }
+
+                for (int b = 0; b < CoastBands.Length; b++)
+                {
+                    var band = CoastBands[b];
+                    if (coastDist[c] < band.Min || coastDist[c] > band.Max)
+                        continue;
+                    bandArea[b] += area;
+                    bandPrecip[b] += precip * area;
+                    bandCount[b]++;
+                    break;
+                }
+            }
+
+            float avgOceanHumidity = oceanCount > 0 ? oceanHumiditySum / oceanCount : 0f;
+            float avgOceanPrecip = oceanCount > 0 ? oceanPrecipSum / oceanCount : 0f;
+            float avgLandHumidity = landCount > 0 ? landHumiditySum / landCount : 0f;
+            float avgLandPrecip = landCount > 0 ? landPrecipSum / landCount : 0f;
+            float weightedAvgPrecip = totalArea > 0f ? weightedTotalPrecipSum / totalArea : 0f;
+            float dryFraction = landCount > 0 ? (float)dryCount / landCount : 0f;
+            float wetFraction = landCount > 0 ? (float)wetCount / landCount : 0f;
+            float coastalAvg = coastalCount > 0 ? coastalPrecipSum / coastalCount : 0f;
+            float inlandAvg = inlandCount > 0 ? inlandPrecipSum / inlandCount : 0f;
+            float weightedOceanPrecip = totalOceanArea > 0f ? weightedOceanPrecipSum / totalOceanArea : 0f;
+            float weightedOceanHumidity = totalOceanArea > 0f ? weightedOceanHumiditySum / totalOceanArea : 0f;
+            float weightedLandHumidity = totalLandArea > 0f ? weightedLandHumiditySum / totalLandArea : 0f;
+            float weightedLandPrecip = totalLandArea > 0f ? weightedLandPrecipSum / totalLandArea : 0f;
+            float weightedDryFraction = totalLandArea > 0f ? dryArea / totalLandArea : 0f;
+            float weightedWetFraction = totalLandArea > 0f ? wetArea / totalLandArea : 0f;
+            float weightedCoastalAvg = coastalArea > 0f ? weightedCoastalPrecipSum / coastalArea : 0f;
+            float weightedInlandAvg = inlandArea > 0f ? weightedInlandPrecipSum / inlandArea : 0f;
+
+            Console.WriteLine($"    Precipitation: {passCount} passes, avg humidity {avgHumidity:F2}, avg precip {weightedAvgPrecip:F2}, avg land humidity {avgLandHumidity:F2}, avg land precip {avgLandPrecip:F2}, avg ocean humidity {avgOceanHumidity:F2}, avg ocean precip {avgOceanPrecip:F2}, max precip {maxPrecip:F2}");
+            Console.WriteLine($"      Land climate: dry<{DryThreshold:F2} {dryFraction:P0}, wet>{WetThreshold:F2} {wetFraction:P0}, coastal avg {coastalAvg:F2}, inland avg {inlandAvg:F2}");
+            Console.WriteLine($"      Area-weighted: ocean humidity {weightedOceanHumidity:F2}, ocean precip {weightedOceanPrecip:F2}, land humidity {weightedLandHumidity:F2}, land precip {weightedLandPrecip:F2}, dry {weightedDryFraction:P0}, wet {weightedWetFraction:P0}, coastal {weightedCoastalAvg:F2}, inland {weightedInlandAvg:F2}");
+
+            for (int b = 0; b < CoastBands.Length; b++)
+            {
+                float areaFraction = totalLandArea > 0f ? bandArea[b] / totalLandArea : 0f;
+                float bandAvg = bandArea[b] > 0f ? bandPrecip[b] / bandArea[b] : 0f;
+                Console.WriteLine($"      Coast band {CoastBands[b].Label,-5}: area {areaFraction:P0}, avg precip {bandAvg:F2}, cells {bandCount[b]}");
+            }
+        }
+
+        static int[] ComputeCoastDistance(SphereMesh mesh, bool[] isOcean)
+        {
+            int cellCount = mesh.CellCount;
+            var dist = new int[cellCount];
+            Array.Fill(dist, -1);
+            var queue = new Queue<int>();
+
+            for (int c = 0; c < cellCount; c++)
+            {
+                if (!isOcean[c])
+                    continue;
+                dist[c] = 0;
+                queue.Enqueue(c);
+            }
+
+            while (queue.Count > 0)
+            {
+                int cell = queue.Dequeue();
+                int nextDist = dist[cell] + 1;
+                int[] neighbors = mesh.CellNeighbors[cell];
+                for (int i = 0; i < neighbors.Length; i++)
+                {
+                    int nb = neighbors[i];
+                    if (dist[nb] >= 0)
+                        continue;
+                    dist[nb] = nextDist;
+                    queue.Enqueue(nb);
+                }
+            }
+
+            return dist;
         }
     }
 }

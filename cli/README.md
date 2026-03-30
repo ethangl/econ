@@ -17,7 +17,7 @@ dotnet run --project WorldGen.Cli -- [options]
 | `--seed <int>`            | 42            | Random seed                                                                 |
 | `--cells <int>`           | 20400         | Dense cell count (more cells = finer terrain)                               |
 | `--ultra`                 | true          | Enable ultra-dense mesh (~4x cells via subdivision)                         |
-| `--ocean <float>`         | 0.6           | Ocean fraction (0-1)                                                        |
+| `--ocean <float>`         | 0.8           | Ocean fraction (0-1)                                                        |
 | `--jitter <float>`        | 0.5           | Point distribution jitter (0-1)                                             |
 | `--width <int>`           | 8192          | Heightmap width                                                             |
 | `--height <int>`          | 4096          | Heightmap height                                                            |
