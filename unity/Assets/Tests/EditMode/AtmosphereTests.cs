@@ -37,6 +37,8 @@ namespace EconSim.Tests
 
             bool foundWind = false;
             bool foundPrecip = false;
+            bool foundOcean = false;
+            bool foundOceanPrecip = false;
 
             for (int i = 0; i < mesh.CellCount; i++)
             {
@@ -55,10 +57,18 @@ namespace EconSim.Tests
                     foundWind = true;
                 if (tectonics.CellPrecipitation[i] > 1e-3f)
                     foundPrecip = true;
+                if (tectonics.CellElevation[i] <= 0.5f)
+                {
+                    foundOcean = true;
+                    if (tectonics.CellPrecipitation[i] > 1e-3f)
+                        foundOceanPrecip = true;
+                }
             }
 
             Assert.IsTrue(foundWind, "Expected at least one non-zero wind cell.");
             Assert.IsTrue(foundPrecip, "Expected at least one non-zero precipitation cell.");
+            Assert.IsTrue(foundOcean, "Expected generated test world to contain ocean cells.");
+            Assert.IsTrue(foundOceanPrecip, "Expected at least one ocean cell to receive precipitation.");
         }
 
         [Test]

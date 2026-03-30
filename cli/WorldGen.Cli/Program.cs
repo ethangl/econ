@@ -16,7 +16,7 @@ var heightOption = new Option<int>("--height", () => 4096, "Heightmap height");
 var outputOption = new Option<string>("--output", () => "heightmap.r16", "Raw little-endian 16-bit heightmap output path");
 var previewOutputOption = new Option<string>("--preview-output", () => null!, "Optional preview PNG path; defaults to a sibling .preview.png file");
 var previewWidthOption = new Option<int>("--preview-width", () => 2048, "Maximum width for the preview PNG");
-var oceanOption = new Option<float>("--ocean", () => 0.8f, "Ocean fraction (0-1)");
+var oceanOption = new Option<float>("--ocean", () => 0.9f, "Ocean fraction (0-1)");
 var jitterOption = new Option<float>("--jitter", () => 0.5f, "Point jitter (0-1)");
 var ultraOption = new Option<bool>("--ultra", () => true, "Enable ultra-dense mesh (~4x cells via subdivision)");
 var blurOption = new Option<float>("--blur", () => 0.5f, "Blur strength (1.0 = 5px sigma at 8192 wide, scales with resolution)");
@@ -26,7 +26,7 @@ var sharpenOption = new Option<float>("--sharpen", () => 0f, "Unsharp mask amoun
 var colorOption = new Option<bool>("--color", () => true, "Apply the terrain color ramp to the preview PNG");
 var coastOption = new Option<float>("--coast", () => 0.125f, "Coastal detail amplitude (0-1)");
 var stepsOption = new Option<int>("--steps", () => 15, "Number of tectonic time steps (1=single-shot, ~10 Myr per step via boundary migration)");
-var debugOption = new Option<bool>("--debug", () => false, "Draw debug overlays and save standalone debug images");
+var debugOption = new Option<bool>("--debug", () => true, "Draw debug overlays and save standalone debug images");
 var cpuOption = new Option<bool>("--cpu", () => false, "Force the CPU heightmap pipeline instead of the default Metal path on macOS");
 
 var rootCommand = new RootCommand("Generate a raw 2D heightmap plus preview from spherical world generation")
