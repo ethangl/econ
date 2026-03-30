@@ -95,9 +95,7 @@ namespace WorldGen.Core
             {
                 totalHumidity += prev[c];
                 float transportHumidity = GatherHumidity(c, mesh, tectonics, prev, incomingDirs);
-                float availableHumidity = isOcean[c]
-                    ? Math.Max(prev[c], transportHumidity)
-                    : transportHumidity;
+                float availableHumidity = transportHumidity;
 
                 float baseLoss = config.BasePrecipitationRate * availableHumidity;
                 float oroLoss = isOcean[c] ? 0f : config.OrographicScale * oroFactor[c] * availableHumidity;
